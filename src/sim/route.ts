@@ -47,22 +47,23 @@ class MinHeap {
 const LANE_PENALTY = 0.5; // 선호하지 않는 차선에 들어갈 때의 벌점(초)
 const MIN_TRIP = 3; // 출발·도착이 같은 차선 위에서 이보다 가까우면 직진 경로로 보지 않는다(m)
 
-/** 출발 도로의 아무 차선에서 시작해 도착 도로의 아무 차선에서 끝나는 최단 시간 경로. 없으면 null */
-export function findRoute(g: LaneGraph, from: RoadPos, to: RoadPos): Route | null {
+interface Source { track: Track; startS: number }
+
+/** 출발점(차선 위 위치 여러 개)에서 도착 도로의 아무 차선까지 가는 최단 시간 경로. 없으면 null */
+function search(g: LaneGraph, sources: Source[], to: RoadPos): Route | null {
   const dist = new Map<number, number>();
   const prev = new Map<number, number>();
   const startS = new Map<number, number>();
   const heap = new MinHeap();
   let best = { cost: Infinity, last: -1, via: -1, endS: 0 };
 
-  for (const L of g.lanesOfSeg.get(from.segId) ?? []) {
-    const s0 = laneS(L, from.t);
+  for (const { track: L, startS: s0 } of sources) {
     startS.set(L.id, s0);
     const c = (L.length - s0) / L.vmax;
     dist.set(L.id, c);
     prev.set(L.id, -1);
     heap.push(c, L.id);
-    if (L.segId === to.segId) {
+    if (L.kind === 'lane' && L.segId === to.segId) {
       const e = laneS(L, to.t);
       if (e - s0 >= MIN_TRIP && (e - s0) / L.vmax < best.cost) best = { cost: (e - s0) / L.vmax, last: L.id, via: -1, endS: e };
     }
@@ -98,4 +99,14 @@ export function findRoute(g: LaneGraph, from: RoadPos, to: RoadPos): Route | nul
   const path = [best.last];
   for (let cur = best.via; cur !== -1; cur = prev.get(cur) ?? -1) path.unshift(cur);
   return { path, startS: startS.get(path[0]) ?? 0, endS: best.endS };
+}
+
+/** 출발 도로의 아무 차선(어느 방향이든)에서 시작해 도착 도로의 아무 차선에서 끝나는 최단 시간 경로. 없으면 null */
+export function findRoute(g: LaneGraph, from: RoadPos, to: RoadPos): Route | null {
+  return search(g, (g.lanesOfSeg.get(from.segId) ?? []).map((L) => ({ track: L, startS: laneS(L, from.t) })), to);
+}
+
+/** 이미 달리고 있는 차량의 지금 위치(트랙 + 거리)에서 새 목적지로 다시 길 찾기. 경로의 첫 트랙은 지금 트랙 */
+export function findRouteFromTrack(g: LaneGraph, trackId: number, s: number, to: RoadPos): Route | null {
+  return search(g, [{ track: g.tracks[trackId], startS: s }], to);
 }

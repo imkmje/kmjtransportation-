@@ -6,6 +6,7 @@ export type Turn = 'straight' | 'left' | 'right' | 'uturn';
 
 export interface Track {
   id: number;
+  key: string; // 도로망이 바뀌어도 같은 차선·연결선을 알아보는 이름(번호는 도로망이 바뀌면 달라진다)
   kind: 'lane' | 'conn';
   segId: number; // 연결선은 -1
   fwd: boolean; // 도로 a→b 방향이면 true
@@ -74,7 +75,7 @@ function makeConnector(id: number, a: Track, b: Track, uturn: boolean, rules: Ru
   const vmax = Math.min(a.vmax, b.vmax, Math.max(curveV, rules.driving.minTurnKmh * KMH));
   const dth = wrap(h3 - h0);
   const turn: Turn = uturn ? 'uturn' : Math.abs(dth) < (rules.intersection.straightDeg * Math.PI) / 180 ? 'straight' : dth > 0 ? 'left' : 'right';
-  return { id, kind: 'conn', segId: -1, fwd: true, index: 0, from: a.to, to: b.from, length: cum[cum.length - 1], pts, cum, vmax, next: [b.id], uturn, t0: 0, lanes: 0, rank: a.rank, sign: a.sign, turn, node: a.to, src: a.id, conflicts: [] };
+  return { id, key: `C${a.key}>${b.key}`, kind: 'conn', segId: -1, fwd: true, index: 0, from: a.to, to: b.from, length: cum[cum.length - 1], pts, cum, vmax, next: [b.id], uturn, t0: 0, lanes: 0, rank: a.rank, sign: a.sign, turn, node: a.to, src: a.id, conflicts: [] };
 }
 
 /** 도로망 → 차선 + 연결선 그래프. ID는 도로 ID 순서로 정해져 항상 같은 결과가 나온다 */
@@ -113,7 +114,7 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
           { x: A.x + ux * d1 + nx * off, y: A.y + uy * d1 + ny * off },
         ];
         const cum = polyline(pts);
-        const t: Track = { id: tracks.length, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
+        const t: Track = { id: tracks.length, key: `L${s.id}:${fwd ? 1 : 0}:${i}`, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
         tracks.push(t);
         list.push(t);
         push(outs, t.from, t);

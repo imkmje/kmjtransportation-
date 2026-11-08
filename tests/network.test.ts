@@ -178,7 +178,7 @@ describe('저장·불러오기', () => {
   });
   it('잘못된 파일은 쉬운 메시지로 거부', () => {
     expect(() => Network.parse(null, config)).toThrow('도로망 파일이 아닙니다');
-    expect(() => Network.parse({ formatVersion: 3, nodes: [], segments: [] }, config)).toThrow('더 새로운');
+    expect(() => Network.parse({ formatVersion: 4, nodes: [], segments: [] }, config)).toThrow('더 새로운');
     expect(() => Network.parse({ formatVersion: 1, nodes: [], segments: [{ id: 1, a: 1, b: 2, kind: 'road2' }] }, config)).toThrow('손상');
     expect(() => Network.parse({ formatVersion: 1, nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 9, y: 0, z: 0 }], segments: [{ id: 1, a: 1, b: 2, kind: 'ufo' }] }, config)).toThrow('손상');
   });
@@ -287,8 +287,9 @@ describe('정지·양보 표지와 저장 형식 2', () => {
       nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 100, y: 0, z: 0 }],
       segments: [{ id: 1, a: 1, b: 2, kind: 'road2', structure: 'ground', playerSpeedKmh: null }] };
     const d = Network.parse(v1, config);
-    expect(d.formatVersion).toBe(2);
+    expect(d.formatVersion).toBe(3);
     expect(d.segments[0]).toMatchObject({ signA: null, signB: null });
+    expect(d.buildings).toEqual([]);
     const e = new Editor(config);
     e.loadText(JSON.stringify(v1));
     expect(e.network.segments.size).toBe(1);
@@ -296,5 +297,79 @@ describe('정지·양보 표지와 저장 형식 2', () => {
   it('잘못된 표지 값은 거부', () => {
     const bad = { formatVersion: 2, nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 50, y: 0, z: 0 }], segments: [{ id: 1, a: 1, b: 2, kind: 'road2', signA: 'ufo', signB: null }] };
     expect(() => Network.parse(bad, config)).toThrow('손상');
+  });
+});
+
+describe('건물', () => {
+  const withRoad = () => { const n = make(); line(n, -300, 0, 300, 0); return n; };
+
+  it('도로 옆 빈 땅에 놓을 수 있고, 가장 가까운 도로에 연결된다', () => {
+    const n = withRoad();
+    const r = n.addBuilding('home', 'medium', 0, 30);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const a = n.accessOf(r.id)!;
+    expect(a.segId).toBe(1);
+    expect(a.t).toBeCloseTo(300, 0); // 도로 시작점에서 300m(건물 바로 옆)
+    expect(Math.hypot(a.x - 0, a.y - 0)).toBeLessThan(1);
+  });
+  it('도로 위·도로에 너무 가까운 곳, 다른 건물과 겹치는 곳, 지도 밖은 거부', () => {
+    const n = withRoad();
+    expect(n.planBuilding('home', 'small', 0, 0)).toEqual({ ok: false, error: 'onRoad' });
+    expect(n.planBuilding('home', 'small', 0, 8)).toEqual({ ok: false, error: 'onRoad' }); // 반폭 3.5 + 건물 4 + 1 = 8.5 이내
+    expect(n.planBuilding('home', 'small', 0, 9).ok).toBe(true);
+    expect(n.addBuilding('home', 'small', 0, 30).ok).toBe(true);
+    expect(n.planBuilding('office', 'small', 5, 30)).toEqual({ ok: false, error: 'overlap' });
+    expect(n.planBuilding('office', 'small', 11, 30).ok).toBe(true); // 4+4+2 = 10m 이상
+    expect(n.planBuilding('home', 'large', 995, 30)).toEqual({ ok: false, error: 'outOfBounds' });
+  });
+  it('도로에서 50m 넘게 떨어진 건물은 미연결(null)', () => {
+    const n = withRoad();
+    const r = n.addBuilding('office', 'small', 0, 80);
+    expect(r.ok && n.accessOf(r.id)).toBe(null);
+    const r2 = n.addBuilding('office', 'small', 0, 45);
+    expect(r2.ok && n.accessOf(r2.id)).not.toBe(null);
+  });
+  it('맵이 제공한 건물(deletable=false)은 지울 수 없고, 일반 건물은 지울 수 있다', () => {
+    const n = withRoad();
+    const m = n.addBuilding('home', 'small', -100, 30, 'map', false);
+    const p = n.addBuilding('home', 'small', 100, 30);
+    if (!m.ok || !p.ok) throw new Error('setup');
+    expect(n.removeBuilding(m.id)).toEqual({ ok: false, error: 'locked' });
+    expect(n.buildings.has(m.id)).toBe(true);
+    expect(n.removeBuilding(p.id)).toEqual({ ok: true });
+    expect(n.removeBuilding(p.id)).toEqual({ ok: false, error: 'noSuchBuilding' });
+    expect(n.removeBuilding(m.id, true)).toEqual({ ok: true }); // 맵 편집용 강제 삭제
+  });
+  it('저장했다 불러와도 건물이 그대로이고, ID가 겹치지 않는다. 실행 취소도 된다', () => {
+    const e = new Editor(config);
+    e.build({ x: -300, y: 0 }, { x: 300, y: 0 }, 'road2');
+    e.addBuilding('home', 'large', 0, 40);
+    e.addBuilding('office', 'small', 100, 40, 'map', false);
+    const text = e.exportText();
+    const e2 = new Editor(config);
+    e2.loadText(text);
+    expect([...e2.network.buildings.values()]).toEqual([...e.network.buildings.values()]);
+    const r = e2.addBuilding('home', 'small', -100, 40);
+    expect(r.ok && r.id).toBe(3);
+    e2.undo();
+    expect(e2.network.buildings.size).toBe(2);
+    e2.redo();
+    expect(e2.network.buildings.size).toBe(3);
+  });
+  it('형식 2 파일(건물 없음)도 열리고, 잘못된 건물 값은 거부', () => {
+    const v2 = { formatVersion: 2, nextNodeId: 3, nextSegmentId: 2, nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 100, y: 0, z: 0 }], segments: [{ id: 1, a: 1, b: 2, kind: 'road2', structure: 'ground', playerSpeedKmh: null, signA: null, signB: null }] };
+    expect(Network.parse(v2, config).buildings).toEqual([]);
+    const bad = { ...v2, formatVersion: 3, buildings: [{ id: 1, kind: 'castle', size: 'small', x: 0, y: 0, source: 'player' }] };
+    expect(() => Network.parse(bad, config)).toThrow('손상');
+  });
+  it('건물을 놓거나 지우면 도로망 revision과 건물 revision이 오른다', () => {
+    const n = withRoad();
+    const r0 = n.revision, b0 = n.buildingsRevision;
+    const id = n.addBuilding('home', 'small', 0, 30);
+    expect(n.revision).toBeGreaterThan(r0);
+    expect(n.buildingsRevision).toBe(b0 + 1);
+    if (id.ok) n.removeBuilding(id.id);
+    expect(n.buildingsRevision).toBe(b0 + 2);
   });
 });

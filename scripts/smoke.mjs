@@ -51,6 +51,14 @@ check('자동 일시정지 안내 문구', (await page.locator('#note').innerTex
 // ---- 2단계: 도로 건설 (드래그) ----
 const counts = () => page.evaluate(() => ({ n: window.__game.editor.network.nodes.size, s: window.__game.editor.network.segments.size }));
 const toScreen = (x, y) => page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
+// 화면 위 도구 모음·통계 패널에 가려지지 않는 지점을 후보 중에서 고른다(패널이 지도 일부를 덮기 때문)
+const freeSpot = async (cands) => {
+  for (const [x, y] of cands) {
+    const p = await toScreen(x, y);
+    if (p.x > 210 && p.x < 990 && p.y > 120 && p.y < 640) return [x, y];
+  }
+  throw new Error('가려지지 않는 지점이 없음');
+};
 const clickWorld = async (x, y) => {
   const p = await toScreen(x, y);
   await page.mouse.move(p.x, p.y);
@@ -77,7 +85,8 @@ await dragWorld(0, -100, 0, 100);
 c = await counts();
 check('십자 교차(노드 5, 도로 4)', c.n === 5 && c.s === 4, JSON.stringify(c));
 
-await dragWorld(200, 200, 200, 205, false);
+const [bx, by] = await freeSpot([[-60, -160], [60, 160], [-160, 60], [160, -60], [0, 200], [0, -200]]);
+await dragWorld(bx, by, bx, by + 5, false);
 check('잘못된 입력은 빨간 안내', (await page.locator('#tip').innerText()).includes('시작점과 같은') && (await page.locator('#tip').getAttribute('class')) === 'bad');
 await page.mouse.up();
 await page.waitForTimeout(80);
@@ -233,6 +242,8 @@ await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '
 await page.keyboard.press('Escape');
 await page.keyboard.press('r');
 const segsBefore = (await counts()).s;
+const idsBefore = await page.evaluate(() => [...window.__game.sim.traffic.vehicles.keys()]);
+const arrivedBefore = (await stats()).arrived;
 // 빈 땅(화면 아래쪽)을 드래그
 await page.mouse.move(560, 580);
 await page.mouse.down();
@@ -241,10 +252,79 @@ await page.mouse.up();
 await page.waitForTimeout(300);
 check('새 도로가 건설됨(테스트 전제)', (await counts()).s === segsBefore + 1, `${segsBefore} -> ${(await counts()).s}`);
 st = await stats();
-check('도로를 고치면 달리던 차량은 모두 제거', st.live === 0, JSON.stringify(st));
+const idsAfter = await page.evaluate(() => [...window.__game.sim.traffic.vehicles.keys()]);
+const lostIds = idsBefore.filter((id) => !idsAfter.includes(id)).length;
+check('다른 곳에 도로를 놓아도 달리던 차량은 사라지지 않음(도착한 차량만 빠짐)', lostIds <= st.arrived - arrivedBefore, `사라진 ${lostIds}, 새로 도착 ${st.arrived - arrivedBefore}`);
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.keyboard.press('d');
+
+// ---- 5·6단계: 샘플 맵, 건물, 통계, 전체 상태 저장·자동 저장, 하루 기록 ----
+const game = () => page.evaluate(() => ({ tick: window.__game.sim.tickCount, live: window.__game.sim.traffic.vehicles.size, arrived: window.__game.sim.traffic.stats.arrived, clock: document.getElementById('clock').textContent }));
+const bcount = () => page.evaluate(() => window.__game.editor.network.buildings.size);
+const ff = (day, hour) => page.evaluate(([day, hour]) => { const s = window.__game.sim; const t = Math.round(((((day - 1) * 86400 + hour * 3600) - 5 * 3600) / 24) * 20); while (s.tickCount < t) s.step(); }, [day, hour]);
+
+await page.click('button[data-speed="0"]');
+await page.click('#sample');
+await page.waitForTimeout(300);
+check('샘플 맵 열기: 건물 23채, 미연결 0', (await bcount()) === 23 && (await page.evaluate(() => window.__game.sim.demand.unconnected().length)) === 0, String(await bcount()));
+await ff(1, 8);
+await page.waitForTimeout(400);
+let g0 = await game();
+check('아침 8시 출근: 차량이 달리고 있음', g0.live > 10 && g0.clock.includes('08:00'), JSON.stringify(g0));
+await page.waitForTimeout(600);
+const ciText = await page.locator('#st-ci').innerText();
+check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciText) && (await page.locator('#stats').innerText()).includes('완료율'), `CI=${ciText}`);
+
+await page.keyboard.press('h');
+await page.selectOption('#bsize', 'small');
+await clickWorld(-20, -40);
+check('주거 건물을 클릭으로 놓음', (await bcount()) === 24, String(await bcount()));
+await clickWorld(0, 0); // 교차로 한가운데: 도로 위
+check('도로 위에는 건물을 못 놓음(쉬운 안내)', (await bcount()) === 24 && (await page.locator('#msg').innerText()).includes('도로'), await page.locator('#msg').innerText());
+await page.keyboard.press('o');
+const [fx, fy] = await freeSpot([[-160, -120], [-160, 120], [160, -120], [160, 120]]); // 격자(20m) 교점이라 반올림 경계에 걸리지 않는다 // 도로에서 50m 넘게 떨어진 빈 땅
+await clickWorld(fx, fy);
+await page.waitForTimeout(500); // 통계 패널은 0.2초마다 갱신된다
+check('도로에서 먼 건물은 놓이되 미연결 경고', (await bcount()) === 25 && (await page.locator('#msg').innerText()).includes('연결되지 않았습니다') && (await page.locator('#st-warn').innerText()).endsWith('· 1'), `msg='${await page.locator('#msg').innerText()}' warn='${await page.locator('#st-warn').innerText()}' 지점=${fx},${fy} 건물수=${await bcount()}`);
+await page.keyboard.press('x');
+await clickWorld(fx, fy);
+await clickWorld(-20, -40);
+check('철거 도구로 건물을 지움', (await bcount()) === 23, String(await bcount()));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+
+// 전체 상태 저장 → 더 진행 → 불러오기: 시계·차량 수가 저장한 순간으로 돌아온다
+const gSave = await game();
+await page.selectOption('#slot', '1');
+await page.click('#save');
+await page.waitForTimeout(500);
+await page.evaluate(() => { for (let i = 0; i < 3000; i++) window.__game.sim.step(); });
+const gMid = await game();
+await page.click('#load');
+await page.waitForTimeout(500);
+const gLoad = await game();
+check('전체 상태 저장·불러오기: 시계와 차량이 저장한 순간으로 복원', gMid.tick > gSave.tick && gLoad.tick === gSave.tick && gLoad.live === gSave.live && gLoad.arrived === gSave.arrived, JSON.stringify({ gSave, gMid, gLoad }));
+
+// 자동 저장(탭을 떠날 때) → 새로고침해도 자동 저장이 있다고 알려 줌
+await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+await page.waitForTimeout(500);
+const autoTick = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open('kmj-transportation', 1); r.onsuccess = () => { const q = r.result.transaction('slots').objectStore('slots').get(0); q.onsuccess = () => res(q.result ? JSON.parse(q.result).sim.tickCount : -1); }; }));
+check('자동 저장 슬롯에 전체 상태가 저장됨', autoTick === gSave.tick, `자동 저장 tick ${autoTick}`);
+
+// 하루가 끝나면(다음 날 04:00) 어제 요약이 기록되고 통계 패널에 표시된다
+await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); });
+await ff(2, 4.5);
+await page.waitForTimeout(800);
+const yday = await page.locator('#st-yesterday').innerText();
+const rec = await page.evaluate(() => window.__game.sim.metrics.history[0]);
+check('하루가 끝나면 어제 요약이 표시됨(완료율 95% 이상)', yday.includes('어제(1일차)') && rec.completion >= 95 && rec.generated === 504, `${yday} / ${JSON.stringify(rec)}`);
+check('샘플 하루 동안 안전망 개입·교착·충돌 점유 0', await page.evaluate(() => { const s = window.__game.sim.traffic.stats; return s.interventions === 0 && s.deadlocks === 0 && s.conflicts === 0; }));
+
+await page.reload();
+await page.waitForSelector('canvas');
+await page.waitForTimeout(800);
+check('다시 열면 자동 저장이 있다고 알려 줌', (await page.locator('#msg').innerText()).includes('자동 저장'), await page.locator('#msg').innerText());
 
 // 카메라 조작: 휠 줌과 드래그 후에도 오류 없이 렌더
 await page.mouse.move(640, 360);

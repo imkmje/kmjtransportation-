@@ -105,14 +105,44 @@ describe('차량 주행', () => {
     expect(sim.traffic.vehicles.size).toBe(0);
   });
 
-  it('도로망이 바뀌면 달리던 차량을 모두 치운다', () => {
+  it('다른 곳에 도로를 더 놓아도 달리던 차량은 그대로 이어서 달린다', () => {
     const { n, sim } = setup((x) => road(x, 0, 0, 500, 0));
     sim.traffic.requestTrip({ segId: 1, t: 50 }, { segId: 1, t: 450 }, 3);
     run(sim, 200);
-    expect(sim.traffic.vehicles.size).toBeGreaterThan(0);
-    road(n, 0, 200, 300, 200);
+    const before = [...sim.traffic.vehicles.values()].map((v) => [v.id, Math.round(v.s)]);
+    expect(before.length).toBeGreaterThan(0);
+    road(n, 0, 200, 300, 200); // 상관없는 도로
+    run(sim, 1);
+    expect([...sim.traffic.vehicles.keys()]).toEqual(before.map((b) => b[0])); // 한 대도 사라지지 않았다
+    run(sim, 20 * 90);
+    expect(sim.traffic.stats.arrived).toBe(3); // 끝까지 간다
+  });
+
+  it('달리던 도로가 철거되면 그 위의 차량은 사라지고 미완료로 알린다', () => {
+    const { n, sim } = setup((x) => road(x, 0, 0, 500, 0));
+    const lost: string[] = [];
+    sim.traffic.onLost = (_v, meta, reason) => lost.push(`${meta.kind}:${reason}`);
+    sim.traffic.requestTrip({ segId: 1, t: 50 }, { segId: 1, t: 450 }, 3);
+    run(sim, 200);
+    const live = sim.traffic.vehicles.size;
+    expect(live).toBeGreaterThan(0);
+    n.removeSegment(1);
     run(sim, 1);
     expect(sim.traffic.vehicles.size).toBe(0);
+    expect(lost.length).toBe(live);
+    expect(lost.every((x) => x === 'test:removed')).toBe(true);
+  });
+
+  it('교차로가 생겨 도로 끝 여유가 바뀌어도 같은 도로 위 차량은 같은 자리에서 이어 달린다', () => {
+    const { n, sim } = setup((x) => road(x, -300, 0, 300, 0));
+    sim.traffic.requestTrip({ segId: 1, t: 20 }, { segId: 1, t: 280 }, 1);
+    run(sim, 20 * 4);
+    const v = [...sim.traffic.vehicles.values()][0];
+    const before = { x: v.x, y: v.y };
+    road(n, 0, -200, 0, 0); // 진행 방향 앞쪽에 T자 교차로가 생겨 도로가 둘로 나뉜다
+    run(sim, 1);
+    expect(sim.traffic.vehicles.has(v.id)).toBe(true);
+    expect(Math.hypot(v.x - before.x, v.y - before.y)).toBeLessThan(1.5); // 한 tick에 1.5m 이상 순간이동하지 않는다
   });
 
   it('같은 입력이면 같은 결과(결정론)', () => {

@@ -15,21 +15,38 @@ export interface Segment {
   signB: SignKind | null; // b쪽 끝으로 들어오는 방향의 표지
 }
 
+export type BuildingKind = 'home' | 'office'; // 1.0.0: 주거, 사무형 직장. 이후 버전에서 늘어난다
+export type BuildingSize = 'small' | 'medium' | 'large';
+export type BuildingSource = 'player' | 'map' | 'auto'; // 4.0.0(구역 시스템) 대비
+export interface Building {
+  id: number;
+  kind: BuildingKind;
+  size: BuildingSize;
+  x: number;
+  y: number;
+  source: BuildingSource;
+  deletable: boolean; // 맵 제공 건물은 지울 수 없다
+  parking: number; // 3.0.0 예약(주차 수용량). 지금은 항상 0
+}
+export type BuildingError = 'onRoad' | 'overlap' | 'outOfBounds' | 'locked';
+
 export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads';
 interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 2; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가
+export const NETWORK_FORMAT_VERSION = 3; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
   nextSegmentId: number;
   nodes: NetNode[];
   segments: Segment[];
+  nextBuildingId: number;
+  buildings: Building[];
 }
 
-type Rules = Pick<Config, 'geometry' | 'roads'>;
+type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings'>;
 const EPS = 1e-9;
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 const cross = (ax: number, ay: number, bx: number, by: number) => ax * by - ay * bx;
@@ -63,10 +80,14 @@ export class Network {
   // Map의 순회 순서 = ID 순서 (새 ID는 항상 더 크고 뒤에 추가되므로)
   readonly nodes = new Map<number, NetNode>();
   readonly segments = new Map<number, Segment>();
-  /** 도로망이 바뀔 때마다 증가. 화면이 다시 그릴 때 확인 */
+  readonly buildings = new Map<number, Building>();
+  /** 도로망(도로·표지·건물)이 바뀔 때마다 증가. 화면이 다시 그릴 때 확인 */
   revision = 0;
+  /** 건물이 바뀔 때마다 증가(수요가 다시 계획할 때 확인) */
+  buildingsRevision = 0;
   private nextNodeId = 1;
   private nextSegmentId = 1;
+  private nextBuildingId = 1;
 
   constructor(private rules: Rules) {}
 
@@ -218,6 +239,59 @@ export class Network {
     return { ok: true };
   }
 
+  // ---------------- 건물 ----------------
+
+  /** 건물을 놓을 수 있는지 확인만 한다 */
+  planBuilding(_kind: BuildingKind, size: BuildingSize, x: number, y: number): { ok: true } | { ok: false; error: BuildingError } {
+    const b = this.rules.buildings;
+    const half = b.footprint[size];
+    if (Math.abs(x) > b.worldHalf - half || Math.abs(y) > b.worldHalf - half) return { ok: false, error: 'outOfBounds' };
+    for (const s of this.segments.values()) {
+      const r = this.rules.roads[s.kind];
+      if (distToSegment({ x, y }, this.nodes.get(s.a)!, this.nodes.get(s.b)!).d < r.lanesPerDir * r.laneWidth + half + 1) return { ok: false, error: 'onRoad' };
+    }
+    for (const o of this.buildings.values()) {
+      if (Math.hypot(o.x - x, o.y - y) < half + b.footprint[o.size] + b.gap) return { ok: false, error: 'overlap' };
+    }
+    return { ok: true };
+  }
+
+  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: BuildingSource = 'player', deletable = true): { ok: true; id: number } | { ok: false; error: BuildingError } {
+    const p = this.planBuilding(kind, size, x, y);
+    if (!p.ok) return p;
+    const id = this.nextBuildingId++;
+    this.buildings.set(id, { id, kind, size, x, y, source, deletable, parking: 0 });
+    this.revision++;
+    this.buildingsRevision++;
+    return { ok: true, id };
+  }
+
+  /** 맵이 제공한 건물(deletable=false)은 force 없이는 지울 수 없다 */
+  removeBuilding(id: number, force = false): { ok: true } | { ok: false; error: BuildingError | 'noSuchBuilding' } {
+    const b = this.buildings.get(id);
+    if (!b) return { ok: false, error: 'noSuchBuilding' };
+    if (!b.deletable && !force) return { ok: false, error: 'locked' };
+    this.buildings.delete(id);
+    this.revision++;
+    this.buildingsRevision++;
+    return { ok: true };
+  }
+
+  /** 건물에서 가장 가까운 도로 위 접속 지점(반경 안에 도로가 없으면 null = 미연결) */
+  accessOf(id: number): { segId: number; t: number; x: number; y: number } | null {
+    const b = this.buildings.get(id);
+    return b ? this.projectOnRoad({ x: b.x, y: b.y }, this.rules.buildings.connectRadius) : null;
+  }
+
+  nearestBuilding(p: Pt, extra = 2): Building | null {
+    let best: Building | null = null, bd = Infinity;
+    for (const b of this.buildings.values()) {
+      const d = dist(b, p);
+      if (d <= this.rules.buildings.footprint[b.size] * 1.45 + extra && d < bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+
   signAt(segId: number, nodeId: number): SignKind | null {
     const s = this.segments.get(segId);
     return !s ? null : s.a === nodeId ? s.signA : s.b === nodeId ? s.signB : null;
@@ -253,6 +327,8 @@ export class Network {
       nextSegmentId: this.nextSegmentId,
       nodes: [...this.nodes.values()].map((n) => ({ ...n })),
       segments: [...this.segments.values()].map((s) => ({ ...s })),
+      nextBuildingId: this.nextBuildingId,
+      buildings: [...this.buildings.values()].map((b) => ({ ...b })),
     };
   }
 
@@ -275,6 +351,15 @@ export class Network {
     // 형식 1 → 2: 표지 필드를 비워서 채운다
     const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null }));
     if (!segments.every((sg) => okSign(sg.signA) && okSign(sg.signB))) throw new Error('도로망 파일이 손상되었습니다');
+    // 형식 1·2 → 3: 건물이 없는 것으로 채운다
+    const rawB = (d as Partial<NetworkData>).buildings ?? [];
+    if (!Array.isArray(rawB)) throw new Error('도로망 파일이 손상되었습니다');
+    const kinds = ['home', 'office'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
+    for (const b of rawB) {
+      if (![b?.id, b?.x, b?.y].every((v) => typeof v === 'number' && Number.isFinite(v)) || !kinds.includes(b.kind) || !sizes.includes(b.size) || !sources.includes(b.source)) throw new Error('도로망 파일이 손상되었습니다');
+    }
+    const buildings = rawB.map((b) => ({ ...b, deletable: b.deletable !== false, parking: b.parking ?? 0 }));
+    const maxBuilding = Math.max(0, ...buildings.map((b) => b.id));
     const maxNode = Math.max(0, ...d.nodes.map((n) => n.id));
     const maxSeg = Math.max(0, ...d.segments.map((s) => s.id));
     return {
@@ -283,6 +368,8 @@ export class Network {
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
       nodes: d.nodes,
       segments,
+      nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
+      buildings,
     };
   }
 
@@ -293,6 +380,10 @@ export class Network {
     for (const s of [...data.segments].sort((a, b) => a.id - b.id)) this.segments.set(s.id, { ...s });
     this.nextNodeId = data.nextNodeId;
     this.nextSegmentId = data.nextSegmentId;
+    this.buildings.clear();
+    for (const b of [...data.buildings].sort((a, c) => a.id - c.id)) this.buildings.set(b.id, { ...b });
+    this.nextBuildingId = data.nextBuildingId;
     this.revision++;
+    this.buildingsRevision++;
   }
 }
