@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { toThree } from './coords';
+import { toThree, fromThree } from './coords';
+import type { Pt } from '../sim/network';
 
 const WORLD = 2000; // 지면 한 변(m)
 
@@ -29,12 +30,6 @@ export function createScene(canvasParent: HTMLElement) {
   sun.position.set(300, 500, 200);
   scene.add(sun);
 
-  // 기준점(원점) 표시: 회전·이동했을 때 위치 감각을 주는 상자
-  const marker = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), new THREE.MeshLambertMaterial({ color: 0xf2a65a }));
-  const p = toThree(0, 0, 5);
-  marker.position.set(p.x, p.y, p.z);
-  scene.add(marker);
-
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 6000);
   camera.position.set(250, 250, 250);
 
@@ -57,7 +52,28 @@ export function createScene(canvasParent: HTMLElement) {
   resize();
 
   const limit = WORLD / 2;
+  const raycaster = new THREE.Raycaster();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hit = new THREE.Vector3();
   return {
+    scene,
+    domElement: renderer.domElement,
+    /** 화면 좌표(client) → 지면 위 시뮬 좌표. 지면 밖이면 null */
+    pickGround(clientX: number, clientY: number): Pt | null {
+      const r = renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      raycaster.setFromCamera(ndc, camera);
+      if (!raycaster.ray.intersectPlane(groundPlane, hit)) return null;
+      const p = fromThree(hit.x, hit.y, hit.z);
+      return Math.abs(p.x) > limit || Math.abs(p.y) > limit ? null : p;
+    },
+    /** 시뮬 좌표 → 화면 좌표(client). 테스트·디버깅용 */
+    project(p: Pt): { x: number; y: number } {
+      const t = toThree(p.x, p.y, 0);
+      const v = new THREE.Vector3(t.x, t.y, t.z).project(camera);
+      const r = renderer.domElement.getBoundingClientRect();
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+    },
     render() {
       controls.update();
       controls.target.x = THREE.MathUtils.clamp(controls.target.x, -limit, limit);

@@ -48,6 +48,76 @@ check('탭 숨김 시 자동 일시정지', (await page.evaluate(() => window.__
 await page.waitForTimeout(200);
 check('자동 일시정지 안내 문구', (await page.locator('#note').innerText()).includes('자동 일시정지'));
 
+// ---- 2단계: 도로 건설 (실제 마우스 클릭) ----
+const counts = () => page.evaluate(() => ({ n: window.__game.editor.network.nodes.size, s: window.__game.editor.network.segments.size }));
+const clickWorld = async (x, y) => {
+  const p = await page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.click(p.x, p.y);
+};
+const hoverWorld = async (x, y) => {
+  const p = await page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
+  await page.mouse.move(p.x, p.y);
+  await page.waitForTimeout(100);
+};
+
+await page.click('button[data-tool="road2"]');
+await clickWorld(-100, 0);
+await hoverWorld(100, 0);
+check('길이 표시', /^200 m$/.test(await page.locator('#tip').innerText()), await page.locator('#tip').innerText());
+await clickWorld(100, 0);
+let c = await counts();
+check('도로 1개 건설(노드 2, 도로 1)', c.n === 2 && c.s === 1, JSON.stringify(c));
+await page.keyboard.press('Escape'); // 이어 그리기 종료
+
+await clickWorld(0, -100);
+await clickWorld(0, 100);
+c = await counts();
+check('십자 교차(노드 5, 도로 4)', c.n === 5 && c.s === 4, JSON.stringify(c));
+await page.keyboard.press('Escape');
+
+await clickWorld(200, 200);
+await hoverWorld(200, 205);
+check('잘못된 입력은 빨간 안내', (await page.locator('#tip').innerText()).includes('시작점과 같은') && (await page.locator('#tip').getAttribute('class')) === 'bad');
+await page.keyboard.press('Escape');
+
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-roads.png') });
+
+await page.keyboard.press('Control+z');
+c = await counts();
+check('실행 취소: 십자 건설 한 번이 통째로 되돌아감(도로 4→1)', c.s === 1 && c.n === 2, JSON.stringify(c));
+await page.keyboard.press('Control+y');
+c = await counts();
+check('다시 실행(도로 1→4)', c.s === 4, JSON.stringify(c));
+
+await page.click('#save');
+await page.waitForTimeout(300);
+check('슬롯 저장 안내', (await page.locator('#msg').innerText()).includes('저장했습니다'), await page.locator('#msg').innerText());
+await page.keyboard.press('x');
+await clickWorld(50, 0);
+c = await counts();
+check('철거(도로 4→3)', c.s === 3, JSON.stringify(c));
+await page.click('#load');
+await page.waitForTimeout(300);
+c = await counts();
+check('슬롯 불러오기(도로 3→4)', c.s === 4 && c.n === 5, JSON.stringify(c));
+await page.keyboard.press('Control+z');
+c = await counts();
+check('불러오기도 실행 취소 가능(도로 4→3)', c.s === 3, JSON.stringify(c));
+await page.keyboard.press('Escape');
+
+// 끌기(카메라 이동)는 건설 클릭으로 오인되지 않는다
+await page.click('button[data-tool="road2"]');
+await page.mouse.move(400, 400);
+await page.mouse.down();
+await page.mouse.move(520, 380, { steps: 6 });
+await page.mouse.up();
+await page.mouse.move(700, 300);
+await page.waitForTimeout(100);
+check('드래그는 건설이 아님', await page.locator('#tip').isHidden());
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+
 // 카메라 조작: 휠 줌과 드래그 후에도 오류 없이 렌더
 await page.mouse.move(640, 360);
 await page.mouse.wheel(0, -400);

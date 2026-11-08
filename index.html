@@ -12,6 +12,17 @@
       #version { top: 12px; right: 12px; padding: 4px 8px; background: #fff9; border-radius: 6px; font-size: 12px; }
       #note { top: 56px; left: 12px; padding: 4px 8px; background: #ffe9a8; border-radius: 6px; font-size: 13px; }
       #note:empty { display: none; }
+      #toolbar { position: fixed; top: 100px; left: 12px; display: flex; flex-direction: column; gap: 6px; width: 170px; }
+      #toolbar button, #filebar button, #filebar select { padding: 7px 10px; border: 0; border-radius: 8px; background: #fffd; cursor: pointer; font-size: 13px; }
+      #toolbar button.on { background: #f2a65a; font-weight: 700; }
+      #toolbar button:disabled { opacity: 0.45; cursor: default; }
+      #toolbar .row { display: flex; gap: 6px; } #toolbar .row button { flex: 1; }
+      #toolbar label { background: #fffc; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+      #toolbar .help { background: #fffc; border-radius: 6px; padding: 6px 8px; font-size: 11px; line-height: 1.5; }
+      #filebar { position: fixed; top: 44px; right: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 300px; }
+      #msg { width: 100%; text-align: right; font-size: 12px; } #msg:not(:empty) { background: #fffd; border-radius: 6px; padding: 4px 8px; }
+      #tip { position: fixed; z-index: 5; pointer-events: none; padding: 3px 8px; background: #2c3e2f; color: #fff; border-radius: 6px; font-size: 13px; white-space: nowrap; }
+      #tip.bad { background: #c0392b; }
       #speeds { bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
       #speeds button { position: static; padding: 8px 14px; border: 0; border-radius: 8px; background: #fffd; cursor: pointer; font-size: 14px; }
       #speeds button.on { background: #f2a65a; font-weight: 700; }
@@ -20,6 +31,9 @@
   <body>
     <div id="view"></div>
     <div id="hud"></div>
+    <div id="toolbar"></div>
+    <div id="filebar"></div>
+    <div id="tip" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

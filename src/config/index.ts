@@ -7,5 +7,14 @@ export const config = {
   startClockHour: 5, // 1일차 월요일 05:00 시작
   dayBoundaryHour: 4, // 하루 경계 = 시계 04:00
   seed: 12345,
+  // 도로 종류 (rules.md 7항). 속도 단위 km/h, 폭 단위 m
+  roads: {
+    road2: { name: '왕복 2차로', lanesPerDir: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60 },
+    road4: { name: '왕복 4차로', lanesPerDir: 2, laneWidth: 3.5, defaultSpeedKmh: 60, maxSpeedKmh: 80 },
+  },
+  // 기하 제약 (rules.md 7항)
+  geometry: { minSegmentLength: 20, mergeRadius: 8, minAngleDeg: 30, maxRoadsPerNode: 6 },
+  // 건설 도구 (제안값)
+  editor: { gridSnap: 20, angleSnapDeg: 15, lengthSnap: 10, historyLimit: 200 },
 };
 export type Config = typeof config;
