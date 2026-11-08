@@ -21,7 +21,7 @@ interface Deps {
   roads: RoadLayer;
   pick: (clientX: number, clientY: number) => Pt | null;
   canvas: HTMLElement;
-  setLeftDragPan: (on: boolean) => void;
+  setDrawMode: (on: boolean) => void;
   toolbar: HTMLElement;
   filebar: HTMLElement;
   tip: HTMLElement;
@@ -149,7 +149,7 @@ export function createTools(d: Deps) {
     start = null;
     tripFrom = null;
     dragging = false;
-    d.setLeftDragPan(!(tool && tool in config.roads));
+    d.setDrawMode(!!tool && tool in config.roads);
     refresh();
   }
 
@@ -186,7 +186,7 @@ export function createTools(d: Deps) {
 
   function cancel() {
     if (start || tripFrom) { start = null; tripFrom = null; dragging = false; }
-    else { tool = null; d.setLeftDragPan(true); }
+    else { tool = null; d.setDrawMode(false); }
     refresh();
   }
 
@@ -198,10 +198,13 @@ export function createTools(d: Deps) {
     refresh();
   });
   const drawing = () => tool !== null && tool in config.roads;
-  d.canvas.addEventListener('pointerdown', (e) => {
+  // 그리기 시작은 카메라 컨트롤보다 먼저(캡처 단계) 받아서, 카메라가 같은 입력으로 같이 움직이지 않게 막는다.
+  d.canvas.parentElement!.addEventListener('pointerdown', (e) => {
     down = { x: e.clientX, y: e.clientY, button: e.button };
-    if (drawing() && e.button === 0) {
+    if (dragging && !e.isPrimary) { start = null; dragging = false; refresh(); return; } // 두 번째 손가락: 그리기를 취소하고 확대·이동에 양보
+    if (drawing() && e.button === 0 && e.isPrimary) {
       const p = d.pick(e.clientX, e.clientY);
+      e.stopPropagation(); // 카메라 컨트롤이 이 입력을 받지 못하게 한다
       if (!p) return;
       last = p;
       start = cursorPoint(p);
@@ -209,7 +212,8 @@ export function createTools(d: Deps) {
       d.canvas.setPointerCapture(e.pointerId);
       refresh();
     } else if (dragging && e.button === 2) { start = null; dragging = false; refresh(); } // 그리는 중 우클릭 = 취소
-  });
+  }, true);
+  d.canvas.addEventListener('pointercancel', () => { if (dragging) { start = null; dragging = false; refresh(); } });
   d.canvas.addEventListener('pointerup', (e) => {
     if (dragging && e.button === 0) {
       dragging = false;

@@ -34,7 +34,7 @@ createTools({
   roads,
   pick: view.pickGround,
   canvas: view.domElement,
-  setLeftDragPan: view.setLeftDragPan,
+  setDrawMode: view.setDrawMode,
   toolbar: document.getElementById('toolbar')!,
   filebar: document.getElementById('filebar')!,
   tip: document.getElementById('tip')!,

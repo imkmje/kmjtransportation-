@@ -116,27 +116,75 @@ c = await counts();
 check('불러오기도 실행 취소 가능(도로 4→3)', c.s === 3, JSON.stringify(c));
 await page.keyboard.press('Escape');
 
-// 도로 도구에서 왼쪽 드래그는 그리기이고 카메라는 움직이지 않는다. 가운데 버튼 드래그가 이동이다
+// 카메라가 움직였는지(이동·회전 모두) 보려면 원점에서 떨어진 점 여러 개를 본다. 회전은 원점을 제자리에 두기 때문에 원점만 보면 놓친다
+const refPts = () => page.evaluate(() => [[300, 0], [0, 300], [-300, 0], [0, 0]].map(([x, y]) => window.__game.project({ x, y })));
+const moved = (a, b) => Math.max(...a.map((p, i) => Math.hypot(b[i].x - p.x, b[i].y - p.y)));
+
+// 도로 도구에서 왼쪽 드래그는 그리기이고 카메라는 이동도 회전도 하지 않는다. 가운데 버튼 = 이동, 오른쪽 버튼 = 회전
 await page.click('button[data-tool="road2"]');
-const refBefore = await toScreen(0, 0);
+const camBefore = await refPts();
 const segsBeforeDrag = (await counts()).s;
 await page.mouse.move(400, 560);
 await page.mouse.down();
 await page.mouse.move(520, 600, { steps: 6 });
 await page.mouse.up();
 await page.waitForTimeout(150);
-const refAfter = await toScreen(0, 0);
-check('도로 도구의 왼쪽 드래그는 카메라를 움직이지 않음', Math.hypot(refAfter.x - refBefore.x, refAfter.y - refBefore.y) < 1, JSON.stringify([refBefore, refAfter]));
+check('도로 도구의 왼쪽 드래그는 카메라를 움직이지도 돌리지도 않음', moved(camBefore, await refPts()) < 1, String(moved(camBefore, await refPts())));
 if ((await counts()).s > segsBeforeDrag) await page.keyboard.press('Control+z'); // 그려진 도로는 되돌려 다음 시나리오를 같게 유지
+
+const camPan0 = await refPts();
 await page.mouse.move(640, 300);
 await page.mouse.down({ button: 'middle' });
 await page.mouse.move(740, 330, { steps: 6 });
 await page.mouse.up({ button: 'middle' });
 await page.waitForTimeout(400);
-const refPan = await toScreen(0, 0);
-check('가운데 버튼 드래그는 화면 이동', Math.hypot(refPan.x - refAfter.x, refPan.y - refAfter.y) > 20, JSON.stringify([refAfter, refPan]));
+const camPan1 = await refPts();
+check('가운데 버튼 드래그는 화면 이동', moved(camPan0, camPan1) > 20, String(moved(camPan0, camPan1)));
+
+await page.mouse.move(640, 300);
+await page.mouse.down({ button: 'right' });
+await page.mouse.move(700, 320, { steps: 6 });
+await page.mouse.up({ button: 'right' });
+await page.waitForTimeout(400);
+const camRot1 = await refPts();
+check('오른쪽 버튼 드래그는 회전(원점 기준 회전이라 먼 점이 움직임)', moved(camPan1, camRot1) > 20, String(moved(camPan1, camRot1)));
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
+
+// ---- 터치 화면: 한 손가락으로 도로를 그릴 때 카메라가 같이 돌아가면 안 된다 ----
+{
+  const tctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, hasTouch: true });
+  const tp = await tctx.newPage();
+  const cdp = await tctx.newCDPSession(tp);
+  await tp.goto('http://localhost:4173/');
+  await tp.waitForSelector('canvas');
+  await tp.click('button[data-speed="0"]');
+  const tref = () => tp.evaluate(() => [[300, 0], [0, 300], [-300, 0], [0, 0]].map(([x, y]) => window.__game.project({ x, y })));
+  const tsegs = () => tp.evaluate(() => window.__game.editor.network.segments.size);
+  const tt = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
+  await tp.click('button[data-tool="road2"]');
+  let t0 = await tref();
+  await tt('touchStart', [{ x: 500, y: 520 }]);
+  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 25, y: 520 + i * 5 }]); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(400);
+  check('터치: 한 손가락 드래그로 도로가 그려짐', (await tsegs()) === 1, String(await tsegs()));
+  check('터치: 도로를 그리는 동안 카메라가 이동도 회전도 안 함', moved(t0, await tref()) < 1, String(moved(t0, await tref())));
+  await tp.keyboard.press('Escape');
+  t0 = await tref();
+  await tt('touchStart', [{ x: 500, y: 400 }]);
+  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 15, y: 400 + i * 5 }]); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(500);
+  check('터치: 도구가 없을 때 한 손가락 드래그는 화면 이동', moved(t0, await tref()) > 20 && (await tsegs()) === 1, String(moved(t0, await tref())));
+  t0 = await tref();
+  await tt('touchStart', [{ x: 560, y: 360 }, { x: 720, y: 360 }]);
+  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 560 - i * 15, y: 360 }, { x: 720 + i * 15, y: 360 }]); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(500);
+  check('터치: 두 손가락 벌리기는 확대', moved(t0, await tref()) > 20, String(moved(t0, await tref())));
+  await tctx.close();
+}
 
 // ---- 4단계: 정지·양보 표지 ----
 const signCount = (kind) => page.evaluate((k) => [...window.__game.editor.network.segments.values()].filter((s) => s.signA === k || s.signB === k).length, kind);
