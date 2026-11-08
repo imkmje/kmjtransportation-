@@ -178,7 +178,7 @@ describe('저장·불러오기', () => {
   });
   it('잘못된 파일은 쉬운 메시지로 거부', () => {
     expect(() => Network.parse(null, config)).toThrow('도로망 파일이 아닙니다');
-    expect(() => Network.parse({ formatVersion: 2, nodes: [], segments: [] }, config)).toThrow('더 새로운');
+    expect(() => Network.parse({ formatVersion: 3, nodes: [], segments: [] }, config)).toThrow('더 새로운');
     expect(() => Network.parse({ formatVersion: 1, nodes: [], segments: [{ id: 1, a: 1, b: 2, kind: 'road2' }] }, config)).toThrow('손상');
     expect(() => Network.parse({ formatVersion: 1, nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 9, y: 0, z: 0 }], segments: [{ id: 1, a: 1, b: 2, kind: 'ufo' }] }, config)).toThrow('손상');
   });
@@ -236,5 +236,65 @@ describe('실행 취소/다시 실행', () => {
     let undos = 0;
     while (e.undo()) undos++;
     expect(undos).toBe(2); // 보관 3개 → 취소 2번
+  });
+});
+
+describe('정지·양보 표지와 저장 형식 2', () => {
+  const cross = () => { const n = make(); line(n, -100, 0, 100, 0); line(n, 0, -100, 0, 100); return n; };
+  const center = (n: Network) => [...n.nodes.values()].find((p) => p.x === 0 && p.y === 0)!.id;
+
+  it('교차로로 들어오는 방향에만 표지를 놓을 수 있다', () => {
+    const n = cross();
+    const c = center(n);
+    const seg = n.segmentsAt(c)[0];
+    expect(n.setSign(seg.id, c, 'stop')).toEqual({ ok: true });
+    expect(n.signAt(seg.id, c)).toBe('stop');
+    const end = [...n.nodes.values()].find((p) => p.x === -100)!.id; // 막다른 끝
+    const other = [...n.segments.values()].find((s) => s.a !== end && s.b !== end)!; // 그 끝점을 갖지 않은 도로
+    expect(n.setSign(other.id, end, 'stop')).toEqual({ ok: false, error: 'noSuchEnd' });
+    const endSeg = n.segmentsAt(end)[0];
+    expect(n.setSign(endSeg.id, end, 'yield')).toEqual({ ok: false, error: 'notIntersection' });
+    expect(n.setSign(seg.id, c, null)).toEqual({ ok: true });
+    expect(n.signAt(seg.id, c)).toBe(null);
+  });
+  it('표지가 있는 도로를 나누면 표지는 원래 끝에 남는다', () => {
+    const n = make();
+    line(n, -200, 0, 200, 0); line(n, 0, -100, 0, 0); // T자: 가로 도로가 가운데에서 나뉨
+    const c = center(n);
+    const east = [...n.segments.values()].find((s) => n.nodes.get(s.b)!.x === 200)!;
+    expect(n.setSign(east.id, c, 'yield').ok).toBe(true); // 중심으로 들어오는 동쪽 조각의 a쪽 끝이 아님 → a쪽(중심)
+    line(n, 100, -100, 100, 100); // 동쪽 조각을 한 번 더 가른다
+    const pieces = [...n.segments.values()].filter((s) => n.nodes.get(s.a)!.x >= 0 && s.kind && n.nodes.get(s.a)!.y === 0);
+    expect(pieces.filter((s) => s.signA === 'yield').length).toBe(1); // 표지는 중심 쪽 끝에 그대로
+    expect(pieces.filter((s) => s.signB === 'yield').length).toBe(0);
+  });
+  it('저장했다 불러와도 표지가 남는다. 되돌리기도 된다', () => {
+    const e = new Editor(config);
+    e.build({ x: -100, y: 0 }, { x: 100, y: 0 }, 'road2');
+    e.build({ x: 0, y: -100 }, { x: 0, y: 100 }, 'road2');
+    const c = center(e.network);
+    const seg = e.network.segmentsAt(c)[0];
+    expect(e.setSign(seg.id, c, 'stop').ok).toBe(true);
+    const text = e.exportText();
+    const e2 = new Editor(config);
+    e2.loadText(text);
+    expect(e2.network.signAt(seg.id, c)).toBe('stop');
+    e.undo();
+    expect(e.network.signAt(seg.id, c)).toBe(null);
+  });
+  it('형식 1(표지 필드 없음) 파일도 열린다', () => {
+    const v1 = { formatVersion: 1, nextNodeId: 3, nextSegmentId: 2,
+      nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 100, y: 0, z: 0 }],
+      segments: [{ id: 1, a: 1, b: 2, kind: 'road2', structure: 'ground', playerSpeedKmh: null }] };
+    const d = Network.parse(v1, config);
+    expect(d.formatVersion).toBe(2);
+    expect(d.segments[0]).toMatchObject({ signA: null, signB: null });
+    const e = new Editor(config);
+    e.loadText(JSON.stringify(v1));
+    expect(e.network.segments.size).toBe(1);
+  });
+  it('잘못된 표지 값은 거부', () => {
+    const bad = { formatVersion: 2, nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 50, y: 0, z: 0 }], segments: [{ id: 1, a: 1, b: 2, kind: 'road2', signA: 'ufo', signB: null }] };
+    expect(() => Network.parse(bad, config)).toThrow('손상');
   });
 });

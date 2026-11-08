@@ -48,38 +48,48 @@ check('탭 숨김 시 자동 일시정지', (await page.evaluate(() => window.__
 await page.waitForTimeout(200);
 check('자동 일시정지 안내 문구', (await page.locator('#note').innerText()).includes('자동 일시정지'));
 
-// ---- 2단계: 도로 건설 (실제 마우스 클릭) ----
+// ---- 2단계: 도로 건설 (드래그) ----
 const counts = () => page.evaluate(() => ({ n: window.__game.editor.network.nodes.size, s: window.__game.editor.network.segments.size }));
+const toScreen = (x, y) => page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
 const clickWorld = async (x, y) => {
-  const p = await page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
+  const p = await toScreen(x, y);
   await page.mouse.move(p.x, p.y);
   await page.mouse.click(p.x, p.y);
 };
-const hoverWorld = async (x, y) => {
-  const p = await page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
-  await page.mouse.move(p.x, p.y);
-  await page.waitForTimeout(100);
+// 누른 채로 끌기. release=false면 버튼을 누른 채로 두어 "그리는 중" 화면을 확인할 수 있다
+const dragWorld = async (x1, y1, x2, y2, release = true) => {
+  const a = await toScreen(x1, y1), b = await toScreen(x2, y2);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 8 });
+  if (release) { await page.mouse.up(); await page.waitForTimeout(80); } else await page.waitForTimeout(100);
 };
 
 await page.click('button[data-tool="road2"]');
-await clickWorld(-100, 0);
-await hoverWorld(100, 0);
-check('길이 표시', /^200 m$/.test(await page.locator('#tip').innerText()), await page.locator('#tip').innerText());
-await clickWorld(100, 0);
+await dragWorld(-100, 0, 100, 0, false);
+check('그리는 중 길이 표시', /^200 m$/.test(await page.locator('#tip').innerText()), await page.locator('#tip').innerText());
+await page.mouse.up();
+await page.waitForTimeout(80);
 let c = await counts();
-check('도로 1개 건설(노드 2, 도로 1)', c.n === 2 && c.s === 1, JSON.stringify(c));
-await page.keyboard.press('Escape'); // 이어 그리기 종료
+check('드래그로 도로 1개 건설(노드 2, 도로 1)', c.n === 2 && c.s === 1, JSON.stringify(c));
 
-await clickWorld(0, -100);
-await clickWorld(0, 100);
+await dragWorld(0, -100, 0, 100);
 c = await counts();
 check('십자 교차(노드 5, 도로 4)', c.n === 5 && c.s === 4, JSON.stringify(c));
-await page.keyboard.press('Escape');
 
-await clickWorld(200, 200);
-await hoverWorld(200, 205);
+await dragWorld(200, 200, 200, 205, false);
 check('잘못된 입력은 빨간 안내', (await page.locator('#tip').innerText()).includes('시작점과 같은') && (await page.locator('#tip').getAttribute('class')) === 'bad');
-await page.keyboard.press('Escape');
+await page.mouse.up();
+await page.waitForTimeout(80);
+check('잘못된 드래그는 건설되지 않음', (await counts()).s === 4);
+
+await dragWorld(160, 200, 260, 200, false);
+await page.keyboard.press('Escape'); // 그리는 중 Esc = 취소
+await page.mouse.up();
+await page.waitForTimeout(80);
+check('드래그 중 Esc로 취소', (await counts()).s === 4);
+await page.click('button[data-tool="road2"]'); // Esc가 도구도 해제했을 수 있으니 다시 선택
+if (!(await page.locator('button[data-tool="road2"].on').count())) await page.click('button[data-tool="road2"]');
 
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-roads.png') });
 
@@ -106,39 +116,67 @@ c = await counts();
 check('불러오기도 실행 취소 가능(도로 4→3)', c.s === 3, JSON.stringify(c));
 await page.keyboard.press('Escape');
 
-// 끌기(카메라 이동)는 건설 클릭으로 오인되지 않는다
+// 도로 도구에서 왼쪽 드래그는 그리기이고 카메라는 움직이지 않는다. 가운데 버튼 드래그가 이동이다
 await page.click('button[data-tool="road2"]');
-await page.mouse.move(400, 400);
+const refBefore = await toScreen(0, 0);
+const segsBeforeDrag = (await counts()).s;
+await page.mouse.move(400, 560);
 await page.mouse.down();
-await page.mouse.move(520, 380, { steps: 6 });
+await page.mouse.move(520, 600, { steps: 6 });
 await page.mouse.up();
-await page.mouse.move(700, 300);
-await page.waitForTimeout(100);
-check('드래그는 건설이 아님', await page.locator('#tip').isHidden());
+await page.waitForTimeout(150);
+const refAfter = await toScreen(0, 0);
+check('도로 도구의 왼쪽 드래그는 카메라를 움직이지 않음', Math.hypot(refAfter.x - refBefore.x, refAfter.y - refBefore.y) < 1, JSON.stringify([refBefore, refAfter]));
+if ((await counts()).s > segsBeforeDrag) await page.keyboard.press('Control+z'); // 그려진 도로는 되돌려 다음 시나리오를 같게 유지
+await page.mouse.move(640, 300);
+await page.mouse.down({ button: 'middle' });
+await page.mouse.move(740, 330, { steps: 6 });
+await page.mouse.up({ button: 'middle' });
+await page.waitForTimeout(400);
+const refPan = await toScreen(0, 0);
+check('가운데 버튼 드래그는 화면 이동', Math.hypot(refPan.x - refAfter.x, refPan.y - refAfter.y) > 20, JSON.stringify([refAfter, refPan]));
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 
-// ---- 3단계: 차량 주행 ----
+// ---- 4단계: 정지·양보 표지 ----
+const signCount = (kind) => page.evaluate((k) => [...window.__game.editor.network.segments.values()].filter((s) => s.signA === k || s.signB === k).length, kind);
+await page.keyboard.press('s');
+await clickWorld(-95, 0); // 막다른 끝 근처: 교차로가 아니라 거부
+check('교차로가 아닌 곳에는 표지를 못 놓음', (await page.locator('#msg').innerText()).includes('교차로') && (await signCount('stop')) === 0, await page.locator('#msg').innerText());
+await clickWorld(-20, 0); // 서쪽 팔의 교차로 쪽
+check('정지 표지 설치', (await signCount('stop')) === 1, String(await signCount('stop')));
+await clickWorld(-20, 0);
+check('같은 곳을 다시 누르면 표지 제거', (await signCount('stop')) === 0);
+await page.keyboard.press('y');
+await clickWorld(-20, 0);
+check('양보 표지 설치', (await signCount('yield')) === 1);
+await page.keyboard.press('s');
+await clickWorld(-20, 0);
+check('다른 표지로 교체', (await signCount('stop')) === 1 && (await signCount('yield')) === 0);
+
+// ---- 3단계+4단계: 차량 주행, 정지 표지 앞 정지, 교차로 통과 ----
 const stats = () => page.evaluate(() => ({ ...window.__game.sim.traffic.stats, live: window.__game.sim.traffic.vehicles.size }));
 await page.click('button[data-speed="4"]');
 await page.keyboard.press('v');
 await page.selectOption('#count', '10');
 await clickWorld(-60, 0);
 await clickWorld(0, 60);
-await page.waitForTimeout(1500);
+let sawStop = false;
+for (let i = 0; i < 400 && (await stats()).arrived < 10; i++) {
+  if (await page.evaluate(() => [...window.__game.sim.traffic.vehicles.values()].some((v) => v.status === '정지 표지'))) sawStop = true;
+  await page.waitForTimeout(150);
+}
 let st = await stats();
-check('차량 투입됨', st.spawned >= 1, JSON.stringify(st));
-for (let i = 0; i < 40 && (await stats()).arrived < 10; i++) await page.waitForTimeout(500);
-st = await stats();
-check('10대 모두 교차로를 지나 도착', st.arrived === 10 && st.live === 0, JSON.stringify(st));
-check('안전망 개입 0건', st.interventions === 0, String(st.interventions));
+check('정지 표지 앞에서 서는 차량이 있었다', sawStop);
+check('10대 모두 표지·교차로를 지나 도착', st.arrived === 10 && st.live === 0, JSON.stringify(st));
+check('안전망 개입 0건, 충돌 점유 0건, 교착 0건', st.interventions === 0 && st.conflicts === 0 && st.deadlocks === 0, JSON.stringify(st));
 
 await page.selectOption('#count', '50');
 await clickWorld(-60, 0);
 await clickWorld(0, 60);
 await page.keyboard.press('d');
 await page.waitForTimeout(6000);
-check('디버그 패널(FPS·차량 수)', /FPS \d+/.test(await page.locator('#debug').innerText()) && (await page.locator('#debug').innerText()).includes('차량'), (await page.locator('#debug').innerText()).replace(/\n/g, ' | '));
+check('디버그 패널(FPS·차량 수·충돌·차선변경)', /FPS \d+/.test(await page.locator('#debug').innerText()) && (await page.locator('#debug').innerText()).includes('충돌점유') && (await page.locator('#debug').innerText()).includes('차선변경'), (await page.locator('#debug').innerText()).replace(/\n/g, ' | '));
 check('디버그 라벨(차선 ID·차량 상태)', (await page.locator('#labels .lane').count()) > 0 && (await page.locator('#labels .veh').count()) > 0, `lane=${await page.locator('#labels .lane').count()} veh=${await page.locator('#labels .veh').count()}`);
 st = await stats();
 check('주행 중 차량 있음', st.live >= 3, JSON.stringify(st));
@@ -147,9 +185,11 @@ await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '
 await page.keyboard.press('Escape');
 await page.keyboard.press('r');
 const segsBefore = (await counts()).s;
-// 카메라가 움직였을 수 있으니 월드 좌표 대신 화면 아래쪽(빈 땅)을 직접 클릭
-await page.mouse.click(560, 560);
-await page.mouse.click(720, 600);
+// 빈 땅(화면 아래쪽)을 드래그
+await page.mouse.move(560, 580);
+await page.mouse.down();
+await page.mouse.move(700, 620, { steps: 6 });
+await page.mouse.up();
 await page.waitForTimeout(300);
 check('새 도로가 건설됨(테스트 전제)', (await counts()).s === segsBefore + 1, `${segsBefore} -> ${(await counts()).s}`);
 st = await stats();

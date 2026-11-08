@@ -1,4 +1,4 @@
-import { Network, NetworkData, PlanError, Pt, RoadKind } from './network';
+import { Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
 import type { Config } from '../config';
 
 // 도로망 + 실행 취소/다시 실행. 전체 상태 스냅샷 방식(도로망이 작은 동안은 가장 단순하고 안전)
@@ -25,6 +25,12 @@ export class Editor {
 
   build(p1: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
     const r = this.network.buildRoad(p1, p2, kind);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  setSign(segId: number, nodeId: number, kind: SignKind | null): ReturnType<Network['setSign']> {
+    const r = this.network.setSign(segId, nodeId, kind);
     if (r.ok) this.commit();
     return r;
   }

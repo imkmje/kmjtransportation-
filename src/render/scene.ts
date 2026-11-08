@@ -34,7 +34,7 @@ export function createScene(canvasParent: HTMLElement) {
   camera.position.set(250, 250, 250);
 
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   controls.screenSpacePanning = false; // 지면 위에서 이동
   controls.enableDamping = true;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(80);
@@ -58,6 +58,10 @@ export function createScene(canvasParent: HTMLElement) {
   return {
     scene,
     domElement: renderer.domElement,
+    /** 왼쪽 버튼 드래그로 화면을 이동할지. 도로를 그리는 동안에는 끈다(가운데 버튼은 항상 이동) */
+    setLeftDragPan(on: boolean) {
+      controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : (-1 as THREE.MOUSE);
+    },
     /** 화면 좌표(client) → 지면 위 시뮬 좌표. 지면 밖이면 null */
     pickGround(clientX: number, clientY: number): Pt | null {
       const r = renderer.domElement.getBoundingClientRect();

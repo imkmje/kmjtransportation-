@@ -1,7 +1,9 @@
 import type { Config } from '../config';
-import type { Network, Pt } from './network';
+import type { Network, Pt, SignKind } from './network';
 
 // 주행 가능한 "트랙": 차선(도로 구간 위) 또는 연결선(교차로 안, 차선 끝 → 다른 차선 시작)
+export type Turn = 'straight' | 'left' | 'right' | 'uturn';
+
 export interface Track {
   id: number;
   kind: 'lane' | 'conn';
@@ -17,6 +19,13 @@ export interface Track {
   next: number[];
   uturn: boolean;
   t0: number; // 차선: 도로 중심선 위 차선 시작 지점의 거리(시작 노드 a 기준)
+  lanes: number; // 차선: 같은 방향 차선 수. 연결선은 0
+  rank: number; // 도로 등급(교차로 우선순위). 연결선은 들어오는 차선의 등급
+  sign: SignKind | null; // 차선: 끝(교차로) 쪽에 놓인 표지. 연결선은 들어오는 차선의 표지
+  turn: Turn; // 연결선의 회전 종류
+  node: number; // 연결선이 놓인 교차로 노드. 차선은 -1
+  src: number; // 연결선이 출발하는 차선 ID. 차선은 -1
+  conflicts: number[]; // 같은 교차로에서 동시에 지나면 부딪히는 다른 연결선 ID
 }
 
 export interface LaneGraph {
@@ -26,7 +35,7 @@ export interface LaneGraph {
 }
 
 const KMH = 1 / 3.6;
-type Rules = Pick<Config, 'roads' | 'driving'>;
+type Rules = Pick<Config, 'roads' | 'driving' | 'intersection'>;
 
 function polyline(pts: Pt[]): number[] {
   const cum = [0];
@@ -63,7 +72,9 @@ function makeConnector(id: number, a: Track, b: Track, uturn: boolean, rules: Ru
   }
   const curveV = kmax > 1e-6 ? Math.sqrt(rules.driving.curveLatAccel / kmax) : Infinity;
   const vmax = Math.min(a.vmax, b.vmax, Math.max(curveV, rules.driving.minTurnKmh * KMH));
-  return { id, kind: 'conn', segId: -1, fwd: true, index: 0, from: a.to, to: b.from, length: cum[cum.length - 1], pts, cum, vmax, next: [b.id], uturn, t0: 0 };
+  const dth = wrap(h3 - h0);
+  const turn: Turn = uturn ? 'uturn' : Math.abs(dth) < (rules.intersection.straightDeg * Math.PI) / 180 ? 'straight' : dth > 0 ? 'left' : 'right';
+  return { id, kind: 'conn', segId: -1, fwd: true, index: 0, from: a.to, to: b.from, length: cum[cum.length - 1], pts, cum, vmax, next: [b.id], uturn, t0: 0, lanes: 0, rank: a.rank, sign: a.sign, turn, node: a.to, src: a.id, conflicts: [] };
 }
 
 /** 도로망 → 차선 + 연결선 그래프. ID는 도로 ID 순서로 정해져 항상 같은 결과가 나온다 */
@@ -102,7 +113,7 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
           { x: A.x + ux * d1 + nx * off, y: A.y + uy * d1 + ny * off },
         ];
         const cum = polyline(pts);
-        const t: Track = { id: tracks.length, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, next: [], uturn: false, t0: d0 };
+        const t: Track = { id: tracks.length, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
         tracks.push(t);
         list.push(t);
         push(outs, t.from, t);
@@ -124,7 +135,41 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
       }
     }
   }
+  computeConflicts(tracks);
   return { revision: net.revision, tracks, lanesOfSeg };
+}
+
+// 두 선분이 서로의 안쪽에서 만나는가(끝점만 닿는 경우는 제외)
+function segCross(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
+  const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-12) return false;
+  const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+  const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+  return t > 1e-6 && t < 1 - 1e-6 && u > 1e-6 && u < 1 - 1e-6;
+}
+
+// 같은 교차로 안의 연결선끼리: 길이 겹치거나(교차) 같은 차선으로 합쳐지면(합류) 충돌 관계
+function computeConflicts(tracks: Track[]): void {
+  const byNode = new Map<number, Track[]>();
+  for (const t of tracks) if (t.kind === 'conn') { const l = byNode.get(t.node); if (l) l.push(t); else byNode.set(t.node, [t]); }
+  const box = (t: Track) => ({ x0: Math.min(...t.pts.map((p) => p.x)), x1: Math.max(...t.pts.map((p) => p.x)), y0: Math.min(...t.pts.map((p) => p.y)), y1: Math.max(...t.pts.map((p) => p.y)) });
+  for (const list of byNode.values()) {
+    const boxes = list.map(box);
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        if (a.src === b.src) continue; // 같은 차선에서 갈라지는 길은 앞뒤로 줄 서므로 충돌이 아니다
+        let hit = a.next[0] === b.next[0]; // 합류
+        if (!hit) {
+          const p = boxes[i], q = boxes[j];
+          if (p.x0 > q.x1 || q.x0 > p.x1 || p.y0 > q.y1 || q.y0 > p.y1) continue;
+          for (let m = 1; m < a.pts.length && !hit; m++) for (let n = 1; n < b.pts.length && !hit; n++) hit = segCross(a.pts[m - 1], a.pts[m], b.pts[n - 1], b.pts[n]);
+        }
+        if (hit) { a.conflicts.push(b.id); b.conflicts.push(a.id); }
+      }
+    }
+  }
 }
 
 export function posAt(t: Track, s: number): { x: number; y: number; h: number } {
