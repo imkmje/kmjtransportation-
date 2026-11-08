@@ -33,7 +33,8 @@ export function createDebug(d: Deps) {
         `FPS ${fps.toFixed(0)}   tick ${d.sim.tickCount}\n` +
         `차량 ${t.vehicles.size}   트랙 ${t.graph.tracks.length}\n` +
         `투입 ${s.spawned} / 도착 ${s.arrived} / 포기 ${s.abandoned} / 경로없음 ${s.noRoute}\n` +
-        `안전망 개입 ${s.interventions}`;
+        `안전망 개입 ${s.interventions}   충돌점유 ${s.conflicts}\n` +
+        `차선변경 ${s.laneChanges}   교착해소 ${s.deadlocks} / 제거 ${s.removed}`;
 
       const cx = innerWidth / 2, cy = innerHeight / 2;
       const items: { x: number; y: number; text: string; cls: string; d: number }[] = [];

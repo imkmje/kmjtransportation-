@@ -44,6 +44,7 @@ class MinHeap {
   }
 }
 
+const LANE_PENALTY = 0.5; // 선호하지 않는 차선에 들어갈 때의 벌점(초)
 const MIN_TRIP = 3; // 출발·도착이 같은 차선 위에서 이보다 가까우면 직진 경로로 보지 않는다(m)
 
 /** 출발 도로의 아무 차선에서 시작해 도착 도로의 아무 차선에서 끝나는 최단 시간 경로. 없으면 null */
@@ -78,7 +79,13 @@ export function findRoute(g: LaneGraph, from: RoadPos, to: RoadPos): Route | nul
         const fc = c + e / N.vmax;
         if (fc < best.cost) best = { cost: fc, last: nid, via: id, endS: e };
       }
-      const nc = c + N.length / N.vmax;
+      let nc = c + N.length / N.vmax;
+      if (N.kind === 'conn' && !N.uturn) {
+        // 차선 선호: 우회전은 오른쪽, 좌회전은 왼쪽, 직진은 지금 차선 그대로 (한 칸 어긋날 때마다 약한 벌점)
+        const out = g.tracks[N.next[0]];
+        const pref = N.turn === 'right' ? 1 : N.turn === 'left' ? out.lanes : Math.min(g.tracks[id].index, out.lanes);
+        nc += LANE_PENALTY * Math.abs(out.index - pref);
+      }
       if (nc < (dist.get(nid) ?? Infinity)) {
         dist.set(nid, nc);
         prev.set(nid, id);

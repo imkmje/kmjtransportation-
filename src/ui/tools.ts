@@ -1,11 +1,11 @@
 import { config } from '../config';
 import type { Editor } from '../sim/editor';
-import type { PlanError, Pt, RoadKind } from '../sim/network';
+import type { PlanError, Pt, RoadKind, SignKind } from '../sim/network';
 import type { RoadPos } from '../sim/route';
 import type { RoadLayer } from '../render/roads';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | 'demolish' | 'trip';
+type Tool = null | RoadKind | SignKind | 'demolish' | 'trip';
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -21,6 +21,7 @@ interface Deps {
   roads: RoadLayer;
   pick: (clientX: number, clientY: number) => Pt | null;
   canvas: HTMLElement;
+  setLeftDragPan: (on: boolean) => void;
   toolbar: HTMLElement;
   filebar: HTMLElement;
   tip: HTMLElement;
@@ -42,11 +43,14 @@ export function createTools(d: Deps) {
   let gridSnap = true;
   let angleSnap = false;
   let tripFrom: RoadHit | null = null;
+  let dragging = false; // 도로 그리기 드래그 중
 
   // ---- 화면 요소 ----
   d.toolbar.innerHTML = `
     <button data-tool="road2" title="단축키 R">${config.roads.road2.name}</button>
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
+    <button data-tool="stop" title="단축키 S">정지 표지</button>
+    <button data-tool="yield" title="단축키 Y">양보 표지</button>
     <button data-tool="demolish" title="단축키 X">철거</button>
     <button data-tool="trip" title="단축키 V">차량 투입 (테스트)</button>
     <div class="row"><select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select><button id="clearveh">차량 제거</button></div>
@@ -54,7 +58,7 @@ export function createTools(d: Deps) {
     <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
     <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
     <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">왼쪽 드래그: 이동 · 오른쪽 드래그: 회전<br />클릭: 시작·끝 지정 · 우클릭/Esc: 취소<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
@@ -91,6 +95,17 @@ export function createTools(d: Deps) {
     return raw;
   }
 
+  // 클릭한 도로에서 가장 가까운 끝(교차로 쪽)과, 그쪽으로 들어오는 방향의 표지 위치
+  function signTarget(p: Pt): { segId: number; nodeId: number; x: number; y: number } | null {
+    const h = net.projectOnRoad(p, 20);
+    if (!h) return null;
+    const seg = net.segments.get(h.segId)!;
+    const len = net.segmentLength(seg);
+    const nodeId = h.t < len / 2 ? seg.a : seg.b;
+    const node = net.nodes.get(nodeId)!, other = net.nodes.get(nodeId === seg.a ? seg.b : seg.a)!;
+    return { segId: seg.id, nodeId, x: node.x + ((other.x - node.x) / len) * 8, y: node.y + ((other.y - node.y) / len) * 8 };
+  }
+
   // ---- 갱신 ----
   function refresh() {
     d.roads.clearGhost();
@@ -105,6 +120,12 @@ export function createTools(d: Deps) {
     if (tool === 'trip') {
       const h = d.pickRoad(last);
       d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
+      return;
+    }
+    if (tool === 'stop' || tool === 'yield') {
+      const t = signTarget(last);
+      const ok = !!t && net.segmentsAt(t.nodeId).length >= 3;
+      d.roads.setCursor(t ? { x: t.x, y: t.y } : null, ok);
       return;
     }
     if (tool === 'demolish') {
@@ -127,6 +148,8 @@ export function createTools(d: Deps) {
     tool = tool === t ? null : t;
     start = null;
     tripFrom = null;
+    dragging = false;
+    d.setLeftDragPan(!(tool && tool in config.roads));
     refresh();
   }
 
@@ -143,21 +166,27 @@ export function createTools(d: Deps) {
       refresh();
       return;
     }
+    if (tool === 'stop' || tool === 'yield') {
+      const t = signTarget(last);
+      if (!t) { say('도로 위를 클릭하세요'); return; }
+      const cur = net.signAt(t.segId, t.nodeId);
+      const r = d.editor.setSign(t.segId, t.nodeId, cur === tool ? null : tool);
+      say(!r.ok ? '표지는 도로 3개 이상이 만나는 교차로 쪽에서만 놓을 수 있습니다' : cur === tool ? '표지를 치웠습니다' : `${tool === 'stop' ? '정지' : '양보'} 표지를 놓았습니다 (달리던 차량은 제거됩니다)`);
+      refresh();
+      return;
+    }
     if (tool === 'demolish') {
       const h = net.nearestSegment(last.x, last.y, config.geometry.mergeRadius);
       if (h) d.editor.demolish(h.id);
       refresh();
       return;
     }
-    const p = cursorPoint(last);
-    if (!start) { start = p; refresh(); return; }
-    if (d.editor.build(start, p, tool).ok) start = { x: p.x, y: p.y }; // 이어서 계속 건설
-    refresh(); // 실패하면 시작점을 유지하고 이유가 표시된 채로 둔다
+    // 도로 도구는 클릭이 아니라 드래그로 그린다
   }
 
   function cancel() {
-    if (start || tripFrom) { start = null; tripFrom = null; }
-    else tool = null;
+    if (start || tripFrom) { start = null; tripFrom = null; dragging = false; }
+    else { tool = null; d.setLeftDragPan(true); }
     refresh();
   }
 
@@ -168,8 +197,33 @@ export function createTools(d: Deps) {
     last = d.pick(e.clientX, e.clientY);
     refresh();
   });
-  d.canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, button: e.button }; });
+  const drawing = () => tool !== null && tool in config.roads;
+  d.canvas.addEventListener('pointerdown', (e) => {
+    down = { x: e.clientX, y: e.clientY, button: e.button };
+    if (drawing() && e.button === 0) {
+      const p = d.pick(e.clientX, e.clientY);
+      if (!p) return;
+      last = p;
+      start = cursorPoint(p);
+      dragging = true;
+      d.canvas.setPointerCapture(e.pointerId);
+      refresh();
+    } else if (dragging && e.button === 2) { start = null; dragging = false; refresh(); } // 그리는 중 우클릭 = 취소
+  });
   d.canvas.addEventListener('pointerup', (e) => {
+    if (dragging && e.button === 0) {
+      dragging = false;
+      const from = start;
+      start = null;
+      last = d.pick(e.clientX, e.clientY) ?? last;
+      if (from && last && drawing()) {
+        const to = cursorPoint({ ...last });
+        if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) d.editor.build(from, to, tool as RoadKind);
+      }
+      down = null;
+      refresh();
+      return;
+    }
     // 거의 움직이지 않았을 때만 "클릭". 끌었으면 카메라 이동·회전이므로 무시
     const isClick = down && down.button === e.button && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5;
     down = null;
@@ -191,6 +245,8 @@ export function createTools(d: Deps) {
     else if (k === 'r') setTool('road2');
     else if (k === 't') setTool('road4');
     else if (k === 'x') setTool('demolish');
+    else if (k === 's') setTool('stop');
+    else if (k === 'y') setTool('yield');
     else if (k === 'v') setTool('trip');
     else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }
     else if (k === ' ') { e.preventDefault(); d.togglePause(); }

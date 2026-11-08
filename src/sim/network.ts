@@ -3,6 +3,7 @@ import type { Config } from '../config';
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
 export interface NetNode { id: number; x: number; y: number; z: number }
+export type SignKind = 'stop' | 'yield';
 export interface Segment {
   id: number;
   a: number; // 시작 노드 ID
@@ -10,6 +11,8 @@ export interface Segment {
   kind: RoadKind;
   structure: 'ground' | 'bridge' | 'tunnel'; // 2.1.0 대비
   playerSpeedKmh: number | null; // 플레이어가 바꾼 제한속도(기본값은 도로 종류에서)
+  signA: SignKind | null; // a쪽 끝으로 들어오는 방향의 표지
+  signB: SignKind | null; // b쪽 끝으로 들어오는 방향의 표지
 }
 
 export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads';
@@ -17,7 +20,7 @@ interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 1;
+export const NETWORK_FORMAT_VERSION = 2; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -205,6 +208,21 @@ export class Network {
     return true;
   }
 
+  /** 교차로(도로 3개 이상이 만나는 노드)로 들어오는 방향에 표지를 놓거나(kind) 치운다(null) */
+  setSign(segId: number, nodeId: number, kind: SignKind | null): { ok: true } | { ok: false; error: 'notIntersection' | 'noSuchEnd' } {
+    const seg = this.segments.get(segId);
+    if (!seg || (seg.a !== nodeId && seg.b !== nodeId)) return { ok: false, error: 'noSuchEnd' };
+    if (kind !== null && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
+    if (seg.a === nodeId) seg.signA = kind; else seg.signB = kind;
+    this.revision++;
+    return { ok: true };
+  }
+
+  signAt(segId: number, nodeId: number): SignKind | null {
+    const s = this.segments.get(segId);
+    return !s ? null : s.a === nodeId ? s.signA : s.b === nodeId ? s.signB : null;
+  }
+
   private addNode(x: number, y: number): number {
     const id = this.nextNodeId++;
     this.nodes.set(id, { id, x, y, z: 0 });
@@ -213,7 +231,7 @@ export class Network {
 
   private addSegment(a: number, b: number, kind: RoadKind): number {
     const id = this.nextSegmentId++;
-    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null });
+    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null, signA: null, signB: null });
     return id;
   }
 
@@ -221,9 +239,11 @@ export class Network {
   private splitSegment(segId: number, node: number): void {
     const s = this.segments.get(segId)!;
     const oldB = s.b;
+    const oldSignB = s.signB;
     s.b = node;
+    s.signB = null; // 새로 생긴 이음 노드에는 표지가 없다
     const id = this.nextSegmentId++;
-    this.segments.set(id, { ...s, id, a: node, b: oldB });
+    this.segments.set(id, { ...s, id, a: node, b: oldB, signA: null, signB: oldSignB });
   }
 
   toJSON(): NetworkData {
@@ -241,7 +261,7 @@ export class Network {
     const d = data as Partial<NetworkData> | null;
     if (!d || typeof d !== 'object' || typeof d.formatVersion !== 'number') throw new Error('도로망 파일이 아닙니다');
     if (d.formatVersion > NETWORK_FORMAT_VERSION) throw new Error('더 새로운 버전에서 저장한 파일입니다');
-    if (d.formatVersion < 1) throw new Error('지원하지 않는 저장 형식입니다');
+    if (d.formatVersion < 1 || !Number.isInteger(d.formatVersion)) throw new Error('지원하지 않는 저장 형식입니다');
     if (!Array.isArray(d.nodes) || !Array.isArray(d.segments)) throw new Error('도로망 파일이 손상되었습니다');
     const ids = new Set<number>();
     for (const n of d.nodes) {
@@ -251,14 +271,18 @@ export class Network {
     for (const s of d.segments) {
       if (!ids.has(s?.a) || !ids.has(s?.b) || !(s.kind in rules.roads)) throw new Error('도로망 파일이 손상되었습니다');
     }
+    const okSign = (v: unknown) => v === null || v === 'stop' || v === 'yield';
+    // 형식 1 → 2: 표지 필드를 비워서 채운다
+    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null }));
+    if (!segments.every((sg) => okSign(sg.signA) && okSign(sg.signB))) throw new Error('도로망 파일이 손상되었습니다');
     const maxNode = Math.max(0, ...d.nodes.map((n) => n.id));
     const maxSeg = Math.max(0, ...d.segments.map((s) => s.id));
     return {
-      formatVersion: d.formatVersion,
+      formatVersion: NETWORK_FORMAT_VERSION,
       nextNodeId: Math.max(d.nextNodeId ?? 0, maxNode + 1),
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
       nodes: d.nodes,
-      segments: d.segments,
+      segments,
     };
   }
 
