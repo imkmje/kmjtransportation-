@@ -1,10 +1,12 @@
 import { config } from '../config';
 import type { Editor } from '../sim/editor';
 import type { PlanError, Pt, RoadKind } from '../sim/network';
+import type { RoadPos } from '../sim/route';
 import type { RoadLayer } from '../render/roads';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | 'demolish';
+type Tool = null | RoadKind | 'demolish' | 'trip';
+type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
   samePoint: '시작점과 같은 위치입니다',
@@ -23,6 +25,12 @@ interface Deps {
   filebar: HTMLElement;
   tip: HTMLElement;
   togglePause: () => void;
+  /** 점 근처의 도로 위 지점(없으면 null) */
+  pickRoad: (p: Pt) => RoadHit | null;
+  /** 차량 투입 요청. 실패하면 이유(한국어), 성공하면 null */
+  requestTrip: (from: RoadPos, to: RoadPos, count: number) => string | null;
+  clearVehicles: () => void;
+  setDebug: (on: boolean) => void;
 }
 
 export function createTools(d: Deps) {
@@ -33,16 +41,20 @@ export function createTools(d: Deps) {
   let lastClient = { x: 0, y: 0 };
   let gridSnap = true;
   let angleSnap = false;
+  let tripFrom: RoadHit | null = null;
 
   // ---- 화면 요소 ----
   d.toolbar.innerHTML = `
     <button data-tool="road2" title="단축키 R">${config.roads.road2.name}</button>
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
     <button data-tool="demolish" title="단축키 X">철거</button>
+    <button data-tool="trip" title="단축키 V">차량 투입 (테스트)</button>
+    <div class="row"><select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select><button id="clearveh">차량 제거</button></div>
     <div class="row"><button id="undo" title="Ctrl+Z">↶ 취소</button><button id="redo" title="Ctrl+Y">↷ 다시</button></div>
     <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
     <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
-    <div class="help">왼쪽 드래그: 이동 · 오른쪽 드래그: 회전<br />클릭: 시작·끝 지정 · 우클릭/Esc: 취소</div>`;
+    <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
+    <div class="help">왼쪽 드래그: 이동 · 오른쪽 드래그: 회전<br />클릭: 시작·끝 지정 · 우클릭/Esc: 취소<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
@@ -88,7 +100,13 @@ export function createTools(d: Deps) {
     undoBtn.disabled = !d.editor.canUndo;
     redoBtn.disabled = !d.editor.canRedo;
     toolButtons.forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
+    d.roads.setMark(tool === 'trip' ? tripFrom : null);
     if (!last || tool === null) return;
+    if (tool === 'trip') {
+      const h = d.pickRoad(last);
+      d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
+      return;
+    }
     if (tool === 'demolish') {
       d.roads.setHover(net.nearestSegment(last.x, last.y, config.geometry.mergeRadius)?.id ?? null);
       return;
@@ -108,11 +126,23 @@ export function createTools(d: Deps) {
   function setTool(t: Tool) {
     tool = tool === t ? null : t;
     start = null;
+    tripFrom = null;
     refresh();
   }
 
   function click() {
     if (!last || tool === null) return;
+    if (tool === 'trip') {
+      const h = d.pickRoad(last);
+      if (!h) { say('도로 위를 클릭하세요'); return; }
+      if (!tripFrom) { tripFrom = h; refresh(); return; }
+      const count = Number($<HTMLSelectElement>(d.toolbar, '#count').value);
+      const err = d.requestTrip(tripFrom, h, count);
+      say(err ?? `차량 ${count}대를 투입합니다`);
+      tripFrom = null;
+      refresh();
+      return;
+    }
     if (tool === 'demolish') {
       const h = net.nearestSegment(last.x, last.y, config.geometry.mergeRadius);
       if (h) d.editor.demolish(h.id);
@@ -126,7 +156,7 @@ export function createTools(d: Deps) {
   }
 
   function cancel() {
-    if (start) start = null;
+    if (start || tripFrom) { start = null; tripFrom = null; }
     else tool = null;
     refresh();
   }
@@ -161,6 +191,8 @@ export function createTools(d: Deps) {
     else if (k === 'r') setTool('road2');
     else if (k === 't') setTool('road4');
     else if (k === 'x') setTool('demolish');
+    else if (k === 'v') setTool('trip');
+    else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }
     else if (k === ' ') { e.preventDefault(); d.togglePause(); }
   });
 
@@ -169,6 +201,8 @@ export function createTools(d: Deps) {
   undoBtn.onclick = () => { d.editor.undo(); start = null; refresh(); };
   redoBtn.onclick = () => { d.editor.redo(); start = null; refresh(); };
   $<HTMLInputElement>(d.toolbar, '#grid').onchange = (e) => (gridSnap = (e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#debugToggle').onchange = (e) => d.setDebug((e.target as HTMLInputElement).checked);
+  $(d.toolbar, '#clearveh').onclick = () => { d.clearVehicles(); say('차량을 모두 제거했습니다'); };
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
 
   const slot = () => Number($<HTMLSelectElement>(d.filebar, '#slot').value);

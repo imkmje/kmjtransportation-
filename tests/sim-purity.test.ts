@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Sim } from '../src/sim/sim';
+import { Network } from '../src/sim/network';
 import { config } from '../src/config';
 import { toThree } from '../src/render/coords';
 
@@ -18,7 +19,7 @@ describe('src/sim 규칙', () => {
     for (const f of files('src/sim')) expect(readFileSync(f, 'utf8'), f).not.toMatch(banned);
   });
   it('같은 시드로 같은 tick 수를 돌리면 결과가 같다', () => {
-    const a = new Sim(config), b = new Sim(config);
+    const a = new Sim(config, new Network(config)), b = new Sim(config, new Network(config));
     for (let i = 0; i < 500; i++) { a.step(); b.step(); }
     expect(a.tickCount).toBe(b.tickCount);
     expect(a.rng.next()).toBe(b.rng.next());

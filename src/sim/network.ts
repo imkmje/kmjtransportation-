@@ -94,6 +94,17 @@ export class Network {
     return best ?? { x: p.x, y: p.y };
   }
 
+  /** 점에서 radius 안의 가장 가까운 도로 위 지점. t = 도로 시작 노드(a)에서의 거리(m) */
+  projectOnRoad(p: Pt, radius: number): { segId: number; t: number; x: number; y: number } | null {
+    let best: { segId: number; t: number; x: number; y: number; d: number } | null = null;
+    for (const s of this.segments.values()) {
+      const a = this.nodes.get(s.a)!, b = this.nodes.get(s.b)!;
+      const q = distToSegment(p, a, b);
+      if (q.d <= radius && (!best || q.d < best.d)) best = { segId: s.id, t: q.u * dist(a, b), x: q.x, y: q.y, d: q.d };
+    }
+    return best && { segId: best.segId, t: best.t, x: best.x, y: best.y };
+  }
+
   nearestSegment(x: number, y: number, radius: number): { id: number; dist: number } | null {
     let best: { id: number; dist: number } | null = null;
     for (const s of this.segments.values()) {

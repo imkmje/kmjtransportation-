@@ -118,6 +118,46 @@ check('드래그는 건설이 아님', await page.locator('#tip').isHidden());
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 
+// ---- 3단계: 차량 주행 ----
+const stats = () => page.evaluate(() => ({ ...window.__game.sim.traffic.stats, live: window.__game.sim.traffic.vehicles.size }));
+await page.click('button[data-speed="4"]');
+await page.keyboard.press('v');
+await page.selectOption('#count', '10');
+await clickWorld(-60, 0);
+await clickWorld(0, 60);
+await page.waitForTimeout(1500);
+let st = await stats();
+check('차량 투입됨', st.spawned >= 1, JSON.stringify(st));
+for (let i = 0; i < 40 && (await stats()).arrived < 10; i++) await page.waitForTimeout(500);
+st = await stats();
+check('10대 모두 교차로를 지나 도착', st.arrived === 10 && st.live === 0, JSON.stringify(st));
+check('안전망 개입 0건', st.interventions === 0, String(st.interventions));
+
+await page.selectOption('#count', '50');
+await clickWorld(-60, 0);
+await clickWorld(0, 60);
+await page.keyboard.press('d');
+await page.waitForTimeout(6000);
+check('디버그 패널(FPS·차량 수)', /FPS \d+/.test(await page.locator('#debug').innerText()) && (await page.locator('#debug').innerText()).includes('차량'), (await page.locator('#debug').innerText()).replace(/\n/g, ' | '));
+check('디버그 라벨(차선 ID·차량 상태)', (await page.locator('#labels .lane').count()) > 0 && (await page.locator('#labels .veh').count()) > 0, `lane=${await page.locator('#labels .lane').count()} veh=${await page.locator('#labels .veh').count()}`);
+st = await stats();
+check('주행 중 차량 있음', st.live >= 3, JSON.stringify(st));
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-vehicles.png') });
+
+await page.keyboard.press('Escape');
+await page.keyboard.press('r');
+const segsBefore = (await counts()).s;
+// 카메라가 움직였을 수 있으니 월드 좌표 대신 화면 아래쪽(빈 땅)을 직접 클릭
+await page.mouse.click(560, 560);
+await page.mouse.click(720, 600);
+await page.waitForTimeout(300);
+check('새 도로가 건설됨(테스트 전제)', (await counts()).s === segsBefore + 1, `${segsBefore} -> ${(await counts()).s}`);
+st = await stats();
+check('도로를 고치면 달리던 차량은 모두 제거', st.live === 0, JSON.stringify(st));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.keyboard.press('d');
+
 // 카메라 조작: 휠 줌과 드래그 후에도 오류 없이 렌더
 await page.mouse.move(640, 360);
 await page.mouse.wheel(0, -400);
