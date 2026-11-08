@@ -2,10 +2,25 @@ import type { Config } from '../config';
 import { buildLaneGraph, LaneGraph, posAt, Track } from './lanes';
 import type { Network } from './network';
 import type { Rng } from './random';
-import { findRoute, RoadPos } from './route';
+import { findRoute, findRouteFromTrack, RoadPos, Route } from './route';
+
+/** 이동 하나의 꼬리표. 수요가 만든 이동은 어느 건물에서 어느 건물로 가는지 알아야 도착·분실을 처리할 수 있다 */
+export interface TripMeta {
+  kind: 'commute' | 'return' | 'test'; // 출근 / 퇴근 / 테스트 도구(통계에서 제외)
+  from: number; // 출발 건물 ID (test는 0)
+  to: number; // 도착 건물 ID
+  born: number; // 이동이 발생한 tick(출발 대기 시간 포함해 통행시간을 잰다)
+  mode: 'car'; // 3.0.0 예약: 이동수단. 지금은 항상 승용차
+  ownerId: number; // 3.0.0 예약: 차량 소유 ID
+}
+export type LostReason = 'noRoute' | 'abandoned' | 'removed' | 'deadlock';
+interface Job { meta: TripMeta; from: RoadPos; to: RoadPos; born: number }
 
 export interface Vehicle {
   id: number;
+  meta: TripMeta | null;
+  mRef: number; mAct: number; // 통계용: 현재 구간(버킷)에서 기준 이동거리와 실제 이동거리
+  gv: number; // 통계용: 방해받지 않는 "기준 차량"의 속도(같은 가속 모델로 출발했다면 도달했을 속도)
   path: number[]; // 지나갈 트랙 ID 순서(차선 변경 때 이 차량 것만 고쳐 쓰므로 투입 때 복사한다)
   pi: number; // 현재 트랙이 path의 몇 번째인지
   s: number; // 현재 트랙 위에서 차량 앞 범퍼의 위치(m)
@@ -34,7 +49,7 @@ export interface Vehicle {
   hold: boolean; holdFor: number; // 테스트·디버그용: 제자리에 고정하고, holdFor가 있으면 그 차량을 기다리는 것으로 본다
   // 차선 변경
   lcCool: number; // 다시 바꿀 수 있을 때까지 남은 tick
-  lcPhantom: number; lcFrom: number; // 이전 차선에도 흔적이 남는 시간(두 차선 점유)
+  lcPhantom: number; lcFrom: number; lcPi: number; // 이전 차선에도 흔적이 남는 시간(두 차선 점유). lcPi: 흔적은 바꾼 차선 위(path 인덱스)에 있는 동안만 유효
   lcTicks: number; lcOffX: number; lcOffY: number; // 옆으로 미끄러지는 표시용 오프셋
 }
 
@@ -83,6 +98,12 @@ export class Traffic {
   readonly stats: Stats = { spawned: 0, arrived: 0, abandoned: 0, interventions: 0, noRoute: 0, conflicts: 0, laneChanges: 0, deadlocks: 0, removed: 0 };
   /** 안전망이 마지막으로 개입한 상황(디버그용) */
   lastIntervention = '';
+  /** 건물에서 출발할 이동 대기열(자리가 나면 투입). 맨 앞부터 처리한다 */
+  jobs: Job[] = [];
+  /** 차량이 도착했을 때 / 도착하지 못하고 사라질 때(미완료) 알림 */
+  onArrive: ((v: Vehicle, tick: number) => void) | null = null;
+  onLost: ((v: Vehicle | null, meta: TripMeta, reason: LostReason, tick: number) => void) | null = null;
+  private routeCache = new Map<string, Route | null>();
   private requests: SpawnRequest[] = [];
   private lists = new Map<number, Entry[]>();
   private cycleState = new Map<string, { since: number; stage: number; stageTick: number; vid: number }>();
@@ -93,20 +114,91 @@ export class Traffic {
     this.graph = buildLaneGraph(net, cfg);
   }
 
-  /** 도로망이 바뀌었으면 그래프를 다시 만든다. 달리던 차량은 모두 제거(삭제 처리 규칙은 6단계에서 다듬음) */
+  /**
+   * 도로망이 바뀌었으면 그래프를 다시 만들고, 달리던 차량은 같은 차선·연결선(이름이 같은 것)이 남아 있으면 그대로 이어서 달린다.
+   * 앞으로 갈 길이 끊긴 차량과 모양이 바뀐 연결선 위의 차량은 제거(미완료)
+   */
   sync(): void {
     if (this.graph.revision === this.net.revision) return;
-    this.graph = buildLaneGraph(this.net, this.cfg);
+    const old = this.graph;
+    const nu = buildLaneGraph(this.net, this.cfg);
+    const byKey = new Map(nu.tracks.map((t) => [t.key, t.id]));
+    this.graph = nu;
+    this.routeCache.clear();
+    this.cycleState.clear();
+    this.requests = [];
+    for (const v of [...this.vehicles.values()]) {
+      const ids: number[] = [];
+      let ok = true, changed = false;
+      for (let k = v.pi; k < v.path.length && ok; k++) {
+        const o = old.tracks[v.path[k]];
+        const id = byKey.get(o.key);
+        if (id === undefined) ok = false;
+        else { ids.push(id); if (Math.abs(nu.tracks[id].length - o.length) > 0.05) changed = true; }
+      }
+      let s = v.s, endS = v.endS;
+      if (ok) {
+        const cur = old.tracks[v.path[v.pi]], now = nu.tracks[ids[0]];
+        if (cur.kind === 'conn') ok = now.pts.length === cur.pts.length && now.pts.every((p, i) => Math.hypot(p.x - cur.pts[i].x, p.y - cur.pts[i].y) < 0.05); // 모양이 바뀐 교차로 안은 지운다
+        else s = this.reproject(cur, now, v.s);
+        const lastOld = old.tracks[v.path[v.path.length - 1]], lastNew = nu.tracks[ids[ids.length - 1]];
+        if (ok && lastOld.kind === 'lane') endS = this.reproject(lastOld, lastNew, v.endS);
+      }
+      if (!ok) { this.vehicles.delete(v.id); if (v.meta) this.onLost?.(v, v.meta, 'removed', this.tick); continue; }
+      v.uturnDone = Math.max(-1, v.uturnDone - v.pi);
+      v.path = ids; v.pi = 0; v.s = s; v.endS = endS;
+      v.grantPi = -1; v.reqPi = -1; v.stopPi = -1; v.lcPhantom = 0; v.lcFrom = -1;
+      // 길의 모양이 바뀌었고(예: 도로가 둘로 나뉨) 목적지 건물이 있으면, 그 건물로 다시 길을 찾는다
+      if (changed && v.meta && v.meta.kind !== 'test' && this.net.buildings.has(v.meta.to)) {
+        const to = this.net.accessOf(v.meta.to);
+        if (!to || !this.reroute(v, to)) { this.vehicles.delete(v.id); this.onLost?.(v, v.meta, 'removed', this.tick); }
+      }
+    }
+  }
+
+  // 옛 차선 위의 거리 s를 새 차선 위의 거리로 바꾼다(같은 도로 위의 같은 지점). 도로 끝 여유가 달라지면 시작점이 움직이기 때문
+  private reproject(oldT: Track, newT: Track, s: number): number {
+    const p = posAt(oldT, s);
+    const a = newT.pts[0], b = newT.pts[1];
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return Math.min(Math.max(((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len, 0), newT.length);
+  }
+
+  /** 차량과 투입 대기를 모두 치운다(통계는 유지). 치워진 차량은 미완료로 알린다 */
+  clear(): void {
+    for (const v of this.vehicles.values()) if (v.meta) this.onLost?.(v, v.meta, 'removed', this.tick);
+    for (const j of this.jobs) this.onLost?.(null, j.meta, 'removed', this.tick);
     this.vehicles.clear();
+    this.jobs = [];
     this.requests = [];
     this.cycleState.clear();
   }
 
-  /** 차량과 투입 대기를 모두 치운다(통계는 유지) */
-  clear(): void {
-    this.vehicles.clear();
-    this.requests = [];
-    this.cycleState.clear();
+  /** 차량 한 대를 길 위에서 치운다(건물 삭제 등). 이동이 있던 차량은 미완료로 알린다 */
+  dropVehicle(v: Vehicle, reason: LostReason): void {
+    if (this.vehicles.delete(v.id) && v.meta) this.onLost?.(v, v.meta, reason, this.tick);
+  }
+
+  /** 건물에서 건물로 가는 이동 하나를 대기열에 넣는다. 자리가 나면 출발하고, 5분 넘게 못 나가면 포기 */
+  enqueue(meta: TripMeta, from: RoadPos, to: RoadPos): void {
+    this.jobs.push({ meta, from, to, born: this.tick });
+  }
+
+  private routeFor(from: RoadPos, to: RoadPos): Route | null {
+    const key = `${from.segId}:${from.t.toFixed(1)}>${to.segId}:${to.t.toFixed(1)}`;
+    if (this.routeCache.has(key)) return this.routeCache.get(key)!;
+    const r = findRoute(this.graph, from, to);
+    this.routeCache.set(key, r);
+    return r;
+  }
+
+  /** 달리는 중인 차량을 지금 위치에서 새 목적지로 다시 보낸다. 길이 없으면 false(호출한 쪽이 미완료 처리) */
+  reroute(v: Vehicle, to: RoadPos): boolean {
+    const r = findRouteFromTrack(this.graph, v.path[v.pi], v.s, to);
+    if (!r) return false;
+    v.path = r.path; v.pi = 0; v.endS = r.endS; v.uturnDone = -1;
+    v.grantPi = -1; v.reqPi = -1; v.stopPi = -1;
+    return true;
   }
 
   requestTrip(from: RoadPos, to: RoadPos, count: number): { ok: true; path: number[] } | { ok: false; reason: 'noRoute' } {
@@ -118,25 +210,44 @@ export class Traffic {
   }
 
   /** 정해진 경로 위에 차량을 직접 놓는다(테스트·투입 공용). 자리가 막혀 있으면 null */
-  spawnOnPath(path: number[], startS: number, endS: number, factor?: number): Vehicle | null {
+  spawnOnPath(path: number[], startS: number, endS: number, factor?: number, meta: TripMeta | null = null): Vehicle | null {
     const d = this.cfg.driving;
     if (this.vehicles.size >= d.maxVehicles) return null;
     const first = path[0];
-    for (const o of this.vehicles.values()) {
-      if (o.path[o.pi] === first && o.s > startS - d.spawnClear - o.length && o.s < startS + d.spawnClear) return null;
+    const car0 = this.cfg.vehicles.car;
+    for (const o of this.occupancy().get(first) ?? []) {
+      if (o.s > startS - d.spawnClear - o.len && o.s < startS + d.spawnClear) return null; // 바로 앞뒤에 차가 있다
+      // 뒤에서 달려오는 차가 새 차에 닿기 전에 편하게(감속 b) 설 수 있어야 한다. 합류할 때의 간격 확인과 같다
+      const gapBehind = startS - o.s - o.len;
+      if (gapBehind > 0 && gapBehind < car0.s0 + o.v * car0.T + (o.v * o.v) / (2 * car0.b)) return null;
     }
     const car = this.cfg.vehicles.car;
     const f = factor ?? Math.min(1.15, Math.max(0.85, 1 + 0.08 * this.gauss()));
     const p = posAt(this.graph.tracks[first], startS);
     const v: Vehicle = {
-      id: this.nextId++, path: path.slice(), pi: 0, s: startS, v: 0, acc: 0, endS, factor: f, length: car.length, waitTicks: 0, uturnDone: -1, status: '',
+      id: this.nextId++, meta, mRef: 0, mAct: 0, gv: 0, path: path.slice(), pi: 0, s: startS, v: 0, acc: 0, endS, factor: f, length: car.length, waitTicks: 0, uturnDone: -1, status: '',
       x: p.x, y: p.y, h: p.h, px: p.x, py: p.y, ph: p.h, ss: startS, sv: 0, spi: 0, li: 0,
       zoned: false, granted: false, reason: '', reqTick: 0, reqPi: -1, grantPi: -1, stopTicks: 0, stopPi: -1, waiver: false, waitFor: 0, waitSince: 0, hold: false, holdFor: 0,
-      lcCool: 0, lcPhantom: 0, lcFrom: -1, lcTicks: 0, lcOffX: 0, lcOffY: 0,
+      lcCool: 0, lcPhantom: 0, lcFrom: -1, lcPi: -1, lcTicks: 0, lcOffX: 0, lcOffY: 0,
     };
     this.vehicles.set(v.id, v);
+    if (this.occ) { const e = { s: v.s, len: v.length, v: v.v }; const l = this.occ.get(first); if (l) l.push(e); else this.occ.set(first, [e]); }
     this.stats.spawned++;
     return v;
+  }
+
+  // 이번 tick에 투입 자리를 확인할 때 쓰는 트랙별 차량 목록(처음 필요할 때 한 번 만든다)
+  private occ: Map<number, { s: number; len: number; v: number }[]> | null = null;
+  private occupancy(): Map<number, { s: number; len: number; v: number }[]> {
+    if (!this.occ) {
+      this.occ = new Map();
+      const put = (k: number, e: { s: number; len: number; v: number }) => { const l = this.occ!.get(k); if (l) l.push(e); else this.occ!.set(k, [e]); };
+      for (const v of this.vehicles.values()) {
+        put(v.path[v.pi], { s: v.s, len: v.length, v: v.v });
+        if (v.lcPhantom > 0 && v.pi === v.lcPi) put(v.lcFrom, { s: v.s, len: v.length, v: v.v }); // 차선을 바꾸는 중인 차는 이전 차선에도 아직 걸쳐 있다
+      }
+    }
+    return this.occ;
   }
 
   private gauss(): number {
@@ -148,7 +259,7 @@ export class Traffic {
     const rate = this.cfg.tickRate;
     for (const r of this.requests) {
       if (r.remaining <= 0 || this.tick < r.nextTick) continue;
-      if (this.spawnOnPath(r.path, r.startS, r.endS)) {
+      if (this.spawnOnPath(r.path, r.startS, r.endS, undefined, { kind: 'test', from: 0, to: 0, born: this.tick, mode: 'car', ownerId: 0 })) {
         r.remaining--;
         r.blocked = 0;
         r.nextTick = this.tick + Math.round(this.cfg.driving.spawnIntervalSec * rate);
@@ -158,10 +269,24 @@ export class Traffic {
       }
     }
     this.requests = this.requests.filter((r) => r.remaining > 0);
+
+    // 건물에서 출발하는 이동: 접속 차선에 자리가 나면 투입, 경로가 없으면 취소, 한도(5분)를 넘으면 포기
+    if (this.jobs.length) {
+      const limit = this.cfg.driving.spawnTimeoutSec * rate;
+      const keep: Job[] = [];
+      for (const j of this.jobs) {
+        if (this.tick - j.born > limit) { this.stats.abandoned++; this.onLost?.(null, j.meta, 'abandoned', this.tick); continue; }
+        const r = this.routeFor(j.from, j.to);
+        if (!r) { this.stats.noRoute++; this.onLost?.(null, j.meta, 'noRoute', this.tick); continue; }
+        if (!this.spawnOnPath(r.path, r.startS, r.endS, undefined, j.meta)) keep.push(j);
+      }
+      this.jobs = keep;
+    }
   }
 
   step(tick: number): void {
     this.tick = tick;
+    this.occ = null;
     this.sync();
     this.spawnStep();
     const dt = 1 / this.cfg.tickRate;
@@ -172,7 +297,7 @@ export class Traffic {
     for (const v of this.vehicles.values()) {
       v.ss = v.s; v.sv = v.v; v.spi = v.pi; v.px = v.x; v.py = v.y; v.ph = v.h;
       if (v.lcCool > 0) v.lcCool--;
-      if (v.lcPhantom > 0) v.lcPhantom--;
+      if (v.lcPhantom > 0) v.lcPhantom = v.pi === v.lcPi ? v.lcPhantom - 1 : 0; // 다른 트랙으로 넘어갔으면 흔적은 끝
       v.waitFor = 0;
       add(v.path[v.pi], { v, s: v.ss, sv: v.sv, len: v.length, phantom: false });
       if (v.lcPhantom > 0) add(v.lcFrom, { v, s: v.ss, sv: v.sv, len: v.length, phantom: true });
@@ -186,7 +311,7 @@ export class Traffic {
     this.resolveIntersections(tick);
     const done: number[] = [];
     for (const v of this.vehicles.values()) if (this.update(v, dt, tick)) done.push(v.id);
-    for (const id of done) { this.vehicles.delete(id); this.stats.arrived++; }
+    for (const id of done) { const v = this.vehicles.get(id)!; this.vehicles.delete(id); this.stats.arrived++; this.onArrive?.(v, tick); }
 
     // 4) 차선 변경, 5) 점검
     this.laneChanges(tick);
@@ -250,8 +375,9 @@ export class Traffic {
       for (const r of g.reqs) {
         for (const i of g.inside) if (i.v !== r.v && r.conn.conflicts.includes(i.conn)) { r.insideBlock = i.v.id; break; }
         if (!r.v.waiver) { // 출구 공간 점검: 나갈 차선 맨 앞 차량의 뒤꽁무니와 차 한 대 + 안전 간격 이상 떨어져 있어야 진입
+          // 나갈 차선 맨 앞 차량 뒤꽁무니에서 차 한 대 + 안전 간격이 비어 있어야 한다. 앞차가 달리고 있으면 내가 연결선을 건너는 동안 더 앞서 가므로 그만큼을 더한다(서 있는 줄은 그대로 막는다)
           const first = this.lists.get(r.conn.next[0])?.[0];
-          if (first && first.s - first.len < car.length + car.s0) r.exitBlock = first.v.id;
+          if (first && first.s - first.len + first.sv * (r.conn.length / Math.max(r.v.sv, 3)) < car.length + car.s0) r.exitBlock = first.v.id;
         }
       }
       const pool = g.reqs.filter((r) => !r.exitBlock); // 출구가 막혀 못 들어가는 차량은 다른 차량을 막을 자격이 없다
@@ -302,6 +428,41 @@ export class Traffic {
 
   // ---------------- 이동 ----------------
 
+  // ---- 저장·불러오기·초기화 ----
+  getState() {
+    return {
+      nextId: this.nextId, tick: this.tick,
+      vehicles: [...this.vehicles.values()].map((v) => ({ ...v, path: v.path.slice(), meta: v.meta ? { ...v.meta } : null })),
+      jobs: this.jobs.map((j) => ({ meta: { ...j.meta }, from: { ...j.from }, to: { ...j.to }, born: j.born })),
+      requests: this.requests.map((r) => ({ ...r, path: r.path.slice() })),
+      stats: { ...this.stats }, lastIntervention: this.lastIntervention,
+      cycles: [...this.cycleState],
+    };
+  }
+
+  /** 도로망을 먼저 불러온 뒤에 호출한다. 차선 번호는 도로망에서 항상 같게 만들어지므로 경로를 그대로 쓴다 */
+  setState(s: ReturnType<Traffic['getState']>): void {
+    this.graph = buildLaneGraph(this.net, this.cfg);
+    this.routeCache.clear();
+    this.occ = null;
+    this.vehicles.clear();
+    for (const v of s.vehicles) this.vehicles.set(v.id, { ...v, path: v.path.slice(), meta: v.meta ? { ...v.meta } : null });
+    this.jobs = s.jobs.map((j) => ({ meta: { ...j.meta }, from: { ...j.from }, to: { ...j.to }, born: j.born }));
+    this.requests = s.requests.map((r) => ({ ...r, path: r.path.slice() }));
+    Object.assign(this.stats, s.stats);
+    this.lastIntervention = s.lastIntervention;
+    this.cycleState = new Map(s.cycles.map(([k, c]) => [k, { ...c }]));
+    this.nextId = s.nextId; this.tick = s.tick;
+  }
+
+  /** 처음 상태로 되돌린다(새 맵을 열 때) */
+  reset(): void {
+    this.vehicles.clear(); this.jobs = []; this.requests = []; this.cycleState.clear(); this.routeCache.clear(); this.occ = null;
+    for (const k of Object.keys(this.stats) as (keyof Stats)[]) this.stats[k] = 0;
+    this.lastIntervention = ''; this.nextId = 1; this.tick = 0;
+    this.graph = buildLaneGraph(this.net, this.cfg);
+  }
+
   // 한 대를 한 tick 움직인다. 도착했으면 true
   private update(v: Vehicle, dt: number, tick: number): boolean {
     const d = this.cfg.driving, car = this.cfg.vehicles.car, ix = this.cfg.intersection;
@@ -326,13 +487,15 @@ export class Traffic {
 
     // 목표 속도: 제한속도 → (양보 표지 접근) → 앞의 연결선·차선 제한
     let v0 = Math.min(cap(tr), car.vmaxKmh / 3.6);
-    if (nextConn?.sign === 'yield') v0 = Math.min(v0, Math.sqrt((ix.yieldKmh / 3.6) ** 2 + 2 * 0.7 * car.b * Math.max(0, distEnd))); // 정지선에서 양보 속도가 되도록 미리 줄인다(IDM이 목표를 따라가는 지연을 감안해 여유 30%)
+    let vGeo = v0; // 통계의 기준 속도: 도로·커브가 허용하는 속도(표지·앞차·교차로 때문에 줄이기 전)
     let dist = distEnd;
     for (let k = v.pi + 1; dist < d.lookahead && k <= last; k++) {
       const t2 = tracks[v.path[k]];
-      v0 = Math.min(v0, Math.sqrt(cap(t2) ** 2 + 2 * car.b * dist));
+      vGeo = Math.min(vGeo, Math.sqrt(cap(t2) ** 2 + 2 * car.b * dist));
       dist += k === last ? v.endS : t2.length;
     }
+    v0 = vGeo;
+    if (nextConn?.sign === 'yield') v0 = Math.min(v0, Math.sqrt((ix.yieldKmh / 3.6) ** 2 + 2 * 0.7 * car.b * Math.max(0, distEnd))); // 정지선에서 양보 속도가 되도록 미리 줄인다(IDM이 목표를 따라가는 지연을 감안해 여유 30%)
 
     // 장애물마다 IDM 가속도를 구하고 가장 작은 값(가장 조심스러운 쪽)을 쓴다
     let acc = idm(car, v.v, v0, Infinity, 0, car.s0);
@@ -373,6 +536,13 @@ export class Traffic {
     }
 
     v.s += ds;
+    // 통계: "기준 차량"(같은 경로·제한속도·커브·목적지 정차를 따르되 다른 차량·표지·교차로 대기가 없는 혼자 달리는 차량)이 갔을 거리와 실제 거리를 쌓는다.
+    // 출발 직후 가속이나 목적지 앞 감속은 기준 차량도 똑같이 하므로 손실이 아니다. 정체·표지·양보·교차로 대기만 손실이 된다
+    {
+      const ga = v.pi === last ? idm(car, v.gv, Math.max(vGeo, 0.1), distEnd, 0, 0.5) : idm(car, v.gv, Math.max(vGeo, 0.1), Infinity, 0, car.s0);
+      v.gv = Math.max(0, Math.min(vGeo, v.gv + Math.max(-d.brakeMax, ga) * dt));
+      v.mRef += v.gv * dt; v.mAct += ds;
+    }
     let cur = tr;
     while (v.pi < last && v.s >= cur.length) {
       const nx = tracks[v.path[v.pi + 1]];
@@ -392,7 +562,7 @@ export class Traffic {
       v.x += v.lcOffX * f; v.y += v.lcOffY * f;
       v.lcTicks--;
     }
-    if (v.pi === last && v.endS - v.s <= d.arrivalTol) return true;
+    if (v.pi === last && (v.endS - v.s <= d.arrivalTol || (v.endS - v.s <= d.arrivalRadius && v.v < d.arrivalSpeed))) return true;
 
     if (v.v >= 0.3) { v.status = ''; v.waitSince = 0; return false; }
     this.markWait(v, tick);
@@ -452,7 +622,7 @@ export class Traffic {
         const a = posAt(tr, v.s), b = posAt(T, v.s);
         v.lcOffX = a.x - b.x; v.lcOffY = a.y - b.y;
         v.lcTicks = Math.round(ch.durationSec * this.cfg.tickRate);
-        v.lcPhantom = v.lcTicks; v.lcFrom = tr.id;
+        v.lcPhantom = v.lcTicks; v.lcFrom = tr.id; v.lcPi = v.pi; // retarget이 경로를 지금 트랙부터로 다시 만들어 pi가 0이 된다
         v.lcCool = Math.round(ch.cooldownSec * this.cfg.tickRate);
         changed.add(T.id);
         this.stats.laneChanges++;
@@ -461,16 +631,16 @@ export class Traffic {
     }
   }
 
-  // 경로의 현재 차선을 옆 차선 T로 바꾸고, 그다음 연결선도 T에서 같은 목적지 차선으로 가는 것으로 바꾼다. 불가능하면 false
+  // 현재 차선을 옆 차선 T로 바꾸고, T에서 같은 목적지(마지막 도로의 같은 위치)로 가는 길을 새로 찾는다.
+  // 길 찾기의 차선 선호(직진은 같은 번호 차선 유지)가 다시 적용되므로 교차로 안에서 차선을 가로지르는 연결선을 타지 않는다. 길이 없으면 false
   private retarget(v: Vehicle, T: Track): boolean {
     const tracks = this.graph.tracks;
-    if (v.pi < v.path.length - 1) {
-      const target = v.path[v.pi + 2];
-      const c2 = T.next.find((id) => tracks[id].next[0] === target);
-      if (c2 === undefined) return false;
-      v.path[v.pi + 1] = c2;
-    }
-    v.path[v.pi] = T.id;
+    const lastLane = tracks[v.path[v.path.length - 1]];
+    const to = { segId: lastLane.segId, t: lastLane.fwd ? lastLane.t0 + v.endS : lastLane.t0 - v.endS };
+    const r = findRouteFromTrack(this.graph, T.id, v.s, to);
+    if (!r || r.path.length < 1) return false;
+    v.path = r.path; v.pi = 0; v.endS = r.endS; v.uturnDone = -1;
+    v.grantPi = -1; v.reqPi = -1; v.stopPi = -1;
     return true;
   }
 
@@ -494,7 +664,8 @@ export class Traffic {
         this.stats.deadlocks++;
       } else if (st.stage === 1 && tick - st.stageTick >= dl.stage2Sec * rate) {
         // 2단계: 그래도 풀리지 않으면 그 차량을 제거하고 미완료로 집계
-        if (this.vehicles.delete(st.vid)) this.stats.removed++;
+        const gone = this.vehicles.get(st.vid);
+        if (gone && this.vehicles.delete(st.vid)) { this.stats.removed++; if (gone.meta) this.onLost?.(gone, gone.meta, 'deadlock', tick); }
         st.stage = 2;
         this.cycleState.delete(key);
       }

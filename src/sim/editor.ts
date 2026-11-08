@@ -1,4 +1,4 @@
-import { Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
+import { BuildingKind, BuildingSize, Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
 import type { Config } from '../config';
 
 // 도로망 + 실행 취소/다시 실행. 전체 상태 스냅샷 방식(도로망이 작은 동안은 가장 단순하고 안전)
@@ -7,7 +7,7 @@ export class Editor {
   private history: string[] = [];
   private index = 0;
 
-  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor'>) {
+  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings'>) {
     this.network = new Network(cfg);
     this.history.push(this.snapshot());
   }
@@ -35,6 +35,18 @@ export class Editor {
     return r;
   }
 
+  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: 'player' | 'map' | 'auto' = 'player', deletable = true): ReturnType<Network['addBuilding']> {
+    const r = this.network.addBuilding(kind, size, x, y, source, deletable);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  removeBuilding(id: number): ReturnType<Network['removeBuilding']> {
+    const r = this.network.removeBuilding(id);
+    if (r.ok) this.commit();
+    return r;
+  }
+
   demolish(segId: number): boolean {
     const ok = this.network.removeSegment(segId);
     if (ok) this.commit();
@@ -45,12 +57,22 @@ export class Editor {
   loadText(text: string): void {
     let raw: unknown;
     try { raw = JSON.parse(text); } catch { throw new Error('도로망 파일이 아닙니다'); }
-    this.network.load(Network.parse(raw, this.cfg));
+    this.loadData(Network.parse(raw, this.cfg));
+  }
+
+  loadData(data: NetworkData): void {
+    this.network.load(data);
     this.commit();
   }
 
   exportText(): string {
     return this.snapshot();
+  }
+
+  /** 지금 상태를 처음 상태로 삼아 취소·다시 실행 기록을 비운다 */
+  resetHistory(): void {
+    this.history = [this.snapshot()];
+    this.index = 0;
   }
 
   get canUndo(): boolean { return this.index > 0; }

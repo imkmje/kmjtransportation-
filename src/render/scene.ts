@@ -36,6 +36,7 @@ export function createScene(canvasParent: HTMLElement) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   controls.screenSpacePanning = false; // 지면 위에서 이동
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }; // 터치: 한 손가락 이동, 두 손가락 확대·회전
   controls.enableDamping = true;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(80);
   controls.minDistance = 30;
@@ -58,9 +59,12 @@ export function createScene(canvasParent: HTMLElement) {
   return {
     scene,
     domElement: renderer.domElement,
-    /** 왼쪽 버튼 드래그로 화면을 이동할지. 도로를 그리는 동안에는 끈다(가운데 버튼은 항상 이동) */
-    setLeftDragPan(on: boolean) {
-      controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : (-1 as THREE.MOUSE);
+    /** 도로를 그리는 중이면 true. 마우스 왼쪽 버튼·터치 한 손가락은 그리기에 쓰고 카메라는 움직이지 않는다.
+     *  (가운데 버튼 드래그, 오른쪽 버튼 회전, 두 손가락 확대·이동은 그대로 쓸 수 있다) */
+    setDrawMode(on: boolean) {
+      controls.mouseButtons.LEFT = on ? (-1 as THREE.MOUSE) : THREE.MOUSE.PAN;
+      controls.touches.ONE = on ? (-1 as THREE.TOUCH) : THREE.TOUCH.PAN;
+      controls.touches.TWO = on ? THREE.TOUCH.DOLLY_PAN : THREE.TOUCH.DOLLY_ROTATE;
     },
     /** 화면 좌표(client) → 지면 위 시뮬 좌표. 지면 밖이면 null */
     pickGround(clientX: number, clientY: number): Pt | null {

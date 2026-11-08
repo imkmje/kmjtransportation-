@@ -22,6 +22,8 @@ export const config = {
     curveLatAccel: 2.0, // 곡선 횡가속 한계(m/s²)
     minTurnKmh: 15, // 교차로 안 최저 속도
     arrivalTol: 1.0, // 도착 판정 거리(m)
+    arrivalRadius: 8, // 목적지 이 거리 안에서 arrivalSpeed 이하로 줄었으면 도착(건물 진입로로 꺾어 들어간 것으로 보고, 길 위에서 완전히 서지 않는다)
+    arrivalSpeed: 6.5, // m/s
     minGap: 0.5, // 안전망: 이보다 가까워지면 강제로 막는다(m)
     spawnIntervalSec: 1.5, // 연속 투입 간격(시뮬 초)
     spawnTimeoutSec: 300, // 출발 대기 한도(시뮬 초)
@@ -42,6 +44,26 @@ export const config = {
   laneChange: { politeness: 0.2, threshold: 0.2, rightBias: 0.1, safeDecel: 4.0, cooldownSec: 5, durationSec: 2, noChangeNearLine: 30, noChangeAfterEntry: 10, evalTicks: 10 }, // noChangeAfterEntry: 차선에 들어선 뒤 차 길이 + 이 거리(m)까지는 변경 금지(연결선에서 들어오는 차량을 아직 볼 수 없다)
   // 교착 (rules.md 6항)
   deadlock: { detectSec: 5, persistSec: 300, stage2Sec: 30 },
+  // 건물 (rules.md 8항 + 제안값). footprint: 건물 한 변의 절반(m)
+  buildings: {
+    footprint: { small: 4, medium: 7, large: 11 },
+    capacity: { small: 10, medium: 30, large: 100 }, // 주거는 거주 인원, 직장은 일자리 수
+    height: { home: { small: 3, medium: 5, large: 9 }, office: { small: 6, medium: 12, large: 22 } }, // 화면 표시용
+    connectRadius: 50, // 가장 가까운 도로 구간에 자동 연결되는 반경(m)
+    gap: 2, // 건물 사이 최소 간격(m)
+    worldHalf: 1000,
+  },
+  // 수요 (rules.md 8항). 시간대는 시계 시각, 가중치 피크 = 100
+  demand: {
+    workerShare: 0.6, // 거주 인원 중 직장인 비율(1.0.0은 직장인의 출근·퇴근만)
+    commuteWeights: [[6, 7, 30], [7, 8, 100], [8, 9, 60], [9, 10, 10]] as [number, number, number][],
+    returnWeights: [[17, 18, 70], [18, 19, 100], [19, 20, 40], [20, 21, 10]] as [number, number, number][],
+    lateStaySec: 3600, // 귀환 시간대가 끝난 뒤 도착한 인원은 시계 1시간 체류 후 귀환
+    lambdaDiv: 4, // λ = 맵 대각선 ÷ 이 값
+    worldSize: 2000,
+  },
+  // 통계 (rules.md 1항)
+  metrics: { bucketSec: 10, windowSec: 150 }, // CI 롤링 윈도우 = 시뮬 2.5분
   // 기하 제약 (rules.md 7항)
   geometry: { minSegmentLength: 20, mergeRadius: 8, minAngleDeg: 30, maxRoadsPerNode: 6 },
   // 건설 도구 (제안값)

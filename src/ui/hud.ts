@@ -9,7 +9,7 @@ export function createHud(
 ) {
   root.innerHTML = `
     <div id="clock"></div>
-    <div id="version">v${__APP_VERSION__} (개발 중)</div>
+    <div id="version">v${__APP_VERSION__}${__APP_VERSION__.startsWith('0.') ? ' (개발 중)' : ''}</div>
     <div id="note"></div>
     <div id="speeds"></div>`;
   const clockEl = root.querySelector<HTMLElement>('#clock')!;

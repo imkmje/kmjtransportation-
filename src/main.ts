@@ -9,6 +9,11 @@ import { createVehicleLayer } from './render/vehicles';
 import { createLaneDebug } from './render/lanesDebug';
 import { createTools } from './ui/tools';
 import { createDebug } from './ui/debug';
+import { createBuildingLayer } from './render/buildings';
+import { createStats } from './ui/stats';
+import { exportGame, importGame } from './io/game';
+import { loadSlot, saveSlot } from './io/storage';
+import { buildSampleMap } from './maps/sample';
 
 const editor = new Editor(config);
 const sim = new Sim(config, editor.network);
@@ -24,17 +29,28 @@ function setSpeed(s: number) {
 
 const view = createScene(document.getElementById('view')!);
 const roads = createRoadLayer(view.scene, editor.network);
+const buildings = createBuildingLayer(view.scene, editor.network);
 const vehicles = createVehicleLayer(view.scene, sim.traffic);
 const laneDebug = createLaneDebug(view.scene, sim.traffic);
 const debug = createDebug({ panel: document.getElementById('debug')!, labels: document.getElementById('labels')!, sim, project: view.project });
 debug.set(false);
 const hud = createHud(document.getElementById('hud')!, config.speedSteps, setSpeed);
-createTools({
+// 미연결 건물 수는 계산이 조금 들어서 도로망이 바뀔 때만 다시 센다
+let uncKey = -1, uncCount = 0;
+const stats = createStats(document.getElementById('stats')!, sim, () => {
+  if (uncKey !== editor.network.revision) { uncKey = editor.network.revision; uncCount = sim.demand.unconnected().length; }
+  return uncCount;
+});
+const tools = createTools({
   editor,
   roads,
+  buildings,
+  save: () => exportGame(editor, sim),
+  load: (text) => { importGame(text, editor, sim); },
+  loadSample: () => { buildSampleMap(editor); sim.reset(); },
   pick: view.pickGround,
   canvas: view.domElement,
-  setLeftDragPan: view.setLeftDragPan,
+  setDrawMode: view.setDrawMode,
   toolbar: document.getElementById('toolbar')!,
   filebar: document.getElementById('filebar')!,
   tip: document.getElementById('tip')!,
@@ -57,13 +73,14 @@ document.addEventListener('visibilitychange', () => {
 });
 
 let last = performance.now();
-let fps = 0, frames = 0, fpsStart = last;
+let fps = 0, frames = 0, fpsStart = last, statFrame = 0;
 function frame(now: number) {
   const dt = Math.min((now - last) / 1000, 1);
   last = now;
   loop.advance(dt, speed);
   sim.traffic.sync(); // 정지 중에도 도로가 바뀌면 그래프를 새로 만든다
   roads.sync();
+  buildings.sync();
   vehicles.update(loop.alpha);
   laneDebug.update(debug.on);
   view.render();
@@ -71,9 +88,17 @@ function frame(now: number) {
   frames++;
   if (now - fpsStart >= 500) { fps = (frames * 1000) / (now - fpsStart); frames = 0; fpsStart = now; }
   debug.update(fps);
+  if (++statFrame % 10 === 0) stats.update();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// 자동 저장: 1분마다, 그리고 탭을 떠날 때 '자동 저장' 슬롯(0)에 전체 상태를 저장한다(실패해도 게임은 계속)
+const autosave = () => { try { void saveSlot(0, exportGame(editor, sim)).catch(() => {}); } catch { /* 저장소를 못 쓰는 환경 */ } };
+setInterval(autosave, 60_000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
+// 이전에 자동 저장한 게임이 있으면 알려 준다(자동으로 불러오지는 않는다)
+loadSlot(0).then((t) => { if (t) tools.say('자동 저장된 게임이 있습니다. 위에서 "자동 저장"을 고르고 불러오기를 누르세요'); }).catch(() => {});
 
 // 스모크 테스트와 디버깅용
 (window as unknown as { __game: unknown }).__game = { sim, editor, scene: view.scene, getSpeed: () => speed, project: view.project };
