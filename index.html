@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>교통 시뮬레이션</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
+      #view { position: fixed; inset: 0; }
+      #hud div, #hud button { position: fixed; }
+      #clock { top: 12px; left: 12px; padding: 6px 12px; background: #fffc; border-radius: 8px; font-size: 18px; font-weight: 600; }
+      #version { top: 12px; right: 12px; padding: 4px 8px; background: #fff9; border-radius: 6px; font-size: 12px; }
+      #note { top: 56px; left: 12px; padding: 4px 8px; background: #ffe9a8; border-radius: 6px; font-size: 13px; }
+      #note:empty { display: none; }
+      #speeds { bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+      #speeds button { position: static; padding: 8px 14px; border: 0; border-radius: 8px; background: #fffd; cursor: pointer; font-size: 14px; }
+      #speeds button.on { background: #f2a65a; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <div id="hud"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
