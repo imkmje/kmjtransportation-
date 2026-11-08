@@ -6,6 +6,10 @@ export class TickLoop {
   private winTime = 0;
   /** 최근 실제 배속(1초 단위로 측정). 목표보다 낮으면 따라가지 못하는 중. 배속이 바뀌면 목표값에서 다시 시작 */
   actualSpeed = 0;
+  /** 다음 tick까지 얼마나 왔는지(0~1). 화면 보간용. 정지 중에는 1 */
+  get alpha(): number {
+    return this.lastSpeed > 0 ? this.acc : 1;
+  }
   constructor(
     private tickRate: number,
     private maxTicksPerFrame: number,
