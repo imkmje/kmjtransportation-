@@ -7,7 +7,7 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneErase' | 'demolish' | 'trip' | 'limit';
+type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
 const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneErase: null };
 const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
@@ -78,6 +78,7 @@ export function createTools(d: Deps) {
     <button data-tool="yield" title="단축키 Y">양보 표지</button>
     <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
     <div class="row"><select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select></div>
+    <button data-tool="upgrade" title="단축키 U: 왕복 2차로를 4차로로 넓힙니다. 교차로 사이 한 구간씩">도로 넓히기</button>
     <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
     <div class="row"><button data-tool="zoneHome" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button><button data-tool="zoneOffice" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button></div>
     <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
@@ -193,6 +194,19 @@ export function createTools(d: Deps) {
       d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
       return;
     }
+    if (tool === 'upgrade') {
+      const h = d.pickRoad(last);
+      d.roads.setCursor(h ? { x: h.x, y: h.y } : null, !!h && net.upgradeChain(h.segId).length > 0);
+      if (h) {
+        const n = net.upgradeChain(h.segId).length;
+        d.tip.textContent = n ? `왕복 4차로로 넓히기 (교차로 사이 ${n}구간)` : '이미 왕복 4차로입니다';
+        d.tip.classList.toggle('bad', !n);
+        d.tip.style.left = `${lastClient.x + 16}px`;
+        d.tip.style.top = `${lastClient.y + 16}px`;
+        d.tip.hidden = false;
+      }
+      return;
+    }
     if (tool === 'limit') {
       const h = d.pickRoad(last);
       d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
@@ -266,6 +280,14 @@ export function createTools(d: Deps) {
       const err = d.requestTrip(tripFrom, h, count);
       say(err ?? `차량 ${count}대를 투입합니다`);
       tripFrom = null;
+      refresh();
+      return;
+    }
+    if (tool === 'upgrade') {
+      const h = d.pickRoad(last);
+      if (!h) { say('도로 위를 클릭하세요'); return; }
+      const r = d.editor.upgrade(h.segId);
+      say(r.ok ? `왕복 4차로로 넓혔습니다 (${r.ids.length}구간)` : r.error === 'onBuilding' ? '옆에 건물이 있어 넓힐 수 없습니다' : '이미 왕복 4차로입니다');
       refresh();
       return;
     }
@@ -400,6 +422,7 @@ export function createTools(d: Deps) {
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
     else if (k === 'l') setTool('limit');
+    else if (k === 'u') setTool('upgrade');
     else if (k === 'g') setTool('signal');
     else if (k === 'm') { const c = $<HTMLInputElement>(d.toolbar, '#heat'); c.checked = !c.checked; d.setHeat(c.checked); }
     else if (k === 'v') setTool('trip');

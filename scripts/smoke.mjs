@@ -338,6 +338,19 @@ check('직각 맞추기: 큰길 근처에서 끝내도 직각으로 닿음', per
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.evaluate(() => window.__game.editor.undo());
+// 도로 넓히기: 왕복 2차로 구간을 클릭하면 4차로가 되고, 실행 취소로 돌아온다
+const road4Count = () => page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((s) => s.kind === 'road4').length);
+const r4before = await road4Count();
+await page.keyboard.press('u');
+const [ux, uy] = await freeSpot([[240, -100], [-240, -100], [240, 100], [-240, 100], [0, 100]]); // 가운데 세로 길(0,100)도 후보
+await clickWorld(ux, uy);
+check('도로 넓히기: 2차로가 4차로가 됨', (await road4Count()) > r4before && (await page.locator('#msg').innerText()).includes('넓혔습니다'), `${r4before} → ${await road4Count()} / ${await page.locator('#msg').innerText()}`);
+await clickWorld(ux, uy);
+check('이미 4차로면 안내', (await page.locator('#msg').innerText()).includes('이미'), await page.locator('#msg').innerText());
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => window.__game.editor.undo());
+check('도로 넓히기도 실행 취소됨', (await road4Count()) === r4before, String(await road4Count()));
 // 신호등: 큰길과 세로 길이 만나는 교차로를 클릭하면 켜지고, 다시 클릭하면 꺼진다
 const sigCount = () => page.evaluate(() => [...window.__game.editor.network.nodes.values()].filter((n) => window.__game.editor.network.hasSignal(n.id)).length);
 await page.keyboard.press('g');

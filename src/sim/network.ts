@@ -240,6 +240,49 @@ export class Network {
     return { ok: true, ids, length: plan.length };
   }
 
+  /**
+   * 업그레이드 대상: 누른 도로 구간과, 그 끝이 "이음 노드"(도로 2개만 만나는 곳)로 이어지는 같은 종류의 구간들.
+   * 교차로에서 멈춘다. 왕복 2차로만 대상이다
+   */
+  upgradeChain(segId: number): number[] {
+    const first = this.segments.get(segId);
+    if (!first || first.kind !== 'road2') return [];
+    const ids = new Set([segId]), todo = [first];
+    while (todo.length) {
+      const s = todo.pop()!;
+      for (const n of [s.a, s.b]) {
+        const at = this.segmentsAt(n);
+        if (at.length !== 2 || this.nodes.get(n)!.signal) continue;
+        const o = at.find((x) => x.id !== s.id)!;
+        if (o.kind === 'road2' && !ids.has(o.id)) { ids.add(o.id); todo.push(o); }
+      }
+    }
+    return [...ids].sort((a, b) => a - b);
+  }
+
+  /** 왕복 2차로 → 4차로. 새 폭이 건물에 걸리면 어느 구간도 바꾸지 않고 실패한다. 겹친 구역 칸은 지워진다 */
+  upgradeRoad(segId: number): { ok: true; ids: number[] } | { ok: false; error: 'notUpgradable' | 'onBuilding' } {
+    const ids = this.upgradeChain(segId);
+    if (!ids.length) return { ok: false, error: 'notUpgradable' };
+    const r = this.rules.roads.road4;
+    for (const id of ids) {
+      const s = this.segments.get(id)!;
+      for (const b of this.buildings.values()) {
+        if (b.kind === 'external') continue;
+        if (distToSegment(b, this.nodes.get(s.a)!, this.nodes.get(s.b)!).d < r.lanesPerDir * r.laneWidth + this.rules.buildings.footprint[b.size] + 1) return { ok: false, error: 'onBuilding' };
+      }
+    }
+    for (const id of ids) {
+      const s = this.segments.get(id)!;
+      s.kind = 'road4';
+      const max = r.maxSpeedKmh;
+      if (s.playerSpeedKmh !== null && s.playerSpeedKmh > max) s.playerSpeedKmh = max;
+    }
+    this.pruneZones();
+    this.revision++;
+    return { ok: true, ids };
+  }
+
   /** 철거. 연결이 모두 없어진 노드도 같이 지운다(2개만 남은 이음 노드는 그대로 둔다) */
   removeSegment(id: number, force = false): boolean {
     const seg = this.segments.get(id);

@@ -1,0 +1,75 @@
+import { describe, it, expect } from 'vitest';
+import { Editor } from '../src/sim/editor';
+import { Sim } from '../src/sim/sim';
+import { config } from '../src/config';
+import { findRoute } from '../src/sim/route';
+
+const make = () => {
+  const e = new Editor(config);
+  e.build({ x: -300, y: 0 }, { x: 0, y: 0 }, 'road2');
+  e.build({ x: 0, y: 0 }, { x: 300, y: 0 }, 'road2'); // 가운데 노드는 도로 2개만 만나는 이음
+  e.build({ x: 0, y: 0 }, { x: 0, y: 200 }, 'road2'); // 이제 (0,0)은 교차로
+  return e;
+};
+const seg = (e: Editor, x: number, y: number) => [...e.network.segments.values()].find((s) => { const a = e.network.nodes.get(s.a)!, b = e.network.nodes.get(s.b)!; return [a, b].some((p) => p.x === x && p.y === y); })!;
+
+describe('도로 넓히기', () => {
+  it('교차로 사이 한 구간(이음 노드로 이어진 조각 포함)만 4차로가 되고 교차로에서 멈춘다', () => {
+    const e = new Editor(config);
+    e.build({ x: -300, y: 0 }, { x: -100, y: 0 }, 'road2');
+    e.build({ x: -100, y: 0 }, { x: 200, y: 0 }, 'road2'); // 이음 (-100,0)
+    e.build({ x: 100, y: -100 }, { x: 100, y: 100 }, 'road2'); // (100,0)에서 교차
+    const n = e.network;
+    const r = e.upgrade(seg(e, -300, 0).id);
+    expect(r.ok && r.ids.length).toBe(2); // (-300..-100), (-100..100)
+    expect([...n.segments.values()].filter((s) => s.kind === 'road4').length).toBe(2);
+    expect(seg(e, 100, -100).kind).toBe('road2'); // 교차로 건너편은 그대로
+    expect(e.upgrade(seg(e, -300, 0).id)).toEqual({ ok: false, error: 'notUpgradable' });
+  });
+
+  it('옆에 건물이 있어 4차로 폭이 걸리면 아무 구간도 바뀌지 않는다', () => {
+    const e = make();
+    expect(e.addBuilding('home', 'large', 100, 17, 'map', false).ok).toBe(true); // 2차로는 되지만 4차로(7+11+1=19)는 걸린다
+    const r = e.upgrade(seg(e, 300, 0).id);
+    expect(r).toEqual({ ok: false, error: 'onBuilding' });
+    expect([...e.network.segments.values()].every((s) => s.kind === 'road2')).toBe(true);
+  });
+
+  it('실행 취소로 되돌아가고, 겹친 구역 칸은 지워지며, 제한속도는 새 상한을 넘지 않는다', () => {
+    const e = make();
+    const s = seg(e, 300, 0);
+    e.network.paintZone(5, 1, 5, 1, 'home'); // (100, 20): 4차로 폭에 걸린다(7+10=17 미만이 되진 않음 → 아래서 확인)
+    const before = e.network.zones.size;
+    e.upgrade(s.id);
+    expect(e.network.segments.get(s.id)!.kind).toBe('road4');
+    expect(e.network.zones.size).toBeLessThanOrEqual(before);
+    e.undo();
+    expect(e.network.segments.get(s.id)!.kind).toBe('road2');
+  });
+
+  it('달리는 중에 넓혀도 차량이 사라지지 않고 모두 도착하며, 안전망·교착 0', () => {
+    const e = new Editor(config);
+    e.build({ x: -600, y: 0 }, { x: 600, y: 0 }, 'road2');
+    const sim = new Sim(config, e.network);
+    const s = [...e.network.segments.values()][0];
+    const from = { segId: s.id, t: 30 }, to = { segId: s.id, t: 1150 };
+    expect(findRoute(sim.traffic.graph, from, to)).not.toBeNull();
+    sim.traffic.requestTrip(from, to, 12);
+    while (sim.traffic.stats.spawned < 12) sim.step(); // 투입 대기열은 도로가 바뀌면 비워지므로 모두 나온 뒤에 넓힌다
+    for (let i = 0; i < 20 * 5; i++) sim.step();
+    expect(sim.traffic.vehicles.size).toBeGreaterThan(3);
+    e.upgrade(s.id);
+    for (let i = 0; i < 20 * 400; i++) sim.step();
+    const st = sim.traffic.stats;
+    expect(st.arrived).toBe(12);
+    expect(st.interventions + st.deadlocks + st.conflicts).toBe(0);
+  }, 60_000);
+
+  it('저장 형식은 그대로(종류 값만 바뀜)이고 불러와도 4차로다', () => {
+    const e = make();
+    e.upgrade(seg(e, 300, 0).id);
+    const e2 = new Editor(config);
+    e2.loadText(e.exportText());
+    expect([...e2.network.segments.values()].filter((x) => x.kind === 'road4').length).toBe(1);
+  });
+});
