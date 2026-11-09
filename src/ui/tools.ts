@@ -64,6 +64,7 @@ export function createTools(d: Deps) {
   let lastClient = { x: 0, y: 0 };
   let gridSnap = true;
   let angleSnap = false;
+  let ortho = true; // 직각 맞추기: 도로에서 출발하거나 도로에 닿을 때 거의 직각이면 정확히 90°로
   let tripFrom: RoadHit | null = null;
   let dragging = false; // 도로 그리기·구역 칠하기 드래그 중
   let zoneFrom: { i: number; j: number } | null = null; // 구역 드래그를 시작한 칸
@@ -85,6 +86,7 @@ export function createTools(d: Deps) {
     <div class="row"><select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select><button id="clearveh">차량 제거</button></div>
     <div class="row"><button id="undo" title="Ctrl+Z">↶ 취소</button><button id="redo" title="Ctrl+Y">↷ 다시</button></div>
     <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
+    <label><input type="checkbox" id="ortho" checked /> 직각 맞추기</label>
     <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
     <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
     <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
@@ -110,7 +112,32 @@ export function createTools(d: Deps) {
   }
 
   // ---- 스냅 ----
+  const angDiff = (a: number, b: number) => { let d = Math.abs(a - b) % (2 * Math.PI); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
+  // 직각 맞추기: (1) 커서가 도로 가까이면 시작점에서 그 도로에 수직으로 내린 발에 닿게, (2) 도로에서 출발하면 그 도로에 수직 방향으로
+  function orthoPoint(raw: Pt, from: Pt): Pt | null {
+    const L = Math.hypot(raw.x - from.x, raw.y - from.y);
+    if (L < 20 || net.snapPoint(raw).nodeId !== undefined) return null; // 교차점에 닿으려는 때는 그대로
+    const ang = Math.atan2(raw.y - from.y, raw.x - from.x);
+    const near = net.nearestSegment(raw.x, raw.y, 25);
+    if (near) {
+      const sg = net.segments.get(near.id)!, a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!;
+      const dx = b.x - a.x, dy = b.y - a.y, u = ((from.x - a.x) * dx + (from.y - a.y) * dy) / (dx * dx + dy * dy);
+      const foot = { x: a.x + u * dx, y: a.y + u * dy };
+      if (u > 0.02 && u < 0.98 && Math.hypot(foot.x - from.x, foot.y - from.y) >= 20 && angDiff(Math.atan2(foot.y - from.y, foot.x - from.x), ang) < (25 * Math.PI) / 180) return foot;
+    }
+    const hs = net.snapPoint(from), dirs: number[] = [];
+    const dirOf = (sg: { a: number; b: number }) => { const a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!; return Math.atan2(b.y - a.y, b.x - a.x); };
+    if (hs.segId !== undefined) dirs.push(dirOf(net.segments.get(hs.segId)!));
+    else if (hs.nodeId !== undefined) for (const sg of net.segmentsAt(hs.nodeId)) dirs.push(dirOf(sg));
+    for (const d of dirs) for (const t of [d + Math.PI / 2, d - Math.PI / 2]) {
+      const diff = angDiff(ang, t);
+      if (diff < (15 * Math.PI) / 180) { const len = L * Math.cos(diff); return { x: from.x + len * Math.cos(t), y: from.y + len * Math.sin(t) }; }
+    }
+    return null;
+  }
+
   function cursorPoint(raw: Pt): Pt {
+    if (ortho && start) { const o = orthoPoint(raw, start); if (o) return o; }
     const s = net.snapPoint(raw); // 기존 노드·도로가 가까우면 그쪽으로
     if (s.nodeId !== undefined || s.segId !== undefined) return { x: s.x, y: s.y };
     if (angleSnap && start) {
@@ -337,7 +364,9 @@ export function createTools(d: Deps) {
         say(n > 0 ? `${ZONE_NAME[tool as keyof typeof ZONE_NAME]} ${n}칸` : '칠할 수 있는 칸이 없습니다 (도로 옆 45m 안의 빈 땅만 가능)');
       }
       if (from && last && drawing()) {
+        start = from; // 각도·직각 맞추기는 시작점을 알아야 한다(미리보기와 같은 결과가 되도록)
         const to = cursorPoint({ ...last });
+        start = null;
         if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) d.editor.build(from, to, tool as RoadKind);
       }
       down = null;
@@ -385,6 +414,7 @@ export function createTools(d: Deps) {
   $<HTMLInputElement>(d.toolbar, '#grid').onchange = (e) => (gridSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#debugToggle').onchange = (e) => d.setDebug((e.target as HTMLInputElement).checked);
   $(d.toolbar, '#clearveh').onclick = () => { d.clearVehicles(); say('차량을 모두 제거했습니다'); };
+  $<HTMLInputElement>(d.toolbar, '#ortho').onchange = (e) => (ortho = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#cb').onchange = (e) => d.setColorblind((e.target as HTMLInputElement).checked);
