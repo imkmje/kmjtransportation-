@@ -34,6 +34,8 @@ interface Deps {
   roads: RoadLayer;
   buildings: BuildingLayer;
   zones: ZoneLayer;
+  /** 도구가 없을 때 도로를 클릭하면 그 도로의 정보 창을 연다(도로 밖을 누르면 닫는다) */
+  selectRoad: (segId: number | null) => void;
   /** 도로망 + 건물 + 시뮬레이션 전체 상태를 글자로 / 글자에서 복원(문제가 있으면 Error) */
   save: () => string;
   load: (text: string) => void;
@@ -311,6 +313,7 @@ export function createTools(d: Deps) {
 
   function setTool(t: Tool) {
     tool = tool === t ? null : t;
+    if (tool) d.selectRoad(null);
     if (tool) openCat(catOf(tool)); // 단축키로 골라도 그 분류가 열린다
     start = null;
     tripFrom = null;
@@ -321,7 +324,8 @@ export function createTools(d: Deps) {
   }
 
   function click() {
-    if (!last || tool === null) return;
+    if (!last) return;
+    if (tool === null) { d.selectRoad(d.pickRoad(last)?.segId ?? null); return; }
     if (tool === 'trip') {
       const h = d.pickRoad(last);
       if (!h) { say('도로 위를 클릭하세요'); return; }

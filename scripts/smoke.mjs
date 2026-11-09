@@ -365,6 +365,27 @@ await page.waitForTimeout(600);
 const ciText = await page.locator('#st-ci').innerText();
 check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciText) && (await page.locator('#stats').innerText()).includes('완료율'), `CI=${ciText}`);
 
+// 도로 정보 창: 도구가 없을 때 도로를 클릭하면 열린다
+{
+  await page.keyboard.press('Escape');
+  const [ix, iy] = await freeSpot([[-120, 0], [120, 0], [-60, 0], [60, 0]]);
+  await clickWorld(ix, iy);
+  const infoText = await page.locator('#info').innerText();
+  check('도로를 클릭하면 도로 정보 창이 열림(종류·제한속도·통과 차량·정체 지수)', (await page.locator('#info').isVisible()) && infoText.includes('도로 정보') && infoText.includes('왕복 4차로') && infoText.includes('제한속도') && infoText.includes('정체 지수'), infoText.replace(/\n/g, ' ').slice(0, 140));
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-info.png') });
+  await page.click('#in-close');
+  check('닫기 버튼으로 닫힘', !(await page.locator('#info').isVisible()));
+  await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 40; while (s.tickCount < t) s.step(); });
+  await page.waitForTimeout(400);
+  const topN = await page.locator('#st-top li[data-seg]').count();
+  const topText = await page.locator('#st-top').innerText();
+  check('막히는 곳 TOP 5 목록이 표시됨(있으면 5개 이하)', topN <= 5 && (topN > 0 || topText.includes('없습니다')), `${topN}개 / ${topText.replace(/\n/g, ' | ')}`);
+  if (topN > 0) {
+    await page.locator('#st-top li[data-seg]').first().click();
+    check('목록 항목을 누르면 그 도로의 정보 창이 열림', await page.locator('#info').isVisible());
+    await page.click('#in-close');
+  }
+}
 // 직각 맞추기: 큰길 위에서 약간 비스듬하게 끌어도 큰길에 정확히 직각으로 나간다
 await page.click('button[data-tool="road2"]');
 await dragWorld(-120, 0, -105, -120);

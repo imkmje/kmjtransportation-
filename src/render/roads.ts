@@ -74,9 +74,10 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
   scene.add(group);
   const ghost = new THREE.Mesh(unitBox, goodMat);
   const hover = new THREE.Mesh(unitBox, badMat);
+  const selected = new THREE.Mesh(unitBox, markMat);
   const cursor = new THREE.Mesh(unitDisk, goodMat);
   const mark = new THREE.Mesh(unitDisk, markMat);
-  for (const m of [ghost, hover, cursor, mark]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
+  for (const m of [ghost, hover, selected, cursor, mark]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
   let shown = -1;
 
   function rebuild() {
@@ -179,6 +180,12 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       ghost.visible = true;
     },
     clearGhost() { ghost.visible = false; },
+    /** 정보 창에서 보고 있는 도로를 파랗게 표시 */
+    setSelect(segId: number | null) {
+      const s = segId === null ? undefined : net.segments.get(segId);
+      selected.visible = !!s;
+      if (s) place(selected, net.nodes.get(s.a)!, net.nodes.get(s.b)!, roadWidth(s.kind) + 2.5, 0.7, 0);
+    },
     setHover(segId: number | null) {
       const s = segId === null ? undefined : net.segments.get(segId);
       hover.visible = !!s;

@@ -101,6 +101,13 @@ export class Metrics {
 
   /** 도로 구간별 롤링 CI. 최근 윈도우 안의 통과 차량이 minPasses보다 적으면 null(판정 없음) */
   segmentCIs(): Map<number, number | null> {
+    const out = new Map<number, number | null>();
+    for (const [id, r] of this.segmentReport()) out.set(id, r.ci);
+    return out;
+  }
+
+  /** 도로 구간별 최근 윈도우 합계: CI(판정 없으면 null), 통과 차량 수, 손실 거리(m) — 병목 순위와 정보 창에 쓴다 */
+  segmentReport(): Map<number, { ci: number | null; passes: number; loss: number }> {
     const sum = new Map<number, SegAcc>();
     for (const m of [...this.segRing, this.segCur]) {
       for (const [id, a] of m) {
@@ -109,8 +116,8 @@ export class Metrics {
         sum.set(id, t);
       }
     }
-    const out = new Map<number, number | null>();
-    for (const [id, a] of sum) out.set(id, a.passes < this.cfg.metrics.minPasses || a.ref <= 1e-9 ? null : Math.min(100, (100 * a.loss) / a.ref));
+    const out = new Map<number, { ci: number | null; passes: number; loss: number }>();
+    for (const [id, a] of sum) out.set(id, { ci: a.passes < this.cfg.metrics.minPasses || a.ref <= 1e-9 ? null : Math.min(100, (100 * a.loss) / a.ref), passes: a.passes, loss: a.loss });
     return out;
   }
 

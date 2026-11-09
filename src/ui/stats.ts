@@ -1,10 +1,11 @@
 import { CI_GRADES, ciGrade } from '../sim/metrics';
 import type { Sim } from '../sim/sim';
+import type { Network } from '../sim/network';
 
 const GRADE_COLORS = ['#3a9d5a', '#7fae3a', '#d98a1f', '#d65a2a', '#b3302a'];
 
 // 오른쪽 통계 패널: 정체 지수(등급·게이지), 완료율, 평균 통행시간, 처리량, 차량 수, 안전·교착, 하루 그래프
-export function createStats(root: HTMLElement, sim: Sim, getUnconnected: () => number, rciRoot: HTMLElement, topCi: HTMLElement) {
+export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconnected: () => number, rciRoot: HTMLElement, topCi: HTMLElement, onPick: (segId: number) => void) {
   rciRoot.innerHTML = `
     <div class="rb" title="주거 수요"><span><i id="st-dh"></i></span><em>주거</em></div>
     <div class="rb" title="상업 수요"><span><i id="st-ds"></i></span><em>상업</em></div>
@@ -23,11 +24,16 @@ export function createStats(root: HTMLElement, sim: Sim, getUnconnected: () => n
       <div>교착 해소 · 안전망 개입</div><div id="st-safe">0 · 0</div>
       <div>일자리 부족 · 미연결 건물</div><div id="st-warn">0 · 0</div>
     </div>
+ <h4 class="top-h">막히는 곳 TOP 5 <span style="font-weight:400">(누르면 이동)</span></h4>
+    <ol id="st-top"></ol>
     <svg id="st-chart" width="236" height="64" viewBox="0 0 236 64"></svg>
     <div id="st-yesterday" class="yday"></div></div>`;
   root.querySelector<HTMLElement>('#st-head')!.onclick = () => root.classList.toggle('closed'); // 머리글을 누르면 접고 편다
   const $ = (id: string) => document.getElementById(id)!;
   const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
+  const topEl = $('st-top');
+  let lastTop = '';
+  topEl.onclick = (e) => { const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-seg]'); if (li) onPick(Number(li.dataset.seg)); };
   const num = (n: number | null, d = 0, unit = '') => (n === null ? '-' : `${n.toFixed(d)}${unit}`);
 
   return {
@@ -64,6 +70,13 @@ export function createStats(root: HTMLElement, sim: Sim, getUnconnected: () => n
         [10, 25, 40].map((v) => `<line x1="0" x2="236" y1="${y0 + H - (v / 100) * H}" y2="${y0 + H - (v / 100) * H}" stroke="#cfd9cf" stroke-dasharray="3 3"/>`).join('') +
         (pts.length > 1 ? `<polyline fill="none" stroke="#e8743a" stroke-width="2" points="${pts.join(' ')}"/>` : '') +
         `<text x="6" y="11" font-size="9" fill="#55655a">정체 지수 · 오늘</text>`;
+      // 막히는 곳 TOP 5: 최근 윈도우의 손실 거리가 큰 도로(정체 지수 25 이상, 통과 차량이 충분한 곳)
+      const top = [...m.segmentReport()].filter(([id, r]) => net.segments.has(id) && r.ci !== null && r.ci >= 25).sort((a, b) => b[1].loss - a[1].loss).slice(0, 5);
+      const key = top.map(([id, r]) => `${id}:${Math.round(r.ci!)}:${r.passes}`).join('|');
+      if (key !== lastTop) {
+        lastTop = key;
+        topEl.innerHTML = top.length ? top.map(([id, r]) => { const s = net.segments.get(id)!, a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!; return `<li data-seg="${id}"><b>${Math.round((a.x + b.x) / 2)}, ${Math.round((a.y + b.y) / 2)}</b> 정체 ${Math.round(r.ci!)} <small>· ${r.passes}대</small></li>`; }).join('') : '<li class="none">막히는 곳이 없습니다</li>';
+      }
       const y = m.history[m.history.length - 1];
       el.yday.textContent = y ? `어제(${y.day}일차): 완료율 ${num(y.completion, 0, '%')} · CI ${num(y.ci, 0)} · 평균 ${num(y.avgTravelMin, 0, '분')}` : '';
     },
