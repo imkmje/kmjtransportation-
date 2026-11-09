@@ -64,6 +64,7 @@ export function createTools(d: Deps) {
   let lastClient = { x: 0, y: 0 };
   let gridSnap = true;
   let angleSnap = false;
+  let ortho = true; // 직각 맞추기: 도로에서 출발하거나 도로에 닿을 때 거의 직각이면 정확히 90°로
   let tripFrom: RoadHit | null = null;
   let dragging = false; // 도로 그리기·구역 칠하기 드래그 중
   let zoneFrom: { i: number; j: number } | null = null; // 구역 드래그를 시작한 칸
@@ -75,7 +76,8 @@ export function createTools(d: Deps) {
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
     <button data-tool="stop" title="단축키 S">정지 표지</button>
     <button data-tool="yield" title="단축키 Y">양보 표지</button>
-    <button data-tool="signal" title="단축키 G: 교차로를 클릭하면 신호등이 켜지고 꺼집니다">신호등</button>
+    <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
+    <div class="row"><select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select></div>
     <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
     <div class="row"><button data-tool="zoneHome" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button><button data-tool="zoneOffice" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button></div>
     <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
@@ -84,11 +86,12 @@ export function createTools(d: Deps) {
     <div class="row"><select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select><button id="clearveh">차량 제거</button></div>
     <div class="row"><button id="undo" title="Ctrl+Z">↶ 취소</button><button id="redo" title="Ctrl+Y">↷ 다시</button></div>
     <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
+    <label><input type="checkbox" id="ortho" checked /> 직각 맞추기</label>
     <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
     <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
     <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
     <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭 (켜면 그 교차로의 표지는 무시)<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
@@ -109,7 +112,32 @@ export function createTools(d: Deps) {
   }
 
   // ---- 스냅 ----
+  const angDiff = (a: number, b: number) => { let d = Math.abs(a - b) % (2 * Math.PI); if (d > Math.PI) d = 2 * Math.PI - d; return d; };
+  // 직각 맞추기: (1) 커서가 도로 가까이면 시작점에서 그 도로에 수직으로 내린 발에 닿게, (2) 도로에서 출발하면 그 도로에 수직 방향으로
+  function orthoPoint(raw: Pt, from: Pt): Pt | null {
+    const L = Math.hypot(raw.x - from.x, raw.y - from.y);
+    if (L < 20 || net.snapPoint(raw).nodeId !== undefined) return null; // 교차점에 닿으려는 때는 그대로
+    const ang = Math.atan2(raw.y - from.y, raw.x - from.x);
+    const near = net.nearestSegment(raw.x, raw.y, 25);
+    if (near) {
+      const sg = net.segments.get(near.id)!, a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!;
+      const dx = b.x - a.x, dy = b.y - a.y, u = ((from.x - a.x) * dx + (from.y - a.y) * dy) / (dx * dx + dy * dy);
+      const foot = { x: a.x + u * dx, y: a.y + u * dy };
+      if (u > 0.02 && u < 0.98 && Math.hypot(foot.x - from.x, foot.y - from.y) >= 20 && angDiff(Math.atan2(foot.y - from.y, foot.x - from.x), ang) < (25 * Math.PI) / 180) return foot;
+    }
+    const hs = net.snapPoint(from), dirs: number[] = [];
+    const dirOf = (sg: { a: number; b: number }) => { const a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!; return Math.atan2(b.y - a.y, b.x - a.x); };
+    if (hs.segId !== undefined) dirs.push(dirOf(net.segments.get(hs.segId)!));
+    else if (hs.nodeId !== undefined) for (const sg of net.segmentsAt(hs.nodeId)) dirs.push(dirOf(sg));
+    for (const d of dirs) for (const t of [d + Math.PI / 2, d - Math.PI / 2]) {
+      const diff = angDiff(ang, t);
+      if (diff < (15 * Math.PI) / 180) { const len = L * Math.cos(diff); return { x: from.x + len * Math.cos(t), y: from.y + len * Math.sin(t) }; }
+    }
+    return null;
+  }
+
   function cursorPoint(raw: Pt): Pt {
+    if (ortho && start) { const o = orthoPoint(raw, start); if (o) return o; }
     const s = net.snapPoint(raw); // 기존 노드·도로가 가까우면 그쪽으로
     if (s.nodeId !== undefined || s.segId !== undefined) return { x: s.x, y: s.y };
     if (angleSnap && start) {
@@ -256,9 +284,11 @@ export function createTools(d: Deps) {
     if (tool === 'signal') {
       const n = signalNode(last);
       if (!n) { say('교차로(도로 3개 이상이 만나는 곳) 가까이를 클릭하세요'); return; }
-      const on = !net.hasSignal(n.id);
-      d.editor.setSignal(n.id, on);
-      say(on ? '신호등을 켰습니다 (녹색 15초, 황색 3초, 전적색 1초)' : '신호등을 껐습니다');
+      const cur = !net.hasSignal(n.id) ? 'off' : net.isActuated(n.id) ? 'actuated' : 'fixed';
+      const green = Number($<HTMLSelectElement>(d.toolbar, '#sgreen').value);
+      if (cur === 'off') { d.editor.setSignal(n.id, true, 'fixed', green); say(`고정식 신호등을 켰습니다 (녹색 ${green}초, 황색 ${config.signals.yellowSec}초, 전적색 ${config.signals.allRedSec}초 · 큰 도로가 낀 방향은 녹색 2배)`); }
+      else if (cur === 'fixed') { d.editor.setSignal(n.id, true, 'actuated'); say(`감응식으로 바꿨습니다 (차가 오는 방향에 녹색 ${config.signals.minGreenSec}~${config.signals.maxGreenSec}초, 차가 없으면 넘깁니다)`); }
+      else { d.editor.setSignal(n.id, false); say('신호등을 껐습니다'); }
       refresh();
       return;
     }
@@ -334,7 +364,9 @@ export function createTools(d: Deps) {
         say(n > 0 ? `${ZONE_NAME[tool as keyof typeof ZONE_NAME]} ${n}칸` : '칠할 수 있는 칸이 없습니다 (도로 옆 45m 안의 빈 땅만 가능)');
       }
       if (from && last && drawing()) {
+        start = from; // 각도·직각 맞추기는 시작점을 알아야 한다(미리보기와 같은 결과가 되도록)
         const to = cursorPoint({ ...last });
+        start = null;
         if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) d.editor.build(from, to, tool as RoadKind);
       }
       down = null;
@@ -382,6 +414,7 @@ export function createTools(d: Deps) {
   $<HTMLInputElement>(d.toolbar, '#grid').onchange = (e) => (gridSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#debugToggle').onchange = (e) => d.setDebug((e.target as HTMLInputElement).checked);
   $(d.toolbar, '#clearveh').onclick = () => { d.clearVehicles(); say('차량을 모두 제거했습니다'); };
+  $<HTMLInputElement>(d.toolbar, '#ortho').onchange = (e) => (ortho = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#cb').onchange = (e) => d.setColorblind((e.target as HTMLInputElement).checked);

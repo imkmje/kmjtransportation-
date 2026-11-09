@@ -17,6 +17,18 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
+// ---- 시작 화면 ----
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
+const titleText = await page.locator('#title').innerText();
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.2.0') && titleText.includes('업데이트 내역') && titleText.includes('감응식'), titleText.slice(0, 120).replace(/\n/g, ' '));
+const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
+await page.waitForTimeout(600);
+check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
+await page.click('#t-start');
+check('시작하기를 누르면 화면이 닫히고 시간이 흐름', !(await page.locator('#title').isVisible()) && await page.waitForFunction((t) => window.__game.sim.tickCount > t, tk0, { timeout: 3000 }).then(() => true).catch(() => false));
+await page.click('#about');
+check('업데이트 내역 버튼으로 다시 열면 멈춤', (await page.locator('#title').isVisible()) && (await page.evaluate(() => window.__game.getSpeed())) === 0);
+await page.click('#t-start');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-start.png') });
 check('캔버스 존재', (await page.locator('canvas').count()) === 1);
 check('버전 표시', /v\d+\.\d+\.\d+/.test(await page.locator('#version').innerText()), await page.locator('#version').innerText());
@@ -63,7 +75,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 5, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 6, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -187,6 +199,7 @@ await page.keyboard.press('Escape');
   const cdp = await tctx.newCDPSession(tp);
   await tp.goto('http://localhost:4173/');
   await tp.waitForSelector('canvas');
+  await tp.click('#t-start');
   await tp.click('button[data-speed="0"]');
   const tref = () => tp.evaluate(() => [[300, 0], [0, 300], [-300, 0], [0, 0]].map(([x, y]) => window.__game.project({ x, y })));
   const tsegs = () => tp.evaluate(() => window.__game.editor.network.segments.size);
@@ -213,6 +226,18 @@ await page.keyboard.press('Escape');
   await tt('touchEnd', []);
   await tp.waitForTimeout(500);
   check('터치: 두 손가락 벌리기는 확대', moved(t0, await tref()) > 20, String(moved(t0, await tref())));
+  // 두 손가락 비틀기 = 회전(손가락이 시계 방향으로 돌면 지도도 같은 방향으로 돈다)
+  await tp.evaluate(() => window.__game.focus({ x: 0, y: 0 }));
+  await tp.waitForTimeout(300);
+  const trot = () => tp.evaluate(() => { const q = window.__game.project({ x: 0, y: 300 }); return Math.atan2(q.y - 360, q.x - 640); });
+  const a0 = await trot();
+  const at = (a) => [{ x: 640 + 80 * Math.cos(a), y: 360 + 80 * Math.sin(a) }, { x: 640 - 80 * Math.cos(a), y: 360 - 80 * Math.sin(a) }];
+  await tt('touchStart', at(0));
+  for (let i = 1; i <= 10; i++) { await tt('touchMove', at(i * 0.1)); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(400);
+  const dRot = ((await trot()) - a0 + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+  check('터치: 두 손가락 비틀기는 같은 방향으로 회전', dRot > 0.3 && dRot < 1.2, dRot.toFixed(2));
   await tctx.close();
 }
 
@@ -297,6 +322,22 @@ await page.waitForTimeout(600);
 const ciText = await page.locator('#st-ci').innerText();
 check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciText) && (await page.locator('#stats').innerText()).includes('완료율'), `CI=${ciText}`);
 
+// 직각 맞추기: 큰길 위에서 약간 비스듬하게 끌어도 큰길에 정확히 직각으로 나간다
+await page.click('button[data-tool="road2"]');
+await dragWorld(-120, 0, -105, -120);
+const perp = await page.evaluate(() => { const n = window.__game.editor.network; const sg = [...n.segments.values()].pop(); const A = n.nodes.get(sg.a), B = n.nodes.get(sg.b); return { dx: Math.abs(A.x - B.x), dy: Math.abs(A.y - B.y) }; });
+check('직각 맞추기: 비스듬하게 끌어도 직각 도로가 만들어짐', perp.dx < 0.01 && perp.dy > 60, JSON.stringify(perp));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => window.__game.editor.undo());
+// 반대로: 큰길 근처에서 끝낼 때도 큰길에 직각으로 닿는다
+await page.click('button[data-tool="road2"]');
+await dragWorld(-160, -100, -150, -10); // 건물(x=-190, -130)에서 30m 떨어진 곳
+const perp2 = await page.evaluate(() => { const n = window.__game.editor.network; const sg = [...n.segments.values()].filter((x) => { const A = n.nodes.get(x.a), B = n.nodes.get(x.b); return Math.abs(A.y + 100) < 0.5 || Math.abs(B.y + 100) < 0.5; }).pop(); const A = n.nodes.get(sg.a), B = n.nodes.get(sg.b); return { dx: Math.abs(A.x - B.x), dy: Math.abs(A.y - B.y) }; });
+check('직각 맞추기: 큰길 근처에서 끝내도 직각으로 닿음', perp2.dx < 0.01 && perp2.dy > 50, JSON.stringify(perp2));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => window.__game.editor.undo());
 // 신호등: 큰길과 세로 길이 만나는 교차로를 클릭하면 켜지고, 다시 클릭하면 꺼진다
 const sigCount = () => page.evaluate(() => [...window.__game.editor.network.nodes.values()].filter((n) => window.__game.editor.network.hasSignal(n.id)).length);
 await page.keyboard.press('g');
@@ -305,6 +346,9 @@ check('신호등 켜기', (await sigCount()) === 1 && (await page.locator('#msg'
 await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 60; while (s.tickCount < t) s.step(); });
 await page.waitForTimeout(300);
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-signal.png') });
+await clickWorld(0, 0);
+check('신호등 다시 클릭: 감응식으로 바뀜', (await sigCount()) === 1 && (await page.evaluate(() => [...window.__game.editor.network.nodes.values()].some((n) => n.sigMode === 'actuated' && n.signal))) && (await page.locator('#msg').innerText()).includes('감응식'), await page.locator('#msg').innerText());
+await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 120; while (s.tickCount < t) s.step(); });
 await clickWorld(0, 0);
 check('신호등 끄기', (await sigCount()) === 0, String(await sigCount()));
 await page.keyboard.press('Escape');
@@ -365,6 +409,7 @@ check('샘플 하루 동안 안전망 개입·교착·충돌 점유 0', await pa
 
 await page.reload();
 await page.waitForSelector('canvas');
+await page.click('#t-start');
 await page.waitForTimeout(800);
 check('다시 열면 자동 저장이 있다고 알려 줌', (await page.locator('#msg').innerText()).includes('자동 저장'), await page.locator('#msg').innerText());
 

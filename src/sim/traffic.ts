@@ -300,6 +300,7 @@ export class Traffic {
     const dt = 1 / this.cfg.tickRate;
 
     // 1) tick 시작 스냅샷과 트랙별 차량 목록(앞에 있는 차 순서). 차선 변경 직후 2초간은 이전 차선에도 흔적을 남긴다
+    this.signals.step(tick, this.vehicles.values(), this.graph);
     this.lists.clear();
     const add = (k: number, e: Entry) => { const l = this.lists.get(k); if (l) l.push(e); else this.lists.set(k, [e]); };
     for (const v of this.vehicles.values()) {
@@ -448,7 +449,7 @@ export class Traffic {
       jobs: this.jobs.map((j) => ({ meta: { ...j.meta }, from: { ...j.from }, to: { ...j.to }, born: j.born })),
       requests: this.requests.map((r) => ({ ...r, path: r.path.slice() })),
       stats: { ...this.stats }, lastIntervention: this.lastIntervention,
-      cycles: [...this.cycleState],
+      cycles: [...this.cycleState], signals: this.signals.getState(),
     };
   }
 
@@ -465,11 +466,12 @@ export class Traffic {
     this.lastIntervention = s.lastIntervention;
     this.cycleState = new Map(s.cycles.map(([k, c]) => [k, { ...c }]));
     this.nextId = s.nextId; this.tick = s.tick;
+    this.signals.setState((s as { signals?: ReturnType<Signals['getState']> }).signals); // 옛 저장 파일에는 없다
   }
 
   /** 처음 상태로 되돌린다(새 맵을 열 때) */
   reset(): void {
-    this.vehicles.clear(); this.jobs = []; this.requests = []; this.cycleState.clear(); this.routeCache.clear(); this.occ = null;
+    this.vehicles.clear(); this.jobs = []; this.requests = []; this.cycleState.clear(); this.routeCache.clear(); this.occ = null; this.signals.reset();
     for (const k of Object.keys(this.stats) as (keyof Stats)[]) this.stats[k] = 0;
     this.lastIntervention = ''; this.nextId = 1; this.tick = 0;
     this.graph = buildLaneGraph(this.net, this.cfg);
