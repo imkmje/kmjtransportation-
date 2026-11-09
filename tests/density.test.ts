@@ -11,9 +11,9 @@ const base = () => { const e = new Editor(config); e.loadData(EMPTY_NETWORK); e.
 describe('구역 종류와 밀도', () => {
   it('고밀 주거 구역에는 밀도 2의 대형(2×2칸) 건물만, 저밀에는 작은·중간 건물만 자라고 서로 겹치지 않는다', () => {
     const e = base();
-    e.addBuilding('office', 'large', 300, 100, 'map', false); // 일자리가 있어야 주거 수요가 높다
+    for (let i = 0; i < 9; i++) for (const y of [-40, 40]) e.addBuilding('office', 'large', 40 + i * 40, y, 'map', false); // 일자리가 충분해야 주거 수요가 계속 높다
     e.network.paintZone(-12, 1, -1, 2, 'homeHigh');
-    e.network.paintZone(2, 1, 12, 2, 'home');
+    e.network.paintZone(-30, -2, -13, -1, 'home');
     const sim = new Sim(config, e.network);
     run(sim, 24);
     const auto = [...e.network.buildings.values()].filter((b) => b.source === 'auto');
@@ -21,7 +21,7 @@ describe('구역 종류와 밀도', () => {
     expect(high.length).toBeGreaterThan(1);
     expect(high.every((b) => b.size === 'large' && b.x < 0)).toBe(true);
     expect(low.length).toBeGreaterThan(1);
-    expect(low.every((b) => b.size !== 'large' && b.x > 0)).toBe(true);
+    expect(low.every((b) => b.size !== 'large' && b.x < -250)).toBe(true);
     // 건물이 차지한 칸이 겹치지 않는다
     const cells = e.network.occupiedCells();
     const expected = auto.reduce((n, b) => n + (b.size === 'large' ? 4 : 1), 0);
