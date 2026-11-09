@@ -62,6 +62,8 @@ interface Deps {
   setDebug: (on: boolean) => void;
   /** 사고·날씨 이벤트 켜기/끄기 */
   setEvents: (on: boolean) => void;
+  /** 적색 우회전 켜기/끄기 */
+  setRtor: (on: boolean) => void;
   /** 배속을 한 단계 올리거나(1) 내린다(-1) */
   stepSpeed: (dir: 1 | -1) => void;
   /** 단축키 도움말 창 열기/닫기 */
@@ -147,6 +149,7 @@ export function createTools(d: Deps) {
         <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
         <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
         <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
+        <label title="적색일 때 우회전은 완전히 선 뒤 교차 차량이 없으면 갑니다"><input type="checkbox" id="rtor" checked /> 적색 우회전</label>
         <label title="단축키 F: 사고(차량이 갑자기 서서 차선을 막음)와 비(속도 저하, 사고 증가)"><input type="checkbox" id="events" /> 사고·날씨 (F)</label>
         <button id="helpbtn" title="단축키 ?">단축키 도움말 [?]</button>
       </div>
@@ -655,6 +658,7 @@ export function createTools(d: Deps) {
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#curve').onchange = (e) => { curveMode = (e.target as HTMLInputElement).checked; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); };
+  $<HTMLInputElement>(d.toolbar, '#rtor').onchange = (e) => d.setRtor((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#events').onchange = (e) => d.setEvents((e.target as HTMLInputElement).checked);
   $<HTMLSelectElement>(d.toolbar, '#bsize').onchange = () => refresh();
   $(d.toolbar, '#helpbtn').onclick = () => d.toggleHelp();

@@ -77,6 +77,7 @@ const tools = createTools({
   zones,
   selectRoad: (id) => pickSegment(id),
   setEvents: (on) => sim.setEvents(on),
+  setRtor: (on) => { sim.traffic.rightOnRed = on; },
   stepSpeed,
   toggleHelp: () => help.toggle(),
   selectNode: (id) => { roads.setSelect(null); info.showNode(id); },

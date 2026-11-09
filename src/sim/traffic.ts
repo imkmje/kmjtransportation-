@@ -103,6 +103,8 @@ export class Traffic {
   readonly crashed = new Map<number, number>();
   /** 사고·날씨 이벤트 켜짐(Sim이 설정). 비가 오면 weatherFactor < 1, 사고 확률 배율 accidentMult > 1 */
   eventsOn = false;
+  /** 적색 우회전(저장 파일에 들어간다). 기본값은 설정에서 */
+  rightOnRed = true;
   weatherFactor = 1;
   accidentMult = 1;
   onAccident: ((v: Vehicle) => void) | null = null;
@@ -127,6 +129,7 @@ export class Traffic {
   constructor(private cfg: Config, private net: Network, private rng: Rng) {
     this.graph = buildLaneGraph(net, cfg);
     this.signals = new Signals(cfg, net);
+    this.rightOnRed = cfg.signals.rightOnRed;
   }
 
   /**
@@ -407,7 +410,7 @@ export class Traffic {
       if (sig) { // 신호등: 녹색이면 요청, 황색이면 편하게 설 수 없을 때만(지나가는 편이 낫다), 적색이면 정지선에서 대기
         const L = this.signals.light(c.node, tracks[c.src].segId, tick);
         if (L === 'red' || (L === 'yellow' && (v.sv * v.sv) / (2 * car.b) <= dEnd)) {
-          if (this.cfg.signals.rightOnRed && L === 'red' && c.turn === 'right') rtor = true;
+          if (this.rightOnRed && L === 'red' && c.turn === 'right') rtor = true;
           else { v.reason = '신호 대기'; v.reqTick = 0; continue; }
         }
       }
@@ -491,7 +494,7 @@ export class Traffic {
       jobs: this.jobs.map((j) => ({ meta: { ...j.meta }, from: { ...j.from }, to: { ...j.to }, born: j.born })),
       requests: this.requests.map((r) => ({ ...r, path: r.path.slice() })),
       stats: { ...this.stats }, lastIntervention: this.lastIntervention,
-      cycles: [...this.cycleState], signals: this.signals.getState(), crashed: [...this.crashed], eventsOn: this.eventsOn,
+      cycles: [...this.cycleState], signals: this.signals.getState(), crashed: [...this.crashed], eventsOn: this.eventsOn, rightOnRed: this.rightOnRed,
     };
   }
 
@@ -512,6 +515,7 @@ export class Traffic {
     this.crashed.clear();
     for (const [id, until] of (s as { crashed?: [number, number][] }).crashed ?? []) this.crashed.set(id, until);
     this.eventsOn = (s as { eventsOn?: boolean }).eventsOn ?? false;
+    this.rightOnRed = (s as { rightOnRed?: boolean }).rightOnRed ?? this.cfg.signals.rightOnRed;
   }
 
   /** 처음 상태로 되돌린다(새 맵을 열 때) */

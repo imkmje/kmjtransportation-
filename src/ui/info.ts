@@ -76,7 +76,7 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     let prog = '';
     if (on && !act) {
       const p = signals.program(id), cyc = p.reduce((t, x) => t + x.green + cfg.signals.yellowSec + cfg.signals.allRedSec, 0);
-      prog = `<div class="sub-h">단계별 녹색 시간 (주기 ${Math.round(cyc)}초 · 시차 ${Math.round(n.sigOffset)}초)</div>` + p.map((x, i) => `<div class="ph"><span>${i + 1}단계 ${axis(id, x.segs)}</span><button data-g="${i}" data-d="-5">−</button><b>${Math.round(x.green)}초</b><button data-g="${i}" data-d="5">＋</button></div>`).join('') + (n.sigOffset ? '<button class="wide" id="in-off">시차 없애기</button>' : '');
+      prog = `<div class="sub-h">단계별 녹색 시간 (주기 ${Math.round(cyc)}초 · 시차 ${Math.round(n.sigOffset)}초)</div>` + p.map((x, i) => `<div class="ph"><button data-mv="${i}:-1" title="이 단계를 앞으로" ${i === 0 ? 'disabled' : ''}>▲</button><button data-mv="${i}:1" title="이 단계를 뒤로" ${i === p.length - 1 ? 'disabled' : ''}>▼</button><span>${i + 1}단계 ${axis(id, x.segs)}</span><button data-g="${i}" data-d="-5">−</button><b>${Math.round(x.green)}초</b><button data-g="${i}" data-d="5">＋</button></div>`).join('') + (n.sigOffset ? '<button class="wide" id="in-off">시차 없애기</button>' : '');
     } else if (act) {
       prog = `<div class="sub-h">감응식: 차가 오는 방향에 녹색 ${cfg.signals.minGreenSec}~${cfg.signals.maxGreenSec}초(큰 도로는 2배), 차가 없으면 넘깁니다</div>`;
     }
@@ -145,6 +145,13 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
       if (copy) copy.onclick = () => { clip = signals.copyProgram(id); last = ''; say('신호 프로그램을 복사했습니다. 다른 교차로를 눌러 붙여넣으세요'); render(); };
       if (paste) paste.onclick = () => { const r = clip ? editor.pasteSignal(id, clip, signals) : null; say(!r ? '' : !r.ok ? '교차로가 아닙니다' : r.applied ? '신호 프로그램을 붙여넣었습니다' : '방식만 붙여넣었습니다 (단계 수가 달라 녹색 시간은 복사하지 못했습니다)'); };
       if (round) round.onclick = () => { const r = editor.makeRoundabout(id); say(r.ok ? '회전교차로로 바꿨습니다' : r.error === 'tooShort' ? '연결된 도로가 짧아 만들 수 없습니다' : r.error === 'tooTight' ? '도로 사이 각도가 너무 좁습니다' : '가까이에 건물이 있어 만들 수 없습니다'); };
+      root.querySelectorAll<HTMLElement>('[data-mv]').forEach((b) => (b.onclick = () => { // 단계 순서 바꾸기(녹색 시간도 같이 옮긴다)
+        const [j, dir] = b.dataset.mv!.split(':').map(Number), p = signals.program(id), nn = net.nodes.get(id)!;
+        const order = nn.sigOrder.length === p.length ? nn.sigOrder.slice() : p.map((_, k) => k), greens = p.map((x) => x.green), k = j + dir;
+        if (k < 0 || k >= p.length) return;
+        [order[j], order[k]] = [order[k], order[j]]; [greens[j], greens[k]] = [greens[k], greens[j]];
+        editor.setSignalProgram(id, { order, greens });
+      }));
       const off = root.querySelector<HTMLElement>('#in-off');
       if (off) off.onclick = () => { editor.setSignalProgram(id, { offset: 0 }); };
     }
