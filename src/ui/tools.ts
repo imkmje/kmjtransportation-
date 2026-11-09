@@ -75,7 +75,8 @@ export function createTools(d: Deps) {
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
     <button data-tool="stop" title="단축키 S">정지 표지</button>
     <button data-tool="yield" title="단축키 Y">양보 표지</button>
-    <button data-tool="signal" title="단축키 G: 교차로를 클릭하면 신호등이 켜지고 꺼집니다">신호등</button>
+    <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
+    <div class="row"><select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select></div>
     <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
     <div class="row"><button data-tool="zoneHome" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button><button data-tool="zoneOffice" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button></div>
     <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
@@ -88,7 +89,7 @@ export function createTools(d: Deps) {
     <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
     <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
     <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭 (켜면 그 교차로의 표지는 무시)<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
@@ -256,9 +257,11 @@ export function createTools(d: Deps) {
     if (tool === 'signal') {
       const n = signalNode(last);
       if (!n) { say('교차로(도로 3개 이상이 만나는 곳) 가까이를 클릭하세요'); return; }
-      const on = !net.hasSignal(n.id);
-      d.editor.setSignal(n.id, on);
-      say(on ? '신호등을 켰습니다 (녹색 15초, 황색 3초, 전적색 1초)' : '신호등을 껐습니다');
+      const cur = !net.hasSignal(n.id) ? 'off' : net.isActuated(n.id) ? 'actuated' : 'fixed';
+      const green = Number($<HTMLSelectElement>(d.toolbar, '#sgreen').value);
+      if (cur === 'off') { d.editor.setSignal(n.id, true, 'fixed', green); say(`고정식 신호등을 켰습니다 (녹색 ${green}초, 황색 ${config.signals.yellowSec}초, 전적색 ${config.signals.allRedSec}초 · 큰 도로가 낀 방향은 녹색 2배)`); }
+      else if (cur === 'fixed') { d.editor.setSignal(n.id, true, 'actuated'); say(`감응식으로 바꿨습니다 (차가 오는 방향에 녹색 ${config.signals.minGreenSec}~${config.signals.maxGreenSec}초, 차가 없으면 넘깁니다)`); }
+      else { d.editor.setSignal(n.id, false); say('신호등을 껐습니다'); }
       refresh();
       return;
     }

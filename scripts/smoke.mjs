@@ -63,7 +63,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 5, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 6, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -213,6 +213,18 @@ await page.keyboard.press('Escape');
   await tt('touchEnd', []);
   await tp.waitForTimeout(500);
   check('터치: 두 손가락 벌리기는 확대', moved(t0, await tref()) > 20, String(moved(t0, await tref())));
+  // 두 손가락 비틀기 = 회전(손가락이 시계 방향으로 돌면 지도도 같은 방향으로 돈다)
+  await tp.evaluate(() => window.__game.focus({ x: 0, y: 0 }));
+  await tp.waitForTimeout(300);
+  const trot = () => tp.evaluate(() => { const q = window.__game.project({ x: 0, y: 300 }); return Math.atan2(q.y - 360, q.x - 640); });
+  const a0 = await trot();
+  const at = (a) => [{ x: 640 + 80 * Math.cos(a), y: 360 + 80 * Math.sin(a) }, { x: 640 - 80 * Math.cos(a), y: 360 - 80 * Math.sin(a) }];
+  await tt('touchStart', at(0));
+  for (let i = 1; i <= 10; i++) { await tt('touchMove', at(i * 0.1)); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(400);
+  const dRot = ((await trot()) - a0 + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+  check('터치: 두 손가락 비틀기는 같은 방향으로 회전', dRot > 0.3 && dRot < 1.2, dRot.toFixed(2));
   await tctx.close();
 }
 
@@ -305,6 +317,9 @@ check('신호등 켜기', (await sigCount()) === 1 && (await page.locator('#msg'
 await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 60; while (s.tickCount < t) s.step(); });
 await page.waitForTimeout(300);
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-signal.png') });
+await clickWorld(0, 0);
+check('신호등 다시 클릭: 감응식으로 바뀜', (await sigCount()) === 1 && (await page.evaluate(() => [...window.__game.editor.network.nodes.values()].some((n) => n.sigMode === 'actuated' && n.signal))) && (await page.locator('#msg').innerText()).includes('감응식'), await page.locator('#msg').innerText());
+await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 120; while (s.tickCount < t) s.step(); });
 await clickWorld(0, 0);
 check('신호등 끄기', (await sigCount()) === 0, String(await sigCount()));
 await page.keyboard.press('Escape');
