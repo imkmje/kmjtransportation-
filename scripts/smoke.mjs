@@ -6,6 +6,24 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const server = await preview({ preview: { port: 4173, strictPort: true } });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+// 새 화면 구성: 도구는 아래쪽 분류 상자 안에, 저장·불러오기 등은 오른쪽 위 메뉴 안에 있다. 클릭하기 전에 알맞은 상자·메뉴를 열어 주는 보조 장치
+const patch = (pg) => {
+  const click = pg.click.bind(pg), sel = pg.selectOption.bind(pg);
+  const menuIds = /^#(save|load|export|import|sample|newcity|slot|about)$/;
+  const prep = async (s) => {
+    if (menuIds.test(s)) { if (!(await pg.locator('#filebar').isVisible())) await click('#menubtn'); }
+    else if (s.startsWith('button[data-tool=')) {
+      const cat = await pg.evaluate((q) => document.querySelector(q)?.closest('[data-cat]')?.dataset.cat ?? null, s);
+      if (cat && !(await pg.locator(`#sub-${cat}`).isVisible())) await click(`button[data-catbtn="${cat}"]`);
+    } else if (/^#(grid|ortho|angle|heat|cb|debugToggle|count|clearveh|sgreen)$/.test(s)) {
+      const cat = await pg.evaluate((q) => document.querySelector(q)?.closest('[data-cat]')?.dataset.cat ?? null, s);
+      if (cat && !(await pg.locator(`#sub-${cat}`).isVisible())) await click(`button[data-catbtn="${cat}"]`);
+    }
+  };
+  pg.click = async (s, o) => { await prep(s); return click(s, o); };
+  pg.selectOption = async (s, v, o) => { await prep(s); return sel(s, v, o); };
+};
+patch(page);
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -17,6 +35,13 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
+// ---- 화면 구성(시티즈 스카이라인식): 위쪽 바, 아래쪽 분류 버튼, 위로 열리는 도구 상자 ----
+check('위쪽 바: 시계·배속·메뉴 버튼이 있음', (await page.locator('#hud #clock').isVisible()) && (await page.locator('#hud button[data-speed]').count()) === 4 && (await page.locator('#menubtn').isVisible()));
+check('아래쪽 분류 버튼 6개(도로·구역·교통·철거·보기·도구)', (await page.locator('#toolbar .cats button[data-catbtn], #toolbar .cats button[data-tool="demolish"]').count()) === 6);
+await page.click('button[data-catbtn="road"]');
+check('분류를 누르면 도구 상자가 열림', await page.locator('#sub-road').isVisible() && !(await page.locator('#sub-zone').isVisible()));
+await page.click('button[data-catbtn="road"]');
+check('다시 누르면 닫힘', !(await page.locator('#sub-road').isVisible()));
 // ---- 카메라 기울기 슬라이더 ----
 {
   const t0 = await page.evaluate(() => window.__game.getTilt());
@@ -98,7 +123,7 @@ const toScreen = (x, y) => page.evaluate(([x, y]) => window.__game.project({ x, 
 const freeSpot = async (cands) => {
   for (const [x, y] of cands) {
     const p = await toScreen(x, y);
-    if (p.x > 210 && p.x < 990 && p.y > 120 && p.y < 640) return [x, y];
+    if (p.x > 80 && p.x < 980 && p.y > 110 && p.y < 500) return [x, y];
   }
   throw new Error('가려지지 않는 지점이 없음');
 };
@@ -207,6 +232,7 @@ await page.keyboard.press('Escape');
 {
   const tctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, hasTouch: true });
   const tp = await tctx.newPage();
+  patch(tp);
   const cdp = await tctx.newCDPSession(tp);
   await tp.goto('http://localhost:4173/');
   await tp.waitForSelector('canvas');
@@ -317,10 +343,10 @@ await page.keyboard.press('r');
 const segsBefore = (await counts()).s;
 const idsBefore = await page.evaluate(() => [...window.__game.sim.traffic.vehicles.keys()]);
 const arrivedBefore = (await stats()).arrived;
-// 빈 땅(화면 아래쪽)을 드래그
-await page.mouse.move(560, 580);
+// 빈 땅(화면 위쪽, 도구 모음에 가려지지 않는 곳)을 드래그
+await page.mouse.move(560, 170);
 await page.mouse.down();
-await page.mouse.move(700, 620, { steps: 6 });
+await page.mouse.move(700, 210, { steps: 6 });
 await page.mouse.up();
 await page.waitForTimeout(300);
 check('새 도로가 건설됨(테스트 전제)', (await counts()).s === segsBefore + 1, `${segsBefore} -> ${(await counts()).s}`);
@@ -340,7 +366,7 @@ const ff = (day, hour) => page.evaluate(([day, hour]) => { const s = window.__ga
 await page.click('button[data-speed="0"]');
 await page.click('#sample');
 await page.waitForTimeout(300);
-check('샘플 맵 열기: 건물 23채 + 외부 연결점, 미연결 0', (await bcount()) === 24 && (await page.evaluate(() => window.__game.sim.demand.unconnected().length)) === 0, String(await bcount()));
+check('샘플 맵 열기: 건물 23채 + 상점 3채 + 외부 연결점, 미연결 0', (await bcount()) === 27 && (await page.evaluate(() => window.__game.sim.demand.unconnected().length)) === 0, String(await bcount()));
 await ff(1, 8);
 await page.waitForTimeout(400);
 let g0 = await game();
@@ -408,7 +434,7 @@ await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount +
 await page.waitForTimeout(300);
 const grown = await page.evaluate(() => [...window.__game.editor.network.buildings.values()].filter((b) => b.source === 'auto').length);
 check('수요가 있으면 구역에 건물이 자람', grown >= 1, String(grown));
-check('통계 패널에 수요 막대 표시', (await page.locator('#stats').innerText()).includes('주거 수요') && (await page.locator('#st-dh').evaluate((e) => e.style.width)) !== '', '');
+check('위쪽 바에 수요 막대(주거·상업·직장) 표시', (await page.locator('#rci .rb').count()) === 3 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-zones.png') });
 // 이후 검사(하루 완료율 등)는 구역을 칠하지 않은 샘플로 다시 시작해서 본다
 await page.keyboard.press('Escape');

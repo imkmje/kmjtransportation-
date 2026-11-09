@@ -48,7 +48,7 @@ let uncKey = -1, uncCount = 0;
 const stats = createStats(document.getElementById('stats')!, sim, () => {
   if (uncKey !== editor.network.revision) { uncKey = editor.network.revision; uncCount = sim.demand.unconnected().length; }
   return uncCount;
-});
+}, document.getElementById('rci')!, document.getElementById('topci')!);
 const tools = createTools({
   editor,
   roads,
@@ -103,7 +103,12 @@ const title = createTitle(
 const aboutBtn = document.createElement('button');
 aboutBtn.id = 'about'; aboutBtn.textContent = '업데이트 내역';
 aboutBtn.onclick = () => void title.show();
-document.getElementById('filebar')!.insertBefore(aboutBtn, document.getElementById('msg'));
+const menu = document.getElementById('filebar')!;
+menu.querySelector('.help')!.before(aboutBtn);
+// 메뉴: 오른쪽 위 버튼으로 열고 닫는다. 안의 버튼(저장·불러오기 등)을 누르면 자동으로 닫힌다
+menu.hidden = true;
+document.getElementById('menubtn')!.onclick = () => { menu.hidden = !menu.hidden; };
+menu.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName === 'BUTTON') menu.hidden = true; });
 void title.show();
 
 // 탭이 가려지면 자동 일시정지 (돌아와도 정지 상태 유지)

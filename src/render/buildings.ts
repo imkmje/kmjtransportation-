@@ -7,6 +7,8 @@ const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const cone = new THREE.ConeGeometry(1, 1, 4);
 const HOME_COLORS = [0xecc9a0, 0xe5a99b, 0xf2dcae, 0xd9bda3, 0xefb98a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const HOME_ROOFS = [0xc9a07a, 0xc3837a, 0xd0b988, 0xb89b82, 0xcf9560].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const SHOP_COLORS = [0xf0c24f, 0xe8a23c, 0xf4d37a, 0xe6b05a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const AWNING = new THREE.MeshLambertMaterial({ color: 0xd4503c });
 const OFFICE_COLORS = [0x8da9c6, 0x7d9bb9, 0xa1b6cb, 0x6f8fb0].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const gateMat = new THREE.MeshLambertMaterial({ color: 0xe8b93c });
 const linkMat = new THREE.MeshBasicMaterial({ color: 0x6c7480, transparent: true, opacity: 0.55 });
@@ -30,7 +32,7 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
   };
   const size = (kind: BuildingKind, s: BuildingSize, variant = 0) => ({
     half: config.buildings.footprint[s],
-    h: config.buildings.height[kind === 'office' ? 'office' : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1), // 자란 건물은 높이가 조금씩 다르다
+    h: config.buildings.height[kind === 'office' ? 'office' : kind === 'shop' ? 'shop' : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1), // 자란 건물은 높이가 조금씩 다르다
   });
 
   function rebuild() {
@@ -49,9 +51,15 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
       }
       const { half, h } = size(b.kind, b.size, b.variant);
       const pick = b.id + b.variant;
-      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[pick % HOME_COLORS.length] : OFFICE_COLORS[pick % OFFICE_COLORS.length]);
+      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[pick % HOME_COLORS.length] : b.kind === 'shop' ? SHOP_COLORS[pick % SHOP_COLORS.length] : OFFICE_COLORS[pick % OFFICE_COLORS.length]);
       place(body, b.x, b.y, half * 2, h);
       group.add(body);
+      if (b.kind === 'shop') { // 붉은 차양(앞쪽으로 튀어나온 얇은 판)
+        const aw = new THREE.Mesh(unitBox, AWNING);
+        place(aw, b.x, b.y + half + 0.8, half * 2.1, 0.5, h * 0.55);
+        aw.scale.set(half * 2.1, 0.5, 3);
+        group.add(aw);
+      }
       if (b.kind === 'office' && b.variant % 2 === 1) { // 위층이 좁아지는 계단형 탑
         const top = new THREE.Mesh(unitBox, OFFICE_COLORS[(pick + 1) % OFFICE_COLORS.length]);
         place(top, b.x, b.y, half * 1.2, h * 0.35, h);

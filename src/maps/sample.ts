@@ -15,6 +15,7 @@ const BUILDINGS: B[] = [
   ...HOME_X.flatMap((x, i): B[] => [['home', HOME_SIZES[i * 2], x, 40], ['home', HOME_SIZES[i * 2 + 1], x, -40]]),
   ...OFFICE_X.flatMap((x, i): B[] => [['office', OFFICE_SIZES[i * 2], x, 40], ['office', OFFICE_SIZES[i * 2 + 1], x, -40]]),
   ['home', 'medium', -290, 160], ['home', 'small', -100, -160], ['office', 'medium', 290, 160],
+  ['shop', 'medium', -100, 160], ['shop', 'small', 100, -160], ['shop', 'medium', 150, 160], // 점심·쇼핑·여가 이동의 목적지
 ];
 
 /**

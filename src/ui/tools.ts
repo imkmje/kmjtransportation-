@@ -7,9 +7,9 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
-const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneErase: null };
-const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneErase: '구역 지우기' } as const;
+type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneShop: 'shop', zoneErase: null };
+const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneShop: '상업 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -72,38 +72,73 @@ export function createTools(d: Deps) {
 
   // ---- 화면 요소 ----
   d.toolbar.innerHTML = `
-    <button data-tool="road2" title="단축키 R">${config.roads.road2.name}</button>
-    <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
-    <button data-tool="stop" title="단축키 S">정지 표지</button>
-    <button data-tool="yield" title="단축키 Y">양보 표지</button>
-    <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
-    <div class="row"><select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select></div>
-    <button data-tool="upgrade" title="단축키 U: 왕복 2차로를 4차로로 넓힙니다. 교차로 사이 한 구간씩">도로 넓히기</button>
-    <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
-    <div class="row"><button data-tool="zoneHome" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button><button data-tool="zoneOffice" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button></div>
-    <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
-    <button data-tool="demolish" title="단축키 X">철거</button>
-    <button data-tool="trip" title="단축키 V">차량 투입 (테스트)</button>
-    <div class="row"><select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select><button id="clearveh">차량 제거</button></div>
-    <div class="row"><button id="undo" title="Ctrl+Z">↶ 취소</button><button id="redo" title="Ctrl+Y">↷ 다시</button></div>
-    <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
-    <label><input type="checkbox" id="ortho" checked /> 직각 맞추기</label>
-    <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
-    <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
-    <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
-    <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="subs">
+      <div class="sub" id="sub-road" data-cat="road" hidden>
+        <button data-tool="road2" title="단축키 R">${config.roads.road2.name}</button>
+        <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
+        <button data-tool="upgrade" title="단축키 U: 왕복 2차로를 4차로로 넓힙니다. 교차로 사이 한 구간씩">도로 넓히기</button>
+        <span class="opts">
+          <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
+          <label><input type="checkbox" id="ortho" checked /> 직각 맞추기</label>
+          <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
+        </span>
+      </div>
+      <div class="sub" id="sub-zone" data-cat="zone" hidden>
+        <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button>
+        <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 구역</button>
+        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button>
+        <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
+      </div>
+      <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
+        <button data-tool="stop" title="단축키 S">정지 표지</button>
+        <button data-tool="yield" title="단축키 Y">양보 표지</button>
+        <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
+        <select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select>
+        <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
+      </div>
+      <div class="sub" id="sub-view" data-cat="view" hidden>
+        <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
+        <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
+        <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
+      </div>
+      <div class="sub" id="sub-tools" data-cat="tools" hidden>
+        <button data-tool="trip" title="단축키 V">차량 투입 (테스트)</button>
+        <select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select>
+        <button id="clearveh">차량 제거</button>
+      </div>
+    </div>
+    <div class="cats">
+      <button id="undo" class="small" title="Ctrl+Z">↶<small>취소</small></button>
+      <button id="redo" class="small" title="Ctrl+Y">↷<small>다시</small></button>
+      <i></i>
+      <button data-catbtn="road"><b>🛣</b>도로</button>
+      <button data-catbtn="zone"><b>🏘</b>구역</button>
+      <button data-catbtn="traffic"><b>🚦</b>교통</button>
+      <button data-tool="demolish" title="단축키 X"><b>🚧</b>철거</button>
+      <button data-catbtn="view"><b>📊</b>보기</button>
+      <button data-catbtn="tools"><b>🧪</b>도구</button>
+    </div>`;
   d.filebar.innerHTML = `
-    <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
-    <button id="save">저장</button><button id="load">불러오기</button>
-    <button id="export">파일로 저장</button><button id="import">파일 열기</button><button id="sample" title="큰길 하나와 작은 길, 주거·직장 건물이 있는 예제 도시">샘플 맵</button><button id="newcity" title="외부에서 들어오는 도로 하나만 있는 새 도시">새 도시</button>
+    <h4>메뉴</h4>
+    <div class="mrow"><select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
+    <button id="save">저장</button><button id="load">불러오기</button></div>
+    <div class="mrow"><button id="export">파일로 저장</button><button id="import">파일 열기</button></div>
+    <div class="mrow"><button id="sample" title="큰길 하나와 작은 길, 주거·직장·상점이 있는 예제 도시">샘플 맵</button><button id="newcity" title="외부에서 들어오는 도로 하나만 있는 새 도시">새 도시</button></div>
     <input type="file" id="file" accept="application/json,.json" hidden />
-    <div id="msg"></div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />마우스: 가운데 드래그 = 이동, 오른쪽 드래그 = 회전·기울기, 휠 = 확대<br />터치: 한 손가락 = 이동, 두 손가락 벌리기 = 확대, 비틀기 = 회전, 같이 위아래 = 기울기, 좌우 = 이동<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다(주거·상업·직장)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   const $ = <T extends HTMLElement>(root: HTMLElement, sel: string) => root.querySelector<T>(sel)!;
   const toolButtons = [...d.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool]')];
+  // 분류 버튼(도로·구역·교통·보기·도구)을 누르면 그 도구 상자가 위로 열린다(시티즈 스카이라인처럼). 한 번에 하나만
+  const catBtns = [...d.toolbar.querySelectorAll<HTMLButtonElement>('button[data-catbtn]')];
+  const openCat = (cat: string | null) => {
+    d.toolbar.querySelectorAll<HTMLElement>('.sub').forEach((el) => (el.hidden = el.dataset.cat !== cat));
+    catBtns.forEach((b) => b.classList.toggle('on', b.dataset.catbtn === cat));
+  };
+  catBtns.forEach((b) => (b.onclick = () => openCat(b.classList.contains('on') ? null : b.dataset.catbtn!)));
+  const catOf = (t: string) => d.toolbar.querySelector<HTMLElement>(`button[data-tool="${t}"]`)?.closest<HTMLElement>('[data-cat]')?.dataset.cat ?? null;
   const undoBtn = $<HTMLButtonElement>(d.toolbar, '#undo');
   const redoBtn = $<HTMLButtonElement>(d.toolbar, '#redo');
-  const msg = $(d.filebar, '#msg');
+  const msg = document.getElementById('msg')!;
   let msgTimer: ReturnType<typeof setTimeout> | undefined;
 
   function say(text: string) {
@@ -262,6 +297,7 @@ export function createTools(d: Deps) {
 
   function setTool(t: Tool) {
     tool = tool === t ? null : t;
+    if (tool) openCat(catOf(tool)); // 단축키로 골라도 그 분류가 열린다
     start = null;
     tripFrom = null;
     dragging = false;
@@ -419,6 +455,7 @@ export function createTools(d: Deps) {
     else if (k === 'h') setTool('zoneHome');
     else if (k === 'o') setTool('zoneOffice');
     else if (k === 'e') setTool('zoneErase');
+    else if (k === 'c') setTool('zoneShop');
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
     else if (k === 'l') setTool('limit');

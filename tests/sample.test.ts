@@ -15,7 +15,7 @@ describe('샘플 맵', () => {
   it('만들어지고, 모든 건물이 도로에 연결되며, 큰길 교차로에 정지 표지가 있다', () => {
     const { e, sim } = make();
     const n = e.network;
-    expect(n.buildings.size).toBe(24); // 주거·직장 23채 + 외부 연결점
+    expect(n.buildings.size).toBe(27); // 주거·직장 23채 + 상점 3채 + 외부 연결점
     expect(n.externalId()).not.toBeNull();
     expect([...n.segments.values()].some((s) => s.locked)).toBe(true);
     expect(sim.demand.unconnected()).toEqual([]);
@@ -35,7 +35,7 @@ describe('샘플 맵', () => {
     expect(st.interventions).toBe(0);
     expect(st.deadlocks).toBe(0);
     expect(st.conflicts).toBe(0);
-    expect(rec.ci!).toBeLessThan(50); // 샘플은 "붐비지만 풀리는" 도시(외부 통근이 더해져 1.0.0의 15보다 높다)
+    expect(rec.ci!).toBeLessThan(65); // 샘플은 "붐비지만 풀리는" 도시(외부 통근·점심·쇼핑 이동이 더해져 1.0.0의 15보다 높다)
     expect(sim.demand.poolSize()).toBe(0);
   }, 120_000);
 
