@@ -8,9 +8,9 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'roundabout' | 'downgrade' | 'school' | 'zoneHome' | 'zoneHomeMid' | 'zoneHomeHigh' | 'zoneShop' | 'zoneOffice' | 'zoneIndustrial' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
-const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneHomeMid: 'homeMid', zoneHomeHigh: 'homeHigh', zoneShop: 'shop', zoneOffice: 'office', zoneIndustrial: 'industrial', zoneErase: null };
-const ZONE_NAME = { zoneHome: '주거(저밀) 구역', zoneHomeMid: '주거(중밀) 구역', zoneHomeHigh: '주거(고밀) 구역', zoneShop: '상업 구역', zoneOffice: '사무 구역', zoneIndustrial: '산업 구역', zoneErase: '구역 지우기' } as const;
+type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'roundabout' | 'downgrade' | 'school' | 'zoneHome' | 'zoneHomeMid' | 'zoneHomeHigh' | 'zoneShop' | 'zoneOffice' | 'zoneIndustrial' | 'zoneMixed' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneHomeMid: 'homeMid', zoneHomeHigh: 'homeHigh', zoneShop: 'shop', zoneOffice: 'office', zoneIndustrial: 'industrial', zoneMixed: 'mixed', zoneErase: null };
+const ZONE_NAME = { zoneHome: '주거(저밀) 구역', zoneHomeMid: '주거(중밀) 구역', zoneHomeHigh: '주거(고밀) 구역', zoneShop: '상업 구역', zoneOffice: '사무 구역', zoneIndustrial: '산업 구역', zoneMixed: '혼합 용도 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -122,6 +122,7 @@ export function createTools(d: Deps) {
         <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 [C]</button>
         <button data-tool="zoneOffice" class="z-office" title="단축키 O: 사무 구역(사무 건물)">사무 [O]</button>
         <button data-tool="zoneIndustrial" class="z-industrial" title="단축키 I: 산업 구역(공장). 화물 트럭이 다닙니다">산업 [I]</button>
+        <button data-tool="zoneMixed" class="z-mixed" title="단축키 Z: 혼합 용도 구역(1층 상가 + 위층 주거인 상가주택). 주거이면서 상점입니다">혼합 [Z]</button>
         <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기 [E]</button>
       </div>
       <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
@@ -588,7 +589,7 @@ export function createTools(d: Deps) {
       last = d.pick(e.clientX, e.clientY) ?? last;
       if (zf && last && zoning()) {
         const c = cellOf(last), n = net.paintZone(zf.i, zf.j, c.i, c.j, ZONE_TOOLS[tool!]!);
-        say(n > 0 ? `${ZONE_NAME[tool as keyof typeof ZONE_NAME]} ${n}칸` : '칠할 수 있는 칸이 없습니다 (도로 옆 45m 안의 빈 땅만 가능)');
+        say(n > 0 ? `${ZONE_NAME[tool as keyof typeof ZONE_NAME]} ${n}칸` : `칠할 수 있는 칸이 없습니다 (도로 옆 ${config.zones.maxDist}m 안의 빈 땅만 가능)`);
       }
       if (from && last && drawing()) {
         start = from; // 각도·직각 맞추기는 시작점을 알아야 한다(미리보기와 같은 결과가 되도록)
@@ -612,7 +613,7 @@ export function createTools(d: Deps) {
 
   // 단축키(CS2처럼 도구 모음과 같은 분류로 묶고, 글자는 기억하기 쉬운 것으로): 도로 2·4·6·Q(곡선)·R(회전교차로)·W(일방통행)·U/Shift+U(넓히기/좁히기),
   // 구역 H·J·K(주거 저·중·고밀)·C(상업)·O(사무)·I(산업)·E(지우기), 시설 P(학교), 교통 S·Y·G·N·B·L, 철거 X, 보기 M·D·F, 도구 V
-  const KEYS: Record<string, Tool> = { '2': 'road2', '4': 'road4', '6': 'road6', r: 'roundabout', w: 'oneway', h: 'zoneHome', j: 'zoneHomeMid', k: 'zoneHomeHigh', c: 'zoneShop', o: 'zoneOffice', i: 'zoneIndustrial', e: 'zoneErase', p: 'school', s: 'stop', y: 'yield', g: 'signal', n: 'noleft', b: 'noentry', l: 'limit', x: 'demolish', v: 'trip' };
+  const KEYS: Record<string, Tool> = { '2': 'road2', '4': 'road4', '6': 'road6', r: 'roundabout', w: 'oneway', h: 'zoneHome', j: 'zoneHomeMid', k: 'zoneHomeHigh', c: 'zoneShop', o: 'zoneOffice', i: 'zoneIndustrial', e: 'zoneErase', p: 'school', z: 'zoneMixed', s: 'stop', y: 'yield', g: 'signal', n: 'noleft', b: 'noentry', l: 'limit', x: 'demolish', v: 'trip' };
   const toggleBox = (id: string, fn: (on: boolean) => void) => { const c = $<HTMLInputElement>(d.toolbar, id); c.checked = !c.checked; fn(c.checked); };
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;

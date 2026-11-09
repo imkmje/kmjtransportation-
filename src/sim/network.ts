@@ -25,14 +25,14 @@ export interface Segment {
   restrictB: RestrictKind | null; // b쪽 끝의 통행 제한
 }
 
-export type BuildingKind = 'home' | 'office' | 'factory' | 'shop' | 'school' | 'external'; // 주거, 사무형 직장, 외부 연결점(지도 가장자리의 가상 건물). 이후 버전에서 늘어난다
-export type ZoneType = 'home' | 'homeMid' | 'homeHigh' | 'shop' | 'office' | 'industrial'; // 구역(CS2식): 주거 저·중·고밀, 상업, 사무, 산업. 학교는 구역이 아니라 직접 놓는 건물
+export type BuildingKind = 'home' | 'office' | 'factory' | 'shop' | 'school' | 'mixed' | 'external'; // 주거, 사무형 직장, 외부 연결점(지도 가장자리의 가상 건물). 이후 버전에서 늘어난다
+export type ZoneType = 'home' | 'homeMid' | 'homeHigh' | 'shop' | 'office' | 'industrial' | 'mixed'; // 구역(CS2식): 주거 저·중·고밀, 상업, 사무, 산업. 학교는 구역이 아니라 직접 놓는 건물
 /** 건물이 속하는 구역 종류(학교·외부 연결점은 구역 없음) */
 export const zoneOf = (b: { kind: BuildingKind; density?: number }): ZoneType | null =>
-  b.kind === 'home' ? (['home', 'homeMid', 'homeHigh'] as const)[b.density ?? 0] : b.kind === 'factory' ? 'industrial' : b.kind === 'office' || b.kind === 'shop' ? b.kind : null;
+  b.kind === 'home' ? (['home', 'homeMid', 'homeHigh'] as const)[b.density ?? 0] : b.kind === 'factory' ? 'industrial' : b.kind === 'office' || b.kind === 'shop' || b.kind === 'mixed' ? b.kind : null;
 export const HOME_ZONES: ZoneType[] = ['home', 'homeMid', 'homeHigh'];
-const ZONE_CODE: Record<ZoneType, number> = { home: 0, office: 1, shop: 2, homeMid: 4, homeHigh: 5, industrial: 6 }; // 3은 옛 학교 구역(읽을 때 버린다)
-const CODE_ZONE: Record<number, ZoneType> = { 0: 'home', 1: 'office', 2: 'shop', 4: 'homeMid', 5: 'homeHigh', 6: 'industrial' };
+const ZONE_CODE: Record<ZoneType, number> = { home: 0, office: 1, shop: 2, homeMid: 4, homeHigh: 5, industrial: 6, mixed: 7 }; // 3은 옛 학교 구역(읽을 때 버린다)
+const CODE_ZONE: Record<number, ZoneType> = { 0: 'home', 1: 'office', 2: 'shop', 4: 'homeMid', 5: 'homeHigh', 6: 'industrial', 7: 'mixed' };
 export type BuildingSize = 'small' | 'medium' | 'large';
 export type BuildingSource = 'player' | 'map' | 'auto'; // 4.0.0(구역 시스템) 대비
 export interface Building {
@@ -693,7 +693,7 @@ export class Network {
     // 형식 1·2 → 3: 건물이 없는 것으로 채운다
     const rawB = (d as Partial<NetworkData>).buildings ?? [];
     if (!Array.isArray(rawB)) throw new Error('도로망 파일이 손상되었습니다');
-    const kinds = ['home', 'office', 'factory', 'shop', 'school', 'external'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
+    const kinds = ['home', 'office', 'factory', 'shop', 'school', 'mixed', 'external'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
     for (const b of rawB) {
       if (![b?.id, b?.x, b?.y].every((v) => typeof v === 'number' && Number.isFinite(v)) || !kinds.includes(b.kind) || !sizes.includes(b.size) || !sources.includes(b.source)) throw new Error('도로망 파일이 손상되었습니다');
     }
@@ -701,7 +701,7 @@ export class Network {
     const buildings = rawB.map((b) => ({ ...b, deletable: b.deletable !== false, parking: b.parking ?? 0, density: (([0, 1, 2] as number[]).includes((b as Partial<Building>).density as number) ? (b as Building).density : 0) as 0 | 1 | 2, variant: (b as Partial<Building>).variant ?? 0 }));
     if (!buildings.every((b) => typeof b.variant === 'number' && Number.isFinite(b.variant))) throw new Error('도로망 파일이 손상되었습니다');
     const rawZ = (d as Partial<NetworkData>).zones ?? [];
-    if (!Array.isArray(rawZ) || !rawZ.every((z) => Array.isArray(z) && Number.isInteger(z[0]) && Number.isInteger(z[1]) && (z[2] === 0 || z[2] === 1 || z[2] === 2 || z[2] === 3 || z[2] === 4 || z[2] === 5 || z[2] === 6) && Math.abs(z[0]) < 1000 && Math.abs(z[1]) < 1000)) throw new Error('도로망 파일이 손상되었습니다');
+    if (!Array.isArray(rawZ) || !rawZ.every((z) => Array.isArray(z) && Number.isInteger(z[0]) && Number.isInteger(z[1]) && (z[2] === 0 || z[2] === 1 || z[2] === 2 || z[2] === 3 || z[2] === 4 || z[2] === 5 || z[2] === 6 || z[2] === 7) && Math.abs(z[0]) < 1000 && Math.abs(z[1]) < 1000)) throw new Error('도로망 파일이 손상되었습니다');
     const maxBuilding = Math.max(0, ...buildings.map((b) => b.id));
     const maxNode = Math.max(0, ...d.nodes.map((n) => n.id));
     const maxSeg = Math.max(0, ...d.segments.map((s) => s.id));

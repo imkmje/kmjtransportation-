@@ -71,7 +71,7 @@ export class Demand {
   // ---------------- 계획 ----------------
   private cap(id: number): number {
     const b = this.net.buildings.get(id)!;
-    return this.cfg.buildings.capacity[b.size] * (b.kind === 'home' ? this.cfg.densityCap[b.density] : 1);
+    return this.cfg.buildings.capacity[b.size] * (b.kind === 'home' ? this.cfg.densityCap[b.density] : b.kind === 'mixed' ? this.cfg.growth.mixedShare : 1);
   }
 
   private weights(list: [number, number, number][], now: number, day: number) {
@@ -112,7 +112,7 @@ export class Demand {
 
   /** kind 건물들. 'office'는 일하는 곳 전체(사무 건물 + 공장) */
   private ofKind(kind: BuildingKind) {
-    return [...this.net.buildings.values()].filter((b) => (kind === 'office' ? b.kind === 'office' || b.kind === 'factory' : b.kind === kind));
+    return [...this.net.buildings.values()].filter((b) => (kind === 'office' ? b.kind === 'office' || b.kind === 'factory' : kind === 'home' ? b.kind === 'home' || b.kind === 'mixed' : kind === 'shop' ? b.kind === 'shop' || b.kind === 'mixed' : b.kind === kind)); // 혼합 용도는 주거이면서 상점이다
   }
 
   /** 오늘 아직 출발하지 않은 직장인의 출근과 외출을 (다시) 계획한다. 출근은 평일만, 외출은 매일 */
@@ -182,7 +182,7 @@ export class Demand {
       // 평일 직장인의 여가는 저녁에, 나머지는 낮 시간대에 나가는 것으로 한다(한 건물 안에서 섞어 계획)
       const eve = weekend ? 0 : Math.min(n, Math.round(workers * e.workerLeisureWeekday));
       for (let i = 0; i < n; i++) {
-        const to = this.choose(h, cands);
+        const to = this.choose(h, cands.filter((c) => c.id !== h.id)); // 혼합 용도 건물은 자기 자신에게 가지 않는다
         if (to === null) break;
         const time = this.sampleTime(i < eve ? e.eveningWeights : e.dayWeights, now, day);
         if (time === null) continue;

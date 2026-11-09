@@ -14,11 +14,12 @@ describe('구역', () => {
     const n = withRoad().network;
     expect(n.cellStatus(0, 0)).toBe('road');
     expect(n.cellStatus(0, 1)).toBe('ok'); // 20m: 도로 반폭 + 칸 반쪽(약 17m) 밖, 45m 안
-    expect(n.cellStatus(0, 3)).toBe('far'); // 60m
+    expect(n.cellStatus(0, 3)).toBe('ok'); // 60m도 65m 안이라 칠할 수 있다
+    expect(n.cellStatus(0, 4)).toBe('far'); // 80m
     expect(n.cellStatus(60, 1)).toBe('out');
     // 세로 -5..5칸, 가로 -2..2칸 칠하기 → 도로 양쪽 첫 줄과 둘째 줄(40m)만
-    expect(n.paintZone(-2, -5, 2, 5, 'home')).toBe(2 * 2 * 5); // y=±20, ±40의 칸 × 가로 5칸
-    expect(n.zones.size).toBe(20);
+    expect(n.paintZone(-2, -5, 2, 5, 'home')).toBe(6 * 5); // y=±20, ±40, ±60의 칸 × 가로 5칸
+    expect(n.zones.size).toBe(30);
     expect(n.paintZone(-2, -5, 2, 5, 'home')).toBe(0); // 다시 칠해도 바뀐 칸 없음
   });
 
@@ -40,7 +41,7 @@ describe('구역', () => {
   it('구역 위에 도로를 새로 놓으면 겹친 칸의 구역이 지워진다', () => {
     const e = withRoad();
     e.network.paintZone(2, 1, 2, 5, 'home');
-    expect(e.network.zones.size).toBe(2); // y=20, 40만
+    expect(e.network.zones.size).toBe(3); // y=20, 40, 60
     e.build({ x: 40, y: 20 }, { x: 40, y: 100 }, 'road2');
     expect(e.network.zones.size).toBe(0);
   });
