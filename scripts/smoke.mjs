@@ -475,13 +475,19 @@ check('주거 구역 드래그로 4칸 칠함', (await zcount()) === 4 && (await
 await page.keyboard.press('e');
 await dragWorld(zx, zy, zx + 60, zy);
 check('구역 지우기 도구로 구역이 사라짐', (await zcount()) === 0, String(await zcount()));
+await page.keyboard.press('k');
+await dragWorld(zx, zy, zx + 60, zy);
+check('학교 구역(K) 칠하기', (await zcount()) === 4 && (await page.locator('#msg').innerText()).includes('학교 구역 4칸'), `${await zcount()} / ${await page.locator('#msg').innerText()}`);
+await page.keyboard.press('e');
+await dragWorld(zx, zy, zx + 60, zy);
+check('학교 구역도 지워짐', (await zcount()) === 0);
 await page.keyboard.press('h');
 await dragWorld(zx, zy, zx + 60, zy);
 await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 120; while (s.tickCount < t) s.step(); }); // 시뮬 2분
 await page.waitForTimeout(300);
 const grown = await page.evaluate(() => [...window.__game.editor.network.buildings.values()].filter((b) => b.source === 'auto').length);
 check('수요가 있으면 구역에 건물이 자람', grown >= 1, String(grown));
-check('위쪽 바에 수요 막대(주거·상업·직장) 표시', (await page.locator('#rci .rb').count()) === 3 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
+check('위쪽 바에 수요 막대(주거·상업·직장·학교) 표시', (await page.locator('#rci .rb').count()) === 4 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-zones.png') });
 // 이후 검사(하루 완료율 등)는 구역을 칠하지 않은 샘플로 다시 시작해서 본다
 await page.keyboard.press('Escape');

@@ -9,7 +9,8 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
   rciRoot.innerHTML = `
     <div class="rb" title="주거 수요"><span><i id="st-dh"></i></span><em>주거</em></div>
     <div class="rb" title="상업 수요"><span><i id="st-ds"></i></span><em>상업</em></div>
-    <div class="rb" title="직장 수요"><span><i id="st-do"></i></span><em>직장</em></div>`;
+    <div class="rb" title="직장 수요"><span><i id="st-do"></i></span><em>직장</em></div>
+    <div class="rb" title="학교 수요"><span><i id="st-dc"></i></span><em>학교</em></div>`;
   root.innerHTML = `
     <h4 id="st-head">교통 현황 <span style="font-weight:400">(최근 시뮬 2.5분)</span> <em>▾</em></h4><div id="st-body">
     <div class="ci"><b id="st-ci">-</b><span id="st-grade"></span></div>
@@ -30,7 +31,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
     <div id="st-yesterday" class="yday"></div></div>`;
   root.querySelector<HTMLElement>('#st-head')!.onclick = () => root.classList.toggle('closed'); // 머리글을 누르면 접고 편다
   const $ = (id: string) => document.getElementById(id)!;
-  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
+  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dsc: $('st-dc'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
   const topEl = $('st-top');
   let lastTop = '';
   topEl.onclick = (e) => { const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-seg]'); if (li) onPick(Number(li.dataset.seg)); };
@@ -51,6 +52,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
       el.dh.style.height = `${bars.home}%`;
       el.dof.style.height = `${bars.office}%`;
       el.dsh.style.height = `${bars.shop}%`;
+      el.dsc.style.height = `${bars.school}%`;
       const completion = m.completion();
       el.comp.textContent = completion === null ? '-' : `${completion.toFixed(0)}% (진행 중 ${dm.inFlight()})`;
       el.avg.textContent = num(m.avgTravelMin(), 0, '분');

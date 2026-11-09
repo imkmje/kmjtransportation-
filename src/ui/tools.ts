@@ -7,9 +7,9 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
-const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneShop: 'shop', zoneErase: null };
-const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneShop: '상업 구역', zoneErase: '구역 지우기' } as const;
+type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneSchool' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneShop: 'shop', zoneSchool: 'school', zoneErase: null };
+const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneShop: '상업 구역', zoneSchool: '학교 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -103,6 +103,7 @@ export function createTools(d: Deps) {
         <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button>
         <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 구역</button>
         <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역(산업 구역)을 칠합니다">직장(산업) 구역</button>
+        <button data-tool="zoneSchool" class="z-school" title="단축키 K: 드래그해서 학교 구역을 칠합니다. 학생이 아침에 등교하고 오후에 돌아옵니다">학교 구역</button>
         <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
       </div>
       <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
@@ -490,6 +491,7 @@ export function createTools(d: Deps) {
     else if (k === 'o') setTool('zoneOffice');
     else if (k === 'e') setTool('zoneErase');
     else if (k === 'c') setTool('zoneShop');
+    else if (k === 'k') setTool('zoneSchool');
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
     else if (k === 'l') setTool('limit');

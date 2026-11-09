@@ -11,7 +11,7 @@ export interface TripMeta {
   from: number; // 출발 건물 ID (test는 0)
   to: number; // 도착 건물 ID
   born: number; // 이동이 발생한 tick(출발 대기 시간 포함해 통행시간을 잰다)
-  mode: 'car'; // 3.0.0 예약: 이동수단. 지금은 항상 승용차
+  mode: 'car' | 'truck'; // 이동수단(3.0.0에서 버스 등 추가). 트럭은 공장의 화물 이동
   ownerId: number; // 3.0.0 예약: 차량 소유 ID
 }
 export type LostReason = 'noRoute' | 'abandoned' | 'removed' | 'deadlock';
@@ -229,10 +229,12 @@ export class Traffic {
       if (gapBehind > 0 && gapBehind < car0.s0 + o.v * car0.T + (o.v * o.v) / (2 * car0.b)) return null;
     }
     const car = this.cfg.vehicles.car;
-    const f = factor ?? Math.min(1.15, Math.max(0.85, 1 + 0.08 * this.gauss()));
+    const truck = meta?.mode === 'truck', fr = this.cfg.demand.freight;
+    const f0 = factor ?? Math.min(1.15, Math.max(0.85, 1 + 0.08 * this.gauss()));
+    const f = truck ? Math.min(f0, fr.speedFactor) : f0; // 트럭은 더 느리고 길다
     const p = posAt(this.graph.tracks[first], startS);
     const v: Vehicle = {
-      id: this.nextId++, meta, seg: this.graph.tracks[first].segId, mRef: 0, mAct: 0, gv: 0, path: path.slice(), pi: 0, s: startS, v: 0, acc: 0, endS, factor: f, length: car.length, waitTicks: 0, uturnDone: -1, status: '',
+      id: this.nextId++, meta, seg: this.graph.tracks[first].segId, mRef: 0, mAct: 0, gv: 0, path: path.slice(), pi: 0, s: startS, v: 0, acc: 0, endS, factor: f, length: truck ? fr.length : car.length, waitTicks: 0, uturnDone: -1, status: '',
       x: p.x, y: p.y, h: p.h, px: p.x, py: p.y, ph: p.h, ss: startS, sv: 0, spi: 0, li: 0,
       zoned: false, granted: false, reason: '', reqTick: 0, reqPi: -1, grantPi: -1, stopTicks: 0, stopPi: -1, waiver: false, waitFor: 0, waitSince: 0, hold: false, holdFor: 0,
       lcCool: 0, lcPhantom: 0, lcFrom: -1, lcPi: -1, lcTicks: 0, lcOffX: 0, lcOffY: 0,

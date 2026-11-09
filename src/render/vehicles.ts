@@ -15,6 +15,7 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
   scene.add(mesh);
   const dummy = new THREE.Object3D();
   const moving = new THREE.Color(0x3d7be0), stopped = new THREE.Color(0xe8893c);
+  const tMoving = new THREE.Color(0x8a5a3c), tStopped = new THREE.Color(0xc0392b); // 트럭은 갈색(멈추면 붉은 갈색)
 
   return {
     /** alpha: 이전 tick과 현재 tick 사이 어디쯤인지(0~1). 움직임을 부드럽게 보이게 한다 */
@@ -25,9 +26,11 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
         const p = toThree(v.px + (v.x - v.px) * alpha, v.py + (v.y - v.py) * alpha, 0.2 + 0.75);
         dummy.position.set(p.x, p.y, p.z);
         dummy.rotation.y = v.ph + wrap(v.h - v.ph) * alpha;
+        const truck = v.meta?.mode === 'truck';
+        dummy.scale.set(truck ? v.length / car.length : 1, truck ? 1.5 : 1, truck ? config.demand.freight.width / car.width : 1);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
-        mesh.setColorAt(i, v.v < 0.3 ? stopped : moving);
+        mesh.setColorAt(i, truck ? (v.v < 0.3 ? tStopped : tMoving) : v.v < 0.3 ? stopped : moving);
         i++;
       }
       mesh.count = i;
