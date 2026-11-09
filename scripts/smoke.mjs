@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.7.1') && titleText.includes('업데이트 내역') && titleText.includes('그리기 호출'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.8.0') && titleText.includes('업데이트 내역') && titleText.includes('혼합 용도'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -105,7 +105,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 10, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 11, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -117,7 +117,7 @@ const toScreen = (x, y) => page.evaluate(([x, y]) => window.__game.project({ x, 
 const freeSpot = async (cands) => {
   for (const [x, y] of cands) {
     const p = await toScreen(x, y);
-    if (p.x > 80 && p.x < 980 && p.y > 110 && p.y < 500) return [x, y];
+    if (p.x > 80 && p.x < 980 && p.y > 110 && p.y < 430) return [x, y];
   }
   throw new Error('가려지지 않는 지점이 없음');
 };
@@ -372,8 +372,17 @@ check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciT
 // 도로 정보 창: 도구가 없을 때 도로를 클릭하면 열린다
 {
   await page.keyboard.press('Escape');
-  const [ix, iy] = await freeSpot([[-120, 0], [120, 0], [-60, 0], [60, 0]]);
-  await clickWorld(ix, iy);
+  await page.keyboard.press('Escape'); // 한 번 더: 도로 도구 해제
+  await page.evaluate(() => window.__game.focus({ x: 0, y: 0 }));
+  await page.waitForTimeout(300);
+  await page.click('button[data-speed="0"]'); // 차량이 끼어들지 않게 잠깐 정지
+  // 차량이 가까이 있으면 차량 정보가 열리므로, 도로 정보가 열릴 때까지 지점을 바꿔 가며 누른다
+  for (const [x, y] of [[-60, 0], [60, 0], [-180, 0], [180, 0], [-90, 0], [90, 0], [-150, 0], [150, 0], [-30, 0], [30, 0]]) {
+    const p = await toScreen(x, y);
+    if (!(p.x > 80 && p.x < 980 && p.y > 110 && p.y < 430)) continue;
+    await clickWorld(x, y);
+    if ((await page.locator('#info').isVisible()) && (await page.locator('#info').innerText()).includes('도로 정보')) break;
+  }
   const infoText = await page.locator('#info').innerText();
   check('도로를 클릭하면 도로 정보 창이 열림(종류·제한속도·통과 차량·정체 지수)', (await page.locator('#info').isVisible()) && infoText.includes('도로 정보') && infoText.includes('왕복 6차로') && infoText.includes('제한속도') && infoText.includes('정체 지수'), infoText.replace(/\n/g, ' ').slice(0, 140));
   await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-info.png') });
@@ -392,9 +401,35 @@ check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciT
     await page.waitForTimeout(200);
   }
 }
+// 차량 정보 창: 달리는 차량을 클릭하면 출발·목적지·속도·상태가 나오고 남은 경로가 그려진다
+{
+  await page.keyboard.press('Escape');
+  const target = await page.evaluate(() => {
+    const g = window.__game;
+    for (const v of g.sim.traffic.vehicles.values()) {
+      if (v.meta?.kind !== 'commute') continue;
+      const p = g.project({ x: v.x, y: v.y });
+      if (p.x > 120 && p.x < 940 && p.y > 130 && p.y < 460) return { id: v.id, x: p.x, y: p.y };
+    }
+    return null;
+  });
+  check('화면 안에 클릭할 출근 차량이 있음', !!target);
+  if (target) {
+    await page.mouse.move(target.x, target.y);
+    await page.mouse.click(target.x, target.y);
+    const t = await page.locator('#info').innerText();
+    check('차량을 클릭하면 차량 정보 창(차종·이동·출발·목적지·속도·상태)이 열림', (await page.locator('#info').isVisible()) && t.includes('차량 정보') && t.includes('승용차') && t.includes('출근') && t.includes('출발') && t.includes('km/h'), t.replace(/\n/g, ' ').slice(0, 140));
+    await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-vehicle.png') });
+    await page.click('#in-follow');
+    check('따라가기 버튼', (await page.locator('#in-follow').innerText()).includes('끄기'));
+    await page.click('#in-close');
+    check('차량 정보 창 닫힘', !(await page.locator('#info').isVisible()));
+  }
+}
 // 교차로 정보 창: 신호 방식 고르기, 단계별 녹색 시간 편집
 {
   await page.keyboard.press('Escape');
+  await page.evaluate(() => { const g = window.__game.sim; for (let i = 0; i < 600 && g.traffic.vehicleNear({ x: 0, y: 0 }, 9); i++) g.step(); }); // 교차로 위의 차량이 지나갈 때까지 손으로 진행
   await clickWorld(0, 0);
   check('교차로를 클릭하면 교차로 정보 창이 열림', (await page.locator('#info').isVisible()) && (await page.locator('#info').innerText()).includes('교차로 정보'), (await page.locator('#info').innerText()).replace(/\n/g, ' ').slice(0, 80));
   await page.click('#info button[data-mode="fix"]');
@@ -527,7 +562,7 @@ await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount +
 await page.waitForTimeout(300);
 const grown = await page.evaluate(() => [...window.__game.editor.network.buildings.values()].filter((b) => b.source === 'auto').length);
 check('수요가 있으면 구역에 건물이 자람', grown >= 1, String(grown));
-check('위쪽 바에 수요 막대(주거 저·중·고밀, 상업, 사무, 산업) 표시', (await page.locator('#rci .rb').count()) === 6 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
+check('위쪽 바에 수요 막대(주거 저·중·고밀, 상업, 사무, 산업, 혼합) 표시', (await page.locator('#rci .rb').count()) === 7 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-zones.png') });
 // 이후 검사(하루 완료율 등)는 구역을 칠하지 않은 샘플로 다시 시작해서 본다
 await page.keyboard.press('Escape');

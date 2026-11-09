@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { config } from '../config';
 import { CI_GRADES } from '../sim/metrics';
 import type { Metrics } from '../sim/metrics';
-import type { Network } from '../sim/network';
+import { roadSpan, type Network } from '../sim/network';
 import { toThree } from './coords';
 
 // 등급(원활~심각) 색. 기본: 초록→빨강. 색약 친화: 파랑→주황→진한 빨강(초록-빨강 구분이 어려운 경우에도 밝기와 색상 축이 다르다)
@@ -30,9 +30,10 @@ export function createHeatmap(scene: THREE.Scene, net: Network, metrics: Metrics
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
       const r = config.roads[s.kind];
       const m = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: NONE, transparent: true, opacity: 0.8, depthWrite: false }));
-      const p = toThree((a.x + b.x) / 2, (a.y + b.y) / 2, 0.38);
+      const sp = roadSpan(r, !!s.oneWay), L = Math.hypot(b.x - a.x, b.y - a.y), ux = (b.x - a.x) / L, uy = (b.y - a.y) / L;
+      const p = toThree((a.x + b.x) / 2 - uy * sp.shift, (a.y + b.y) / 2 + ux * sp.shift, 0.38); // 비대칭 도로는 몸체가 중앙선에서 치우쳐 있다
       m.position.set(p.x, p.y, p.z);
-      m.scale.set(Math.hypot(b.x - a.x, b.y - a.y), 0.08, r.lanesPerDir * 2 * r.laneWidth);
+      m.scale.set(L, 0.08, sp.width);
       m.rotation.y = Math.atan2(b.y - a.y, b.x - a.x);
       m.renderOrder = 1;
       group.add(m);

@@ -57,7 +57,7 @@ export interface Vehicle {
 
 interface SpawnRequest { path: number[]; startS: number; endS: number; remaining: number; nextTick: number; blocked: number }
 interface Entry { v: Vehicle; s: number; sv: number; len: number; phantom: boolean }
-interface Req { v: Vehicle; conn: Track; tick: number; d: number; sticky: boolean; insideBlock: number; exitBlock: number }
+interface Req { v: Vehicle; conn: Track; tick: number; d: number; sticky: boolean; insideBlock: number; exitBlock: number; rtor?: boolean }
 
 export interface Stats {
   spawned: number; arrived: number; abandoned: number; interventions: number; noRoute: number;
@@ -103,6 +103,8 @@ export class Traffic {
   readonly crashed = new Map<number, number>();
   /** 사고·날씨 이벤트 켜짐(Sim이 설정). 비가 오면 weatherFactor < 1, 사고 확률 배율 accidentMult > 1 */
   eventsOn = false;
+  /** 적색 우회전(저장 파일에 들어간다). 기본값은 설정에서 */
+  rightOnRed = true;
   weatherFactor = 1;
   accidentMult = 1;
   onAccident: ((v: Vehicle) => void) | null = null;
@@ -122,11 +124,12 @@ export class Traffic {
   private lists = new Map<number, Entry[]>();
   private cycleState = new Map<string, { since: number; stage: number; stageTick: number; vid: number }>();
   private nextId = 1;
-  private tick = 0;
+  tick = 0; // 마지막으로 처리한 tick(화면·정보 창이 읽는다)
 
   constructor(private cfg: Config, private net: Network, private rng: Rng) {
     this.graph = buildLaneGraph(net, cfg);
     this.signals = new Signals(cfg, net);
+    this.rightOnRed = cfg.signals.rightOnRed;
   }
 
   /**
@@ -339,6 +342,36 @@ export class Traffic {
     if (tick % Math.round(this.cfg.deadlock.detectSec * this.cfg.tickRate) === 0) this.deadlocks(tick);
   }
 
+  // ---------------- 화면용 조회(차량 정보·이동 흐름) ----------------
+
+  /** 점 p에서 radius m 안의 가장 가까운 차량(없으면 null). ID 순으로 훑어 같은 거리면 ID가 작은 차 */
+  vehicleNear(p: { x: number; y: number }, radius: number): Vehicle | null {
+    let best: Vehicle | null = null, bd = radius;
+    for (const v of this.vehicles.values()) { const d = Math.hypot(v.x - p.x, v.y - p.y); if (d < bd) { bd = d; best = v; } }
+    return best;
+  }
+
+  /** 차량이 앞으로 갈 경로를 점 목록으로(지금 위치 → 남은 차선·연결선). 그래프가 바뀌어 길이 어긋나면 빈 목록 */
+  routePoints(v: Vehicle): { x: number; y: number }[] {
+    const pts: { x: number; y: number }[] = [{ x: v.x, y: v.y }];
+    for (let k = v.pi; k < v.path.length; k++) {
+      const t = this.graph.tracks[v.path[k]];
+      if (!t) return [];
+      const s0 = k === v.pi ? v.s : 0, s1 = k === v.path.length - 1 ? Math.min(v.endS, t.length) : t.length; // 마지막 차선은 목적지 위치까지만
+      for (let i = 1; i < t.pts.length - 1; i++) if (t.cum[i] > s0 && t.cum[i] < s1) pts.push({ x: t.pts[i].x, y: t.pts[i].y }); // 곡선 연결선의 중간 점
+      const e = posAt(t, s1);
+      pts.push({ x: e.x, y: e.y });
+    }
+    return pts;
+  }
+
+  /** 도로 구간 segId를 지났거나 지나갈 차량들(경로에 그 구간의 차선이 들어 있는 차량) */
+  vehiclesUsing(segId: number): Vehicle[] {
+    const out: Vehicle[] = [];
+    for (const v of this.vehicles.values()) if (v.path.some((id) => this.graph.tracks[id]?.segId === segId)) out.push(v);
+    return out;
+  }
+
   // ---------------- 사고 ----------------
 
   /** 치울 때가 된 사고 차량을 풀고, 이벤트가 켜져 있으면 20tick마다 달리는 차량에게 사고 확률을 굴린다 */
@@ -366,6 +399,7 @@ export class Traffic {
   // o가 r보다 먼저 지나갈 자격이 있는가 (rules.md 9항 우선순위)
   private higher(o: Req, r: Req): boolean {
     if (o.sticky !== r.sticky) return o.sticky; // 이미 허가받은 차량은 새로 온 차량에게 밀리지 않는다(우선순위 역전 방지)
+    if (!!o.rtor !== !!r.rtor) return !o.rtor; // 적색 우회전은 녹색 쪽 차량에게 양보한다
     const so = o.conn.sign ? 1 : 0, sr = r.conn.sign ? 1 : 0;
     if (so !== sr) return so < sr; // 표지 없는 쪽이 먼저
     if (o.conn.rank !== r.conn.rank) return o.conn.rank > r.conn.rank; // 도로 등급
@@ -402,18 +436,23 @@ export class Traffic {
       v.zoned = true;
       let eligible = true;
       const sig = this.net.hasSignal(c.node);
+      let rtor = false; // 적색 우회전: 적색에서 우회전은 완전히 선 뒤 교차 차량이 없을 때만 간다(교차 차량에게 양보)
       if (sig) { // 신호등: 녹색이면 요청, 황색이면 편하게 설 수 없을 때만(지나가는 편이 낫다), 적색이면 정지선에서 대기
         const L = this.signals.light(c.node, tracks[c.src].segId, tick);
-        if (L === 'red' || (L === 'yellow' && (v.sv * v.sv) / (2 * car.b) <= dEnd)) { v.reason = '신호 대기'; v.reqTick = 0; continue; }
-      } else if (c.sign === 'stop') { // 정지 표지: 정지선에서 완전히 서서 일정 시간 기다린 뒤에야 요청
+        if (L === 'red' || (L === 'yellow' && (v.sv * v.sv) / (2 * car.b) <= dEnd)) {
+          if (this.rightOnRed && L === 'red' && c.turn === 'right') rtor = true;
+          else { v.reason = '신호 대기'; v.reqTick = 0; continue; }
+        }
+      }
+      if (rtor || (!sig && c.sign === 'stop')) { // 정지 표지·적색 우회전: 정지선에서 완전히 서서 일정 시간 기다린 뒤에야 요청
         if (dEnd <= ix.stopLineTol && v.sv < 0.1) { if (v.stopPi !== v.spi) { v.stopPi = v.spi; v.stopTicks = 0; } v.stopTicks++; }
         eligible = v.stopPi === v.spi && v.stopTicks >= Math.round(ix.stopSec * rate);
-        if (!eligible) v.reason = '정지 표지';
+        if (!eligible) v.reason = rtor ? '신호 대기(적색 우회전 정지)' : '정지 표지';
       }
       if (c.uturn && v.uturnDone < v.spi + 1) eligible = false; // 회차는 정지 대기를 마친 뒤에
       if (!eligible) { v.reqTick = 0; continue; }
       if (v.reqTick === 0 || v.reqPi !== v.spi) { v.reqTick = tick; v.reqPi = v.spi; }
-      node(c.node).reqs.push({ v, conn: c, tick: v.reqTick, d: dEnd, sticky: v.grantPi === v.spi, insideBlock: 0, exitBlock: 0 });
+      node(c.node).reqs.push({ v, conn: c, tick: v.reqTick, d: dEnd, sticky: v.grantPi === v.spi, insideBlock: 0, exitBlock: 0, rtor });
     }
 
     for (const g of nodes.values()) {
@@ -485,7 +524,7 @@ export class Traffic {
       jobs: this.jobs.map((j) => ({ meta: { ...j.meta }, from: { ...j.from }, to: { ...j.to }, born: j.born })),
       requests: this.requests.map((r) => ({ ...r, path: r.path.slice() })),
       stats: { ...this.stats }, lastIntervention: this.lastIntervention,
-      cycles: [...this.cycleState], signals: this.signals.getState(), crashed: [...this.crashed], eventsOn: this.eventsOn,
+      cycles: [...this.cycleState], signals: this.signals.getState(), crashed: [...this.crashed], eventsOn: this.eventsOn, rightOnRed: this.rightOnRed,
     };
   }
 
@@ -506,6 +545,7 @@ export class Traffic {
     this.crashed.clear();
     for (const [id, until] of (s as { crashed?: [number, number][] }).crashed ?? []) this.crashed.set(id, until);
     this.eventsOn = (s as { eventsOn?: boolean }).eventsOn ?? false;
+    this.rightOnRed = (s as { rightOnRed?: boolean }).rightOnRed ?? this.cfg.signals.rightOnRed;
   }
 
   /** 처음 상태로 되돌린다(새 맵을 열 때) */

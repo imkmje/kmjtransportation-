@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { config } from '../config';
-import type { Network, Pt, RoadKind } from '../sim/network';
+import { roadSpan, type Network, type Pt, type RoadKind } from '../sim/network';
 import { toThree } from './coords';
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
@@ -16,7 +16,10 @@ const goodMat = new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true
 const markMat = new THREE.MeshBasicMaterial({ color: 0x2f6fe0, transparent: true, opacity: 0.8, depthWrite: false });
 const badMat = new THREE.MeshBasicMaterial({ color: 0xe0443c, transparent: true, opacity: 0.6, depthWrite: false });
 
-const roadWidth = (kind: RoadKind) => config.roads[kind].lanesPerDir * 2 * config.roads[kind].laneWidth;
+const roadWidth = (kind: RoadKind, oneWay = false) => roadSpan(config.roads[kind], oneWay).width; // 비대칭 도로는 두 방향 차선 수의 합, 일방통행은 한 방향 차선 폭만
+const walkMat = new THREE.MeshLambertMaterial({ color: 0xb9bdc4 });
+const whiteLine = new THREE.MeshBasicMaterial({ color: 0xf4f4f0 });
+const yellowLine = new THREE.MeshBasicMaterial({ color: 0xe8b93c });
 
 // 두 점 사이에 가로×세로×높이 상자를 놓는다(상자의 긴 쪽이 두 점 방향)
 function place(m: THREE.Mesh, a: Pt, b: Pt, width: number, height: number, bottom: number) {
@@ -81,16 +84,52 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
   for (const m of [ghost, hover, selected, cursor, mark]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
   let shown = -1;
 
+  // 도로 몸체·인도·차선 표시·교차로 판은 종류별로 InstancedMesh 하나로 모아 그린다(도로가 수백 개여도 그리기 호출이 몇 번뿐이다)
+  type Inst = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number };
+  function flush(geo: THREE.BufferGeometry, mat: THREE.Material, list: Inst[]) {
+    if (!list.length) return;
+    const m = new THREE.InstancedMesh(geo, mat, list.length);
+    m.frustumCulled = false;
+    const d = new THREE.Object3D();
+    list.forEach((it, i) => { d.position.set(it.x, it.y, it.z); d.scale.set(it.sx, it.sy, it.sz); d.rotation.set(0, it.ry, 0); d.updateMatrix(); m.setMatrixAt(i, d.matrix); });
+    group.add(m);
+  }
+
   function rebuild() {
+    group.children.forEach((c) => (c as THREE.InstancedMesh).dispose?.());
     group.clear();
     const radius = new Map<number, number>();
+    for (const s of net.segments.values()) for (const id of [s.a, s.b]) radius.set(id, Math.max(radius.get(id) ?? 0, config.roads[s.kind].lanesPerDir * config.roads[s.kind].laneWidth + 2));
+    const bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
-      const m = new THREE.Mesh(unitBox, roadMat);
-      place(m, a, b, roadWidth(s.kind), 0.2, 0);
-      group.add(m);
-      for (const id of [s.a, s.b]) radius.set(id, Math.max(radius.get(id) ?? 0, roadWidth(s.kind) / 2));
+      const len = Math.hypot(b.x - a.x, b.y - a.y), ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, ry = Math.atan2(b.y - a.y, b.x - a.x);
+      const r = config.roads[s.kind], w = r.laneWidth, sp = roadSpan(r, !!s.oneWay), width = sp.width;
+      // 한 줄(선·띠): 구간 안에서 거리 t0~t1, 옆으로 off만큼 떨어진 곳(왼쪽 +). z는 바닥 높이
+      const strip = (list: Inst[], t0: number, t1: number, off: number, wd: number, h: number, z0: number) => {
+        if (t1 - t0 < 0.5) return;
+        const t = (t0 + t1) / 2, p = toThree(a.x + ux * t - uy * off, a.y + uy * t + ux * off, z0 + h / 2);
+        list.push({ x: p.x, y: p.y, z: p.z, sx: t1 - t0, sy: h, sz: wd, ry });
+      };
+      strip(bodies, 0, len, sp.shift, width, 0.2, 0); // 아스팔트(비대칭 도로는 중앙선에서 한쪽으로 치우친다)
+      const t0 = Math.min(radius.get(s.a)!, len / 2), t1 = Math.max(len - radius.get(s.b)!, len / 2); // 교차로 판 사이 구간
+      strip(walks, t0, t1, sp.left + 1, 2, 0.32, 0); strip(walks, t0, t1, -(sp.right + 1), 2, 0.32, 0); // 인도(양쪽)
+      strip(whites, t0, t1, sp.left - 0.25, 0.18, 0.02, 0.2); strip(whites, t0, t1, -(sp.right - 0.25), 0.18, 0.02, 0.2); // 가장자리 실선
+      if (!s.oneWay) { strip(yellows, t0, t1, 0.18, 0.14, 0.02, 0.2); strip(yellows, t0, t1, -0.18, 0.14, 0.02, 0.2); } // 중앙 이중 황색선
+      // 차선 구분선(흰 점선): 같은 방향 차선 사이마다. 일방통행은 가운데를 기준으로 좌우에 k-1개
+      const kd = Math.max(r.lanesFwd, r.lanesBack);
+      const dividers = s.oneWay ? Array.from({ length: kd - 1 }, (_, j) => (j + 1 - kd / 2) * w) : [...Array.from({ length: r.lanesFwd - 1 }, (_, j) => -(j + 1) * w), ...Array.from({ length: r.lanesBack - 1 }, (_, j) => (j + 1) * w)];
+      for (const off of dividers) for (let t = t0 + 1; t + 3 <= t1; t += 8) strip(whites, t, t + 3, off, 0.15, 0.02, 0.2);
     }
+    for (const [id, rr] of radius) {
+      const n = net.nodes.get(id)!, c = toThree(n.x, n.y, 0.15);
+      discs.push({ x: c.x, y: c.y, z: c.z, sx: rr, sy: 0.3, sz: rr, ry: 0 }); // 교차로·끝점은 둥근 판으로 덮어 이음새를 가린다(조금 더 높게: 겹침 깜빡임 방지)
+    }
+    flush(unitBox, roadMat, bodies);
+    flush(unitDisk, roadMat, discs);
+    flush(unitBox, walkMat, walks);
+    flush(unitBox, whiteLine, whites);
+    flush(unitBox, yellowLine, yellows);
     // 정지·양보 표지: 교차로로 들어오는 방향의 오른쪽 길가, 노드에서 조금 떨어진 곳에 세운다
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
@@ -176,15 +215,6 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       sp.position.set(p.x, p.y, p.z);
       sp.scale.set(9, 9, 1);
       group.add(sp);
-    }
-    // 교차로·끝점은 둥근 판으로 덮어 이음새를 가린다(조금 더 높게: 겹침 깜빡임 방지)
-    for (const [id, r] of radius) {
-      const n = net.nodes.get(id)!;
-      const d = new THREE.Mesh(unitDisk, roadMat);
-      const c = toThree(n.x, n.y, 0.15);
-      d.position.set(c.x, c.y, c.z);
-      d.scale.set(r, 0.3, r);
-      group.add(d);
     }
   }
 

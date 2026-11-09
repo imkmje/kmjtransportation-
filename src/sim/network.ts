@@ -2,7 +2,7 @@ import type { Config } from '../config';
 
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
-export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean; sigMode: SignalMode; sigGreen: number; sigGreens: number[]; sigOffset: number } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동), sigMode: 고정/감응식, sigGreen: 고정식 녹색 시간 초(0 = 기본값)
+export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean; sigMode: SignalMode; sigGreen: number; sigGreens: number[]; sigOffset: number; sigOrder: number[] } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동), sigMode: 고정/감응식, sigGreen: 고정식 녹색 시간 초(0 = 기본값)
 export type SignalMode = 'fixed' | 'actuated';
 export type SignKind = 'stop' | 'yield';
 export type OneWay = 'ab' | 'ba'; // 일방통행: 시작 노드(a)에서 끝 노드(b)로만 / b에서 a로만
@@ -25,14 +25,14 @@ export interface Segment {
   restrictB: RestrictKind | null; // b쪽 끝의 통행 제한
 }
 
-export type BuildingKind = 'home' | 'office' | 'factory' | 'shop' | 'school' | 'external'; // 주거, 사무형 직장, 외부 연결점(지도 가장자리의 가상 건물). 이후 버전에서 늘어난다
-export type ZoneType = 'home' | 'homeMid' | 'homeHigh' | 'shop' | 'office' | 'industrial'; // 구역(CS2식): 주거 저·중·고밀, 상업, 사무, 산업. 학교는 구역이 아니라 직접 놓는 건물
+export type BuildingKind = 'home' | 'office' | 'factory' | 'shop' | 'school' | 'mixed' | 'external'; // 주거, 사무형 직장, 외부 연결점(지도 가장자리의 가상 건물). 이후 버전에서 늘어난다
+export type ZoneType = 'home' | 'homeMid' | 'homeHigh' | 'shop' | 'office' | 'industrial' | 'mixed'; // 구역(CS2식): 주거 저·중·고밀, 상업, 사무, 산업. 학교는 구역이 아니라 직접 놓는 건물
 /** 건물이 속하는 구역 종류(학교·외부 연결점은 구역 없음) */
 export const zoneOf = (b: { kind: BuildingKind; density?: number }): ZoneType | null =>
-  b.kind === 'home' ? (['home', 'homeMid', 'homeHigh'] as const)[b.density ?? 0] : b.kind === 'factory' ? 'industrial' : b.kind === 'office' || b.kind === 'shop' ? b.kind : null;
+  b.kind === 'home' ? (['home', 'homeMid', 'homeHigh'] as const)[b.density ?? 0] : b.kind === 'factory' ? 'industrial' : b.kind === 'office' || b.kind === 'shop' || b.kind === 'mixed' ? b.kind : null;
 export const HOME_ZONES: ZoneType[] = ['home', 'homeMid', 'homeHigh'];
-const ZONE_CODE: Record<ZoneType, number> = { home: 0, office: 1, shop: 2, homeMid: 4, homeHigh: 5, industrial: 6 }; // 3은 옛 학교 구역(읽을 때 버린다)
-const CODE_ZONE: Record<number, ZoneType> = { 0: 'home', 1: 'office', 2: 'shop', 4: 'homeMid', 5: 'homeHigh', 6: 'industrial' };
+const ZONE_CODE: Record<ZoneType, number> = { home: 0, office: 1, shop: 2, homeMid: 4, homeHigh: 5, industrial: 6, mixed: 7 }; // 3은 옛 학교 구역(읽을 때 버린다)
+const CODE_ZONE: Record<number, ZoneType> = { 0: 'home', 1: 'office', 2: 'shop', 4: 'homeMid', 5: 'homeHigh', 6: 'industrial', 7: 'mixed' };
 export type BuildingSize = 'small' | 'medium' | 'large';
 export type BuildingSource = 'player' | 'map' | 'auto'; // 4.0.0(구역 시스템) 대비
 export interface Building {
@@ -56,7 +56,7 @@ interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 10; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
+export const NETWORK_FORMAT_VERSION = 11; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 11: 신호 단계 순서(sigOrder) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -70,6 +70,12 @@ export interface NetworkData {
 
 type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout'>;
 const EPS = 1e-9;
+/** 도로 단면: 중앙선(구분선)에서 오른쪽(a→b 방향 차선 쪽)·왼쪽으로 뻗은 폭, 전체 폭, 도로 몸체의 가운데가 중앙선에서 벗어난 정도(왼쪽 +). 일방통행은 한 방향 차선 폭만큼 가운데에 모은다 */
+export function roadSpan(r: { lanesFwd: number; lanesBack: number; laneWidth: number }, oneWay: boolean): { right: number; left: number; width: number; shift: number } {
+  const w = r.laneWidth;
+  if (oneWay) { const k = Math.max(r.lanesFwd, r.lanesBack); return { right: (k * w) / 2, left: (k * w) / 2, width: k * w, shift: 0 }; }
+  return { right: r.lanesFwd * w, left: r.lanesBack * w, width: (r.lanesFwd + r.lanesBack) * w, shift: ((r.lanesBack - r.lanesFwd) * w) / 2 };
+}
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 const zkey = (i: number, j: number) => (i + 1024) * 2048 + (j + 1024);
 const zcell = (k: number): [number, number] => [Math.floor(k / 2048) - 1024, (k % 2048) - 1024];
@@ -322,8 +328,21 @@ export class Network {
     if (list.some((x) => x.len < R + g.minSegmentLength)) return { ok: false, error: 'tooShort' };
     for (const b of this.buildings.values()) if (b.kind !== 'external' && Math.hypot(b.x - n.x, b.y - n.y) < R + 6 + this.rules.buildings.footprint[b.size]) return { ok: false, error: 'onBuilding' };
     const ringKind: RoadKind = arms.some((s) => s.kind !== 'road2') ? 'road4' : 'road2';
-    const ringNodes = list.map((x) => this.addNode(n.x + R * Math.cos(x.ang), n.y + R * Math.sin(x.ang)));
+    // 환형 노드: 도로마다 하나(들어오는 도로가 닿는 곳) + 도로 사이 빈 각도에 중간 노드를 더해 환형이 둥글게 보이게 한다(조각 길이는 최소 길이 이상)
+    const rk = this.rules.roads[ringKind], ringMin = Math.max(g.minSegmentLength * 1.05, 2 * (rk.lanesPerDir * rk.laneWidth + 2) + 14); // 조각이 너무 짧으면 차선이 차 두 대보다 짧아져 겹치므로, 교차로 판(양 끝)을 뺀 길이가 14m 이상 되게
+    const ang: { a: number; arm: number }[] = [];
     list.forEach((x, i) => {
+      ang.push({ a: x.ang, arm: i });
+      const nx = list[(i + 1) % list.length];
+      let gap = nx.ang - x.ang; if (gap <= 0) gap += Math.PI * 2;
+      const extra = Math.max(0, Math.floor(gap / (ringMin / R)) - 1); // 이 틈에 더 넣을 수 있는 중간 노드 수
+      const want = Math.min(extra, Math.max(0, Math.round((gap / (Math.PI * 2)) * 12) - 1)); // 한 바퀴 12조각 안팎
+      for (let j = 1; j <= want; j++) ang.push({ a: x.ang + (gap * j) / (want + 1), arm: -1 });
+    });
+    const ringNodes = ang.map((q) => this.addNode(n.x + R * Math.cos(q.a), n.y + R * Math.sin(q.a)));
+    ang.forEach((q, i) => {
+      if (q.arm < 0) return;
+      const x = list[q.arm];
       if (x.s.a === nodeId) { x.s.a = ringNodes[i]; x.s.signA = 'yield'; x.s.restrictA = null; x.s.laneDirsA = []; }
       else { x.s.b = ringNodes[i]; x.s.signB = 'yield'; x.s.restrictB = null; x.s.laneDirsB = []; }
     });
@@ -546,16 +565,18 @@ export class Network {
     if (!n) return { ok: false, error: 'noSuchNode' };
     if (on && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
     n.signal = on; n.sigMode = mode; n.sigGreen = green;
-    if (!on) { n.sigGreens = []; n.sigOffset = 0; }
+    if (!on) { n.sigGreens = []; n.sigOffset = 0; n.sigOrder = []; }
     this.revision++;
     return { ok: true };
   }
 
   /** 신호 프로그램 편집: 단계별 녹색 시간(초, 5~90)과 시작 시차(초). 신호가 켜진 교차로만 */
-  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number }): { ok: true } | { ok: false; error: 'noSignal' | 'badValue' } {
+  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number; order?: number[] }): { ok: true } | { ok: false; error: 'noSignal' | 'badValue' } {
     const n = this.nodes.get(nodeId);
     if (!n || !this.hasSignal(nodeId)) return { ok: false, error: 'noSignal' };
     if (p.greens && !p.greens.every((g) => Number.isFinite(g) && g >= 5 && g <= 90)) return { ok: false, error: 'badValue' };
+    if (p.order && (!p.order.every((i) => Number.isInteger(i) && i >= 0 && i < p.order!.length) || new Set(p.order).size !== p.order.length)) return { ok: false, error: 'badValue' }; // 0..n-1의 순열이어야 한다
+    if (p.order) n.sigOrder = p.order.slice();
     if (p.greens) n.sigGreens = p.greens.slice();
     if (p.offset !== undefined) n.sigOffset = p.offset;
     this.revision++;
@@ -585,11 +606,19 @@ export class Network {
     const seg = this.segments.get(segId);
     if (!seg || (seg.a !== nodeId && seg.b !== nodeId)) return { ok: false, error: 'noSuchEnd' };
     if (masks.length && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
-    const lanes = this.rules.roads[seg.kind].lanesPerDir;
+    const lanes = this.lanesIncoming(segId, nodeId);
     if (masks.length > lanes || !masks.every((m) => Number.isInteger(m) && m >= 1 && m <= 7)) return { ok: false, error: 'badValue' };
     if (seg.a === nodeId) seg.laneDirsA = masks.slice(); else seg.laneDirsB = masks.slice();
     this.revision++;
     return { ok: true };
+  }
+
+  /** nodeId로 들어오는 차선 수(비대칭 도로는 방향마다 다르다. 일방통행은 한 방향 차선 수의 최댓값) */
+  lanesIncoming(segId: number, nodeId: number): number {
+    const s = this.segments.get(segId);
+    if (!s) return 0;
+    const r = this.rules.roads[s.kind];
+    return s.oneWay ? Math.max(r.lanesFwd, r.lanesBack) : nodeId === s.b ? r.lanesFwd : r.lanesBack;
   }
 
   laneDirsAt(segId: number, nodeId: number): number[] {
@@ -619,7 +648,7 @@ export class Network {
 
   private addNode(x: number, y: number): number {
     const id = this.nextNodeId++;
-    this.nodes.set(id, { id, x, y, z: 0, signal: false, sigMode: 'fixed', sigGreen: 0, sigGreens: [], sigOffset: 0 });
+    this.nodes.set(id, { id, x, y, z: 0, signal: false, sigMode: 'fixed', sigGreen: 0, sigGreens: [], sigOffset: 0, sigOrder: [] });
     return id;
   }
 
@@ -680,7 +709,7 @@ export class Network {
     // 형식 1·2 → 3: 건물이 없는 것으로 채운다
     const rawB = (d as Partial<NetworkData>).buildings ?? [];
     if (!Array.isArray(rawB)) throw new Error('도로망 파일이 손상되었습니다');
-    const kinds = ['home', 'office', 'factory', 'shop', 'school', 'external'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
+    const kinds = ['home', 'office', 'factory', 'shop', 'school', 'mixed', 'external'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
     for (const b of rawB) {
       if (![b?.id, b?.x, b?.y].every((v) => typeof v === 'number' && Number.isFinite(v)) || !kinds.includes(b.kind) || !sizes.includes(b.size) || !sources.includes(b.source)) throw new Error('도로망 파일이 손상되었습니다');
     }
@@ -688,7 +717,7 @@ export class Network {
     const buildings = rawB.map((b) => ({ ...b, deletable: b.deletable !== false, parking: b.parking ?? 0, density: (([0, 1, 2] as number[]).includes((b as Partial<Building>).density as number) ? (b as Building).density : 0) as 0 | 1 | 2, variant: (b as Partial<Building>).variant ?? 0 }));
     if (!buildings.every((b) => typeof b.variant === 'number' && Number.isFinite(b.variant))) throw new Error('도로망 파일이 손상되었습니다');
     const rawZ = (d as Partial<NetworkData>).zones ?? [];
-    if (!Array.isArray(rawZ) || !rawZ.every((z) => Array.isArray(z) && Number.isInteger(z[0]) && Number.isInteger(z[1]) && (z[2] === 0 || z[2] === 1 || z[2] === 2 || z[2] === 3 || z[2] === 4 || z[2] === 5 || z[2] === 6) && Math.abs(z[0]) < 1000 && Math.abs(z[1]) < 1000)) throw new Error('도로망 파일이 손상되었습니다');
+    if (!Array.isArray(rawZ) || !rawZ.every((z) => Array.isArray(z) && Number.isInteger(z[0]) && Number.isInteger(z[1]) && (z[2] === 0 || z[2] === 1 || z[2] === 2 || z[2] === 3 || z[2] === 4 || z[2] === 5 || z[2] === 6 || z[2] === 7) && Math.abs(z[0]) < 1000 && Math.abs(z[1]) < 1000)) throw new Error('도로망 파일이 손상되었습니다');
     const maxBuilding = Math.max(0, ...buildings.map((b) => b.id));
     const maxNode = Math.max(0, ...d.nodes.map((n) => n.id));
     const maxSeg = Math.max(0, ...d.segments.map((s) => s.id));
@@ -696,7 +725,7 @@ export class Network {
       formatVersion: NETWORK_FORMAT_VERSION,
       nextNodeId: Math.max(d.nextNodeId ?? 0, maxNode + 1),
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
-      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true, sigMode: (n as Partial<NetNode>).sigMode === 'actuated' ? 'actuated' as const : 'fixed' as const, sigGreen: typeof (n as Partial<NetNode>).sigGreen === 'number' ? (n as NetNode).sigGreen : 0, sigGreens: Array.isArray((n as Partial<NetNode>).sigGreens) ? (n as NetNode).sigGreens.map((g) => Number(g)).filter((g) => Number.isFinite(g) && g > 0) : [], sigOffset: Number.isFinite((n as Partial<NetNode>).sigOffset) ? (n as NetNode).sigOffset : 0 })),
+      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true, sigMode: (n as Partial<NetNode>).sigMode === 'actuated' ? 'actuated' as const : 'fixed' as const, sigGreen: typeof (n as Partial<NetNode>).sigGreen === 'number' ? (n as NetNode).sigGreen : 0, sigGreens: Array.isArray((n as Partial<NetNode>).sigGreens) ? (n as NetNode).sigGreens.map((g) => Number(g)).filter((g) => Number.isFinite(g) && g > 0) : [], sigOffset: Number.isFinite((n as Partial<NetNode>).sigOffset) ? (n as NetNode).sigOffset : 0, sigOrder: Array.isArray((n as Partial<NetNode>).sigOrder) ? (n as NetNode).sigOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < 8) : [] })),
       segments,
       nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
       buildings,

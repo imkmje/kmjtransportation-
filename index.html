@@ -19,7 +19,7 @@
       #rci { display: flex; gap: 6px; align-items: flex-end; }
       #rci .rb { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 28px; } #rci .rb em { font-style: normal; font-size: 9px; color: #b9c8d0; }
       #rci .rb span { width: 12px; height: 28px; background: #ffffff2e; border-radius: 3px; display: flex; align-items: flex-end; overflow: hidden; } #rci .rb i { display: block; width: 100%; height: 0; }
-      #rci .rb:nth-child(1) i { background: #6fcf7e; } #rci .rb:nth-child(2) i { background: #3fae5a; } #rci .rb:nth-child(3) i { background: #1f8a45; } #rci .rb:nth-child(4) i { background: #4f86d6; } #rci .rb:nth-child(5) i { background: #9a6fd1; } #rci .rb:nth-child(6) i { background: #e8b93c; }
+      #rci .rb:nth-child(1) i { background: #6fcf7e; } #rci .rb:nth-child(2) i { background: #3fae5a; } #rci .rb:nth-child(3) i { background: #1f8a45; } #rci .rb:nth-child(4) i { background: #4f86d6; } #rci .rb:nth-child(5) i { background: #9a6fd1; } #rci .rb:nth-child(6) i { background: #e8b93c; } #rci .rb:nth-child(7) i { background: #4fc7b0; }
       #topci { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #55655a; white-space: nowrap; }
       #speeds { display: flex; gap: 3px; background: #ffffff1f; padding: 3px; border-radius: 8px; }
       #speeds button { padding: 5px 11px; border: 0; border-radius: 6px; background: transparent; color: #fff; font-size: 14px; cursor: pointer; }
@@ -59,7 +59,7 @@
       #info h4 { margin: 0 0 6px; font-size: 12px; color: #4a5a4d; font-weight: 600; } #info h4 button { float: right; border: 0; background: none; cursor: pointer; font-size: 13px; }
       #info .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; } #info .kv div:nth-child(odd) { color: #55655a; } #info .kv div:nth-child(even) { font-weight: 600; text-align: right; }
       #info .sub-h { margin: 10px 0 4px; font-size: 11px; color: #4a5a4d; font-weight: 600; } #info .seg3 { display: flex; gap: 4px; } #info .seg3 button { flex: 1; padding: 7px 0; border: 0; border-radius: 8px; background: #e6ede2; cursor: pointer; } #info .seg3 button.on { background: #f2a65a; font-weight: 700; }
-      #info .ph { display: flex; align-items: center; gap: 6px; margin: 3px 0; } #info .ph span { flex: 1; font-size: 12px; } #info .ph b { min-width: 38px; text-align: center; } #info .ph button { width: 26px; height: 26px; border: 0; border-radius: 6px; background: #e6ede2; cursor: pointer; }
+      #info .ph { display: flex; align-items: center; gap: 6px; margin: 3px 0; } #info .ph span { flex: 1; font-size: 12px; } #info .ph b { min-width: 38px; text-align: center; } #info .ph button:disabled { opacity: .3; cursor: default; } #info .ph button { width: 26px; height: 26px; border: 0; border-radius: 6px; background: #e6ede2; cursor: pointer; }
       #info button.wide { width: 100%; margin-top: 6px; padding: 7px 6px; border: 0; border-radius: 8px; background: #e6ede2; cursor: pointer; font-size: 12px; }
       #info .namebox { display: flex; gap: 4px; margin-top: 8px; } #info .namebox input { flex: 1; min-width: 0; padding: 6px; border: 1px solid #cfd9cf; border-radius: 6px; } #info .namebox button { border: 0; border-radius: 6px; background: #e6ede2; cursor: pointer; padding: 0 8px; }
       #info .two { display: flex; gap: 6px; } #info .two .wide { flex: 1; } #info .hint { font-size: 11px; color: #55655a; margin-top: 3px; }
@@ -73,7 +73,7 @@
       #toolbar .sub[hidden] { display: none; }
       #toolbar .sub button { padding: 9px 14px; border: 0; border-radius: 8px; background: #e6ede2; cursor: pointer; font-size: 13px; }
       #toolbar .sub button.on { background: #f2a65a; font-weight: 700; }
-      #toolbar .sub button.z-home { border-bottom: 4px solid #6fcf7e; } #toolbar .sub button.z-homeMid { border-bottom: 4px solid #3fae5a; } #toolbar .sub button.z-homeHigh { border-bottom: 4px solid #1f8a45; } #toolbar .sub button.z-industrial { border-bottom: 4px solid #e8b93c; } #toolbar .sub button.z-shop { border-bottom: 4px solid #4f86d6; } #toolbar .sub button.z-office { border-bottom: 4px solid #9a6fd1; }
+      #toolbar .sub button.z-home { border-bottom: 4px solid #6fcf7e; } #toolbar .sub button.z-homeMid { border-bottom: 4px solid #3fae5a; } #toolbar .sub button.z-homeHigh { border-bottom: 4px solid #1f8a45; } #toolbar .sub button.z-industrial { border-bottom: 4px solid #e8b93c; } #toolbar .sub button.z-shop { border-bottom: 4px solid #4f86d6; } #toolbar .sub button.z-office { border-bottom: 4px solid #9a6fd1; } #toolbar .sub button.z-mixed { border-bottom: 4px solid #4fc7b0; }
       #toolbar .sub select { padding: 8px; border: 0; border-radius: 8px; background: #e6ede2; font-size: 13px; }
       #toolbar .sub label { font-size: 12px; padding: 4px 8px; color: #1f2a22; } #toolbar .opts { display: flex; flex-wrap: wrap; gap: 2px 6px; border-left: 1px solid #cfd9cf; margin-left: 4px; padding-left: 6px; }
       #toolbar .cats { display: flex; align-items: stretch; gap: 6px; padding: 8px; background: linear-gradient(#2b3b46fa, #1b2830fa); border-radius: 16px; border: 1px solid #ffffff22; box-shadow: 0 6px 20px #0006, inset 0 1px 0 #ffffff26; max-width: 98vw; overflow-x: auto; }

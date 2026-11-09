@@ -22,6 +22,7 @@ import { createSignalLayer } from './render/signals';
 import { createTitle } from './ui/title';
 import { createInfo } from './ui/info';
 import { createHelp } from './ui/help';
+import { createOverlay } from './render/overlay';
 
 const editor = new Editor(config);
 const sim = new Sim(config, editor.network);
@@ -51,9 +52,20 @@ let uncKey = -1, uncCount = 0;
 const stats = createStats(document.getElementById('stats')!, sim, editor.network, () => {
   if (uncKey !== editor.network.revision + editor.network.buildingsRevision * 1e6) { uncKey = editor.network.revision + editor.network.buildingsRevision * 1e6; uncCount = sim.demand.unconnected().length; }
   return uncCount;
-}, document.getElementById('rci')!, document.getElementById('topci')!, (id) => pickSegment(id, true));
+}, document.getElementById('rci')!, document.getElementById('topci')!, (id) => pickSegment(id, true), () => {
+  const id = sim.traffic.crashed.keys().next().value; // 진행 중인 사고 중 가장 오래된 것으로 이동하고 그 차량 정보를 연다
+  const v = id === undefined ? undefined : sim.traffic.vehicles.get(id);
+  if (v) { view.focus({ x: v.x, y: v.y }); roads.setSelect(null); info.showVehicle(v.id); } else tools.say('진행 중인 사고가 없습니다');
+});
 // 도로 정보 창: 도로를 클릭하거나 병목 목록을 누르면 열린다
-const info = createInfo(document.getElementById('info')!, config, editor, sim.metrics, sim.traffic.signals, (t) => tools.say(t), () => roads.setSelect(null), (segId, dir) => { const r = editor.upgrade(segId, dir); tools.say(r.ok ? `${dir === 'up' ? '넓혔' : '좁혔'}습니다 (${r.ids.length}구간)` : '건물이 있어 넓힐 수 없습니다'); });
+const overlay = createOverlay(view.scene);
+let followId: number | null = null; // 카메라가 따라가는 차량
+const info = createInfo(document.getElementById('info')!, config, editor, sim.metrics, sim.traffic.signals, (t) => tools.say(t), () => roads.setSelect(null), (segId, dir) => { const r = editor.upgrade(segId, dir); tools.say(r.ok ? `${dir === 'up' ? '넓혔' : '좁혔'}습니다 (${r.ids.length}구간)` : '건물이 있어 넓힐 수 없습니다'); }, {
+  traffic: sim.traffic,
+  onRoute: (pts, o, d) => overlay.setRoute(pts, o, d),
+  onFlows: (lines) => overlay.setFlows(lines),
+  onFollow: (id) => { followId = id; },
+});
 function pickSegment(id: number | null, focus = false) {
   roads.setSelect(id);
   info.showSegment(id);
@@ -76,7 +88,10 @@ const tools = createTools({
   buildings,
   zones,
   selectRoad: (id) => pickSegment(id),
+  pickVehicle: (p) => sim.traffic.vehicleNear(p, 7)?.id ?? null,
+  selectVehicle: (id) => { roads.setSelect(null); info.showVehicle(id); },
   setEvents: (on) => sim.setEvents(on),
+  setRtor: (on) => { sim.traffic.rightOnRed = on; },
   stepSpeed,
   toggleHelp: () => help.toggle(),
   selectNode: (id) => { roads.setSelect(null); info.showNode(id); },
@@ -147,6 +162,7 @@ function frame(now: number) {
   buildings.sync();
   zones.sync();
   view.setWeather(sim.raining);
+  if (followId !== null) { const fv = sim.traffic.vehicles.get(followId); if (fv) view.panTo({ x: fv.x, y: fv.y }); else followId = null; }
   signalLayer.update();
   vehicles.update(loop.alpha);
   laneDebug.update(debug.on);

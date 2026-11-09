@@ -43,6 +43,8 @@ export class Signals {
       }
       out.push(ph);
     }
+    const order = this.net.nodes.get(nodeId)!.sigOrder; // 편집한 단계 순서(0..n-1의 순열). 단계 수가 맞지 않으면 무시
+    if (order.length === out.length && new Set(order).size === out.length) return order.map((k) => out[k]);
     return out;
   }
 

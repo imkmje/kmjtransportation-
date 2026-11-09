@@ -59,8 +59,17 @@ export class Editor {
     return r;
   }
 
+  /** 일방통행 도로를 그린다: 만든 구간 모두를 그리는 방향(시작 → 끝)의 일방통행으로. 취소 한 번으로 되돌아간다 */
+  buildOneWay(p1: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
+    const r = this.network.buildRoad(p1, p2, kind);
+    if (!r.ok) return r;
+    for (const id of r.ids) this.network.setOneWay(id, 'ab');
+    this.commit();
+    return r;
+  }
+
   /**
-   * 곡선 도로: 시작·조절점·끝 세 점으로 베지어 곡선을 그려 짧은 직선 구간의 연결로 만든다(30m 안팎).
+   * 곡선 도로: 시작·조절점·끝 세 점으로 베지어 곡선을 그려 짧은 직선 구간의 연결로 만든다(22m 안팎, 최소 길이 바로 위).
    * 한 조각이라도 건설할 수 없으면(너무 급한 곡선, 건물 등) 아무것도 만들지 않는다. 취소 한 번으로 곡선 전체가 되돌아간다
    */
   buildCurve(p0: Pt, c: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError | 'tooSharp' } {
@@ -108,7 +117,7 @@ export class Editor {
     return r;
   }
 
-  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number }): ReturnType<Network['setSignalProgram']> {
+  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number; order?: number[] }): ReturnType<Network['setSignalProgram']> {
     const r = this.network.setSignalProgram(nodeId, p);
     if (r.ok) this.commit();
     return r;

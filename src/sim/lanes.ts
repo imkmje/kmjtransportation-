@@ -103,12 +103,12 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
     const ux = (B.x - A.x) / len, uy = (B.y - A.y) / len;
     const nx = -uy, ny = ux; // 왼쪽 법선
     const r = rules.roads[s.kind];
-    const k = r.lanesPerDir;
     const vmax = (s.playerSpeedKmh ?? r.defaultSpeedKmh) * KMH;
     const vbase = r.defaultSpeedKmh * KMH;
     const list: Track[] = [];
     for (const fwd of [true, false]) {
       if ((s.oneWay === 'ab' && !fwd) || (s.oneWay === 'ba' && fwd)) continue; // 일방통행: 반대 방향 차선은 만들지 않는다
+      const k = s.oneWay ? Math.max(r.lanesFwd, r.lanesBack) : fwd ? r.lanesFwd : r.lanesBack; // 이 방향의 차선 수(비대칭 도로는 방향마다 다르다)
       for (let i = 1; i <= k; i++) {
         const off = (k - i + 0.5 - (s.oneWay ? k / 2 : 0)) * r.laneWidth * (fwd ? -1 : 1); // 진행 방향 오른쪽(일방통행은 도로 가운데로 모은다). 1번 차선이 중앙선에서 가장 멀다
         const d0 = fwd ? inset.get(s.a)! : len - inset.get(s.b)!;

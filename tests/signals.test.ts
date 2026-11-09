@@ -53,9 +53,10 @@ describe('신호등', () => {
   });
 
   it('빨간불에서는 정지선을 넘지 않고, 사방에서 온 차량이 모두 충돌 없이 도착한다', () => {
+    const cfg = { ...config, signals: { ...config.signals, rightOnRed: false } }; // 적색 우회전은 일부러 끈다(켜면 적색에서도 우회전이 정지선을 넘는다)
     const { n, c } = make();
     n.setSignal(c, true);
-    const sim = new Sim(config, n);
+    const sim = new Sim(cfg, n);
     const arms: [number, number][] = [[-200, 0], [200, 0], [0, -200], [0, 200]];
     let total = 0;
     for (const [dx, dy] of arms) for (const [ex, ey] of arms) {
@@ -238,5 +239,58 @@ describe('신호 복사·붙여넣기', () => {
     const sim = new Sim(config, e.network);
     const leaf = [...e.network.nodes.values()].find((p) => p.x === -200)!.id;
     expect(e.pasteSignal(leaf, { mode: 'fixed', greens: [], offset: 0 }, sim.traffic.signals)).toEqual({ ok: false, error: 'notIntersection' });
+  });
+});
+
+describe('적색 우회전', () => {
+  // 서쪽 팔에서 출발한 차량이 북쪽 팔(왼쪽/오른쪽 중 하나)로 가는 시간을 비교한다. 우회전이 되는 쪽 팔을 찾아 쓴다
+  const timeToArrive = (rightOnRed: boolean, dest: [number, number], origin: [number, number]) => {
+    const cfg = { ...config, signals: { ...config.signals, rightOnRed } };
+    const { n, c } = make();
+    n.setSignal(c, true);
+    const sim = new Sim(cfg, n);
+    // 주기 38초: 남북 0~19초, 동서 19~38초(황색 34~37), 남북 38~57초(동서 적색), 동서 57초~. 20초에 출발하면 황색 직후 적색에서 멈춘다(우회전 가능 차는 약 48초에 도착하고, 아니면 신호가 바뀌는 57초 뒤에 도착한다)
+    for (let i = 0; i < 20 * 20; i++) sim.step();
+    sim.traffic.requestTrip(onArm(n, origin[0], origin[1], 15), onArm(n, dest[0], dest[1], 15), 1);
+    const t0 = sim.tickCount;
+    for (let i = 0; i < 20 * 120 && sim.traffic.stats.arrived < 1; i++) sim.step();
+    return { sec: (sim.tickCount - t0) / 20, st: sim.traffic.stats };
+  };
+  it('적색에서 우회전은 정지 후 교차 차량이 없으면 가서 더 빨리 도착하고, 직진은 여전히 신호를 기다린다', () => {
+    // 서쪽 팔(-200,0)에서 들어와 우회전하는 쪽: 동쪽으로 가는 차의 오른쪽 = 남쪽(0,-200)이거나 북쪽(0,200) 중 하나. 둘 다 시험해 더 빨라지는 쪽이 우회전
+    const results = ([[0, -200], [0, 200]] as [number, number][]).map((d) => ({ d, on: timeToArrive(true, d, [-200, 0]).sec, off: timeToArrive(false, d, [-200, 0]).sec }));
+    const faster = results.filter((r) => r.on < r.off - 4);
+    expect(faster.length).toBe(1); // 두 방향 중 정확히 하나(우회전)만 빨라진다
+    const straight = { on: timeToArrive(true, [200, 0], [-200, 0]).sec, off: timeToArrive(false, [200, 0], [-200, 0]).sec };
+    expect(Math.abs(straight.on - straight.off)).toBeLessThan(1.5); // 직진은 같다
+  }, 120_000);
+
+  it('녹색 교차 차량과 섞여도 충돌·안전망·교착이 없다', () => {
+    const { n, c } = make();
+    n.setSignal(c, true);
+    const sim = new Sim(config, n);
+    const dirs: [number, number][] = [[-200, 0], [200, 0], [0, -200], [0, 200]];
+    let total = 0;
+    for (const [dx, dy] of dirs) for (const [ex, ey] of dirs) if (dx !== ex || dy !== ey) { sim.traffic.requestTrip(onArm(n, dx, dy, 10), onArm(n, ex, ey, 10), 3); total += 3; }
+    for (let i = 0; i < 20 * 400; i++) sim.step();
+    const st = sim.traffic.stats;
+    expect(st.arrived).toBe(total);
+    expect(st.interventions + st.deadlocks + st.conflicts).toBe(0);
+  }, 120_000);
+
+  it('신호 단계 순서 편집: 순열만 허용하고, 순서대로 녹색이 돈다(저장 형식 11)', () => {
+    const { n, c } = make();
+    n.setSignal(c, true);
+    const sim = new Sim(config, n);
+    const sig = sim.traffic.signals;
+    const base = sig.program(c).map((p) => p.segs);
+    expect(n.setSignalProgram(c, { order: [0, 0] })).toEqual({ ok: false, error: 'badValue' });
+    expect(n.setSignalProgram(c, { order: [1, 0] })).toEqual({ ok: true });
+    expect(sig.program(c).map((p) => p.segs)).toEqual([base[1], base[0]]);
+    // 편집한 순서로: 처음 녹색은 원래 두 번째 단계
+    expect(sig.light(c, base[1][0], 1)).toBe('green');
+    expect(sig.light(c, base[0][0], 1)).toBe('red');
+    const n2 = new Network(config); n2.load(JSON.parse(JSON.stringify(n.toJSON())));
+    expect(n2.nodes.get(c)!.sigOrder).toEqual([1, 0]);
   });
 });

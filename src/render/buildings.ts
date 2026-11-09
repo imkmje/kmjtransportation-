@@ -36,7 +36,7 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
   };
   const size = (kind: BuildingKind, s: BuildingSize, variant = 0, density = 0) => ({
     half: config.buildings.footprint[s],
-    h: config.buildings.height[kind === 'office' ? 'office' : kind === 'shop' || kind === 'factory' || kind === 'school' ? kind : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1) * (kind === 'home' ? config.densityHeight[density] : 1), // 자란 건물은 높이가 조금씩 다르고, 고밀 주거는 더 높다
+    h: config.buildings.height[kind === 'office' ? 'office' : kind === 'shop' || kind === 'factory' || kind === 'school' || kind === 'mixed' ? kind : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1) * (kind === 'home' ? config.densityHeight[density] : 1), // 자란 건물은 높이가 조금씩 다르고, 고밀 주거는 더 높다
   });
 
   // 건물 몸체·지붕·연결선·경고 표지는 종류별로 InstancedMesh 하나로 모아 그린다(건물이 수백 채여도 그리기 호출이 몇 번뿐이다)
@@ -78,13 +78,14 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
       }
       const { half, h } = size(b.kind, b.size, b.variant, b.density);
       const pick = b.id + b.variant;
-      const pal = b.kind === 'home' ? HOME_COLORS : b.kind === 'shop' ? SHOP_COLORS : b.kind === 'factory' ? FACTORY_COLORS : b.kind === 'school' ? SCHOOL_COLORS : OFFICE_COLORS;
+      const pal = b.kind === 'home' || b.kind === 'mixed' ? HOME_COLORS : b.kind === 'shop' ? SHOP_COLORS : b.kind === 'factory' ? FACTORY_COLORS : b.kind === 'school' ? SCHOOL_COLORS : OFFICE_COLORS;
       box(pal[pick % pal.length], b.x, b.y, half * 2, h);
       if (b.kind === 'factory') for (const dx of [-0.45, 0.2]) box(DARK, b.x + dx * half, b.y - 0.3 * half, half * 0.35, h * 0.9, h); // 굴뚝 둘
+      if (b.kind === 'mixed') box(SHOP_COLORS[pick % SHOP_COLORS.length], b.x, b.y, half * 2.06, h * 0.3, 0); // 상가주택: 아래층은 파란 상가, 위층은 주거
       if (b.kind === 'school') box(WHITE, b.x, b.y, half * 0.6, h * 0.8, h); // 흰 시계탑
       if (b.kind === 'shop') box(AWNING, b.x, b.y + half + 0.8, half * 2.1, 0.5, h * 0.55, half * 2.1, 3); // 붉은 차양
       if (b.kind === 'office' && b.variant % 2 === 1) box(OFFICE_COLORS[(pick + 1) % OFFICE_COLORS.length], b.x, b.y, half * 1.2, h * 0.35, h); // 위층이 좁아지는 계단형 탑
-      if (b.kind === 'home' && b.variant % 3 !== 2) { // 지붕(변형 2는 평평한 지붕)
+      if ((b.kind === 'home' || b.kind === 'mixed') && b.variant % 3 !== 2) { // 지붕(변형 2는 평평한 지붕)
         const p = toThree(b.x, b.y, h + half * 0.35);
         roofs.push({ x: p.x, y: p.y, z: p.z, sx: half * 1.45, sy: half * (b.variant % 3 === 1 ? 1.1 : 0.7), sz: half * 1.45, ry: Math.PI / 4, rz: 0, color: HOME_ROOFS[pick % HOME_ROOFS.length].color });
       }
