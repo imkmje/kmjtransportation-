@@ -101,7 +101,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 7, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 8, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -385,6 +385,27 @@ check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciT
     check('목록 항목을 누르면 그 도로의 정보 창이 열림', await page.locator('#info').isVisible());
     await page.click('#in-close');
   }
+}
+// 교차로 정보 창: 신호 방식 고르기, 단계별 녹색 시간 편집
+{
+  await page.keyboard.press('Escape');
+  await clickWorld(0, 0);
+  check('교차로를 클릭하면 교차로 정보 창이 열림', (await page.locator('#info').isVisible()) && (await page.locator('#info').innerText()).includes('교차로 정보'), (await page.locator('#info').innerText()).replace(/\n/g, ' ').slice(0, 80));
+  await page.click('#info button[data-mode="fix"]');
+  const prog = () => page.evaluate(() => { const n = [...window.__game.editor.network.nodes.values()].find((x) => x.x === 0 && x.y === 0); return { on: window.__game.editor.network.hasSignal(n.id), act: window.__game.editor.network.isActuated(n.id), greens: n.sigGreens }; });
+  let pr = await prog();
+  check('창에서 고정식 신호를 켬', pr.on && !pr.act);
+  await page.click('#info button[data-g="0"][data-d="5"]');
+  pr = await prog();
+  check('단계 녹색 시간을 5초 늘림', pr.greens.length === 2 && pr.greens[0] % 5 === 0, JSON.stringify(pr));
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-node.png') });
+  await page.click('#info button[data-mode="act"]');
+  pr = await prog();
+  check('감응식으로 바꿈', pr.on && pr.act);
+  await page.click('#info button[data-mode="off"]');
+  pr = await prog();
+  check('신호등 끄기', !pr.on);
+  await page.click('#in-close');
 }
 // 직각 맞추기: 큰길 위에서 약간 비스듬하게 끌어도 큰길에 정확히 직각으로 나간다
 await page.click('button[data-tool="road2"]');

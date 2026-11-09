@@ -133,3 +133,62 @@ describe('감응식 신호', () => {
     expect(sim.traffic.stats.conflicts + sim.traffic.stats.interventions + sim.traffic.stats.deadlocks).toBe(0);
   }, 120_000);
 });
+
+describe('신호 편집과 녹색파', () => {
+  const line = () => {
+    // 가로 길 하나에 세로 길 둘: 교차로 A(0,0)와 B(240,0), 사이 도로 240m
+    const n = new Network(config);
+    road(n, -200, 0, 440, 0); road(n, 0, -200, 0, 200); road(n, 240, -200, 240, 200);
+    const id = (x: number) => [...n.nodes.values()].find((p) => p.x === x && p.y === 0)!.id;
+    return { n, A: id(0), B: id(240) };
+  };
+  const between = (n: Network, A: number, B: number) => n.segmentsAt(A).find((s) => s.a === B || s.b === B)!;
+
+  it('단계별 녹색 시간을 바꾸면 주기가 바뀌고, 범위 밖 값은 거부된다', () => {
+    const { n, A } = line();
+    n.setSignal(A, true);
+    const sim = new Sim(config, n);
+    const before = sim.traffic.signals.program(A).map((p) => p.green);
+    expect(n.setSignalProgram(A, { greens: [20, 40] })).toEqual({ ok: true });
+    expect(sim.traffic.signals.program(A).map((p) => p.green)).toEqual([20, 40]);
+    expect(before).not.toEqual([20, 40]);
+    expect(n.setSignalProgram(A, { greens: [3, 40] })).toEqual({ ok: false, error: 'badValue' });
+    expect(n.setSignalProgram(A + 999, { greens: [20] })).toEqual({ ok: false, error: 'noSignal' });
+    // 20초 녹색: 첫 단계는 19초에도 녹색, 25초에는 적색 이하(황색 3초 뒤 전적색)
+    const seg = sim.traffic.signals.program(A)[0].segs[0];
+    const at = (sec: number) => sim.traffic.signals.light(A, seg, Math.round(sec * config.tickRate));
+    expect(at(19)).toBe('green'); expect(at(21)).toBe('yellow'); expect(at(25)).toBe('red');
+  });
+
+  it('녹색파: 반대쪽 교차로의 녹색이 "도로 길이 ÷ 속도"만큼 늦게 시작하고, 시차는 저장·불러오기로 유지된다', () => {
+    const { n, A, B } = line();
+    n.setSignal(A, true); n.setSignal(B, true);
+    const sim = new Sim(config, n);
+    const seg = between(n, A, B);
+    const r = sim.traffic.signals.greenWave(seg.id, A);
+    expect(r.ok).toBe(true);
+    const travel = 240 / (config.roads[seg.kind].defaultSpeedKmh / 3.6);
+    if (r.ok) expect(r.travelSec).toBeCloseTo(travel);
+    const L = sim.traffic.signals, rate = config.tickRate;
+    // A에서 이 도로 단계가 녹색이 된 순간을 찾고, 그로부터 travel초 뒤에 B에서도 녹색이 되는지
+    let startA = -1;
+    for (let t = 1; t < 400 * rate; t++) if (L.light(A, seg.id, t) === 'green' && L.light(A, seg.id, t - 1) !== 'green') { startA = t; break; }
+    expect(startA).toBeGreaterThan(0);
+    const startB = (() => { for (let t = startA; t < startA + 400 * rate; t++) if (L.light(B, seg.id, t) === 'green' && L.light(B, seg.id, t - 1) !== 'green') return t; return -1; })();
+    expect((startB - startA) / rate).toBeCloseTo(travel, 0);
+    const n2 = new Network(config); n2.load(JSON.parse(JSON.stringify(n.toJSON())));
+    expect(n2.nodes.get(B)!.sigOffset).toBeCloseTo(n.nodes.get(B)!.sigOffset);
+    expect(n2.nodes.get(B)!.sigGreens).toEqual(n.nodes.get(B)!.sigGreens);
+  });
+
+  it('녹색파는 고정식끼리만 되고, 형식 7 파일(시차·단계 시간 없음)도 열린다', () => {
+    const { n, A, B } = line();
+    n.setSignal(A, true); n.setSignal(B, true, 'actuated');
+    const sim = new Sim(config, n);
+    expect(sim.traffic.signals.greenWave(between(n, A, B).id, A)).toEqual({ ok: false, error: 'notFixed' });
+    const v7 = JSON.parse(JSON.stringify(n.toJSON()));
+    v7.formatVersion = 7; for (const nd of v7.nodes) { delete nd.sigGreens; delete nd.sigOffset; }
+    const d = Network.parse(v7, config);
+    expect(d.nodes[0]).toMatchObject({ sigGreens: [], sigOffset: 0 });
+  });
+});

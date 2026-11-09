@@ -1,3 +1,4 @@
+import type { Signals } from './signals';
 import { RestrictKind, SignalMode, BuildingKind, BuildingSize, Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
 import type { Config } from '../config';
 
@@ -52,6 +53,19 @@ export class Editor {
 
   setRestrict(segId: number, nodeId: number, kind: RestrictKind | null): ReturnType<Network['setRestrict']> {
     const r = this.network.setRestrict(segId, nodeId, kind);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number }): ReturnType<Network['setSignalProgram']> {
+    const r = this.network.setSignalProgram(nodeId, p);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  /** 녹색파: segId 도로를 fromNode에서 반대쪽 교차로 방향으로 달리는 차량이 연달아 녹색을 받도록 맞춘다 */
+  greenWave(segId: number, fromNode: number, signals: Signals): ReturnType<Signals['greenWave']> {
+    const r = signals.greenWave(segId, fromNode);
     if (r.ok) this.commit();
     return r;
   }

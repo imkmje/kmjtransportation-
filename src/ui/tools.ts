@@ -36,6 +36,8 @@ interface Deps {
   zones: ZoneLayer;
   /** 도구가 없을 때 도로를 클릭하면 그 도로의 정보 창을 연다(도로 밖을 누르면 닫는다) */
   selectRoad: (segId: number | null) => void;
+  /** 도구가 없을 때 교차로를 클릭하면 신호 편집 창을 연다 */
+  selectNode: (nodeId: number) => void;
   /** 도로망 + 건물 + 시뮬레이션 전체 상태를 글자로 / 글자에서 복원(문제가 있으면 Error) */
   save: () => string;
   load: (text: string) => void;
@@ -325,7 +327,11 @@ export function createTools(d: Deps) {
 
   function click() {
     if (!last) return;
-    if (tool === null) { d.selectRoad(d.pickRoad(last)?.segId ?? null); return; }
+    if (tool === null) { // 교차로(가까이 있을 때 우선) → 교차로 정보, 아니면 도로 정보
+      const n = signalNode(last);
+      if (n) d.selectNode(n.id); else d.selectRoad(d.pickRoad(last)?.segId ?? null);
+      return;
+    }
     if (tool === 'trip') {
       const h = d.pickRoad(last);
       if (!h) { say('도로 위를 클릭하세요'); return; }

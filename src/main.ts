@@ -51,10 +51,10 @@ const stats = createStats(document.getElementById('stats')!, sim, editor.network
   return uncCount;
 }, document.getElementById('rci')!, document.getElementById('topci')!, (id) => pickSegment(id, true));
 // 도로 정보 창: 도로를 클릭하거나 병목 목록을 누르면 열린다
-const info = createInfo(document.getElementById('info')!, config, editor.network, sim.metrics, () => roads.setSelect(null), (segId) => { const r = editor.upgrade(segId); tools.say(r.ok ? `왕복 4차로로 넓혔습니다 (${r.ids.length}구간)` : '옆에 건물이 있어 넓힐 수 없습니다'); });
+const info = createInfo(document.getElementById('info')!, config, editor, sim.metrics, sim.traffic.signals, (t) => tools.say(t), () => roads.setSelect(null), (segId) => { const r = editor.upgrade(segId); tools.say(r.ok ? `왕복 4차로로 넓혔습니다 (${r.ids.length}구간)` : '옆에 건물이 있어 넓힐 수 없습니다'); });
 function pickSegment(id: number | null, focus = false) {
   roads.setSelect(id);
-  info.show(id);
+  info.showSegment(id);
   const s = id === null ? undefined : editor.network.segments.get(id);
   if (focus && s) { const a = editor.network.nodes.get(s.a)!, b = editor.network.nodes.get(s.b)!; view.focus({ x: (a.x + b.x) / 2, y: (b.y + a.y) / 2 }); }
 }
@@ -64,6 +64,7 @@ const tools = createTools({
   buildings,
   zones,
   selectRoad: (id) => pickSegment(id),
+  selectNode: (id) => { roads.setSelect(null); info.showNode(id); },
   save: () => exportGame(editor, sim),
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },

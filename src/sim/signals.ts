@@ -47,9 +47,51 @@ export class Signals {
   }
 
   /** 고정식 단계의 녹색 시간(초): 도로 등급이 높은 접근로가 있는 단계는 그 등급에 비례해 더 길다(큰길에 녹색을 더 준다) */
-  private green(nodeId: number, ph: number[]): number {
-    const top = Math.max(...ph.map((id) => this.cfg.roads[this.net.segments.get(id)!.kind].rank));
-    return (this.net.nodes.get(nodeId)!.sigGreen || this.cfg.signals.greenSec) * top;
+  private topRank(ph: number[]): number { return Math.max(...ph.map((id) => this.cfg.roads[this.net.segments.get(id)!.kind].rank)); }
+  private green(nodeId: number, ph: number[], i = this.phases(nodeId).indexOf(ph)): number {
+    const n = this.net.nodes.get(nodeId)!;
+    return n.sigGreens[i] ?? (n.sigGreen || this.cfg.signals.greenSec) * this.topRank(ph);
+  }
+
+  /** 편집 창용: 교차로의 단계별 {도로 구간들, 고정식 녹색 시간(초)} */
+  program(nodeId: number): { segs: number[]; green: number }[] {
+    return this.phases(nodeId).map((segs, i) => ({ segs, green: this.green(nodeId, segs, i) }));
+  }
+
+  private cycle(nodeId: number): number {
+    const s = this.cfg.signals;
+    return this.phases(nodeId).reduce((t, ph, i) => t + this.green(nodeId, ph, i) + s.yellowSec + s.allRedSec, 0);
+  }
+
+  /** 고정식: 도로 segId가 속한 단계의 녹색이 한 주기 안에서 시작하는 시각(초) */
+  private phaseStart(nodeId: number, segId: number): number | null {
+    const s = this.cfg.signals, ph = this.phases(nodeId);
+    let t = 0;
+    for (let i = 0; i < ph.length; i++) { if (ph[i].includes(segId)) return t; t += this.green(nodeId, ph[i], i) + s.yellowSec + s.allRedSec; }
+    return null;
+  }
+
+  /**
+   * 녹색파(고정식 신호끼리): fromNode의 신호를 기준으로, segId 도로를 따라 반대쪽 교차로로 가는 차량이
+   * "도로 길이 ÷ 제한속도"만큼 뒤에 그쪽의 녹색을 만나도록 반대쪽 교차로의 시차(sigOffset)를 정한다.
+   * 단계 수가 같으면 반대쪽에 같은 녹색 시간(공통 주기)을 복사한다. 반대 방향 차량까지 맞추지는 못한다(한쪽 방향만)
+   */
+  greenWave(segId: number, fromNode: number): { ok: true; offset: number; travelSec: number } | { ok: false; error: 'notFixed' | 'noSuchRoad' } {
+    const seg = this.net.segments.get(segId);
+    if (!seg || (seg.a !== fromNode && seg.b !== fromNode)) return { ok: false, error: 'noSuchRoad' };
+    const to = seg.a === fromNode ? seg.b : seg.a;
+    const ok = (n: number) => this.net.hasSignal(n) && !this.net.isActuated(n);
+    if (!ok(fromNode) || !ok(to)) return { ok: false, error: 'notFixed' };
+    const A = this.net.nodes.get(fromNode)!, B = this.net.nodes.get(to)!;
+    // 공통 주기: 단계 수가 같으면 B의 녹색 시간을 A와 같게
+    if (this.phases(to).length === this.phases(fromNode).length) B.sigGreens = this.program(fromNode).map((p) => p.green);
+    const road = this.cfg.roads[seg.kind];
+    const travel = this.net.segmentLength(seg) / (((seg.playerSpeedKmh ?? road.defaultSpeedKmh) * 1000) / 3600);
+    const startA = A.sigOffset + (this.phaseStart(fromNode, segId) ?? 0);
+    const cycB = this.cycle(to);
+    B.sigOffset = (((startA + travel - (this.phaseStart(to, segId) ?? 0)) % cycB) + cycB) % cycB;
+    this.net.revision++;
+    return { ok: true, offset: B.sigOffset, travelSec: travel };
   }
 
   /** 감응식 교차로의 현재 상태: 지금 녹색을 받는 단계 i, 하위 상태, 그 상태가 시작된 tick, 마지막으로 차가 감지된 tick */
@@ -75,7 +117,8 @@ export class Signals {
       if (st.sub === 'green') {
         if (demand(st.i)) st.lastCar = tick;
         const others = ph.some((_, i) => i !== st.i && demand(i));
-        if (others && el >= s.minGreenSec && ((tick - st.lastCar) / rate > s.gapSec || el >= s.maxGreenSec)) { st.sub = 'yellow'; st.t0 = tick; }
+        const k = this.topRank(ph[st.i]); // 큰 도로가 낀 방향은 최소·최대 녹색을 더 길게 줘서, 작은 길 차 한 대 때문에 큰길 흐름이 자주 끊기지 않게 한다
+        if (others && el >= s.minGreenSec * k && ((tick - st.lastCar) / rate > s.gapSec || el >= s.maxGreenSec * k)) { st.sub = 'yellow'; st.t0 = tick; }
       } else if (st.sub === 'yellow') {
         if (el >= s.yellowSec) { st.sub = 'red'; st.t0 = tick; }
       } else if (el >= s.allRedSec) {
@@ -93,12 +136,13 @@ export class Signals {
       const st = this.states.get(nodeId);
       return st && ph[st.i]?.includes(segId) ? st.sub : 'red';
     }
-    const slots = ph.map((p) => this.green(nodeId, p) + s.yellowSec + s.allRedSec);
-    let t = (tick / this.cfg.tickRate) % slots.reduce((a, b) => a + b, 0);
+    const slots = ph.map((p, i) => this.green(nodeId, p, i) + s.yellowSec + s.allRedSec);
+    const total = slots.reduce((a, b) => a + b, 0);
+    let t = ((((tick / this.cfg.tickRate) - this.net.nodes.get(nodeId)!.sigOffset) % total) + total) % total;
     for (let i = 0; i < ph.length; i++) {
       if (t >= slots[i]) { t -= slots[i]; continue; }
       if (!ph[i].includes(segId)) return 'red';
-      const g = this.green(nodeId, ph[i]);
+      const g = this.green(nodeId, ph[i], i);
       return t < g ? 'green' : t < g + s.yellowSec ? 'yellow' : 'red';
     }
     return 'red';
