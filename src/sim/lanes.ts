@@ -134,6 +134,12 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
         const turnBack = a.segId === b.segId;
         if (turnBack && !(segCount.get(n.id) === 1 && a.index === b.index)) continue;
         const c = makeConnector(tracks.length, a, b, turnBack, rules);
+        // 통행 제한: 들어오는 도로 끝의 좌회전 금지, 나가는 도로 끝의 진입 금지(막다른 끝의 회차는 제한하지 않는다)
+        if (!turnBack) {
+          const inSeg = net.segments.get(a.segId)!, outSeg = net.segments.get(b.segId)!;
+          if (c.turn === 'left' && (inSeg.b === n.id ? inSeg.restrictB : inSeg.restrictA) === 'noLeft') continue;
+          if ((outSeg.a === n.id ? outSeg.restrictA : outSeg.restrictB) === 'noEntry') continue;
+        }
         tracks.push(c);
         a.next.push(c.id);
       }
