@@ -60,7 +60,7 @@ export class Editor {
   }
 
   /**
-   * 곡선 도로: 시작·조절점·끝 세 점으로 베지어 곡선을 그려 짧은 직선 구간의 연결로 만든다(30m 안팎).
+   * 곡선 도로: 시작·조절점·끝 세 점으로 베지어 곡선을 그려 짧은 직선 구간의 연결로 만든다(22m 안팎, 최소 길이 바로 위).
    * 한 조각이라도 건설할 수 없으면(너무 급한 곡선, 건물 등) 아무것도 만들지 않는다. 취소 한 번으로 곡선 전체가 되돌아간다
    */
   buildCurve(p0: Pt, c: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError | 'tooSharp' } {

@@ -1,7 +1,7 @@
 import type { Pt } from './network';
 
 /** 2차 베지어 곡선(시작 p0, 조절점 c, 끝 p2)을 호 길이가 거의 같은 점 목록으로 자른다. 조각 길이는 spacing 근처(최소 minLen 이상)로 맞춘다 */
-export function curvePoints(p0: Pt, c: Pt, p2: Pt, spacing = 30, minLen = 21): Pt[] {
+export function curvePoints(p0: Pt, c: Pt, p2: Pt, spacing = 22, minLen = 21): Pt[] {
   const at = (t: number): Pt => { const u = 1 - t; return { x: u * u * p0.x + 2 * u * t * c.x + t * t * p2.x, y: u * u * p0.y + 2 * u * t * c.y + t * t * p2.y }; };
   const N = 200, fine: Pt[] = [], cum = [0];
   for (let i = 0; i <= N; i++) fine.push(at(i / N));

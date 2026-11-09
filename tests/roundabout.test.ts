@@ -14,10 +14,10 @@ describe('회전교차로', () => {
     const e = cross(), n = e.network;
     const c = center(e);
     const r = e.makeRoundabout(c);
-    expect(r.ok && r.ring.length).toBe(4);
+    expect(r.ok && r.ring.length).toBeGreaterThanOrEqual(4); // 도로마다 하나 + 사이사이 중간 노드
     expect(n.nodes.has(c)).toBe(false);
     const ring = [...n.segments.values()].filter((s) => s.oneWay === 'ab');
-    expect(ring.length).toBe(4);
+    expect(ring.length).toBe(r.ok ? r.ring.length : -1);
     // 반시계: 각 조각은 각도가 커지는 방향
     for (const s of ring) { const a = n.nodes.get(s.a)!, b = n.nodes.get(s.b)!; let d = Math.atan2(b.y, b.x) - Math.atan2(a.y, a.x); if (d < 0) d += Math.PI * 2; expect(d).toBeGreaterThan(0); expect(d).toBeLessThan(Math.PI); }
     const arms = [...n.segments.values()].filter((s) => !s.oneWay);
@@ -61,10 +61,10 @@ describe('회전교차로', () => {
     e.build({ x: 0, y: 0 }, { x: 0, y: 200 }, 'road2'); // T자(가운데 노드는 도로 위 점)
     const c3 = center(e);
     const r = e.makeRoundabout(c3);
-    expect(r.ok && r.ring.length).toBe(3);
+    expect(r.ok && r.ring.length).toBeGreaterThanOrEqual(3);
     expect([...e.network.segments.values()].filter((s) => s.oneWay).every((s) => s.kind === 'road4')).toBe(true);
     const e2 = new Editor(config); e2.loadText(e.exportText());
-    expect([...e2.network.segments.values()].filter((s) => s.oneWay).length).toBe(3);
+    expect([...e2.network.segments.values()].filter((s) => s.oneWay).length).toBe(r.ok ? r.ring.length : -1);
     e.undo();
     expect([...e.network.segments.values()].filter((s) => s.oneWay).length).toBe(0);
     expect([...e.network.nodes.values()].some((p) => p.x === 0 && p.y === 0)).toBe(true);

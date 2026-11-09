@@ -322,8 +322,21 @@ export class Network {
     if (list.some((x) => x.len < R + g.minSegmentLength)) return { ok: false, error: 'tooShort' };
     for (const b of this.buildings.values()) if (b.kind !== 'external' && Math.hypot(b.x - n.x, b.y - n.y) < R + 6 + this.rules.buildings.footprint[b.size]) return { ok: false, error: 'onBuilding' };
     const ringKind: RoadKind = arms.some((s) => s.kind !== 'road2') ? 'road4' : 'road2';
-    const ringNodes = list.map((x) => this.addNode(n.x + R * Math.cos(x.ang), n.y + R * Math.sin(x.ang)));
+    // 환형 노드: 도로마다 하나(들어오는 도로가 닿는 곳) + 도로 사이 빈 각도에 중간 노드를 더해 환형이 둥글게 보이게 한다(조각 길이는 최소 길이 이상)
+    const rk = this.rules.roads[ringKind], ringMin = Math.max(g.minSegmentLength * 1.05, 2 * (rk.lanesPerDir * rk.laneWidth + 2) + 14); // 조각이 너무 짧으면 차선이 차 두 대보다 짧아져 겹치므로, 교차로 판(양 끝)을 뺀 길이가 14m 이상 되게
+    const ang: { a: number; arm: number }[] = [];
     list.forEach((x, i) => {
+      ang.push({ a: x.ang, arm: i });
+      const nx = list[(i + 1) % list.length];
+      let gap = nx.ang - x.ang; if (gap <= 0) gap += Math.PI * 2;
+      const extra = Math.max(0, Math.floor(gap / (ringMin / R)) - 1); // 이 틈에 더 넣을 수 있는 중간 노드 수
+      const want = Math.min(extra, Math.max(0, Math.round((gap / (Math.PI * 2)) * 12) - 1)); // 한 바퀴 12조각 안팎
+      for (let j = 1; j <= want; j++) ang.push({ a: x.ang + (gap * j) / (want + 1), arm: -1 });
+    });
+    const ringNodes = ang.map((q) => this.addNode(n.x + R * Math.cos(q.a), n.y + R * Math.sin(q.a)));
+    ang.forEach((q, i) => {
+      if (q.arm < 0) return;
+      const x = list[q.arm];
       if (x.s.a === nodeId) { x.s.a = ringNodes[i]; x.s.signA = 'yield'; x.s.restrictA = null; x.s.laneDirsA = []; }
       else { x.s.b = ringNodes[i]; x.s.signB = 'yield'; x.s.restrictB = null; x.s.laneDirsB = []; }
     });
