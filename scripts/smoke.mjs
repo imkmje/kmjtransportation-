@@ -35,13 +35,6 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
-// ---- 화면 구성(시티즈 스카이라인식): 위쪽 바, 아래쪽 분류 버튼, 위로 열리는 도구 상자 ----
-check('위쪽 바: 시계·배속·메뉴 버튼이 있음', (await page.locator('#hud #clock').isVisible()) && (await page.locator('#hud button[data-speed]').count()) === 4 && (await page.locator('#menubtn').isVisible()));
-check('아래쪽 분류 버튼 6개(도로·구역·교통·철거·보기·도구)', (await page.locator('#toolbar .cats button[data-catbtn], #toolbar .cats button[data-tool="demolish"]').count()) === 6);
-await page.click('button[data-catbtn="road"]');
-check('분류를 누르면 도구 상자가 열림', await page.locator('#sub-road').isVisible() && !(await page.locator('#sub-zone').isVisible()));
-await page.click('button[data-catbtn="road"]');
-check('다시 누르면 닫힘', !(await page.locator('#sub-road').isVisible()));
 // ---- 카메라 기울기 슬라이더 ----
 {
   const t0 = await page.evaluate(() => window.__game.getTilt());
@@ -66,6 +59,14 @@ await page.click('#about');
 check('업데이트 내역 버튼으로 다시 열면 멈춤', (await page.locator('#title').isVisible()) && (await page.evaluate(() => window.__game.getSpeed())) === 0);
 await page.click('#t-start');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-start.png') });
+// ---- 화면 구성(시티즈 스카이라인식): 위쪽 바, 아래쪽 분류 버튼, 위로 열리는 도구 상자 ----
+check('위쪽 바: 시계·배속·메뉴 버튼이 있음', (await page.locator('#hud #clock').isVisible()) && (await page.locator('#hud button[data-speed]').count()) === 4 && (await page.locator('#menubtn').isVisible()));
+check('아래쪽 분류 버튼 6개(도로·구역·교통·철거·보기·도구)', (await page.locator('#toolbar .cats button[data-catbtn], #toolbar .cats button[data-tool="demolish"]').count()) === 6);
+await page.click('button[data-catbtn="road"]');
+check('분류를 누르면 도구 상자가 열림', await page.locator('#sub-road').isVisible() && !(await page.locator('#sub-zone').isVisible()));
+await page.click('button[data-catbtn="road"]');
+check('다시 누르면 닫힘', !(await page.locator('#sub-road').isVisible()));
+
 check('캔버스 존재', (await page.locator('canvas').count()) === 1);
 check('버전 표시', /v\d+\.\d+\.\d+/.test(await page.locator('#version').innerText()), await page.locator('#version').innerText());
 check('시계 표시(1일차 월요일)', (await page.locator('#clock').innerText()).startsWith('1일차 월요일'), await page.locator('#clock').innerText());
