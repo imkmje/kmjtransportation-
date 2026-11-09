@@ -309,6 +309,22 @@ await page.waitForTimeout(600);
 const ciText = await page.locator('#st-ci').innerText();
 check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciText) && (await page.locator('#stats').innerText()).includes('완료율'), `CI=${ciText}`);
 
+// 직각 맞추기: 큰길 위에서 약간 비스듬하게 끌어도 큰길에 정확히 직각으로 나간다
+await page.click('button[data-tool="road2"]');
+await dragWorld(-120, 0, -105, -120);
+const perp = await page.evaluate(() => { const n = window.__game.editor.network; const sg = [...n.segments.values()].pop(); const A = n.nodes.get(sg.a), B = n.nodes.get(sg.b); return { dx: Math.abs(A.x - B.x), dy: Math.abs(A.y - B.y) }; });
+check('직각 맞추기: 비스듬하게 끌어도 직각 도로가 만들어짐', perp.dx < 0.01 && perp.dy > 60, JSON.stringify(perp));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => window.__game.editor.undo());
+// 반대로: 큰길 근처에서 끝낼 때도 큰길에 직각으로 닿는다
+await page.click('button[data-tool="road2"]');
+await dragWorld(-160, -100, -150, -10); // 건물(x=-190, -130)에서 30m 떨어진 곳
+const perp2 = await page.evaluate(() => { const n = window.__game.editor.network; const sg = [...n.segments.values()].filter((x) => { const A = n.nodes.get(x.a), B = n.nodes.get(x.b); return Math.abs(A.y + 100) < 0.5 || Math.abs(B.y + 100) < 0.5; }).pop(); const A = n.nodes.get(sg.a), B = n.nodes.get(sg.b); return { dx: Math.abs(A.x - B.x), dy: Math.abs(A.y - B.y) }; });
+check('직각 맞추기: 큰길 근처에서 끝내도 직각으로 닿음', perp2.dx < 0.01 && perp2.dy > 50, JSON.stringify(perp2));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => window.__game.editor.undo());
 // 신호등: 큰길과 세로 길이 만나는 교차로를 클릭하면 켜지고, 다시 클릭하면 꺼진다
 const sigCount = () => page.evaluate(() => [...window.__game.editor.network.nodes.values()].filter((n) => window.__game.editor.network.hasSignal(n.id)).length);
 await page.keyboard.press('g');
