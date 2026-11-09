@@ -120,11 +120,6 @@ export function createScene(canvasParent: HTMLElement) {
     },
     /** 카메라 기울기(도): 0 = 바로 위에서 내려다봄, 80 = 거의 수평. 화면을 도는 각도와 거리는 그대로 */
     getTilt(): number { return THREE.MathUtils.radToDeg(controls.getPolarAngle()); },
-    setTilt(deg: number) {
-      const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
-      s.phi = THREE.MathUtils.clamp(THREE.MathUtils.degToRad(deg), 0.05, controls.maxPolarAngle);
-      camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(s));
-    },
     /** 카메라를 시뮬 좌표 p 위쪽으로 옮긴다 */
     focus(p: Pt) {
       const t = toThree(p.x, p.y, 0);

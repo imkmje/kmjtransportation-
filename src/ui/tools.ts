@@ -71,6 +71,18 @@ export function createTools(d: Deps) {
   const cellOf = (p: Pt) => ({ i: Math.round(p.x / config.zones.cell), j: Math.round(p.y / config.zones.cell) });
 
   // ---- 화면 요소 ----
+  // 아래 도구 모음 아이콘(선 그림 SVG). 색은 글자색을 따른다
+  const svg = (inner: string) => `<svg viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+  const ICON = {
+    road: svg('<path d="M9 25 12 3M19 25 16 3"/><path d="M14 6v3M14 12v3M14 18v3" stroke-width="2.2"/>'),
+    zone: svg('<rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="#4fb866" stroke="none"/><rect x="15.5" y="3.5" width="9" height="9" rx="1.5" fill="#4f86d6" stroke="none"/><rect x="3.5" y="15.5" width="9" height="9" rx="1.5" fill="#e8b93c" stroke="none"/><rect x="15.5" y="15.5" width="9" height="9" rx="1.5" stroke-dasharray="2.5 2.5"/>'),
+    traffic: svg('<rect x="9" y="2.5" width="10" height="23" rx="4"/><circle cx="14" cy="8.5" r="2.4" fill="#e0443c" stroke="none"/><circle cx="14" cy="14" r="2.4" fill="#f5c518" stroke="none"/><circle cx="14" cy="19.5" r="2.4" fill="#2fcf5a" stroke="none"/>'),
+    demolish: svg('<path d="M4 22h13M7 22V13l6-4 5 3v10"/><path d="M18 12l7-7M22 4l3 3"/>'),
+    view: svg('<path d="M4 24h20"/><rect x="5.5" y="14" width="4" height="10" rx="1" fill="currentColor"/><rect x="12" y="8" width="4" height="16" rx="1" fill="currentColor"/><rect x="18.5" y="11" width="4" height="13" rx="1" fill="currentColor"/>'),
+    tools: svg('<path d="M18 4a6 6 0 0 0-5.6 8L4.5 20a2.2 2.2 0 0 0 3.2 3.2L15.6 15.5A6 6 0 0 0 24 10l-3.6 3.2-3.4-.8-.8-3.4L19.6 5.6A6 6 0 0 0 18 4z"/>'),
+    undo: svg('<path d="M10 6 4.5 11.5 10 17"/><path d="M5 11.5h11a6 6 0 0 1 0 12h-4"/>'),
+    redo: svg('<path d="M18 6l5.5 5.5L18 17"/><path d="M23 11.5H12a6 6 0 0 0 0 12h4"/>'),
+  };
   d.toolbar.innerHTML = `
     <div class="subs">
       <div class="sub" id="sub-road" data-cat="road" hidden>
@@ -86,7 +98,7 @@ export function createTools(d: Deps) {
       <div class="sub" id="sub-zone" data-cat="zone" hidden>
         <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button>
         <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 구역</button>
-        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button>
+        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역(산업 구역)을 칠합니다">직장(산업) 구역</button>
         <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
       </div>
       <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
@@ -108,15 +120,15 @@ export function createTools(d: Deps) {
       </div>
     </div>
     <div class="cats">
-      <button id="undo" class="small" title="Ctrl+Z">↶<small>취소</small></button>
-      <button id="redo" class="small" title="Ctrl+Y">↷<small>다시</small></button>
+      <button id="undo" class="small" title="Ctrl+Z">${ICON.undo}<small>취소</small></button>
+      <button id="redo" class="small" title="Ctrl+Y">${ICON.redo}<small>다시</small></button>
       <i></i>
-      <button data-catbtn="road"><b>🛣</b>도로</button>
-      <button data-catbtn="zone"><b>🏘</b>구역</button>
-      <button data-catbtn="traffic"><b>🚦</b>교통</button>
-      <button data-tool="demolish" title="단축키 X"><b>🚧</b>철거</button>
-      <button data-catbtn="view"><b>📊</b>보기</button>
-      <button data-catbtn="tools"><b>🧪</b>도구</button>
+      <button data-catbtn="road">${ICON.road}도로</button>
+      <button data-catbtn="zone">${ICON.zone}구역</button>
+      <button data-catbtn="traffic">${ICON.traffic}교통</button>
+      <button data-tool="demolish" title="단축키 X">${ICON.demolish}철거</button>
+      <button data-catbtn="view">${ICON.view}보기</button>
+      <button data-catbtn="tools">${ICON.tools}도구</button>
     </div>`;
   d.filebar.innerHTML = `
     <h4>메뉴</h4>

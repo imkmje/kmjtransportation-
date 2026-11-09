@@ -7,10 +7,10 @@ const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const cone = new THREE.ConeGeometry(1, 1, 4);
 const HOME_COLORS = [0xecc9a0, 0xe5a99b, 0xf2dcae, 0xd9bda3, 0xefb98a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const HOME_ROOFS = [0xc9a07a, 0xc3837a, 0xd0b988, 0xb89b82, 0xcf9560].map((c) => new THREE.MeshLambertMaterial({ color: c }));
-const SHOP_COLORS = [0xf0c24f, 0xe8a23c, 0xf4d37a, 0xe6b05a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const SHOP_COLORS = [0x6f9fe0, 0x5b8fd6, 0x8db3e8, 0x4f86d6].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const AWNING = new THREE.MeshLambertMaterial({ color: 0xd4503c });
-const OFFICE_COLORS = [0x8da9c6, 0x7d9bb9, 0xa1b6cb, 0x6f8fb0].map((c) => new THREE.MeshLambertMaterial({ color: c }));
-const gateMat = new THREE.MeshLambertMaterial({ color: 0xe8b93c });
+const OFFICE_COLORS = [0xe8b93c, 0xdca62e, 0xf0cb62, 0xd4a040].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const gateMat = new THREE.MeshLambertMaterial({ color: 0x9a6fd1 }); // 외부 연결점은 보라색(직장 = 노랑, 상업 = 파랑과 구분)
 const linkMat = new THREE.MeshBasicMaterial({ color: 0x6c7480, transparent: true, opacity: 0.55 });
 const warnMat = new THREE.MeshBasicMaterial({ color: 0xe0443c });
 const goodMat = new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true, opacity: 0.55, depthWrite: false });

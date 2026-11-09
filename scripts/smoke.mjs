@@ -35,21 +35,10 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
-// ---- 카메라 기울기 슬라이더 ----
-{
-  const t0 = await page.evaluate(() => window.__game.getTilt());
-  await page.evaluate(() => { const el = document.getElementById('tilt'); el.value = '30'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.waitForTimeout(300);
-  const t1 = await page.evaluate(() => window.__game.getTilt());
-  const shown = await page.evaluate(() => document.getElementById('tilt').value);
-  check('기울기 슬라이더가 카메라 기울기를 바꿈', Math.abs(t1 - 30) < 1 && t0 > 40 && shown === '30', `${t0.toFixed(0)} → ${t1.toFixed(0)}`);
-  await page.evaluate(() => { const el = document.getElementById('tilt'); el.value = '55'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.waitForTimeout(200);
-}
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.2.0') && titleText.includes('업데이트 내역') && titleText.includes('감응식'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.3.0') && titleText.includes('업데이트 내역') && titleText.includes('상업 구역'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
