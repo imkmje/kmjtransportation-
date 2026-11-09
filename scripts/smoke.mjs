@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.5.0') && titleText.includes('업데이트 내역') && titleText.includes('병목'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.5.1') && titleText.includes('업데이트 내역') && titleText.includes('직각'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -453,6 +453,21 @@ await clickWorld(-30, 0);
 check('진입 금지 해제', (await resCount('noEntry')) === 0);
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
+// 평행한 두 도로(큰길 y=0과 가로 길 y=-200)를 서로 어긋나게 끌어서 이어도 직각으로 이어진다
+await page.click('button[data-tool="road2"]');
+const countBefore = await page.evaluate(() => window.__game.editor.network.segments.size);
+await dragWorld(-160, 0, -150, -192);
+const link = await page.evaluate((nb) => { const n = window.__game.editor.network; const segs = [...n.segments.values()]; if (segs.length <= nb) return null; const sg = segs.filter((x) => { const A = n.nodes.get(x.a), B = n.nodes.get(x.b); return Math.abs(A.y + 200) < 0.5 || Math.abs(B.y + 200) < 0.5; }).filter((x) => { const A = n.nodes.get(x.a), B = n.nodes.get(x.b); return Math.abs(A.y - B.y) > 50; }).pop(); if (!sg) return null; const A = n.nodes.get(sg.a), B = n.nodes.get(sg.b); return { dx: Math.abs(A.x - B.x), dy: Math.abs(A.y - B.y) }; }, countBefore);
+check('평행한 두 도로를 어긋나게 끌어 이어도 직각', !!link && link.dx < 0.01 && link.dy > 150, JSON.stringify(link));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => window.__game.editor.undo());
+// 분류 버튼을 다시 누르면 그 분류에서 고른 도구도 해제된다
+await page.click('button[data-catbtn="zone"]');
+await page.keyboard.press('o');
+check('직장 구역 도구가 선택됨', await page.locator('button[data-tool="zoneOffice"].on').count() === 1);
+await page.click('button[data-catbtn="zone"]');
+check('분류 버튼을 다시 누르면 도구 상자가 닫히고 선택도 풀림', !(await page.locator('#sub-zone').isVisible()) && (await page.locator('button[data-tool="zoneOffice"].on').count()) === 0);
 // 도로 넓히기: 왕복 2차로 구간을 클릭하면 4차로가 되고, 실행 취소로 돌아온다
 const road4Count = () => page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((s) => s.kind === 'road4').length);
 const r4before = await road4Count();
