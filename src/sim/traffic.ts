@@ -392,7 +392,10 @@ export class Traffic {
         if (!r.v.waiver) { // 출구 공간 점검: 나갈 차선 맨 앞 차량의 뒤꽁무니와 차 한 대 + 안전 간격 이상 떨어져 있어야 진입
           // 나갈 차선 맨 앞 차량 뒤꽁무니에서 차 한 대 + 안전 간격이 비어 있어야 한다. 앞차가 달리고 있으면 내가 연결선을 건너는 동안 더 앞서 가므로 그만큼을 더한다(서 있는 줄은 그대로 막는다)
           const first = this.lists.get(r.conn.next[0])?.[0];
-          if (first && first.s - first.len + first.sv * (r.conn.length / Math.max(r.v.sv, 3)) < car.length + car.s0) r.exitBlock = first.v.id;
+          // 회전교차로 진입(양보 표지가 있는 도로 → 일방통행 환형)은 환형이 꽉 차 서로 막히지 않도록 더 넓은 빈 공간을 요구한다
+          const ring = r.conn.sign === 'yield' && this.net.segments.get(tracks[r.conn.next[0]].segId)?.oneWay != null && !this.net.segments.get(tracks[r.conn.src].segId)?.oneWay;
+          const need = car.length + car.s0 + (ring ? ix.ringEntryGap : 0);
+          if (first && first.s - first.len + first.sv * (r.conn.length / Math.max(r.v.sv, 3)) < need) r.exitBlock = first.v.id;
         }
       }
       const pool = g.reqs.filter((r) => !r.exitBlock); // 출구가 막혀 못 들어가는 차량은 다른 차량을 막을 자격이 없다

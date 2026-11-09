@@ -24,7 +24,16 @@ describe('도로 넓히기', () => {
     expect(r.ok && r.ids.length).toBe(2); // (-300..-100), (-100..100)
     expect([...n.segments.values()].filter((s) => s.kind === 'road4').length).toBe(2);
     expect(seg(e, 100, -100).kind).toBe('road2'); // 교차로 건너편은 그대로
-    expect(e.upgrade(seg(e, -300, 0).id)).toEqual({ ok: false, error: 'notUpgradable' });
+    const r6 = e.upgrade(seg(e, -300, 0).id); // 4차로 → 6차로
+    expect(r6.ok && r6.ids.length).toBe(2);
+    expect(seg(e, -300, 0).kind).toBe('road6');
+    expect(e.upgrade(seg(e, -300, 0).id)).toEqual({ ok: false, error: 'notUpgradable' }); // 더는 못 넓힌다
+    const d = e.upgrade(seg(e, -300, 0).id, 'down'); // 좁히기
+    expect(d.ok && d.ids.length).toBe(2);
+    expect(seg(e, -300, 0).kind).toBe('road4');
+    expect(e.upgrade(seg(e, -300, 0).id, 'down').ok).toBe(true);
+    expect(e.upgrade(seg(e, -300, 0).id, 'down')).toEqual({ ok: false, error: 'notUpgradable' }); // 2차로보다 좁아질 수 없다
+    e.upgrade(seg(e, -300, 0).id); // 아래 검사를 위해 4차로로
   });
 
   it('옆에 건물이 있어 4차로 폭이 걸리면 아무 구간도 바뀌지 않는다', () => {
@@ -72,4 +81,60 @@ describe('도로 넓히기', () => {
     e2.loadText(e.exportText());
     expect([...e2.network.segments.values()].filter((x) => x.kind === 'road4').length).toBe(1);
   });
+});
+
+describe('도로 이름과 차선별 방향', () => {
+  const cross = () => { const e = new Editor(config); e.build({ x: -300, y: 0 }, { x: 300, y: 0 }, 'road4'); e.build({ x: 0, y: -200 }, { x: 0, y: 200 }, 'road2'); return e; };
+  const find = (e: Editor, x: number, y: number) => [...e.network.segments.values()].find((s) => { const a = e.network.nodes.get(s.a)!, b = e.network.nodes.get(s.b)!; return [a, b].some((p) => p.x === x && p.y === y); })!;
+  const center = (e: Editor) => [...e.network.nodes.values()].find((p) => p.x === 0 && p.y === 0)!.id;
+
+  it('이름은 이음 노드로 이어진 구간 전체에 붙고 저장된다(교차로에서 멈춤)', () => {
+    const e = new Editor(config);
+    e.build({ x: -300, y: 0 }, { x: -100, y: 0 }, 'road2');
+    e.build({ x: -100, y: 0 }, { x: 100, y: 0 }, 'road2');
+    e.build({ x: 0, y: -100 }, { x: 0, y: 100 }, 'road2'); // (0,0)에서 교차 → 둘째 구간이 둘로 나뉜다
+    const west = find(e, -300, 0);
+    expect(e.setName(west.id, '  중앙로  ')).toBe(2); // (-300..-100), (-100..0)
+    expect(west.name).toBe('중앙로');
+    expect(find(e, 100, 0).name).toBe('');
+    const e2 = new Editor(config); e2.loadText(e.exportText());
+    expect([...e2.network.segments.values()].filter((s) => s.name === '중앙로').length).toBe(2);
+    expect(e.setName(west.id, 'x'.repeat(50))).toBe(2);
+    expect(west.name.length).toBe(30);
+  });
+
+  it('차선별 방향: 지정한 방향의 연결만 남고, 없는 방향만 고르면 무시되며, 초기화·저장·형식 검사가 된다', () => {
+    const e = cross(), n = e.network, c = center(e);
+    const west = find(e, -300, 0).id;
+    const turnsOf = (lane: number) => { const g = new Sim(config, n).traffic.graph; return g.tracks.filter((t) => t.kind === 'conn' && g.tracks[t.src].segId === west && g.tracks[t.src].index === lane && !t.uturn).map((t) => t.turn).sort(); };
+    const all = turnsOf(1);
+    expect(all).toContain('left'); expect(all).toContain('right'); expect(all).toContain('straight');
+    expect(e.setLaneDirs(west, c, [6, 1])).toEqual({ ok: true }); // 1번(오른쪽) 차선 직진+우회전, 2번 차선 좌회전
+    expect(turnsOf(1).every((t) => t !== 'left')).toBe(true);
+    expect(turnsOf(2)).toEqual(all.filter((t) => t === 'left'));
+    expect(e.setLaneDirs(west, c, [1])).toEqual({ ok: true });
+    const only = turnsOf(1); expect(only.length).toBeGreaterThan(0); // 오른쪽 차선이 좌회전만 → 연결이 있다
+    expect(e.setLaneDirs(west, c, [0])).toEqual({ ok: false, error: 'badValue' });
+    expect(e.setLaneDirs(west, c, [1, 1, 1])).toEqual({ ok: false, error: 'badValue' }); // 차선 수 초과
+    const e2 = new Editor(config); e2.loadText(e.exportText());
+    expect(e2.network.laneDirsAt(find(e2, -300, 0).id, center(e2))).toEqual([1]);
+    e.setLaneDirs(west, c, []);
+    expect(turnsOf(1)).toEqual(all);
+    e.setLaneDirs(west, c, [2]);
+    e.undo(); // 초기화 직전 상태로
+    expect(n.laneDirsAt(west, c)).toEqual([]);
+  });
+
+  it('차선별 방향을 지정해도 차량이 길을 찾아 도착하고 안전망·교착은 0', () => {
+    const e = cross(), n = e.network, c = center(e);
+    const west = find(e, -300, 0);
+    e.setLaneDirs(west.id, c, [2, 5]); // 오른쪽 차선 직진, 왼쪽 차선 좌회전+우회전
+    const sim = new Sim(config, n);
+    const from = { segId: west.id, t: 20 }, north = find(e, 0, 200), east = find(e, 300, 0);
+    sim.traffic.requestTrip(from, { segId: north.id, t: 40 }, 4);
+    sim.traffic.requestTrip(from, { segId: east.id, t: 40 }, 4);
+    for (let i = 0; i < 20 * 200; i++) sim.step();
+    expect(sim.traffic.stats.arrived).toBe(8);
+    expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks + sim.traffic.stats.conflicts).toBe(0);
+  }, 60_000);
 });

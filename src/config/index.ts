@@ -12,6 +12,7 @@ export const config = {
   roads: {
     road2: { name: '왕복 2차로', lanesPerDir: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60, rank: 1 },
     road4: { name: '왕복 4차로', lanesPerDir: 2, laneWidth: 3.5, defaultSpeedKmh: 60, maxSpeedKmh: 80, rank: 2 }, // rank: 교차로 우선순위(큰 쪽이 먼저)
+    road6: { name: '왕복 6차로', lanesPerDir: 3, laneWidth: 3.5, defaultSpeedKmh: 70, maxSpeedKmh: 100, rank: 3 },
   },
   // 차종 (rules.md 10항). 단위: m, m/s², s, km/h
   vehicles: { car: { length: 4.5, width: 1.8, a: 1.5, b: 2.0, T: 1.5, s0: 2.0, vmaxKmh: 120 } },
@@ -40,6 +41,7 @@ export const config = {
     yieldKmh: 20, // 양보 표지: 정지선에서의 속도
     simultaneousSec: 1.0, // 이 시간 안에 도착하면 동시 도착으로 보고 좌회전이 양보
     straightDeg: 35, // 이 각도 안의 방향 전환은 직진
+    ringEntryGap: 14, // 회전교차로 진입에 필요한 추가 빈 공간(m). 환형이 꽉 차 서로 막히는 것을 막는다
   },
   // 차선 변경 (rules.md 10항 MOBIL 단순화)
   laneChange: { politeness: 0.2, threshold: 0.2, rightBias: 0.1, safeDecel: 4.0, cooldownSec: 5, durationSec: 2, noChangeNearLine: 30, noChangeAfterEntry: 10, evalTicks: 10 }, // noChangeAfterEntry: 차선에 들어선 뒤 차 길이 + 이 거리(m)까지는 변경 금지(연결선에서 들어오는 차량을 아직 볼 수 없다)
@@ -54,6 +56,8 @@ export const config = {
     gap: 2, // 건물 사이 최소 간격(m)
     worldHalf: 1000,
   },
+  // 회전교차로: 환형 도로 반지름(m). 이웃한 두 도로 사이 각도가 좁으면 반지름을 키워 환형 조각 길이를 최소 길이 이상으로 맞춘다
+  roundabout: { radius: 28, maxRadius: 50 },
   // 신호등(1.2.0): 초 단위(시뮬 시간). 녹색·황색·전적색. 기본 프로그램은 자동 생성
   signals: { greenSec: 15, yellowSec: 3, allRedSec: 1, minGreenSec: 7, maxGreenSec: 45, gapSec: 2.5, detectM: 30, greenChoices: [10, 15, 20, 30, 45] }, // 감응식: 감지 구간 detectM, 최소 녹색, 차가 없는 시간이 gapSec를 넘으면 전환, 최대 녹색
   // 구역(심시티식): 칸 하나 = 20m. 도로에서 이 거리(중심선 기준) 안의 칸만 칠할 수 있다
