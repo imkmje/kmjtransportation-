@@ -364,13 +364,14 @@ describe('건물', () => {
     const bad = { ...v2, formatVersion: 3, buildings: [{ id: 1, kind: 'castle', size: 'small', x: 0, y: 0, source: 'player' }] };
     expect(() => Network.parse(bad, config)).toThrow('손상');
   });
-  it('건물을 놓거나 지우면 도로망 revision과 건물 revision이 오른다', () => {
+  it('건물을 놓거나 지워도 도로망 revision은 그대로이고(도로 그래프를 다시 만들지 않는다) 건물 revision만 오른다', () => {
     const n = withRoad();
     const r0 = n.revision, b0 = n.buildingsRevision;
     const id = n.addBuilding('home', 'small', 0, 30);
-    expect(n.revision).toBeGreaterThan(r0);
+    expect(n.revision).toBe(r0);
     expect(n.buildingsRevision).toBe(b0 + 1);
     if (id.ok) n.removeBuilding(id.id);
     expect(n.buildingsRevision).toBe(b0 + 2);
+    expect(n.revision).toBe(r0);
   });
 });

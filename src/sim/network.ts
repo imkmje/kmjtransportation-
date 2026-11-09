@@ -405,7 +405,6 @@ export class Network {
     if (!p.ok) return p;
     const id = this.nextBuildingId++;
     this.buildings.set(id, { id, kind, size, x, y, source, deletable, parking: 0, density, variant });
-    this.revision++;
     this.buildingsRevision++;
     return { ok: true, id };
   }
@@ -414,7 +413,6 @@ export class Network {
   addExternal(x: number, y: number): number {
     const id = this.nextBuildingId++;
     this.buildings.set(id, { id, kind: 'external', size: 'small', x, y, source: 'map', deletable: false, parking: 0, density: 0, variant: 0 });
-    this.revision++;
     this.buildingsRevision++;
     return id;
   }
@@ -512,7 +510,6 @@ export class Network {
     if (!b) return { ok: false, error: 'noSuchBuilding' };
     if (!b.deletable && !force) return { ok: false, error: 'locked' };
     this.buildings.delete(id);
-    this.revision++;
     this.buildingsRevision++;
     return { ok: true };
   }

@@ -49,7 +49,7 @@ const hud = createHud(document.getElementById('hud')!, config.speedSteps, setSpe
 // 미연결 건물 수는 계산이 조금 들어서 도로망이 바뀔 때만 다시 센다
 let uncKey = -1, uncCount = 0;
 const stats = createStats(document.getElementById('stats')!, sim, editor.network, () => {
-  if (uncKey !== editor.network.revision) { uncKey = editor.network.revision; uncCount = sim.demand.unconnected().length; }
+  if (uncKey !== editor.network.revision + editor.network.buildingsRevision * 1e6) { uncKey = editor.network.revision + editor.network.buildingsRevision * 1e6; uncCount = sim.demand.unconnected().length; }
   return uncCount;
 }, document.getElementById('rci')!, document.getElementById('topci')!, (id) => pickSegment(id, true));
 // 도로 정보 창: 도로를 클릭하거나 병목 목록을 누르면 열린다

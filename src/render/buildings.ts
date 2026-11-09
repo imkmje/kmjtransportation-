@@ -27,7 +27,7 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
   const ghost = new THREE.Mesh(unitBox, goodMat);
   const hover = new THREE.Mesh(unitBox, badMat);
   for (const m of [ghost, hover]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
-  let shown = -1;
+  let shown = '';
 
   const place = (m: THREE.Mesh, x: number, y: number, w: number, h: number, bottom = 0) => {
     const p = toThree(x, y, bottom + h / 2);
@@ -39,10 +39,33 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
     h: config.buildings.height[kind === 'office' ? 'office' : kind === 'shop' || kind === 'factory' || kind === 'school' ? kind : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1) * (kind === 'home' ? config.densityHeight[density] : 1), // 자란 건물은 높이가 조금씩 다르고, 고밀 주거는 더 높다
   });
 
+  // 건물 몸체·지붕·연결선·경고 표지는 종류별로 InstancedMesh 하나로 모아 그린다(건물이 수백 채여도 그리기 호출이 몇 번뿐이다)
+  type Inst = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; rz: number; color: THREE.Color | null };
+  const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  function flush(geo: THREE.BufferGeometry, mat: THREE.Material, list: Inst[], colored: boolean) {
+    if (!list.length) return;
+    const m = new THREE.InstancedMesh(geo, mat, list.length);
+    m.frustumCulled = false;
+    const d = new THREE.Object3D();
+    list.forEach((it, i) => {
+      d.position.set(it.x, it.y, it.z); d.scale.set(it.sx, it.sy, it.sz); d.rotation.set(0, it.ry, it.rz); d.updateMatrix();
+      m.setMatrixAt(i, d.matrix);
+      if (colored && it.color) m.setColorAt(i, it.color);
+    });
+    group.add(m);
+  }
+
   function rebuild() {
+    group.children.forEach((c) => (c as THREE.InstancedMesh).dispose?.());
     group.clear();
+    const bodies: Inst[] = [], roofs: Inst[] = [], links: Inst[] = [], warns: Inst[] = [];
+    // 상자 하나: 바닥 높이 bottom 위에 w×h×w(sx·sz로 바꿔 쓸 수도 있다)
+    const box = (mat: THREE.MeshLambertMaterial, x: number, y: number, w: number, h: number, bottom = 0, sx = w, sz = w) => {
+      const p = toThree(x, y, bottom + h / 2);
+      bodies.push({ x: p.x, y: p.y, z: p.z, sx, sy: h, sz, ry: 0, rz: 0, color: mat.color });
+    };
     for (const b of net.buildings.values()) {
-      if (b.kind === 'external') { // 외부 연결점: 노란 표지판이 달린 문
+      if (b.kind === 'external') { // 외부 연결점: 분홍 표지판이 달린 문(지도에 하나뿐이라 따로 그린다)
         const pad = new THREE.Mesh(unitBox, gateMat);
         place(pad, b.x, b.y, 16, 0.4);
         const sign = new THREE.Mesh(unitBox, gateMat);
@@ -55,63 +78,34 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
       }
       const { half, h } = size(b.kind, b.size, b.variant, b.density);
       const pick = b.id + b.variant;
-      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[pick % HOME_COLORS.length] : b.kind === 'shop' ? SHOP_COLORS[pick % SHOP_COLORS.length] : b.kind === 'factory' ? FACTORY_COLORS[pick % FACTORY_COLORS.length] : b.kind === 'school' ? SCHOOL_COLORS[pick % SCHOOL_COLORS.length] : OFFICE_COLORS[pick % OFFICE_COLORS.length]);
-      place(body, b.x, b.y, half * 2, h);
-      group.add(body);
-      if (b.kind === 'factory') { // 굴뚝 둘(어두운 상자)
-        for (const dx of [-0.45, 0.2]) {
-          const ch = new THREE.Mesh(unitBox, DARK);
-          place(ch, b.x + dx * half, b.y - 0.3 * half, half * 0.35, h * 0.9, h);
-          group.add(ch);
-        }
-      }
-      if (b.kind === 'school') { // 흰 시계탑
-        const tw = new THREE.Mesh(unitBox, WHITE);
-        place(tw, b.x, b.y, half * 0.6, h * 0.8, h);
-        group.add(tw);
-      }
-      if (b.kind === 'shop') { // 붉은 차양(앞쪽으로 튀어나온 얇은 판)
-        const aw = new THREE.Mesh(unitBox, AWNING);
-        place(aw, b.x, b.y + half + 0.8, half * 2.1, 0.5, h * 0.55);
-        aw.scale.set(half * 2.1, 0.5, 3);
-        group.add(aw);
-      }
-      if (b.kind === 'office' && b.variant % 2 === 1) { // 위층이 좁아지는 계단형 탑
-        const top = new THREE.Mesh(unitBox, OFFICE_COLORS[(pick + 1) % OFFICE_COLORS.length]);
-        place(top, b.x, b.y, half * 1.2, h * 0.35, h);
-        group.add(top);
-      }
+      const pal = b.kind === 'home' ? HOME_COLORS : b.kind === 'shop' ? SHOP_COLORS : b.kind === 'factory' ? FACTORY_COLORS : b.kind === 'school' ? SCHOOL_COLORS : OFFICE_COLORS;
+      box(pal[pick % pal.length], b.x, b.y, half * 2, h);
+      if (b.kind === 'factory') for (const dx of [-0.45, 0.2]) box(DARK, b.x + dx * half, b.y - 0.3 * half, half * 0.35, h * 0.9, h); // 굴뚝 둘
+      if (b.kind === 'school') box(WHITE, b.x, b.y, half * 0.6, h * 0.8, h); // 흰 시계탑
+      if (b.kind === 'shop') box(AWNING, b.x, b.y + half + 0.8, half * 2.1, 0.5, h * 0.55, half * 2.1, 3); // 붉은 차양
+      if (b.kind === 'office' && b.variant % 2 === 1) box(OFFICE_COLORS[(pick + 1) % OFFICE_COLORS.length], b.x, b.y, half * 1.2, h * 0.35, h); // 위층이 좁아지는 계단형 탑
       if (b.kind === 'home' && b.variant % 3 !== 2) { // 지붕(변형 2는 평평한 지붕)
-        const roof = new THREE.Mesh(cone, HOME_ROOFS[pick % HOME_ROOFS.length]);
         const p = toThree(b.x, b.y, h + half * 0.35);
-        roof.position.set(p.x, p.y, p.z);
-        roof.scale.set(half * 1.45, half * (b.variant % 3 === 1 ? 1.1 : 0.7), half * 1.45);
-        roof.rotation.y = Math.PI / 4;
-        group.add(roof);
+        roofs.push({ x: p.x, y: p.y, z: p.z, sx: half * 1.45, sy: half * (b.variant % 3 === 1 ? 1.1 : 0.7), sz: half * 1.45, ry: Math.PI / 4, rz: 0, color: HOME_ROOFS[pick % HOME_ROOFS.length].color });
       }
       const acc = net.accessOf(b.id);
       if (acc) { // 연결된 도로 접속 지점까지 가는 가는 선
-        const len = Math.hypot(acc.x - b.x, acc.y - b.y);
-        const link = new THREE.Mesh(unitBox, linkMat);
         const p = toThree((acc.x + b.x) / 2, (acc.y + b.y) / 2, 0.35);
-        link.position.set(p.x, p.y, p.z);
-        link.scale.set(len, 0.15, 0.7);
-        link.rotation.y = Math.atan2(acc.y - b.y, acc.x - b.x);
-        group.add(link);
-      } else { // 미연결 경고
-        const w = new THREE.Mesh(cone, warnMat);
+        links.push({ x: p.x, y: p.y, z: p.z, sx: Math.hypot(acc.x - b.x, acc.y - b.y), sy: 0.15, sz: 0.7, ry: Math.atan2(acc.y - b.y, acc.x - b.x), rz: 0, color: null });
+      } else { // 미연결 경고(꼭짓점이 아래로)
         const p = toThree(b.x, b.y, h + (b.kind === 'home' ? half * 0.7 : 0) + 4);
-        w.position.set(p.x, p.y, p.z);
-        w.scale.set(2.4, 5, 2.4);
-        w.rotation.z = Math.PI; // 꼭짓점이 아래로(경고 표지)
-        group.add(w);
+        warns.push({ x: p.x, y: p.y, z: p.z, sx: 2.4, sy: 5, sz: 2.4, ry: 0, rz: Math.PI, color: null });
       }
     }
+    flush(unitBox, white, bodies, true);
+    flush(cone, white, roofs, true);
+    flush(unitBox, linkMat, links, false);
+    flush(cone, warnMat, warns, false);
   }
 
   return {
     /** 도로망이 바뀌었으면 다시 그린다 */
-    sync() { if (net.revision !== shown) { rebuild(); shown = net.revision; } },
+    sync() { const key = `${net.revision}:${net.buildingsRevision}`; if (key !== shown) { rebuild(); shown = key; } },
     setGhost(kind: BuildingKind, s: BuildingSize, x: number, y: number, valid: boolean) {
       const { half, h } = size(kind, s);
       place(ghost, x, y, half * 2, h);
