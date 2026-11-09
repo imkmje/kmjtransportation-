@@ -154,7 +154,14 @@ export function createTools(d: Deps) {
     d.toolbar.querySelectorAll<HTMLElement>('.sub').forEach((el) => (el.hidden = el.dataset.cat !== cat));
     catBtns.forEach((b) => b.classList.toggle('on', b.dataset.catbtn === cat));
   };
-  catBtns.forEach((b) => (b.onclick = () => openCat(b.classList.contains('on') ? null : b.dataset.catbtn!)));
+  // 분류 버튼을 다시 눌러 닫을 때, 그 분류에서 고른 도구도 함께 해제한다(예: 직장 구역을 고른 채 "구역"을 누르면 직장 구역 선택도 풀린다)
+  catBtns.forEach((b) => (b.onclick = () => {
+    const cat = b.dataset.catbtn!;
+    if (b.classList.contains('on')) {
+      if (tool && catOf(tool) === cat) setTool(tool); // 같은 도구를 다시 고르면 해제된다
+      openCat(null);
+    } else openCat(cat);
+  }));
   const catOf = (t: string) => d.toolbar.querySelector<HTMLElement>(`button[data-tool="${t}"]`)?.closest<HTMLElement>('[data-cat]')?.dataset.cat ?? null;
   const undoBtn = $<HTMLButtonElement>(d.toolbar, '#undo');
   const redoBtn = $<HTMLButtonElement>(d.toolbar, '#redo');
@@ -172,22 +179,33 @@ export function createTools(d: Deps) {
   // 직각 맞추기: (1) 커서가 도로 가까이면 시작점에서 그 도로에 수직으로 내린 발에 닿게, (2) 도로에서 출발하면 그 도로에 수직 방향으로
   function orthoPoint(raw: Pt, from: Pt): Pt | null {
     const L = Math.hypot(raw.x - from.x, raw.y - from.y);
-    if (L < 20 || net.snapPoint(raw).nodeId !== undefined) return null; // 교차점에 닿으려는 때는 그대로
-    const ang = Math.atan2(raw.y - from.y, raw.x - from.x);
-    const near = net.nearestSegment(raw.x, raw.y, 25);
-    if (near) {
-      const sg = net.segments.get(near.id)!, a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!;
-      const dx = b.x - a.x, dy = b.y - a.y, u = ((from.x - a.x) * dx + (from.y - a.y) * dy) / (dx * dx + dy * dy);
+    if (L < 20) return null;
+    const hit = net.snapPoint(raw);
+    if (hit.nodeId !== undefined && net.segmentsAt(hit.nodeId).length >= 3) return null; // 교차점에 닿으려는 때는 그대로(이음 노드는 도로의 한 점이므로 직각을 맞춘다)
+    const ang = Math.atan2(raw.y - from.y, raw.x - from.x), rad = (d: number) => (d * Math.PI) / 180;
+    // (1) 커서 가까이(35m)의 모든 도로 조각 중, 시작점에서 수직으로 내린 발이 조각 안에 있고 커서 방향과 가장 가까운 것
+    let best: { p: Pt; score: number } | null = null;
+    for (const sg of net.segments.values()) {
+      const a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!;
+      const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy, u = ((from.x - a.x) * dx + (from.y - a.y) * dy) / len2;
+      if (u <= 0.02 || u >= 0.98) continue;
       const foot = { x: a.x + u * dx, y: a.y + u * dy };
-      if (u > 0.02 && u < 0.98 && Math.hypot(foot.x - from.x, foot.y - from.y) >= 20 && angDiff(Math.atan2(foot.y - from.y, foot.x - from.x), ang) < (25 * Math.PI) / 180) return foot;
+      if (Math.hypot(foot.x - from.x, foot.y - from.y) < 20) continue;
+      const near = Math.hypot(foot.x - raw.x, foot.y - raw.y);
+      const diff = angDiff(Math.atan2(foot.y - from.y, foot.x - from.x), ang);
+      if (near > 35 || diff > rad(45)) continue;
+      const score = diff + near * 0.01;
+      if (!best || score < best.score) best = { p: foot, score };
     }
+    if (best) return best.p;
+    // (2) 도로(또는 교차점)에서 출발하면 그 도로에 수직인 방향으로
     const hs = net.snapPoint(from), dirs: number[] = [];
     const dirOf = (sg: { a: number; b: number }) => { const a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!; return Math.atan2(b.y - a.y, b.x - a.x); };
     if (hs.segId !== undefined) dirs.push(dirOf(net.segments.get(hs.segId)!));
     else if (hs.nodeId !== undefined) for (const sg of net.segmentsAt(hs.nodeId)) dirs.push(dirOf(sg));
     for (const d of dirs) for (const t of [d + Math.PI / 2, d - Math.PI / 2]) {
       const diff = angDiff(ang, t);
-      if (diff < (15 * Math.PI) / 180) { const len = L * Math.cos(diff); return { x: from.x + len * Math.cos(t), y: from.y + len * Math.sin(t) }; }
+      if (diff < rad(30)) { const len = L * Math.cos(diff); return { x: from.x + len * Math.cos(t), y: from.y + len * Math.sin(t) }; }
     }
     return null;
   }
