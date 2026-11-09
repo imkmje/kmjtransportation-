@@ -17,6 +17,7 @@ import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
 import { buildStartMap } from './maps/start';
 import { createZoneLayer } from './render/zones';
+import { createSignalLayer } from './render/signals';
 
 const editor = new Editor(config);
 const sim = new Sim(config, editor.network);
@@ -34,6 +35,7 @@ const view = createScene(document.getElementById('view')!);
 const roads = createRoadLayer(view.scene, editor.network);
 const buildings = createBuildingLayer(view.scene, editor.network);
 const zones = createZoneLayer(view.scene, editor.network);
+const signalLayer = createSignalLayer(view.scene, editor.network, sim.traffic.signals, () => sim.tickCount);
 const heat = createHeatmap(view.scene, editor.network, sim.metrics, document.getElementById('legend')!);
 const vehicles = createVehicleLayer(view.scene, sim.traffic);
 const laneDebug = createLaneDebug(view.scene, sim.traffic);
@@ -95,6 +97,7 @@ function frame(now: number) {
   roads.sync();
   buildings.sync();
   zones.sync();
+  signalLayer.update();
   vehicles.update(loop.alpha);
   laneDebug.update(debug.on);
   view.render();

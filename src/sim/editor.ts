@@ -44,6 +44,12 @@ export class Editor {
     return this.network.removeBuilding(id);
   }
 
+  setSignal(nodeId: number, on: boolean): ReturnType<Network['setSignal']> {
+    const r = this.network.setSignal(nodeId, on);
+    if (r.ok) this.commit();
+    return r;
+  }
+
   setSpeedLimit(segId: number, kmh: number | null): ReturnType<Network['setSpeedLimit']> {
     const r = this.network.setSpeedLimit(segId, kmh);
     if (r.ok) this.commit();

@@ -7,7 +7,7 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'zoneHome' | 'zoneOffice' | 'zoneErase' | 'demolish' | 'trip' | 'limit';
+type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneErase' | 'demolish' | 'trip' | 'limit';
 const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneErase: null };
 const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
@@ -75,6 +75,7 @@ export function createTools(d: Deps) {
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
     <button data-tool="stop" title="단축키 S">정지 표지</button>
     <button data-tool="yield" title="단축키 Y">양보 표지</button>
+    <button data-tool="signal" title="단축키 G: 교차로를 클릭하면 신호등이 켜지고 꺼집니다">신호등</button>
     <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
     <div class="row"><button data-tool="zoneHome" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button><button data-tool="zoneOffice" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button></div>
     <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
@@ -87,7 +88,7 @@ export function createTools(d: Deps) {
     <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
     <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
     <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭 (켜면 그 교차로의 표지는 무시)<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
@@ -135,6 +136,16 @@ export function createTools(d: Deps) {
     return { segId: seg.id, nodeId, x: node.x + ((other.x - node.x) / len) * 8, y: node.y + ((other.y - node.y) / len) * 8 };
   }
 
+  // 클릭 지점에서 20m 안의 가장 가까운 교차로(도로 3개 이상)
+  function signalNode(p: Pt) {
+    let best: { id: number; x: number; y: number } | null = null, bd = 20;
+    for (const n of net.nodes.values()) {
+      const dd = Math.hypot(n.x - p.x, n.y - p.y);
+      if (dd < bd && net.segmentsAt(n.id).length >= 3) { bd = dd; best = n; }
+    }
+    return best;
+  }
+
   // ---- 갱신 ----
   function refresh() {
     d.roads.clearGhost();
@@ -165,6 +176,11 @@ export function createTools(d: Deps) {
         d.tip.style.top = `${lastClient.y + 16}px`;
         d.tip.hidden = false;
       }
+      return;
+    }
+    if (tool === 'signal') {
+      const n = signalNode(last);
+      d.roads.setCursor(n ? { x: n.x, y: n.y } : null, !!n);
       return;
     }
     if (tool === 'stop' || tool === 'yield') {
@@ -234,6 +250,15 @@ export function createTools(d: Deps) {
       const next = choices[(choices.indexOf(cur) + 1) % choices.length]; // 한 칸씩 올라가고, 끝에서 가장 낮은 값으로
       d.editor.setSpeedLimit(seg.id, next);
       say(`제한속도 ${next}km/h${next === r.defaultSpeedKmh ? ' (기본)' : ''}`);
+      refresh();
+      return;
+    }
+    if (tool === 'signal') {
+      const n = signalNode(last);
+      if (!n) { say('교차로(도로 3개 이상이 만나는 곳) 가까이를 클릭하세요'); return; }
+      const on = !net.hasSignal(n.id);
+      d.editor.setSignal(n.id, on);
+      say(on ? '신호등을 켰습니다 (녹색 15초, 황색 3초, 전적색 1초)' : '신호등을 껐습니다');
       refresh();
       return;
     }
@@ -343,6 +368,7 @@ export function createTools(d: Deps) {
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
     else if (k === 'l') setTool('limit');
+    else if (k === 'g') setTool('signal');
     else if (k === 'm') { const c = $<HTMLInputElement>(d.toolbar, '#heat'); c.checked = !c.checked; d.setHeat(c.checked); }
     else if (k === 'v') setTool('trip');
     else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }

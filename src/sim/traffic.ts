@@ -2,6 +2,7 @@ import type { Config } from '../config';
 import { buildLaneGraph, LaneGraph, posAt, Track } from './lanes';
 import type { Network } from './network';
 import type { Rng } from './random';
+import { Signals } from './signals';
 import { findRoute, findRouteFromTrack, RoadPos, Route } from './route';
 
 /** 이동 하나의 꼬리표. 수요가 만든 이동은 어느 건물에서 어느 건물로 가는지 알아야 도착·분실을 처리할 수 있다 */
@@ -108,6 +109,7 @@ export class Traffic {
   onSeg: ((seg: number, ref: number, loss: number) => void) | null = null;
   onPass: ((seg: number) => void) | null = null;
   private routeCache = new Map<string, Route | null>();
+  readonly signals: Signals;
   private requests: SpawnRequest[] = [];
   private lists = new Map<number, Entry[]>();
   private cycleState = new Map<string, { since: number; stage: number; stageTick: number; vid: number }>();
@@ -116,6 +118,7 @@ export class Traffic {
 
   constructor(private cfg: Config, private net: Network, private rng: Rng) {
     this.graph = buildLaneGraph(net, cfg);
+    this.signals = new Signals(cfg, net);
   }
 
   /**
@@ -364,7 +367,11 @@ export class Traffic {
       if (dEnd > ix.zone + (v.sv * v.sv) / (2 * car.b)) { v.reqTick = 0; continue; } // 아직 멀다
       v.zoned = true;
       let eligible = true;
-      if (c.sign === 'stop') { // 정지 표지: 정지선에서 완전히 서서 일정 시간 기다린 뒤에야 요청
+      const sig = this.net.hasSignal(c.node);
+      if (sig) { // 신호등: 녹색이면 요청, 황색이면 편하게 설 수 없을 때만(지나가는 편이 낫다), 적색이면 정지선에서 대기
+        const L = this.signals.light(c.node, tracks[c.src].segId, tick);
+        if (L === 'red' || (L === 'yellow' && (v.sv * v.sv) / (2 * car.b) <= dEnd)) { v.reason = '신호 대기'; v.reqTick = 0; continue; }
+      } else if (c.sign === 'stop') { // 정지 표지: 정지선에서 완전히 서서 일정 시간 기다린 뒤에야 요청
         if (dEnd <= ix.stopLineTol && v.sv < 0.1) { if (v.stopPi !== v.spi) { v.stopPi = v.spi; v.stopTicks = 0; } v.stopTicks++; }
         eligible = v.stopPi === v.spi && v.stopTicks >= Math.round(ix.stopSec * rate);
         if (!eligible) v.reason = '정지 표지';

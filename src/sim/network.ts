@@ -2,7 +2,7 @@ import type { Config } from '../config';
 
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
-export interface NetNode { id: number; x: number; y: number; z: number }
+export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동)
 export type SignKind = 'stop' | 'yield';
 export interface Segment {
   id: number;
@@ -40,7 +40,7 @@ interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 4; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가
+export const NETWORK_FORMAT_VERSION = 5; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -415,6 +415,21 @@ export class Network {
     return { ok: true };
   }
 
+  /** 교차로의 신호등을 켜거나 끈다. 도로 3개 이상이 만나는 곳만 가능. 켜면 그 교차로의 정지·양보 표지는 무시된다 */
+  setSignal(nodeId: number, on: boolean): { ok: true } | { ok: false; error: 'notIntersection' | 'noSuchNode' } {
+    const n = this.nodes.get(nodeId);
+    if (!n) return { ok: false, error: 'noSuchNode' };
+    if (on && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
+    n.signal = on;
+    this.revision++;
+    return { ok: true };
+  }
+
+  /** 신호등이 실제로 작동하는 교차로인가 */
+  hasSignal(nodeId: number): boolean {
+    return !!this.nodes.get(nodeId)?.signal && this.segmentsAt(nodeId).length >= 3;
+  }
+
   signAt(segId: number, nodeId: number): SignKind | null {
     const s = this.segments.get(segId);
     return !s ? null : s.a === nodeId ? s.signA : s.b === nodeId ? s.signB : null;
@@ -422,7 +437,7 @@ export class Network {
 
   private addNode(x: number, y: number): number {
     const id = this.nextNodeId++;
-    this.nodes.set(id, { id, x, y, z: 0 });
+    this.nodes.set(id, { id, x, y, z: 0, signal: false });
     return id;
   }
 
@@ -494,7 +509,7 @@ export class Network {
       formatVersion: NETWORK_FORMAT_VERSION,
       nextNodeId: Math.max(d.nextNodeId ?? 0, maxNode + 1),
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
-      nodes: d.nodes,
+      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true })),
       segments,
       nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
       buildings,

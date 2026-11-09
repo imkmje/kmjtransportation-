@@ -63,7 +63,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 4, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 5, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -297,6 +297,18 @@ await page.waitForTimeout(600);
 const ciText = await page.locator('#st-ci').innerText();
 check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciText) && (await page.locator('#stats').innerText()).includes('완료율'), `CI=${ciText}`);
 
+// 신호등: 큰길과 세로 길이 만나는 교차로를 클릭하면 켜지고, 다시 클릭하면 꺼진다
+const sigCount = () => page.evaluate(() => [...window.__game.editor.network.nodes.values()].filter((n) => window.__game.editor.network.hasSignal(n.id)).length);
+await page.keyboard.press('g');
+await clickWorld(0, 0);
+check('신호등 켜기', (await sigCount()) === 1 && (await page.locator('#msg').innerText()).includes('켰습니다'), await page.locator('#msg').innerText());
+await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 60; while (s.tickCount < t) s.step(); });
+await page.waitForTimeout(300);
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-signal.png') });
+await clickWorld(0, 0);
+check('신호등 끄기', (await sigCount()) === 0, String(await sigCount()));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
 // 구역: 도로 옆을 드래그해서 칠하고, 지우고, 건물이 자라는지 본다
 const zcount = () => page.evaluate(() => window.__game.editor.network.zones.size);
 const [zx, zy] = await freeSpot([[-160, -20], [160, -20], [-160, 20], [160, 20]]);

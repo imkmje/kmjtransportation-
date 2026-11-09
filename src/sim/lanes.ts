@@ -117,7 +117,7 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
           { x: A.x + ux * d1 + nx * off, y: A.y + uy * d1 + ny * off },
         ];
         const cum = polyline(pts);
-        const t: Track = { id: tracks.length, key: `L${s.id}:${fwd ? 1 : 0}:${i}`, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, vbase, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
+        const t: Track = { id: tracks.length, key: `L${s.id}:${fwd ? 1 : 0}:${i}`, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, vbase, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: net.hasSignal(fwd ? s.b : s.a) ? null : fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
         tracks.push(t);
         list.push(t);
         push(outs, t.from, t);
