@@ -8,6 +8,10 @@ const cone = new THREE.ConeGeometry(1, 1, 4);
 const HOME_COLORS = [0xecc9a0, 0xe5a99b, 0xf2dcae, 0xd9bda3, 0xefb98a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const HOME_ROOFS = [0xc9a07a, 0xc3837a, 0xd0b988, 0xb89b82, 0xcf9560].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const SHOP_COLORS = [0x6f9fe0, 0x5b8fd6, 0x8db3e8, 0x4f86d6].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const FACTORY_COLORS = [0xb89a4a, 0xa88a3c, 0xc4a85a, 0x9c8040].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const SCHOOL_COLORS = [0x3fc0b2, 0x2fb5a8, 0x5fd0c4, 0x28a094].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const DARK = new THREE.MeshLambertMaterial({ color: 0x4a4f57 });
+const WHITE = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
 const AWNING = new THREE.MeshLambertMaterial({ color: 0xd4503c });
 const OFFICE_COLORS = [0xe8b93c, 0xdca62e, 0xf0cb62, 0xd4a040].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const gateMat = new THREE.MeshLambertMaterial({ color: 0x9a6fd1 }); // 외부 연결점은 보라색(직장 = 노랑, 상업 = 파랑과 구분)
@@ -32,7 +36,7 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
   };
   const size = (kind: BuildingKind, s: BuildingSize, variant = 0) => ({
     half: config.buildings.footprint[s],
-    h: config.buildings.height[kind === 'office' ? 'office' : kind === 'shop' ? 'shop' : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1), // 자란 건물은 높이가 조금씩 다르다
+    h: config.buildings.height[kind === 'office' ? 'office' : kind === 'shop' || kind === 'factory' || kind === 'school' ? kind : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1), // 자란 건물은 높이가 조금씩 다르다
   });
 
   function rebuild() {
@@ -51,9 +55,21 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
       }
       const { half, h } = size(b.kind, b.size, b.variant);
       const pick = b.id + b.variant;
-      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[pick % HOME_COLORS.length] : b.kind === 'shop' ? SHOP_COLORS[pick % SHOP_COLORS.length] : OFFICE_COLORS[pick % OFFICE_COLORS.length]);
+      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[pick % HOME_COLORS.length] : b.kind === 'shop' ? SHOP_COLORS[pick % SHOP_COLORS.length] : b.kind === 'factory' ? FACTORY_COLORS[pick % FACTORY_COLORS.length] : b.kind === 'school' ? SCHOOL_COLORS[pick % SCHOOL_COLORS.length] : OFFICE_COLORS[pick % OFFICE_COLORS.length]);
       place(body, b.x, b.y, half * 2, h);
       group.add(body);
+      if (b.kind === 'factory') { // 굴뚝 둘(어두운 상자)
+        for (const dx of [-0.45, 0.2]) {
+          const ch = new THREE.Mesh(unitBox, DARK);
+          place(ch, b.x + dx * half, b.y - 0.3 * half, half * 0.35, h * 0.9, h);
+          group.add(ch);
+        }
+      }
+      if (b.kind === 'school') { // 흰 시계탑
+        const tw = new THREE.Mesh(unitBox, WHITE);
+        place(tw, b.x, b.y, half * 0.6, h * 0.8, h);
+        group.add(tw);
+      }
       if (b.kind === 'shop') { // 붉은 차양(앞쪽으로 튀어나온 얇은 판)
         const aw = new THREE.Mesh(unitBox, AWNING);
         place(aw, b.x, b.y + half + 0.8, half * 2.1, 0.5, h * 0.55);

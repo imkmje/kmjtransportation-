@@ -178,7 +178,7 @@ describe('저장·불러오기', () => {
   });
   it('잘못된 파일은 쉬운 메시지로 거부', () => {
     expect(() => Network.parse(null, config)).toThrow('도로망 파일이 아닙니다');
-    expect(() => Network.parse({ formatVersion: 8, nodes: [], segments: [] }, config)).toThrow('더 새로운');
+    expect(() => Network.parse({ formatVersion: 10, nodes: [], segments: [] }, config)).toThrow('더 새로운');
     expect(() => Network.parse({ formatVersion: 1, nodes: [], segments: [{ id: 1, a: 1, b: 2, kind: 'road2' }] }, config)).toThrow('손상');
     expect(() => Network.parse({ formatVersion: 1, nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 9, y: 0, z: 0 }], segments: [{ id: 1, a: 1, b: 2, kind: 'ufo' }] }, config)).toThrow('손상');
   });
@@ -287,7 +287,7 @@ describe('정지·양보 표지와 저장 형식 2', () => {
       nodes: [{ id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 100, y: 0, z: 0 }],
       segments: [{ id: 1, a: 1, b: 2, kind: 'road2', structure: 'ground', playerSpeedKmh: null }] };
     const d = Network.parse(v1, config);
-    expect(d.formatVersion).toBe(7);
+    expect(d.formatVersion).toBe(9);
     expect(d.segments[0]).toMatchObject({ signA: null, signB: null, locked: false });
     expect(d.zones).toEqual([]);
     expect(d.buildings).toEqual([]);
