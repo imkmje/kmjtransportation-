@@ -127,6 +127,8 @@ export function createScene(canvasParent: HTMLElement) {
       hemi.intensity = rain ? 1.0 : 1.6;
       sun.intensity = rain ? 0.5 : 1.2;
     },
+    /** 렌더러 통계(그리기 호출 수·삼각형 수). 성능 점검용 */
+    info: renderer.info,
     /** 카메라 기울기(도): 0 = 바로 위에서 내려다봄, 80 = 거의 수평. 화면을 도는 각도와 거리는 그대로 */
     getTilt(): number { return THREE.MathUtils.radToDeg(controls.getPolarAngle()); },
     /** 카메라를 시뮬 좌표 p 위쪽으로 옮긴다 */

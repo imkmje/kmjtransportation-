@@ -49,7 +49,7 @@ const hud = createHud(document.getElementById('hud')!, config.speedSteps, setSpe
 // 미연결 건물 수는 계산이 조금 들어서 도로망이 바뀔 때만 다시 센다
 let uncKey = -1, uncCount = 0;
 const stats = createStats(document.getElementById('stats')!, sim, editor.network, () => {
-  if (uncKey !== editor.network.revision) { uncKey = editor.network.revision; uncCount = sim.demand.unconnected().length; }
+  if (uncKey !== editor.network.revision + editor.network.buildingsRevision * 1e6) { uncKey = editor.network.revision + editor.network.buildingsRevision * 1e6; uncCount = sim.demand.unconnected().length; }
   return uncCount;
 }, document.getElementById('rci')!, document.getElementById('topci')!, (id) => pickSegment(id, true));
 // 도로 정보 창: 도로를 클릭하거나 병목 목록을 누르면 열린다
@@ -168,4 +168,4 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) autos
 loadSlot(0).then((t) => { if (t) tools.say('자동 저장된 게임이 있습니다. 위에서 "자동 저장"을 고르고 불러오기를 누르세요'); }).catch(() => {});
 
 // 스모크 테스트와 디버깅용
-(window as unknown as { __game: unknown }).__game = { sim, editor, heat, scene: view.scene, focus: view.focus, getTilt: view.getTilt, getSpeed: () => speed, project: view.project };
+(window as unknown as { __game: unknown }).__game = { sim, editor, heat, scene: view.scene, focus: view.focus, getTilt: view.getTilt, renderInfo: () => ({ calls: view.info.render.calls, triangles: view.info.render.triangles }), getSpeed: () => speed, project: view.project };
