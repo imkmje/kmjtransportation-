@@ -9,7 +9,7 @@ import type { LostReason, Traffic, TripMeta, Vehicle } from './traffic';
 export interface Planned {
   time: number;
   seq: number;
-  kind: 'commute' | 'return';
+  kind: 'commute' | 'return' | 'errand' | 'errandBack'; // errand = 점심·여가·쇼핑 외출, errandBack = 외출에서 돌아옴(귀환 풀을 쓰지 않는다)
   from: number; // 출발 건물 ID
   to: number; // 도착 건물 ID
   ghost: { x: number; y: number } | null; // 출발 건물이 지워졌을 때 마지막 위치(귀환 이동만)
@@ -30,6 +30,8 @@ export class Demand {
   /** 오늘 일자리가 모자라 출근하지 못하는 인원(마지막 계획 기준) */
   unemployed = 0;
   private departed = new Map<number, number>(); // 주거 → 오늘 출근을 시작한 인원
+  private quota = new Map<number, number>(); // 건물 → 오늘 외출할 인원(하루 계획 때 정한 값)
+  private errandDeparted = new Map<number, number>(); // 건물 → 오늘 외출을 시작한 인원
   private committed = new Map<number, number>(); // 직장 → 오늘 출근해 오는(오는 중 포함) 인원
   private known = new Map<number, { x: number; y: number; kind: BuildingKind }>(); // 지워진 건물의 마지막 위치를 알기 위해
   private seq = 0;
@@ -55,6 +57,7 @@ export class Demand {
       this.planDay = day;
       this.departed.clear();
       this.committed.clear();
+      this.quota.clear(); this.errandDeparted.clear();
       this.sync(now);
       this.replan(now, day);
     } else if (this.rev !== this.net.buildingsRevision) { // 건물이 추가·삭제되면 남은 출근 계획을 다시 짠다
@@ -109,10 +112,12 @@ export class Demand {
     return [...this.net.buildings.values()].filter((b) => b.kind === kind);
   }
 
-  /** 오늘 아직 출발하지 않은 직장인의 출근을 (다시) 계획한다. 평일만 */
+  /** 오늘 아직 출발하지 않은 직장인의 출근과 외출을 (다시) 계획한다. 출근은 평일만, 외출은 매일 */
   private replan(now: number, day: number): void {
-    this.pending = this.pending.filter((t) => t.kind === 'return');
+    // 집에서 나가는 외출은 새로 계획하고, 직장에서 나가는 점심 외출·귀환 이동은 그대로 둔다
+    this.pending = this.pending.filter((t) => t.kind === 'return' || t.kind === 'errandBack' || (t.kind === 'errand' && this.net.buildings.get(t.from)?.kind === 'office'));
     this.unemployed = 0;
+    this.planErrands(now, day);
     if (this.isWeekend(day)) return;
     const offices = this.ofKind('office');
     const remaining = new Map(offices.map((o) => [o.id, Math.max(0, this.cap(o.id) - (this.committed.get(o.id) ?? 0))]));
@@ -141,6 +146,28 @@ export class Demand {
     }
   }
 
+  /** 상업 건물이 있으면 주거 건물마다 오늘 몫(quota)만큼 외출을 계획한다. 몫은 하루 계획 때 한 번만 정해서(재계획해도 늘지 않게) 거주자 수 × 확률을 반올림한다 */
+  private planErrands(now: number, day: number): void {
+    const shops = this.ofKind('shop');
+    if (!shops.length) return;
+    const e = this.cfg.demand.errand, ws = this.cfg.demand.workerShare, weekend = this.isWeekend(day);
+    const cands = shops.map((b) => ({ id: b.id, x: b.x, y: b.y, cap: this.cap(b.id) }));
+    for (const h of this.ofKind('home')) {
+      const workers = Math.round(this.cap(h.id) * ws), others = this.cap(h.id) - workers;
+      if (!this.quota.has(h.id)) this.quota.set(h.id, Math.round(others * (weekend ? e.otherWeekend : e.otherWeekday)) + Math.round(workers * (weekend ? e.workerLeisureWeekend : e.workerLeisureWeekday)));
+      const n = this.quota.get(h.id)! - (this.errandDeparted.get(h.id) ?? 0);
+      // 평일 직장인의 여가는 저녁에, 나머지는 낮 시간대에 나가는 것으로 한다(한 건물 안에서 섞어 계획)
+      const eve = weekend ? 0 : Math.min(n, Math.round(workers * e.workerLeisureWeekday));
+      for (let i = 0; i < n; i++) {
+        const to = this.choose(h, cands);
+        if (to === null) break;
+        const time = this.sampleTime(i < eve ? e.eveningWeights : e.dayWeights, now, day);
+        if (time === null) continue;
+        this.insert({ time, kind: 'errand', from: h.id, to, ghost: null });
+      }
+    }
+  }
+
   // ---------------- 건물이 바뀌었을 때(삭제 처리 규칙, rules.md 7항) ----------------
   private sync(now: number): void {
     this.rev = this.net.buildingsRevision;
@@ -151,13 +178,14 @@ export class Demand {
     // 대기 중인 귀환 이동
     let touched = false;
     for (const t of [...this.pending]) {
-      if (t.kind !== 'return') continue;
-      if (!alive.has(t.to)) { // 돌아갈 주거가 지워졌다: 같은 유형의 다른 건물로 재배정, 없으면 취소(미완료)
-        const nh = this.pickAlive('home', this.known.get(t.from) ?? { x: 0, y: 0 });
-        this.leavePool(t.from, t.to);
+      if (t.kind !== 'return' && t.kind !== 'errandBack') continue;
+      const pooled = t.kind === 'return';
+      if (!alive.has(t.to)) { // 돌아갈 건물이 지워졌다: 같은 유형의 다른 건물로 재배정, 없으면 취소(미완료)
+        const nh = this.pickAlive(this.known.get(t.to)?.kind ?? 'home', this.known.get(t.from) ?? { x: 0, y: 0 });
+        if (pooled) this.leavePool(t.from, t.to);
         this.pending.splice(this.pending.indexOf(t), 1);
         if (nh === null) { this.metrics.generated(); this.metrics.incomplete('removed'); continue; }
-        this.enterPool(t.from, nh);
+        if (pooled) this.enterPool(t.from, nh);
         t.to = nh;
         this.pending.push(t);
         touched = true;
@@ -175,7 +203,7 @@ export class Demand {
     for (const v of [...this.traffic.vehicles.values()]) {
       const m = v.meta;
       if (!m || m.kind === 'test' || alive.has(m.to)) continue;
-      const kind: BuildingKind = m.kind === 'commute' ? 'office' : 'home';
+      const kind: BuildingKind = this.known.get(m.to)?.kind ?? (m.kind === 'commute' ? 'office' : m.kind === 'errand' ? 'shop' : 'home');
       const nb = this.pickAlive(kind, this.known.get(m.from) ?? { x: v.x, y: v.y });
       const to = nb === null ? null : this.net.accessOf(nb);
       if (nb === null || !to || !this.traffic.reroute(v, to)) { this.traffic.dropVehicle(v, 'removed'); continue; }
@@ -201,11 +229,12 @@ export class Demand {
     if (t.kind === 'commute') {
       this.departed.set(t.from, (this.departed.get(t.from) ?? 0) + 1);
       this.committed.set(t.to, (this.committed.get(t.to) ?? 0) + 1);
-    } else this.leavePool(t.from, t.to);
+    } else if (t.kind === 'errand') this.errandDeparted.set(t.from, (this.errandDeparted.get(t.from) ?? 0) + 1);
+    else if (t.kind === 'return') this.leavePool(t.from, t.to);
     const fromPos = fromB ? this.net.accessOf(t.from) : t.ghost ? this.net.projectOnRoad(t.ghost, this.cfg.buildings.connectRadius) : null;
     const toPos = toB ? this.net.accessOf(t.to) : null;
     if (!fromPos || !toPos) { this.metrics.incomplete('noRoute'); return; } // 미연결 건물도 수요는 발생하고 미완료로 집계된다
-    this.traffic.enqueue({ kind: t.kind, from: t.from, to: t.to, born: tick, mode: 'car', ownerId: 0 }, fromPos, toPos);
+    this.traffic.enqueue({ kind: t.kind === 'errandBack' ? 'return' : t.kind, from: t.from, to: t.to, born: tick, mode: 'car', ownerId: 0 }, fromPos, toPos);
   }
 
   /** 차량이 도착했을 때(Traffic이 호출) */
@@ -213,8 +242,20 @@ export class Demand {
     const m = v.meta;
     if (!m || m.kind === 'test') return;
     this.metrics.arrived(m, tick);
-    if (m.kind !== 'commute') return; // 1.x: 도착하면 차량은 사라지고, 귀환할 때 새 차량이 생긴다
     const now = this.clockAbs(tick);
+    if (m.kind === 'errand') { // 상점에 머문 뒤 출발지로 돌아간다(출발지가 지워졌으면 같은 유형의 다른 건물로)
+      const e = this.cfg.demand.errand;
+      this.insert({ time: now + e.stayMinSec + this.rng.next() * (e.stayMaxSec - e.stayMinSec), kind: 'errandBack', from: m.to, to: m.from, ghost: null });
+      return;
+    }
+    if (m.kind !== 'commute') return; // 1.x: 도착하면 차량은 사라지고, 귀환할 때 새 차량이 생긴다
+    // 점심: 평일 직장인 일부가 근처 상점에 갔다가 직장으로 돌아온다(귀환 풀은 그대로 — 퇴근은 그 직장에서 한다)
+    const shops = this.ofKind('shop');
+    if (shops.length && this.rng.next() < this.cfg.demand.errand.lunchProb) {
+      const to = this.choose(this.net.buildings.get(m.to) ?? { x: v.x, y: v.y }, shops.map((b) => ({ id: b.id, x: b.x, y: b.y, cap: this.cap(b.id) })));
+      const t = to === null ? null : this.sampleTime(this.cfg.demand.errand.lunchWeights, now, this.dayOf(now));
+      if (to !== null && t !== null) this.insert({ time: t, kind: 'errand', from: m.to, to, ghost: null });
+    }
     let home = m.from;
     if (!this.net.buildings.has(home)) { // 도착하는 사이 집이 지워졌다
       const nh = this.pickAlive('home', this.known.get(m.to) ?? { x: v.x, y: v.y });
@@ -267,7 +308,7 @@ export class Demand {
   }
 
   reset(): void {
-    this.pending = []; this.pool.clear(); this.departed.clear(); this.committed.clear(); this.known.clear();
+    this.pending = []; this.pool.clear(); this.quota.clear(); this.errandDeparted.clear(); this.departed.clear(); this.committed.clear(); this.known.clear();
     this.planDay = 0; this.unemployed = 0; this.seq = 0; this.rev = -1;
   }
 
@@ -275,7 +316,7 @@ export class Demand {
   getState() {
     return {
       pending: this.pending, pool: [...this.pool].map(([o, m]) => [o, [...m]] as [number, [number, number][]]),
-      planDay: this.planDay, unemployed: this.unemployed, departed: [...this.departed], committed: [...this.committed],
+      planDay: this.planDay, unemployed: this.unemployed, departed: [...this.departed], quota: [...this.quota], errandDeparted: [...this.errandDeparted], committed: [...this.committed],
       known: [...this.known], seq: this.seq, // rev(건물 변경 횟수)는 게임 상태가 아니라 이 실행 안에서만 의미 있는 카운터라 저장하지 않는다
     };
   }
@@ -284,6 +325,7 @@ export class Demand {
     this.pending = s.pending.map((p) => ({ ...p, ghost: p.ghost ? { ...p.ghost } : null }));
     this.pool = new Map(s.pool.map(([o, m]) => [o, new Map(m)]));
     this.planDay = s.planDay; this.unemployed = s.unemployed;
+    this.quota = new Map((s as { quota?: [number, number][] }).quota ?? []); this.errandDeparted = new Map((s as { errandDeparted?: [number, number][] }).errandDeparted ?? []);
     this.departed = new Map(s.departed); this.committed = new Map(s.committed);
     this.known = new Map(s.known.map(([k, v]) => [k, { ...v }]));
     this.seq = s.seq;

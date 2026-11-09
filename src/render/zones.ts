@@ -3,7 +3,7 @@ import { config } from '../config';
 import type { Network, ZoneType } from '../sim/network';
 import { toThree } from './coords';
 
-const COLORS: Record<ZoneType | 'erase', number> = { home: 0x4fb866, office: 0x4f86d6, erase: 0xe0443c };
+const COLORS: Record<ZoneType | 'erase', number> = { home: 0x4fb866, office: 0x4f86d6, shop: 0xe8b93c, erase: 0xe0443c };
 const mat = (c: number, o: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide });
 
 /** 구역 칸을 지면 위에 색 칸으로 그린다(주거 = 초록, 직장 = 파랑). 드래그 중인 사각형은 따로 보여 준다 */
@@ -19,7 +19,7 @@ export function createZoneLayer(scene: THREE.Scene, net: Network) {
 
   function rebuild() {
     group.clear();
-    for (const type of ['home', 'office'] as const) {
+    for (const type of ['home', 'office', 'shop'] as const) {
       const cells = net.zoneList().filter((z) => z.type === type);
       if (!cells.length) continue;
       const pos = new Float32Array(cells.length * 18);

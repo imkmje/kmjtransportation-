@@ -44,6 +44,12 @@ export class Editor {
     return this.network.removeBuilding(id);
   }
 
+  upgrade(segId: number): ReturnType<Network['upgradeRoad']> {
+    const r = this.network.upgradeRoad(segId);
+    if (r.ok) this.commit();
+    return r;
+  }
+
   setSignal(nodeId: number, on: boolean, mode: SignalMode = 'fixed', green = 0): ReturnType<Network['setSignal']> {
     const r = this.network.setSignal(nodeId, on, mode, green);
     if (r.ok) this.commit();

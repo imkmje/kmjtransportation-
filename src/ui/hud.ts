@@ -8,16 +8,16 @@ export function createHud(
   onSpeed: (s: number) => void,
 ) {
   root.innerHTML = `
-    <div id="clock"></div>
-    <div id="version">v${__APP_VERSION__}${__APP_VERSION__.startsWith('0.') ? ' (개발 중)' : ''}</div>
-    <div id="note"></div>
-    <div id="speeds"></div>`;
+    <div id="tb-left"><div id="rci"></div><div id="topci"></div></div>
+    <div id="tb-center"><div id="clock"></div><div id="note"></div></div>
+    <div id="tb-right"><div id="version">v${__APP_VERSION__}${__APP_VERSION__.startsWith('0.') ? ' (개발 중)' : ''}</div><div id="speeds"></div><button id="menubtn" title="저장·불러오기·새 도시·도움말">☰ 메뉴</button></div>`;
   const clockEl = root.querySelector<HTMLElement>('#clock')!;
   const noteEl = root.querySelector<HTMLElement>('#note')!;
   const speedsEl = root.querySelector<HTMLElement>('#speeds')!;
   const buttons = steps.map((s) => {
     const b = document.createElement('button');
-    b.textContent = s === 0 ? '일시정지' : `${s}×`;
+    b.textContent = s === 0 ? '⏸' : `${s}×`;
+    b.title = s === 0 ? '일시정지 (Space)' : `${s}배속`;
     b.dataset.speed = String(s);
     b.onclick = () => onSpeed(s);
     speedsEl.appendChild(b);

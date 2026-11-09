@@ -49,7 +49,7 @@ export const config = {
   buildings: {
     footprint: { small: 4, medium: 7, large: 11 },
     capacity: { small: 10, medium: 30, large: 100 }, // 주거는 거주 인원, 직장은 일자리 수
-    height: { home: { small: 3, medium: 5, large: 9 }, office: { small: 6, medium: 12, large: 22 } }, // 화면 표시용
+    height: { home: { small: 3, medium: 5, large: 9 }, office: { small: 6, medium: 12, large: 22 }, shop: { small: 3, medium: 4, large: 6 } }, // 화면 표시용
     connectRadius: 50, // 가장 가까운 도로 구간에 자동 연결되는 반경(m)
     gap: 2, // 건물 사이 최소 간격(m)
     worldHalf: 1000,
@@ -61,12 +61,16 @@ export const config = {
   // 외부 연결: 지도 가장자리에서 들어오는 시작 도로. 직장인 수의 share만큼 외부 사람이 들어와 일하고(남은 일자리 안에서), 시민의 outShare는 외부로 출근한다
   external: { x: 0, y: -1000, roadEndY: -400, share: 0.15, outShare: 0.1 },
   // 건물 성장: stepSec(시뮬 초)마다 수요 막대만큼 자란다. base: 도시가 작을 때의 기본 수요(이주·사업 의욕)
-  growth: { stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3, sizeWeights: { small: 0.4, medium: 0.45, large: 0.15 } },
+  growth: { shopPerResident: 0.5, stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3, sizeWeights: { small: 0.4, medium: 0.45, large: 0.15 } },
   // 수요 (rules.md 8항). 시간대는 시계 시각, 가중치 피크 = 100
   demand: {
     workerShare: 0.6, // 거주 인원 중 직장인 비율(1.0.0은 직장인의 출근·퇴근만)
     commuteWeights: [[6, 7, 30], [7, 8, 100], [8, 9, 60], [9, 10, 10]] as [number, number, number][],
     returnWeights: [[17, 18, 70], [18, 19, 100], [19, 20, 40], [20, 21, 10]] as [number, number, number][],
+    // 출퇴근 말고 다른 이동(rules.md 8항): 직장인은 평일 점심(30%)·저녁 여가(30%), 주말 여가(70%). 그 밖의 거주자(40%)는 평일 80%·주말 90%가 상업 건물로 외출한다.
+    // 학교가 생기기 전까지는 학생도 "그 밖의 거주자"로 센다. 확률은 거주자 수에 곱해 반올림한 값을 하루 몫(quota)으로 쓴다
+    errand: { lunchProb: 0.2, workerLeisureWeekday: 0.2, workerLeisureWeekend: 0.4, otherWeekday: 0.5, otherWeekend: 0.6, stayMinSec: 1800, stayMaxSec: 9000 as number,
+      dayWeights: [[9, 11, 30], [11, 14, 50], [14, 18, 50], [18, 21, 60]] as [number, number, number][], eveningWeights: [[19, 21, 100]] as [number, number, number][], lunchWeights: [[11.5, 13.5, 100]] as [number, number, number][] },
     lateStaySec: 3600, // 귀환 시간대가 끝난 뒤 도착한 인원은 시계 1시간 체류 후 귀환
     lambdaDiv: 4, // λ = 맵 대각선 ÷ 이 값
     worldSize: 2000,

@@ -7,7 +7,7 @@ import { findRoute, findRouteFromTrack, RoadPos, Route } from './route';
 
 /** 이동 하나의 꼬리표. 수요가 만든 이동은 어느 건물에서 어느 건물로 가는지 알아야 도착·분실을 처리할 수 있다 */
 export interface TripMeta {
-  kind: 'commute' | 'return' | 'test'; // 출근 / 퇴근 / 테스트 도구(통계에서 제외)
+  kind: 'commute' | 'return' | 'errand' | 'test'; // 출근 / 귀가·복귀 / 점심·여가·쇼핑 외출 / 테스트 도구(통계에서 제외)
   from: number; // 출발 건물 ID (test는 0)
   to: number; // 도착 건물 ID
   born: number; // 이동이 발생한 tick(출발 대기 시간 포함해 통행시간을 잰다)

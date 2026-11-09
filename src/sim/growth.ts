@@ -4,8 +4,8 @@ import type { BuildingSize, Network, ZoneType } from './network';
 import type { Rng } from './random';
 
 /** 수요 막대(0~100). 막대가 높을수록 그 종류 구역에 건물이 빨리 자란다 */
-export interface DemandBars { home: number; office: number }
-const TYPES: ZoneType[] = ['home', 'office'];
+export interface DemandBars { home: number; office: number; shop: number }
+const TYPES: ZoneType[] = ['home', 'office', 'shop'];
 const SIZES: BuildingSize[] = ['large', 'medium', 'small']; // 큰 것부터 시도하고 안 들어가면 작은 것으로
 
 /**
@@ -13,7 +13,7 @@ const SIZES: BuildingSize[] = ['large', 'medium', 'small']; // 큰 것부터 시
  * 수요 = 기본값 + 일자리와 직장인의 불균형 − 교통 정체 감점. 세금·건물 레벨업은 없다.
  */
 export class Growth {
-  private acc: Record<ZoneType, number> = { home: 0, office: 0 };
+  private acc: Record<ZoneType, number> = { home: 0, office: 0, shop: 0 };
   private readonly stepTicks: number;
 
   constructor(private cfg: Config, private net: Network, private rng: Rng, private metrics: Metrics) {
@@ -22,16 +22,19 @@ export class Growth {
 
   bars(): DemandBars {
     const g = this.cfg.growth;
-    let workers = 0, jobs = 0;
+    let workers = 0, jobs = 0, residents = 0, shops = 0;
     for (const b of this.net.buildings.values()) {
       const c = this.cfg.buildings.capacity[b.size];
-      if (b.kind === 'home') workers += c * this.cfg.demand.workerShare;
+      if (b.kind === 'home') { workers += c * this.cfg.demand.workerShare; residents += c; }
       else if (b.kind === 'office') jobs += c;
+      else if (b.kind === 'shop') shops += c;
     }
     const scale = g.scaleBase + g.scaleDiv * (workers + jobs);
     const pen = 1 - g.trafficPenalty * Math.min(1, (this.metrics.rollingCI() ?? 0) / g.trafficFull);
     const bar = (diff: number) => Math.max(0, Math.min(100, g.base + (100 * diff) / scale)) * pen;
-    return { home: bar(jobs - workers), office: bar(workers - jobs) };
+    // 상업: 거주자 수에 비례하는 방문 수요 대비 상점 수용량. 주민이 없으면 지을 이유가 없어 기본값 없이 0
+    const shopBar = residents > 0 ? bar(g.shopPerResident * residents - shops) : 0;
+    return { home: bar(jobs - workers), office: bar(workers - jobs), shop: shopBar };
   }
 
   step(tick: number): void {
@@ -59,7 +62,7 @@ export class Growth {
     return false;
   }
 
-  reset(): void { this.acc = { home: 0, office: 0 }; }
+  reset(): void { this.acc = { home: 0, office: 0, shop: 0 }; }
   getState() { return { acc: { ...this.acc } }; }
-  setState(s: ReturnType<Growth['getState']> | undefined): void { this.acc = s ? { ...s.acc } : { home: 0, office: 0 }; }
+  setState(s: ReturnType<Growth['getState']> | undefined): void { this.acc = { home: 0, office: 0, shop: 0, ...(s?.acc ?? {}) }; }
 }
