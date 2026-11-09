@@ -141,7 +141,7 @@ export function createTools(d: Deps) {
         <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
         <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
         <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-        <label title="단축키 F: 사고(차량이 갑자기 서서 차선을 막음)와 비(속도 저하, 사고 증가)"><input type="checkbox" id="events" checked /> 사고·날씨 (F)</label>
+        <label title="단축키 F: 사고(차량이 갑자기 서서 차선을 막음)와 비(속도 저하, 사고 증가)"><input type="checkbox" id="events" /> 사고·날씨 (F)</label>
         <button id="helpbtn" title="단축키 ?">단축키 도움말 [?]</button>
       </div>
       <div class="sub" id="sub-tools" data-cat="tools" hidden>

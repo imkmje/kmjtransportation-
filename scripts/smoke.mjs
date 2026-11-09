@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.6.0') && titleText.includes('업데이트 내역') && titleText.includes('곡선'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.6.1') && titleText.includes('업데이트 내역') && titleText.includes('사고·날씨'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -47,9 +47,10 @@ check('시작하기를 누르면 화면이 닫히고 시간이 흐름', !(await 
 await page.click('#about');
 check('업데이트 내역 버튼으로 다시 열면 멈춤', (await page.locator('#title').isVisible()) && (await page.evaluate(() => window.__game.getSpeed())) === 0);
 await page.click('#t-start');
-check('사고·날씨 이벤트는 기본으로 켜져 있음', await page.evaluate(() => window.__game.sim.traffic.eventsOn));
+check('사고·날씨 이벤트는 기본으로 꺼져 있음', !(await page.evaluate(() => window.__game.sim.traffic.eventsOn)));
 await page.keyboard.press('f');
-check('F 키로 사고·날씨를 끔', !(await page.evaluate(() => window.__game.sim.traffic.eventsOn)) && (await page.locator('#msg').innerText()).includes('껐습니다'), await page.locator('#msg').innerText());
+check('F 키로 사고·날씨를 켬', (await page.evaluate(() => window.__game.sim.traffic.eventsOn)) && (await page.locator('#msg').innerText()).includes('켰습니다'), await page.locator('#msg').innerText());
+await page.keyboard.press('f'); // 이후 검사는 꺼진 상태에서
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-start.png') });
 // ---- 화면 구성(시티즈 스카이라인식): 위쪽 바, 아래쪽 분류 버튼, 위로 열리는 도구 상자 ----
 check('위쪽 바: 시계·배속·메뉴 버튼이 있음', (await page.locator('#hud #clock').isVisible()) && (await page.locator('#hud button[data-speed]').count()) === 4 && (await page.locator('#menubtn').isVisible()));
