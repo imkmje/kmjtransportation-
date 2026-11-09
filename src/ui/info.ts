@@ -37,10 +37,9 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
   const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   // 차선별 방향: 교차로로 들어오는 끝마다, 차선(오른쪽부터)에 좌회전(←)·직진(↑)·우회전(→) 허용 여부를 켜고 끈다
   function laneHtml(s: Segment): string {
-    const lanes = cfg.roads[s.kind].lanesPerDir;
     const ends = [s.a, s.b].filter((n) => net.segmentsAt(n).length >= 3 && !(s.oneWay === 'ab' && n === s.a) && !(s.oneWay === 'ba' && n === s.b));
     return ends.map((n) => {
-      const cur = net.laneDirsAt(s.id, n), node = net.nodes.get(n)!;
+      const lanes = net.lanesIncoming(s.id, n), cur = net.laneDirsAt(s.id, n), node = net.nodes.get(n)!;
       const rows = Array.from({ length: lanes }, (_, i) => { const m = cur[i] || 7; return `<div class="ln"><span>${i + 1}차선${i === 0 ? '(오른쪽)' : i === lanes - 1 && lanes > 1 ? '(왼쪽)' : ''}</span>${[[1, '←', '좌'], [2, '↑', '직'], [4, '→', '우']].map(([bit, ar, nm]) => `<button data-ld="${n}:${i}:${bit}" class="${m & (bit as number) ? 'on' : ''}" title="${nm}">${ar}</button>`).join('')}</div>`; }).join('');
       return `<div class="sub-h">차선 방향 · 끝 (${Math.round(node.x)}, ${Math.round(node.y)})</div>${rows}<div class="two"><button class="wide" data-ld-auto="${n}">자동 배정</button><button class="wide" data-ld-reset="${n}">모두 허용</button></div>`;
     }).join('');
@@ -105,18 +104,19 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     const down = root.querySelector<HTMLElement>('#in-down');
     if (down && sel?.kind === 'seg') { const id = sel.id; down.onclick = () => onUpgrade(id, 'down'); }
     if (sel?.kind === 'seg') {
-      const id = sel.id, seg = net.segments.get(id)!, lanes = cfg.roads[seg.kind].lanesPerDir;
+      const id = sel.id;
       const nameOk = root.querySelector<HTMLElement>('#in-name-ok'), nameIn = root.querySelector<HTMLInputElement>('#in-name');
       if (nameOk && nameIn) nameOk.onclick = () => { const n = editor.setName(id, nameIn.value); say(nameIn.value.trim() ? `이름을 붙였습니다 (${n}구간)` : `이름을 지웠습니다 (${n}구간)`); };
       root.querySelectorAll<HTMLElement>('[data-ld]').forEach((b) => (b.onclick = () => {
         const [n, i, bit] = b.dataset.ld!.split(':').map(Number);
-        const cur = net.laneDirsAt(id, n), m = Array.from({ length: lanes }, (_, k) => cur[k] || 7);
+        const lanes = net.lanesIncoming(id, n), cur = net.laneDirsAt(id, n), m = Array.from({ length: lanes }, (_, k) => cur[k] || 7);
         m[i] ^= bit;
         if (m[i] === 0) { say('차선에는 방향이 하나 이상 있어야 합니다'); return; }
         editor.setLaneDirs(id, n, m.every((x) => x === 7) ? [] : m);
       }));
       root.querySelectorAll<HTMLElement>('[data-ld-reset]').forEach((b) => (b.onclick = () => { editor.setLaneDirs(id, Number(b.dataset.ldReset), []); }));
       root.querySelectorAll<HTMLElement>('[data-ld-auto]').forEach((b) => (b.onclick = () => {
+        const lanes = net.lanesIncoming(id, Number(b.dataset.ldAuto));
         // 오른쪽 차선 = 직진+우회전, 가운데 = 직진, 왼쪽 차선 = 좌회전+직진
         const auto = lanes === 1 ? [] : lanes === 2 ? [6, 3] : [6, ...Array(lanes - 2).fill(2), 3];
         editor.setLaneDirs(id, Number(b.dataset.ldAuto), auto);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { config } from '../config';
-import type { Network, Pt, RoadKind } from '../sim/network';
+import { roadSpan, type Network, type Pt, type RoadKind } from '../sim/network';
 import { toThree } from './coords';
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
@@ -16,7 +16,7 @@ const goodMat = new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true
 const markMat = new THREE.MeshBasicMaterial({ color: 0x2f6fe0, transparent: true, opacity: 0.8, depthWrite: false });
 const badMat = new THREE.MeshBasicMaterial({ color: 0xe0443c, transparent: true, opacity: 0.6, depthWrite: false });
 
-const roadWidth = (kind: RoadKind, oneWay = false) => config.roads[kind].lanesPerDir * (oneWay ? 1 : 2) * config.roads[kind].laneWidth; // 일방통행은 한 방향 차선 폭만
+const roadWidth = (kind: RoadKind, oneWay = false) => roadSpan(config.roads[kind], oneWay).width; // 비대칭 도로는 두 방향 차선 수의 합, 일방통행은 한 방향 차선 폭만
 const walkMat = new THREE.MeshLambertMaterial({ color: 0xb9bdc4 });
 const whiteLine = new THREE.MeshBasicMaterial({ color: 0xf4f4f0 });
 const yellowLine = new THREE.MeshBasicMaterial({ color: 0xe8b93c });
@@ -104,21 +104,21 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
       const len = Math.hypot(b.x - a.x, b.y - a.y), ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, ry = Math.atan2(b.y - a.y, b.x - a.x);
-      const r = config.roads[s.kind], w = r.laneWidth, k = r.lanesPerDir, width = roadWidth(s.kind, !!s.oneWay);
+      const r = config.roads[s.kind], w = r.laneWidth, sp = roadSpan(r, !!s.oneWay), width = sp.width;
       // 한 줄(선·띠): 구간 안에서 거리 t0~t1, 옆으로 off만큼 떨어진 곳(왼쪽 +). z는 바닥 높이
       const strip = (list: Inst[], t0: number, t1: number, off: number, wd: number, h: number, z0: number) => {
         if (t1 - t0 < 0.5) return;
         const t = (t0 + t1) / 2, p = toThree(a.x + ux * t - uy * off, a.y + uy * t + ux * off, z0 + h / 2);
         list.push({ x: p.x, y: p.y, z: p.z, sx: t1 - t0, sy: h, sz: wd, ry });
       };
-      strip(bodies, 0, len, 0, width, 0.2, 0); // 아스팔트
+      strip(bodies, 0, len, sp.shift, width, 0.2, 0); // 아스팔트(비대칭 도로는 중앙선에서 한쪽으로 치우친다)
       const t0 = Math.min(radius.get(s.a)!, len / 2), t1 = Math.max(len - radius.get(s.b)!, len / 2); // 교차로 판 사이 구간
-      const half = width / 2;
-      strip(walks, t0, t1, half + 1, 2, 0.32, 0); strip(walks, t0, t1, -(half + 1), 2, 0.32, 0); // 인도(양쪽)
-      strip(whites, t0, t1, half - 0.25, 0.18, 0.02, 0.2); strip(whites, t0, t1, -(half - 0.25), 0.18, 0.02, 0.2); // 가장자리 실선
+      strip(walks, t0, t1, sp.left + 1, 2, 0.32, 0); strip(walks, t0, t1, -(sp.right + 1), 2, 0.32, 0); // 인도(양쪽)
+      strip(whites, t0, t1, sp.left - 0.25, 0.18, 0.02, 0.2); strip(whites, t0, t1, -(sp.right - 0.25), 0.18, 0.02, 0.2); // 가장자리 실선
       if (!s.oneWay) { strip(yellows, t0, t1, 0.18, 0.14, 0.02, 0.2); strip(yellows, t0, t1, -0.18, 0.14, 0.02, 0.2); } // 중앙 이중 황색선
       // 차선 구분선(흰 점선): 같은 방향 차선 사이마다. 일방통행은 가운데를 기준으로 좌우에 k-1개
-      const dividers = s.oneWay ? Array.from({ length: k - 1 }, (_, j) => (j + 1 - k / 2) * w) : Array.from({ length: k - 1 }, (_, j) => [(j + 1) * w, -(j + 1) * w]).flat();
+      const kd = Math.max(r.lanesFwd, r.lanesBack);
+      const dividers = s.oneWay ? Array.from({ length: kd - 1 }, (_, j) => (j + 1 - kd / 2) * w) : [...Array.from({ length: r.lanesFwd - 1 }, (_, j) => -(j + 1) * w), ...Array.from({ length: r.lanesBack - 1 }, (_, j) => (j + 1) * w)];
       for (const off of dividers) for (let t = t0 + 1; t + 3 <= t1; t += 8) strip(whites, t, t + 3, off, 0.15, 0.02, 0.2);
     }
     for (const [id, rr] of radius) {

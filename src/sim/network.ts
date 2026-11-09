@@ -70,6 +70,12 @@ export interface NetworkData {
 
 type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout'>;
 const EPS = 1e-9;
+/** 도로 단면: 중앙선(구분선)에서 오른쪽(a→b 방향 차선 쪽)·왼쪽으로 뻗은 폭, 전체 폭, 도로 몸체의 가운데가 중앙선에서 벗어난 정도(왼쪽 +). 일방통행은 한 방향 차선 폭만큼 가운데에 모은다 */
+export function roadSpan(r: { lanesFwd: number; lanesBack: number; laneWidth: number }, oneWay: boolean): { right: number; left: number; width: number; shift: number } {
+  const w = r.laneWidth;
+  if (oneWay) { const k = Math.max(r.lanesFwd, r.lanesBack); return { right: (k * w) / 2, left: (k * w) / 2, width: k * w, shift: 0 }; }
+  return { right: r.lanesFwd * w, left: r.lanesBack * w, width: (r.lanesFwd + r.lanesBack) * w, shift: ((r.lanesBack - r.lanesFwd) * w) / 2 };
+}
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 const zkey = (i: number, j: number) => (i + 1024) * 2048 + (j + 1024);
 const zcell = (k: number): [number, number] => [Math.floor(k / 2048) - 1024, (k % 2048) - 1024];
@@ -598,11 +604,19 @@ export class Network {
     const seg = this.segments.get(segId);
     if (!seg || (seg.a !== nodeId && seg.b !== nodeId)) return { ok: false, error: 'noSuchEnd' };
     if (masks.length && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
-    const lanes = this.rules.roads[seg.kind].lanesPerDir;
+    const lanes = this.lanesIncoming(segId, nodeId);
     if (masks.length > lanes || !masks.every((m) => Number.isInteger(m) && m >= 1 && m <= 7)) return { ok: false, error: 'badValue' };
     if (seg.a === nodeId) seg.laneDirsA = masks.slice(); else seg.laneDirsB = masks.slice();
     this.revision++;
     return { ok: true };
+  }
+
+  /** nodeId로 들어오는 차선 수(비대칭 도로는 방향마다 다르다. 일방통행은 한 방향 차선 수의 최댓값) */
+  lanesIncoming(segId: number, nodeId: number): number {
+    const s = this.segments.get(segId);
+    if (!s) return 0;
+    const r = this.rules.roads[s.kind];
+    return s.oneWay ? Math.max(r.lanesFwd, r.lanesBack) : nodeId === s.b ? r.lanesFwd : r.lanesBack;
   }
 
   laneDirsAt(segId: number, nodeId: number): number[] {

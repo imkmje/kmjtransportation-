@@ -10,9 +10,11 @@ export const config = {
   speedChoicesKmh: [30, 40, 50, 60, 70, 80, 100, 110], // 속도 제한 도구가 고를 수 있는 값(도로 종류의 상한 이하만)
   // 도로 종류 (rules.md 7항). 속도 단위 km/h, 폭 단위 m
   roads: {
-    road2: { name: '왕복 2차로', lanesPerDir: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60, rank: 1 },
-    road4: { name: '왕복 4차로', lanesPerDir: 2, laneWidth: 3.5, defaultSpeedKmh: 60, maxSpeedKmh: 80, rank: 2 }, // rank: 교차로 우선순위(큰 쪽이 먼저)
-    road6: { name: '왕복 6차로', lanesPerDir: 3, laneWidth: 3.5, defaultSpeedKmh: 70, maxSpeedKmh: 100, rank: 3 },
+    road2: { name: '왕복 2차로', lanesPerDir: 1, lanesFwd: 1, lanesBack: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60, rank: 1 },
+    road3: { name: '왕복 3차로(비대칭)', lanesPerDir: 2, lanesFwd: 2, lanesBack: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 70, rank: 1.5 }, // 그리는 방향 2차로 + 반대 방향 1차로(CS2의 비대칭 3차로)
+    road4: { name: '왕복 4차로', lanesPerDir: 2, lanesFwd: 2, lanesBack: 2, laneWidth: 3.5, defaultSpeedKmh: 60, maxSpeedKmh: 80, rank: 2 }, // rank: 교차로 우선순위(큰 쪽이 먼저)
+    road5: { name: '왕복 5차로(비대칭)', lanesPerDir: 3, lanesFwd: 3, lanesBack: 2, laneWidth: 3.5, defaultSpeedKmh: 60, maxSpeedKmh: 90, rank: 2.5 }, // 그리는 방향 3차로 + 반대 방향 2차로
+    road6: { name: '왕복 6차로', lanesPerDir: 3, lanesFwd: 3, lanesBack: 3, laneWidth: 3.5, defaultSpeedKmh: 70, maxSpeedKmh: 100, rank: 3 },
   },
   // 차종 (rules.md 10항). 단위: m, m/s², s, km/h
   vehicles: { car: { length: 4.5, width: 1.8, a: 1.5, b: 2.0, T: 1.5, s0: 2.0, vmaxKmh: 120 } },

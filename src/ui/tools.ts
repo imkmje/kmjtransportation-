@@ -8,7 +8,7 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'roundabout' | 'downgrade' | 'school' | 'zoneHome' | 'zoneHomeMid' | 'zoneHomeHigh' | 'zoneShop' | 'zoneOffice' | 'zoneIndustrial' | 'zoneMixed' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'roundabout' | 'downgrade' | 'school' | 'oneway1' | 'oneway2' | 'oneway3' | 'zoneHome' | 'zoneHomeMid' | 'zoneHomeHigh' | 'zoneShop' | 'zoneOffice' | 'zoneIndustrial' | 'zoneMixed' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
 const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneHomeMid: 'homeMid', zoneHomeHigh: 'homeHigh', zoneShop: 'shop', zoneOffice: 'office', zoneIndustrial: 'industrial', zoneMixed: 'mixed', zoneErase: null };
 const ZONE_NAME = { zoneHome: '주거(저밀) 구역', zoneHomeMid: '주거(중밀) 구역', zoneHomeHigh: '주거(고밀) 구역', zoneShop: '상업 구역', zoneOffice: '사무 구역', zoneIndustrial: '산업 구역', zoneMixed: '혼합 용도 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
@@ -103,7 +103,12 @@ export function createTools(d: Deps) {
       <div class="sub" id="sub-road" data-cat="road" hidden>
         <button data-tool="road2" title="단축키 2: 드래그로 왕복 2차로를 그립니다">${config.roads.road2.name} [2]</button>
         <button data-tool="road4" title="단축키 4: 왕복 4차로">${config.roads.road4.name} [4]</button>
+        <button data-tool="road3" title="단축키 3: 비대칭 3차로. 그리는 방향 2차로 + 반대 방향 1차로(출퇴근 방향이 한쪽으로 몰리는 길에)">${config.roads.road3.name} [3]</button>
+        <button data-tool="road5" title="단축키 5: 비대칭 5차로. 그리는 방향 3차로 + 반대 방향 2차로">${config.roads.road5.name} [5]</button>
         <button data-tool="road6" title="단축키 6: 왕복 6차로">${config.roads.road6.name} [6]</button>
+        <button data-tool="oneway1" title="단축키 Shift+2: 일방통행 1차로 도로. 그리는 방향으로만 갑니다">일방통행 1차로 [⇧2]</button>
+        <button data-tool="oneway2" title="단축키 Shift+4: 일방통행 2차로 도로">일방통행 2차로 [⇧4]</button>
+        <button data-tool="oneway3" title="단축키 Shift+6: 일방통행 3차로 도로">일방통행 3차로 [⇧6]</button>
         <label class="chip" title="단축키 Q: 켜면 세 번 클릭해(시작 → 휘는 점 → 끝) 곡선 도로를 만듭니다"><input type="checkbox" id="curve" /> 곡선 [Q]</label>
         <button data-tool="roundabout" title="단축키 R: 교차로를 클릭하면 회전교차로로 바꿉니다(도로가 환형 반지름 + 20m보다 길어야 함)">회전교차로 [R]</button>
         <button data-tool="oneway" title="단축키 W: 도로를 클릭할 때마다 양방향 → 한쪽 방향 → 반대 방향 → 양방향. 도로 위 화살표가 가는 방향입니다">일방통행 [W]</button>
@@ -389,7 +394,7 @@ export function createTools(d: Deps) {
     const p = cursorPoint(last);
     if (curveMode) { // 곡선 모드: 클릭한 점들과 커서로 곡선 미리보기
       d.roads.setCursor(p, true);
-      const kind = tool as RoadKind;
+      const kind = roadKind();
       if (curvePts.length === 0) { tipAt('곡선: 시작점을 클릭하세요', false); return; }
       const pts = curvePts.length === 1 ? [curvePts[0], p] : curvePoints(curvePts[0], curvePts[1], p);
       const ok = pts.slice(1).every((q, i) => net.planRoad(pts[i], q, kind).ok);
@@ -399,8 +404,8 @@ export function createTools(d: Deps) {
       return;
     }
     if (!start) { d.roads.setCursor(p, true); return; }
-    const plan = net.planRoad(start, p, tool as RoadKind);
-    d.roads.setGhost(start, p, tool as RoadKind, plan.ok);
+    const plan = net.planRoad(start, p, roadKind());
+    d.roads.setGhost(start, p, roadKind(), plan.ok);
     const len = plan.ok ? plan.length : Math.hypot(p.x - start.x, p.y - start.y);
     d.tip.textContent = `${Math.round(len)} m${plan.ok ? '' : ' — ' + ERR[plan.error]}`;
     d.tip.classList.toggle('bad', !plan.ok);
@@ -476,9 +481,10 @@ export function createTools(d: Deps) {
       return;
     }
     if (roadTool() && curveMode) { // 곡선: 시작 → 휘는 점 → 끝 세 번 클릭
+      if (tool! in ONEWAY_KIND) { say('일방통행 도로는 직선으로만 그립니다 (곡선 모드를 끄세요)'); return; }
       curvePts.push(cursorPoint(last));
       if (curvePts.length === 3) {
-        const r = d.editor.buildCurve(curvePts[0], curvePts[1], curvePts[2], tool as RoadKind);
+        const r = d.editor.buildCurve(curvePts[0], curvePts[1], curvePts[2], roadKind());
         say(r.ok ? `곡선 도로를 만들었습니다 (${Math.round(r.length)} m)` : r.error === 'tooSharp' ? '곡선이 너무 급하거나 다른 도로와 너무 가깝습니다' : ERR[r.error]);
         curvePts = [];
       } else say(curvePts.length === 1 ? '곡선: 휘어지는 점을 클릭하세요' : '곡선: 끝점을 클릭하세요');
@@ -551,7 +557,9 @@ export function createTools(d: Deps) {
     last = d.pick(e.clientX, e.clientY);
     refresh();
   });
-  const roadTool = () => tool !== null && tool in config.roads;
+  const ONEWAY_KIND: Partial<Record<NonNullable<Tool>, RoadKind>> = { oneway1: 'road2', oneway2: 'road4', oneway3: 'road6' }; // 일방통행 도로 종류 = 같은 차선 수 도로 + 그리는 방향 일방통행
+  const roadTool = () => tool !== null && (tool in config.roads || tool in ONEWAY_KIND);
+  const roadKind = (): RoadKind => (ONEWAY_KIND[tool!] ?? tool) as RoadKind;
   const drawing = () => roadTool() && !curveMode; // 곡선 모드에서는 드래그로 그리지 않는다
   const syncDrawMode = () => d.setDrawMode((roadTool() && !curveMode) || tool !== null && tool in ZONE_TOOLS);
   const zoning = () => tool !== null && tool in ZONE_TOOLS;
@@ -595,7 +603,7 @@ export function createTools(d: Deps) {
         start = from; // 각도·직각 맞추기는 시작점을 알아야 한다(미리보기와 같은 결과가 되도록)
         const to = cursorPoint({ ...last });
         start = null;
-        if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) d.editor.build(from, to, tool as RoadKind);
+        if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) { if (tool! in ONEWAY_KIND) d.editor.buildOneWay(from, to, roadKind()); else d.editor.build(from, to, roadKind()); }
       }
       down = null;
       refresh();
@@ -613,7 +621,7 @@ export function createTools(d: Deps) {
 
   // 단축키(CS2처럼 도구 모음과 같은 분류로 묶고, 글자는 기억하기 쉬운 것으로): 도로 2·4·6·Q(곡선)·R(회전교차로)·W(일방통행)·U/Shift+U(넓히기/좁히기),
   // 구역 H·J·K(주거 저·중·고밀)·C(상업)·O(사무)·I(산업)·E(지우기), 시설 P(학교), 교통 S·Y·G·N·B·L, 철거 X, 보기 M·D·F, 도구 V
-  const KEYS: Record<string, Tool> = { '2': 'road2', '4': 'road4', '6': 'road6', r: 'roundabout', w: 'oneway', h: 'zoneHome', j: 'zoneHomeMid', k: 'zoneHomeHigh', c: 'zoneShop', o: 'zoneOffice', i: 'zoneIndustrial', e: 'zoneErase', p: 'school', z: 'zoneMixed', s: 'stop', y: 'yield', g: 'signal', n: 'noleft', b: 'noentry', l: 'limit', x: 'demolish', v: 'trip' };
+  const KEYS: Record<string, Tool> = { '2': 'road2', '3': 'road3', '4': 'road4', '5': 'road5', '6': 'road6', r: 'roundabout', w: 'oneway', h: 'zoneHome', j: 'zoneHomeMid', k: 'zoneHomeHigh', c: 'zoneShop', o: 'zoneOffice', i: 'zoneIndustrial', e: 'zoneErase', p: 'school', z: 'zoneMixed', s: 'stop', y: 'yield', g: 'signal', n: 'noleft', b: 'noentry', l: 'limit', x: 'demolish', v: 'trip' };
   const toggleBox = (id: string, fn: (on: boolean) => void) => { const c = $<HTMLInputElement>(d.toolbar, id); c.checked = !c.checked; fn(c.checked); };
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
@@ -623,6 +631,7 @@ export function createTools(d: Deps) {
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); d.editor.redo(); start = null; refresh(); }
     else if (e.ctrlKey || e.metaKey || e.altKey) return;
     else if (k === 'escape') cancel();
+    else if (e.shiftKey && (e.code === 'Digit2' || e.code === 'Digit4' || e.code === 'Digit6')) setTool(e.code === 'Digit2' ? 'oneway1' : e.code === 'Digit4' ? 'oneway2' : 'oneway3');
     else if (k === 'u') setTool(e.shiftKey ? 'downgrade' : 'upgrade');
     else if (k === 'q') toggleBox('#curve', (on) => { curveMode = on; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); say(on ? '곡선 모드: 도로 도구를 고르고 세 번 클릭하세요 (시작 → 휘는 점 → 끝)' : '직선 모드'); });
     else if (k === 'm') toggleBox('#heat', (on) => d.setHeat(on));
