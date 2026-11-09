@@ -57,7 +57,7 @@ export interface Vehicle {
 
 interface SpawnRequest { path: number[]; startS: number; endS: number; remaining: number; nextTick: number; blocked: number }
 interface Entry { v: Vehicle; s: number; sv: number; len: number; phantom: boolean }
-interface Req { v: Vehicle; conn: Track; tick: number; d: number; sticky: boolean; insideBlock: number; exitBlock: number }
+interface Req { v: Vehicle; conn: Track; tick: number; d: number; sticky: boolean; insideBlock: number; exitBlock: number; rtor?: boolean }
 
 export interface Stats {
   spawned: number; arrived: number; abandoned: number; interventions: number; noRoute: number;
@@ -366,6 +366,7 @@ export class Traffic {
   // o가 r보다 먼저 지나갈 자격이 있는가 (rules.md 9항 우선순위)
   private higher(o: Req, r: Req): boolean {
     if (o.sticky !== r.sticky) return o.sticky; // 이미 허가받은 차량은 새로 온 차량에게 밀리지 않는다(우선순위 역전 방지)
+    if (!!o.rtor !== !!r.rtor) return !o.rtor; // 적색 우회전은 녹색 쪽 차량에게 양보한다
     const so = o.conn.sign ? 1 : 0, sr = r.conn.sign ? 1 : 0;
     if (so !== sr) return so < sr; // 표지 없는 쪽이 먼저
     if (o.conn.rank !== r.conn.rank) return o.conn.rank > r.conn.rank; // 도로 등급
@@ -402,18 +403,23 @@ export class Traffic {
       v.zoned = true;
       let eligible = true;
       const sig = this.net.hasSignal(c.node);
+      let rtor = false; // 적색 우회전: 적색에서 우회전은 완전히 선 뒤 교차 차량이 없을 때만 간다(교차 차량에게 양보)
       if (sig) { // 신호등: 녹색이면 요청, 황색이면 편하게 설 수 없을 때만(지나가는 편이 낫다), 적색이면 정지선에서 대기
         const L = this.signals.light(c.node, tracks[c.src].segId, tick);
-        if (L === 'red' || (L === 'yellow' && (v.sv * v.sv) / (2 * car.b) <= dEnd)) { v.reason = '신호 대기'; v.reqTick = 0; continue; }
-      } else if (c.sign === 'stop') { // 정지 표지: 정지선에서 완전히 서서 일정 시간 기다린 뒤에야 요청
+        if (L === 'red' || (L === 'yellow' && (v.sv * v.sv) / (2 * car.b) <= dEnd)) {
+          if (this.cfg.signals.rightOnRed && L === 'red' && c.turn === 'right') rtor = true;
+          else { v.reason = '신호 대기'; v.reqTick = 0; continue; }
+        }
+      }
+      if (rtor || (!sig && c.sign === 'stop')) { // 정지 표지·적색 우회전: 정지선에서 완전히 서서 일정 시간 기다린 뒤에야 요청
         if (dEnd <= ix.stopLineTol && v.sv < 0.1) { if (v.stopPi !== v.spi) { v.stopPi = v.spi; v.stopTicks = 0; } v.stopTicks++; }
         eligible = v.stopPi === v.spi && v.stopTicks >= Math.round(ix.stopSec * rate);
-        if (!eligible) v.reason = '정지 표지';
+        if (!eligible) v.reason = rtor ? '신호 대기(적색 우회전 정지)' : '정지 표지';
       }
       if (c.uturn && v.uturnDone < v.spi + 1) eligible = false; // 회차는 정지 대기를 마친 뒤에
       if (!eligible) { v.reqTick = 0; continue; }
       if (v.reqTick === 0 || v.reqPi !== v.spi) { v.reqTick = tick; v.reqPi = v.spi; }
-      node(c.node).reqs.push({ v, conn: c, tick: v.reqTick, d: dEnd, sticky: v.grantPi === v.spi, insideBlock: 0, exitBlock: 0 });
+      node(c.node).reqs.push({ v, conn: c, tick: v.reqTick, d: dEnd, sticky: v.grantPi === v.spi, insideBlock: 0, exitBlock: 0, rtor });
     }
 
     for (const g of nodes.values()) {

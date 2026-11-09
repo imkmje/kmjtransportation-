@@ -2,7 +2,7 @@ import type { Config } from '../config';
 
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
-export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean; sigMode: SignalMode; sigGreen: number; sigGreens: number[]; sigOffset: number } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동), sigMode: 고정/감응식, sigGreen: 고정식 녹색 시간 초(0 = 기본값)
+export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean; sigMode: SignalMode; sigGreen: number; sigGreens: number[]; sigOffset: number; sigOrder: number[] } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동), sigMode: 고정/감응식, sigGreen: 고정식 녹색 시간 초(0 = 기본값)
 export type SignalMode = 'fixed' | 'actuated';
 export type SignKind = 'stop' | 'yield';
 export type OneWay = 'ab' | 'ba'; // 일방통행: 시작 노드(a)에서 끝 노드(b)로만 / b에서 a로만
@@ -56,7 +56,7 @@ interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 10; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
+export const NETWORK_FORMAT_VERSION = 11; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 11: 신호 단계 순서(sigOrder) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -565,16 +565,18 @@ export class Network {
     if (!n) return { ok: false, error: 'noSuchNode' };
     if (on && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
     n.signal = on; n.sigMode = mode; n.sigGreen = green;
-    if (!on) { n.sigGreens = []; n.sigOffset = 0; }
+    if (!on) { n.sigGreens = []; n.sigOffset = 0; n.sigOrder = []; }
     this.revision++;
     return { ok: true };
   }
 
   /** 신호 프로그램 편집: 단계별 녹색 시간(초, 5~90)과 시작 시차(초). 신호가 켜진 교차로만 */
-  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number }): { ok: true } | { ok: false; error: 'noSignal' | 'badValue' } {
+  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number; order?: number[] }): { ok: true } | { ok: false; error: 'noSignal' | 'badValue' } {
     const n = this.nodes.get(nodeId);
     if (!n || !this.hasSignal(nodeId)) return { ok: false, error: 'noSignal' };
     if (p.greens && !p.greens.every((g) => Number.isFinite(g) && g >= 5 && g <= 90)) return { ok: false, error: 'badValue' };
+    if (p.order && (!p.order.every((i) => Number.isInteger(i) && i >= 0 && i < p.order!.length) || new Set(p.order).size !== p.order.length)) return { ok: false, error: 'badValue' }; // 0..n-1의 순열이어야 한다
+    if (p.order) n.sigOrder = p.order.slice();
     if (p.greens) n.sigGreens = p.greens.slice();
     if (p.offset !== undefined) n.sigOffset = p.offset;
     this.revision++;
@@ -646,7 +648,7 @@ export class Network {
 
   private addNode(x: number, y: number): number {
     const id = this.nextNodeId++;
-    this.nodes.set(id, { id, x, y, z: 0, signal: false, sigMode: 'fixed', sigGreen: 0, sigGreens: [], sigOffset: 0 });
+    this.nodes.set(id, { id, x, y, z: 0, signal: false, sigMode: 'fixed', sigGreen: 0, sigGreens: [], sigOffset: 0, sigOrder: [] });
     return id;
   }
 
@@ -723,7 +725,7 @@ export class Network {
       formatVersion: NETWORK_FORMAT_VERSION,
       nextNodeId: Math.max(d.nextNodeId ?? 0, maxNode + 1),
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
-      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true, sigMode: (n as Partial<NetNode>).sigMode === 'actuated' ? 'actuated' as const : 'fixed' as const, sigGreen: typeof (n as Partial<NetNode>).sigGreen === 'number' ? (n as NetNode).sigGreen : 0, sigGreens: Array.isArray((n as Partial<NetNode>).sigGreens) ? (n as NetNode).sigGreens.map((g) => Number(g)).filter((g) => Number.isFinite(g) && g > 0) : [], sigOffset: Number.isFinite((n as Partial<NetNode>).sigOffset) ? (n as NetNode).sigOffset : 0 })),
+      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true, sigMode: (n as Partial<NetNode>).sigMode === 'actuated' ? 'actuated' as const : 'fixed' as const, sigGreen: typeof (n as Partial<NetNode>).sigGreen === 'number' ? (n as NetNode).sigGreen : 0, sigGreens: Array.isArray((n as Partial<NetNode>).sigGreens) ? (n as NetNode).sigGreens.map((g) => Number(g)).filter((g) => Number.isFinite(g) && g > 0) : [], sigOffset: Number.isFinite((n as Partial<NetNode>).sigOffset) ? (n as NetNode).sigOffset : 0, sigOrder: Array.isArray((n as Partial<NetNode>).sigOrder) ? (n as NetNode).sigOrder.filter((i) => Number.isInteger(i) && i >= 0 && i < 8) : [] })),
       segments,
       nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
       buildings,

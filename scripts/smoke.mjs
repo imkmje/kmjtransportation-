@@ -105,7 +105,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 10, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 11, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);

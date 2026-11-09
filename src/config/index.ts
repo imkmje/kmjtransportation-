@@ -63,7 +63,7 @@ export const config = {
   // 회전교차로: 환형 도로 반지름(m). 이웃한 두 도로 사이 각도가 좁으면 반지름을 키워 환형 조각 길이를 최소 길이 이상으로 맞춘다
   roundabout: { radius: 28, maxRadius: 50 },
   // 신호등(1.2.0): 초 단위(시뮬 시간). 녹색·황색·전적색. 기본 프로그램은 자동 생성
-  signals: { greenSec: 15, yellowSec: 3, allRedSec: 1, minGreenSec: 7, maxGreenSec: 45, gapSec: 2.5, detectM: 30, greenChoices: [10, 15, 20, 30, 45] }, // 감응식: 감지 구간 detectM, 최소 녹색, 차가 없는 시간이 gapSec를 넘으면 전환, 최대 녹색
+  signals: { rightOnRed: true, greenSec: 15, yellowSec: 3, allRedSec: 1, minGreenSec: 7, maxGreenSec: 45, gapSec: 2.5, detectM: 30, greenChoices: [10, 15, 20, 30, 45] }, // 감응식: 감지 구간 detectM, 최소 녹색, 차가 없는 시간이 gapSec를 넘으면 전환, 최대 녹색
   // 구역(심시티식): 칸 하나 = 20m. 도로에서 이 거리(중심선 기준) 안의 칸만 칠할 수 있다
   zones: { cell: 20, maxDist: 65, maxRect: 60 }, // 도로에서 65m 안(대형 건물을 두 줄로 놓을 수 있는 깊이)
   // 외부 연결: 지도 가장자리에서 들어오는 시작 도로. 직장인 수의 share만큼 외부 사람이 들어와 일하고(남은 일자리 안에서), 시민의 outShare는 외부로 출근한다

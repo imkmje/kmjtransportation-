@@ -117,7 +117,7 @@ export class Editor {
     return r;
   }
 
-  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number }): ReturnType<Network['setSignalProgram']> {
+  setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number; order?: number[] }): ReturnType<Network['setSignalProgram']> {
     const r = this.network.setSignalProgram(nodeId, p);
     if (r.ok) this.commit();
     return r;
