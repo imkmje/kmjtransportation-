@@ -62,6 +62,7 @@ interface Req { v: Vehicle; conn: Track; tick: number; d: number; sticky: boolea
 export interface Stats {
   spawned: number; arrived: number; abandoned: number; interventions: number; noRoute: number;
   conflicts: number; // 충돌 지점을 동시에 점유한 횟수(0이어야 한다)
+  accidents: number; // 일어난 사고 수(이벤트가 켜져 있을 때)
   laneChanges: number; deadlocks: number; removed: number; // 교착 해소 시작 / 교착 때문에 제거된 차량
 }
 
@@ -97,7 +98,14 @@ export function findCycles(waitFor: Map<number, number>): number[][] {
 export class Traffic {
   graph: LaneGraph;
   readonly vehicles = new Map<number, Vehicle>(); // 삽입 순서 = ID 순서
-  readonly stats: Stats = { spawned: 0, arrived: 0, abandoned: 0, interventions: 0, noRoute: 0, conflicts: 0, laneChanges: 0, deadlocks: 0, removed: 0 };
+  readonly stats: Stats = { spawned: 0, arrived: 0, abandoned: 0, interventions: 0, noRoute: 0, conflicts: 0, laneChanges: 0, deadlocks: 0, removed: 0, accidents: 0 };
+  /** 사고로 멈춘 차량 → 치워지는 tick */
+  readonly crashed = new Map<number, number>();
+  /** 사고·날씨 이벤트 켜짐(Sim이 설정). 비가 오면 weatherFactor < 1, 사고 확률 배율 accidentMult > 1 */
+  eventsOn = false;
+  weatherFactor = 1;
+  accidentMult = 1;
+  onAccident: ((v: Vehicle) => void) | null = null;
   /** 안전망이 마지막으로 개입한 상황(디버그용) */
   lastIntervention = '';
   /** 건물에서 출발할 이동 대기열(자리가 나면 투입). 맨 앞부터 처리한다 */
@@ -299,6 +307,7 @@ export class Traffic {
     this.occ = null;
     this.sync();
     this.spawnStep();
+    this.events(tick);
     const dt = 1 / this.cfg.tickRate;
 
     // 1) tick 시작 스냅샷과 트랙별 차량 목록(앞에 있는 차 순서). 차선 변경 직후 2초간은 이전 차선에도 흔적을 남긴다
@@ -328,6 +337,28 @@ export class Traffic {
     this.laneChanges(tick);
     this.countConflicts();
     if (tick % Math.round(this.cfg.deadlock.detectSec * this.cfg.tickRate) === 0) this.deadlocks(tick);
+  }
+
+  // ---------------- 사고 ----------------
+
+  /** 치울 때가 된 사고 차량을 풀고, 이벤트가 켜져 있으면 20tick마다 달리는 차량에게 사고 확률을 굴린다 */
+  private events(tick: number): void {
+    for (const [id, until] of [...this.crashed]) {
+      if (tick < until) continue;
+      this.crashed.delete(id);
+      const v = this.vehicles.get(id);
+      if (v) v.hold = false;
+    }
+    if (!this.eventsOn || tick % 20 !== 0) return;
+    const e = this.cfg.events, p = e.accidentPerVehicleSec * (20 / this.cfg.tickRate) * this.accidentMult;
+    for (const v of this.vehicles.values()) {
+      if (v.hold || v.v < 4) continue;
+      if (this.rng.next() >= p) continue;
+      v.hold = true; v.holdFor = 0; v.v = 0; v.acc = 0;
+      this.crashed.set(v.id, tick + Math.round(e.accidentDurationSec * this.cfg.tickRate));
+      this.stats.accidents++;
+      this.onAccident?.(v);
+    }
   }
 
   // ---------------- 교차로 ----------------
@@ -454,7 +485,7 @@ export class Traffic {
       jobs: this.jobs.map((j) => ({ meta: { ...j.meta }, from: { ...j.from }, to: { ...j.to }, born: j.born })),
       requests: this.requests.map((r) => ({ ...r, path: r.path.slice() })),
       stats: { ...this.stats }, lastIntervention: this.lastIntervention,
-      cycles: [...this.cycleState], signals: this.signals.getState(),
+      cycles: [...this.cycleState], signals: this.signals.getState(), crashed: [...this.crashed], eventsOn: this.eventsOn,
     };
   }
 
@@ -472,11 +503,14 @@ export class Traffic {
     this.cycleState = new Map(s.cycles.map(([k, c]) => [k, { ...c }]));
     this.nextId = s.nextId; this.tick = s.tick;
     this.signals.setState((s as { signals?: ReturnType<Signals['getState']> }).signals); // 옛 저장 파일에는 없다
+    this.crashed.clear();
+    for (const [id, until] of (s as { crashed?: [number, number][] }).crashed ?? []) this.crashed.set(id, until);
+    this.eventsOn = (s as { eventsOn?: boolean }).eventsOn ?? false;
   }
 
   /** 처음 상태로 되돌린다(새 맵을 열 때) */
   reset(): void {
-    this.vehicles.clear(); this.jobs = []; this.requests = []; this.cycleState.clear(); this.routeCache.clear(); this.occ = null; this.signals.reset();
+    this.vehicles.clear(); this.jobs = []; this.requests = []; this.cycleState.clear(); this.routeCache.clear(); this.occ = null; this.signals.reset(); this.crashed.clear();
     for (const k of Object.keys(this.stats) as (keyof Stats)[]) this.stats[k] = 0;
     this.lastIntervention = ''; this.nextId = 1; this.tick = 0;
     this.graph = buildLaneGraph(this.net, this.cfg);
@@ -493,7 +527,7 @@ export class Traffic {
     const distEnd = trackEnd - v.s;
     const nextConn = v.pi < last && tracks[v.path[v.pi + 1]].kind === 'conn' ? tracks[v.path[v.pi + 1]] : null;
     const nextIsUturn = !!nextConn && nextConn.uturn && v.uturnDone < v.pi + 1;
-    const cap = (t: Track) => (t.kind === 'lane' ? t.vmax * v.factor : t.vmax);
+    const cap = (t: Track) => (t.kind === 'lane' ? t.vmax * v.factor * this.weatherFactor : t.vmax);
 
     // 막다른 끝 회차: 차선 끝에서 정지 → 대기 → 진입
     if (nextIsUturn && distEnd <= ix.stopLineTol && v.v < 0.3) {
@@ -515,7 +549,7 @@ export class Traffic {
     }
     v0 = vGeo;
     // 통계의 기준 속도는 플레이어가 바꾼 제한속도가 아니라 도로 종류의 기본 제한속도로 계산한다
-    const capBase = (t: Track) => (t.kind === 'lane' ? t.vbase * v.factor : t.vbase);
+    const capBase = (t: Track) => (t.kind === 'lane' ? t.vbase * v.factor * this.weatherFactor : t.vbase); // 정체 지수의 기준에도 날씨가 반영된다(비 오는 날 기준이 느려지므로 비 자체는 정체로 잡히지 않는다)
     let vBase = Math.min(capBase(tr), car.vmaxKmh / 3.6);
     let distB = distEnd;
     for (let k = v.pi + 1; distB < d.lookahead && k <= last; k++) {

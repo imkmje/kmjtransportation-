@@ -5,6 +5,7 @@ import { Metrics } from './metrics';
 import type { Network } from './network';
 import { Rng } from './random';
 import { clockAt, ClockTime } from './time';
+import { isRaining } from './weather';
 import { Traffic } from './traffic';
 
 // 순수 시뮬레이션 상태. 화면(DOM, Three.js)을 모른다.
@@ -52,8 +53,20 @@ export class Sim {
   get simSeconds(): number {
     return this.tickCount / this.cfg.tickRate;
   }
+  /** 사고·날씨 이벤트 켜기/끄기(저장 파일에 들어간다) */
+  setEvents(on: boolean): void {
+    this.traffic.eventsOn = on;
+    if (!on) { this.traffic.weatherFactor = 1; this.traffic.accidentMult = 1; }
+  }
+  get raining(): boolean { return this.traffic.eventsOn && this.traffic.weatherFactor < 1; }
+
   step(): void {
     this.tickCount++;
+    if (this.traffic.eventsOn) { // 날씨는 날짜와 시각으로 정해지므로(해시) 저장할 상태가 없다
+      const c = this.clock(), rain = isRaining(c.day, c.hour + c.minute / 60, this.cfg.seed, this.cfg);
+      this.traffic.weatherFactor = rain ? this.cfg.events.rainSpeedFactor : 1;
+      this.traffic.accidentMult = rain ? this.cfg.events.rainAccidentMult : 1;
+    }
     this.growth.step(this.tickCount); // 수요 막대만큼 구역에 건물이 자란다
     this.demand.step(this.tickCount); // 시계 시각에 맞춰 이동을 만든다
     this.traffic.step(this.tickCount); // 차량을 움직인다

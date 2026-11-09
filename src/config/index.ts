@@ -56,6 +56,8 @@ export const config = {
     gap: 2, // 건물 사이 최소 간격(m)
     worldHalf: 1000,
   },
+  // 사고·날씨(CS2의 사고·날씨 이벤트 방향). 사고는 달리는 차량 한 대가 갑자기 서서 그 차선을 durationSec 동안 막는다(긴급 서비스는 없어 시간이 지나면 치워진다). 비는 속도를 낮추고 사고 확률을 높인다
+  events: { accidentPerVehicleSec: 8e-6, accidentDurationSec: 45, rainDayChance: 0.3, rainSpeedFactor: 0.85, rainAccidentMult: 2.5 },
   // 회전교차로: 환형 도로 반지름(m). 이웃한 두 도로 사이 각도가 좁으면 반지름을 키워 환형 조각 길이를 최소 길이 이상으로 맞춘다
   roundabout: { radius: 28, maxRadius: 50 },
   // 신호등(1.2.0): 초 단위(시뮬 시간). 녹색·황색·전적색. 기본 프로그램은 자동 생성
