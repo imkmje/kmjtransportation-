@@ -75,6 +75,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
   const ghost = new THREE.Mesh(unitBox, goodMat);
   const hover = new THREE.Mesh(unitBox, badMat);
   const selected = new THREE.Mesh(unitBox, markMat);
+  const curveGhosts: THREE.Mesh[] = [];
   const cursor = new THREE.Mesh(unitDisk, goodMat);
   const mark = new THREE.Mesh(unitDisk, markMat);
   for (const m of [ghost, hover, selected, cursor, mark]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
@@ -198,6 +199,15 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       ghost.visible = true;
     },
     clearGhost() { ghost.visible = false; },
+    /** 곡선 미리보기: 점 목록을 이은 직선 조각들을 초록(건설 가능)/빨강(불가)으로 보여 준다. null이면 지운다 */
+    setCurve(pts: Pt[] | null, kind: RoadKind, ok: boolean) {
+      const n = pts ? pts.length - 1 : 0;
+      while (curveGhosts.length < n) { const m = new THREE.Mesh(unitBox, goodMat); m.renderOrder = 1; scene.add(m); curveGhosts.push(m); }
+      curveGhosts.forEach((m, i) => {
+        m.visible = i < n;
+        if (i < n && pts) { m.material = ok ? goodMat : badMat; place(m, pts[i], pts[i + 1], roadWidth(kind), 0.5, 0); }
+      });
+    },
     /** 정보 창에서 보고 있는 도로를 파랗게 표시 */
     setSelect(segId: number | null) {
       const s = segId === null ? undefined : net.segments.get(segId);

@@ -25,7 +25,8 @@ export function createScene(canvasParent: HTMLElement) {
   grid.position.y = 0.05;
   scene.add(grid);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x9bb58a, 1.6));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x9bb58a, 1.6);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffffff, 1.2);
   sun.position.set(300, 500, 200);
   scene.add(sun);
@@ -117,6 +118,14 @@ export function createScene(canvasParent: HTMLElement) {
       if (!raycaster.ray.intersectPlane(groundPlane, hit)) return null;
       const p = fromThree(hit.x, hit.y, hit.z);
       return Math.abs(p.x) > limit || Math.abs(p.y) > limit ? null : p;
+    },
+    /** 비 오는 날은 하늘·안개가 회색으로, 햇빛이 약해진다 */
+    setWeather(rain: boolean) {
+      const c = rain ? 0x8d99a6 : 0xcfe8f7;
+      (scene.background as THREE.Color).setHex(c);
+      (scene.fog as THREE.Fog).color.setHex(c);
+      hemi.intensity = rain ? 1.0 : 1.6;
+      sun.intensity = rain ? 0.5 : 1.2;
     },
     /** 카메라 기울기(도): 0 = 바로 위에서 내려다봄, 80 = 거의 수평. 화면을 도는 각도와 거리는 그대로 */
     getTilt(): number { return THREE.MathUtils.radToDeg(controls.getPolarAngle()); },

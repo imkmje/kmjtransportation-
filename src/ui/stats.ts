@@ -26,6 +26,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
       <div>귀환 대기(직장)</div><div id="st-pool">0명</div>
       <div>교착 해소 · 안전망 개입</div><div id="st-safe">0 · 0</div>
       <div>일자리 부족 · 미연결 건물</div><div id="st-warn">0 · 0</div>
+      <div>사고 · 날씨</div><div id="st-wx">0건 · 맑음</div>
     </div>
  <h4 class="top-h">막히는 곳 TOP 5 <span style="font-weight:400">(누르면 이동)</span></h4>
     <ol id="st-top"></ol>
@@ -33,7 +34,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
     <div id="st-yesterday" class="yday"></div></div>`;
   root.querySelector<HTMLElement>('#st-head')!.onclick = () => root.classList.toggle('closed'); // 머리글을 누르면 접고 편다
   const $ = (id: string) => document.getElementById(id)!;
-  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dmid: $('st-dm'), dhigh: $('st-dg'), dind: $('st-di'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
+  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dmid: $('st-dm'), dhigh: $('st-dg'), dind: $('st-di'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), wx: $('st-wx'), chart: $('st-chart'), yday: $('st-yesterday') };
   const topEl = $('st-top');
   let lastTop = '';
   topEl.onclick = (e) => { const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-seg]'); if (li) onPick(Number(li.dataset.seg)); };
@@ -66,6 +67,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
       el.safe.textContent = `${t.stats.deadlocks} · ${t.stats.interventions}`;
       const unc = getUnconnected();
       el.warn.textContent = `${dm.unemployed} · ${unc}`;
+      el.wx.textContent = `${t.stats.accidents}건${t.crashed.size ? ` (진행 중 ${t.crashed.size})` : ''} · ${!t.eventsOn ? '꺼짐' : sim.raining ? '비' : '맑음'}`;
       el.warn.style.color = unc > 0 ? '#c0392b' : '';
       // 오늘 롤링 CI 그래프(10초 단위 기록)
       const s = m.ciSeries;
@@ -81,7 +83,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
       const key = top.map(([id, r]) => `${id}:${Math.round(r.ci!)}:${r.passes}`).join('|');
       if (key !== lastTop) {
         lastTop = key;
-        topEl.innerHTML = top.length ? top.map(([id, r]) => { const s = net.segments.get(id)!, a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!; return `<li data-seg="${id}"><b>${Math.round((a.x + b.x) / 2)}, ${Math.round((a.y + b.y) / 2)}</b> 정체 ${Math.round(r.ci!)} <small>· ${r.passes}대</small></li>`; }).join('') : '<li class="none">막히는 곳이 없습니다</li>';
+        topEl.innerHTML = top.length ? top.map(([id, r]) => { const s = net.segments.get(id)!, a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!; return `<li data-seg="${id}"><b>${s.name ? s.name.replace(/</g, '&lt;') : `${Math.round((a.x + b.x) / 2)}, ${Math.round((a.y + b.y) / 2)}`}</b> 정체 ${Math.round(r.ci!)} <small>· ${r.passes}대</small></li>`; }).join('') : '<li class="none">막히는 곳이 없습니다</li>';
       }
       const y = m.history[m.history.length - 1];
       el.yday.textContent = y ? `어제(${y.day}일차): 완료율 ${num(y.completion, 0, '%')} · CI ${num(y.ci, 0)} · 평균 ${num(y.avgTravelMin, 0, '분')}` : '';

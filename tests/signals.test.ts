@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Network } from '../src/sim/network';
+import { Editor } from '../src/sim/editor';
 import { Sim } from '../src/sim/sim';
 import { config } from '../src/config';
 import { findRoute } from '../src/sim/route';
@@ -190,5 +191,52 @@ describe('신호 편집과 녹색파', () => {
     v7.formatVersion = 7; for (const nd of v7.nodes) { delete nd.sigGreens; delete nd.sigOffset; }
     const d = Network.parse(v7, config);
     expect(d.nodes[0]).toMatchObject({ sigGreens: [], sigOffset: 0 });
+  });
+});
+
+describe('신호 복사·붙여넣기', () => {
+  const two = () => {
+    const n = new Network(config);
+    road(n, -200, 0, 440, 0); road(n, 0, -200, 0, 200); road(n, 240, -200, 240, 200);
+    const id = (x: number) => [...n.nodes.values()].find((p) => p.x === x && p.y === 0)!.id;
+    return { n, A: id(0), B: id(240) };
+  };
+  it('고정식 프로그램(녹색 시간·시차)을 다른 교차로에 붙이고, 편집 한 번으로 취소할 수 있다', () => {
+    const { n, A, B } = two();
+    const e = new Editor(config); e.loadData(n.toJSON());
+    const sim = new Sim(config, e.network);
+    e.network.setSignal(A, true); e.network.setSignalProgram(A, { greens: [25, 35], offset: 7 });
+    const prog = sim.traffic.signals.copyProgram(A)!;
+    expect(prog).toEqual({ mode: 'fixed', greens: [25, 35], offset: 7 });
+    expect(e.pasteSignal(B, prog, sim.traffic.signals)).toEqual({ ok: true, applied: true });
+    expect(sim.traffic.signals.program(B).map((p) => p.green)).toEqual([25, 35]);
+    expect(e.network.nodes.get(B)!.sigOffset).toBe(7);
+    e.undo();
+    expect(e.network.hasSignal(B)).toBe(false);
+  });
+  it('감응식은 방식만 복사되고, 단계 수가 다르면 녹색 시간은 복사되지 않는다', () => {
+    const { n, A, B } = two();
+    const e = new Editor(config); e.loadData(n.toJSON());
+    const sim = new Sim(config, e.network);
+    e.network.setSignal(A, true, 'actuated');
+    const prog = sim.traffic.signals.copyProgram(A)!;
+    expect(prog).toEqual({ mode: 'actuated', greens: [], offset: 0 });
+    expect(e.pasteSignal(B, prog, sim.traffic.signals)).toEqual({ ok: true, applied: true });
+    expect(e.network.isActuated(B)).toBe(true);
+    // T자 교차로(단계 2개 = 마주 보는 한 쌍 + 혼자 하나) 대신 3단계가 되는 Y자를 만들어 단계 수가 다름을 확인
+    const y = new Editor(config);
+    y.build({ x: 0, y: 0 }, { x: 150, y: 0 }, 'road2'); y.build({ x: 0, y: 0 }, { x: -75, y: 130 }, 'road2'); y.build({ x: 0, y: 0 }, { x: -75, y: -130 }, 'road2');
+    const yc = [...y.network.nodes.values()].find((p) => p.x === 0 && p.y === 0)!.id;
+    const ysim = new Sim(config, y.network);
+    const r = y.pasteSignal(yc, { mode: 'fixed', greens: [20, 30], offset: 5 }, ysim.traffic.signals);
+    expect(r).toEqual({ ok: true, applied: false });
+    expect(y.network.hasSignal(yc)).toBe(true);
+  });
+  it('교차로가 아닌 곳에는 붙일 수 없다', () => {
+    const { n } = two();
+    const e = new Editor(config); e.loadData(n.toJSON());
+    const sim = new Sim(config, e.network);
+    const leaf = [...e.network.nodes.values()].find((p) => p.x === -200)!.id;
+    expect(e.pasteSignal(leaf, { mode: 'fixed', greens: [], offset: 0 }, sim.traffic.signals)).toEqual({ ok: false, error: 'notIntersection' });
   });
 });

@@ -101,6 +101,13 @@ export class Editor {
     return r;
   }
 
+  /** 신호 복사·붙여넣기: 복사해 둔 프로그램을 이 교차로에 붙인다 */
+  pasteSignal(nodeId: number, prog: NonNullable<ReturnType<Signals['copyProgram']>>, signals: Signals): ReturnType<Signals['pasteProgram']> {
+    const r = signals.pasteProgram(nodeId, prog);
+    if (r.ok) this.commit();
+    return r;
+  }
+
   setSignalProgram(nodeId: number, p: { greens?: number[]; offset?: number }): ReturnType<Network['setSignalProgram']> {
     const r = this.network.setSignalProgram(nodeId, p);
     if (r.ok) this.commit();

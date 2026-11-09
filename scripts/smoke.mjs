@@ -9,7 +9,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 // 새 화면 구성: 도구는 아래쪽 분류 상자 안에, 저장·불러오기 등은 오른쪽 위 메뉴 안에 있다. 클릭하기 전에 알맞은 상자·메뉴를 열어 주는 보조 장치
 const patch = (pg) => {
   const click = pg.click.bind(pg), sel = pg.selectOption.bind(pg);
-  const menuIds = /^#(save|load|export|import|sample|newcity|slot|about)$/;
+  const menuIds = /^#(save|load|export|import|sample|newcity|gridcity|slot|about)$/;
   const prep = async (s) => {
     if (menuIds.test(s)) { if (!(await pg.locator('#filebar').isVisible())) await click('#menubtn'); }
     else if (s.startsWith('button[data-tool=')) {
@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.5.1') && titleText.includes('업데이트 내역') && titleText.includes('직각'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.6.0') && titleText.includes('업데이트 내역') && titleText.includes('곡선'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -47,10 +47,13 @@ check('시작하기를 누르면 화면이 닫히고 시간이 흐름', !(await 
 await page.click('#about');
 check('업데이트 내역 버튼으로 다시 열면 멈춤', (await page.locator('#title').isVisible()) && (await page.evaluate(() => window.__game.getSpeed())) === 0);
 await page.click('#t-start');
+check('사고·날씨 이벤트는 기본으로 켜져 있음', await page.evaluate(() => window.__game.sim.traffic.eventsOn));
+await page.keyboard.press('f');
+check('F 키로 사고·날씨를 끔', !(await page.evaluate(() => window.__game.sim.traffic.eventsOn)) && (await page.locator('#msg').innerText()).includes('껐습니다'), await page.locator('#msg').innerText());
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-start.png') });
 // ---- 화면 구성(시티즈 스카이라인식): 위쪽 바, 아래쪽 분류 버튼, 위로 열리는 도구 상자 ----
 check('위쪽 바: 시계·배속·메뉴 버튼이 있음', (await page.locator('#hud #clock').isVisible()) && (await page.locator('#hud button[data-speed]').count()) === 4 && (await page.locator('#menubtn').isVisible()));
-check('아래쪽 분류 버튼 6개(도로·구역·교통·철거·보기·도구)', (await page.locator('#toolbar .cats button[data-catbtn], #toolbar .cats button[data-tool="demolish"]').count()) === 6);
+check('아래쪽 분류 버튼 7개(도로·구역·교통·시설·철거·보기·도구)', (await page.locator('#toolbar .cats button[data-catbtn], #toolbar .cats button[data-tool="demolish"]').count()) === 7);
 await page.click('button[data-catbtn="road"]');
 check('분류를 누르면 도구 상자가 열림', await page.locator('#sub-road').isVisible() && !(await page.locator('#sub-zone').isVisible()));
 await page.click('button[data-catbtn="road"]');
@@ -234,16 +237,16 @@ await page.keyboard.press('Escape');
   const tbase = await tsegs(); // 새 도시는 외부 연결 도로 1개로 시작
   await tp.click('button[data-tool="road2"]');
   let t0 = await tref();
-  await tt('touchStart', [{ x: 500, y: 520 }]);
-  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 25, y: 520 + i * 5 }]); await tp.waitForTimeout(20); }
+  await tt('touchStart', [{ x: 500, y: 220 }]);
+  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 25, y: 220 + i * 5 }]); await tp.waitForTimeout(20); }
   await tt('touchEnd', []);
   await tp.waitForTimeout(400);
   check('터치: 한 손가락 드래그로 도로가 그려짐', (await tsegs()) === tbase + 1, String(await tsegs()));
   check('터치: 도로를 그리는 동안 카메라가 이동도 회전도 안 함', moved(t0, await tref()) < 1, String(moved(t0, await tref())));
   await tp.keyboard.press('Escape');
   t0 = await tref();
-  await tt('touchStart', [{ x: 500, y: 400 }]);
-  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 15, y: 400 + i * 5 }]); await tp.waitForTimeout(20); }
+  await tt('touchStart', [{ x: 500, y: 300 }]);
+  for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 15, y: 300 + i * 5 }]); await tp.waitForTimeout(20); }
   await tt('touchEnd', []);
   await tp.waitForTimeout(500);
   check('터치: 도구가 없을 때 한 손가락 드래그는 화면 이동', moved(t0, await tref()) > 20 && (await tsegs()) === tbase + 1, String(moved(t0, await tref())));
@@ -329,7 +332,7 @@ check('주행 중 차량 있음', st.live >= 3, JSON.stringify(st));
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-vehicles.png') });
 
 await page.keyboard.press('Escape');
-await page.keyboard.press('r');
+await page.keyboard.press('2');
 const segsBefore = (await counts()).s;
 const idsBefore = await page.evaluate(() => [...window.__game.sim.traffic.vehicles.keys()]);
 const arrivedBefore = (await stats()).arrived;
@@ -476,10 +479,12 @@ const [ux, uy] = await freeSpot([[240, -100], [-240, -100], [240, 100], [-240, 1
 await clickWorld(ux, uy);
 check('도로 넓히기: 2차로가 4차로가 됨', (await road4Count()) > r4before && (await page.locator('#msg').innerText()).includes('넓혔습니다'), `${r4before} → ${await road4Count()} / ${await page.locator('#msg').innerText()}`);
 await clickWorld(ux, uy);
-check('이미 4차로면 안내', (await page.locator('#msg').innerText()).includes('이미'), await page.locator('#msg').innerText());
+check('한 번 더 누르면 6차로로', (await page.locator('#msg').innerText()).includes('6차로') && (await page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((x) => x.kind === 'road6').length)) === 1, await page.locator('#msg').innerText());
+await clickWorld(ux, uy);
+check('6차로에서는 더 넓힐 수 없음 안내', (await page.locator('#msg').innerText()).includes('더 넓힐 수 없습니다'), await page.locator('#msg').innerText());
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
-await page.evaluate(() => window.__game.editor.undo());
+await page.evaluate(() => { window.__game.editor.undo(); window.__game.editor.undo(); });
 check('도로 넓히기도 실행 취소됨', (await road4Count()) === r4before, String(await road4Count()));
 // 신호등: 큰길과 세로 길이 만나는 교차로를 클릭하면 켜지고, 다시 클릭하면 꺼진다
 const sigCount = () => page.evaluate(() => [...window.__game.editor.network.nodes.values()].filter((n) => window.__game.editor.network.hasSignal(n.id)).length);
@@ -501,23 +506,23 @@ const zcount = () => page.evaluate(() => window.__game.editor.network.zones.size
 const [zx, zy] = await freeSpot([[-160, -20], [160, -20], [-160, 20], [160, 20]]);
 await page.keyboard.press('h');
 await dragWorld(zx, zy, zx + 60, zy);
-check('주거 구역 드래그로 4칸 칠함', (await zcount()) === 4 && (await page.locator('#msg').innerText()).includes('주거 구역 4칸'), `${await zcount()} / ${await page.locator('#msg').innerText()}`);
+check('주거 구역 드래그로 4칸 칠함', (await zcount()) === 4 && (await page.locator('#msg').innerText()).includes('주거(저밀) 구역 4칸'), `${await zcount()} / ${await page.locator('#msg').innerText()}`);
 await page.keyboard.press('e');
 await dragWorld(zx, zy, zx + 60, zy);
 check('구역 지우기 도구로 구역이 사라짐', (await zcount()) === 0, String(await zcount()));
 await page.keyboard.press('k');
 await dragWorld(zx, zy, zx + 60, zy);
-check('학교 구역(K) 칠하기', (await zcount()) === 4 && (await page.locator('#msg').innerText()).includes('학교 구역 4칸'), `${await zcount()} / ${await page.locator('#msg').innerText()}`);
+check('주거 고밀 구역(K) 칠하기', (await zcount()) === 4 && (await page.locator('#msg').innerText()).includes('주거(고밀) 구역 4칸'), `${await zcount()} / ${await page.locator('#msg').innerText()}`);
 await page.keyboard.press('e');
 await dragWorld(zx, zy, zx + 60, zy);
-check('학교 구역도 지워짐', (await zcount()) === 0);
+check('고밀 구역도 지워짐', (await zcount()) === 0);
 await page.keyboard.press('h');
 await dragWorld(zx, zy, zx + 60, zy);
 await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 120; while (s.tickCount < t) s.step(); }); // 시뮬 2분
 await page.waitForTimeout(300);
 const grown = await page.evaluate(() => [...window.__game.editor.network.buildings.values()].filter((b) => b.source === 'auto').length);
 check('수요가 있으면 구역에 건물이 자람', grown >= 1, String(grown));
-check('위쪽 바에 수요 막대(주거·상업·직장·학교) 표시', (await page.locator('#rci .rb').count()) === 4 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
+check('위쪽 바에 수요 막대(주거 저·중·고밀, 상업, 사무, 산업) 표시', (await page.locator('#rci .rb').count()) === 6 && (await page.locator('#st-dh').evaluate((e) => e.style.height)) !== '', '');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-zones.png') });
 // 이후 검사(하루 완료율 등)는 구역을 칠하지 않은 샘플로 다시 시작해서 본다
 await page.keyboard.press('Escape');
@@ -602,6 +607,60 @@ await page.mouse.up({ button: 'right' });
 await page.waitForTimeout(500);
 await page.screenshot({ path: process.argv[2] ?? 'smoke.png' });
 
+// ---- 새 도시에서 1.6.0 기능: 곡선·회전교차로·차선 방향·이름·학교·단축키 도움말 ----
+{
+  await page.click('#newcity');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__game.sim.setEvents(false));
+  const segs = () => page.evaluate(() => window.__game.editor.network.segments.size);
+  // 곡선: Q로 곡선 모드, 2로 2차로, 세 번 클릭
+  await page.keyboard.press('q');
+  await page.keyboard.press('2');
+  const base = await segs();
+  await clickWorld(60, -450); await clickWorld(130, -380); await clickWorld(200, -450);
+  check('곡선 모드: 세 번 클릭으로 곡선 도로가 여러 구간으로 만들어짐', (await segs()) >= base + 3 && (await page.locator('#msg').innerText()).includes('곡선 도로를 만들었습니다'), `${base} -> ${await segs()} / ${await page.locator('#msg').innerText()}`);
+  await page.keyboard.press('q');
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  // 교차로를 만들어 두고(편집 API) 회전교차로 도구와 정보 창을 쓴다
+  await page.evaluate(() => { const e = window.__game.editor; e.build({ x: 300, y: -700 }, { x: 300, y: -500 }, 'road4'); e.build({ x: 200, y: -600 }, { x: 400, y: -600 }, 'road4'); window.__game.focus({ x: 300, y: -600 }); });
+  await page.waitForTimeout(300);
+  await clickWorld(250, -600); // 도구 없음: 가로 도로 조각 클릭 → 도로 정보
+  const infoT = await page.locator('#info').innerText();
+  check('도로 정보 창에 이름 입력·넓히기·차선 방향이 있음', infoT.includes('이름 저장') && infoT.includes('차선 방향') && infoT.includes('1차선') && infoT.includes('2차선'), infoT.replace(/\n/g, ' ').slice(0, 120));
+  await page.fill('#in-name', '중앙로');
+  await page.click('#in-name-ok');
+  check('도로 이름 저장', await page.evaluate(() => [...window.__game.editor.network.segments.values()].some((x) => x.name === '중앙로')));
+  await page.click('[data-ld-auto]');
+  check('차선 방향 자동 배정(오른쪽 직진·우회전, 왼쪽 좌회전·직진)', await page.evaluate(() => [...window.__game.editor.network.segments.values()].some((x) => JSON.stringify(x.laneDirsA) === '[6,3]' || JSON.stringify(x.laneDirsB) === '[6,3]')));
+  await page.click('#in-close');
+  await page.keyboard.press('r');
+  await clickWorld(300, -600);
+  check('회전교차로 도구: 교차로가 환형(일방통행 4조각)으로 바뀜', (await page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((x) => x.oneWay).length)) === 4 && (await page.locator('#msg').innerText()).includes('회전교차로를 만들었습니다'), await page.locator('#msg').innerText());
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-roundabout.png') });
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  // 학교 놓기
+  await page.keyboard.press('p');
+  await page.selectOption('#bsize', 'small');
+  await clickWorld(100, -500);
+  check('학교 도구(P): 학교 건물이 놓임', await page.evaluate(() => [...window.__game.editor.network.buildings.values()].some((b) => b.kind === 'school' && b.source === 'player')), await page.locator('#msg').innerText());
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  // 좁히기(Shift+U)
+  await page.keyboard.press('Shift+U');
+  check('Shift+U로 좁히기 도구가 선택됨', await page.locator('button[data-tool="downgrade"].on').count() === 1);
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  // 단축키 도움말
+  await page.keyboard.press('?');
+  check('? 키로 단축키 도움말이 열림(키 이름과 설명 표시)', (await page.locator('#help').isVisible()) && (await page.locator('#help').innerText()).includes('회전교차로') && (await page.locator('#help').innerText()).includes('Shift + U'));
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-help.png') });
+  await page.keyboard.press('Escape');
+  check('Esc로 도움말이 닫힘', !(await page.locator('#help').isVisible()));
+  // 격자 도시
+  await page.click('#gridcity');
+  await page.waitForTimeout(300);
+  const gi = await page.evaluate(() => { const n = window.__game.editor.network; return { sig: [...n.nodes.values()].filter((x) => n.hasSignal(x.id)).length, zones: n.zones.size, ring: [...n.segments.values()].filter((s) => s.oneWay).length }; });
+  check('격자 도시: 신호등 3곳, 회전교차로, 구역 300칸 이상', gi.sig === 3 && gi.zones > 300 && gi.ring >= 3, JSON.stringify(gi));
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-grid.png') });
+}
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

@@ -148,6 +148,24 @@ export class Signals {
     return 'red';
   }
 
+  /** 신호 프로그램 복사: 방식(고정식·감응식)과, 고정식이면 단계별 녹색 시간·시차 */
+  copyProgram(nodeId: number): { mode: 'fixed' | 'actuated'; greens: number[]; offset: number } | null {
+    if (!this.net.hasSignal(nodeId)) return null;
+    if (this.net.isActuated(nodeId)) return { mode: 'actuated', greens: [], offset: 0 };
+    return { mode: 'fixed', greens: this.program(nodeId).map((p) => p.green), offset: this.net.nodes.get(nodeId)!.sigOffset };
+  }
+
+  /** 붙여넣기: 신호를 켜고 방식을 맞춘다. 고정식은 단계 수가 같을 때만 녹색 시간·시차까지 복사한다(다르면 기본 시간). 단계 수가 달라 녹색 시간을 복사하지 못했으면 applied=false */
+  pasteProgram(nodeId: number, p: { mode: 'fixed' | 'actuated'; greens: number[]; offset: number }): { ok: true; applied: boolean } | { ok: false; error: 'notIntersection' } {
+    const r = this.net.setSignal(nodeId, true, p.mode, 0);
+    if (!r.ok) return { ok: false, error: 'notIntersection' };
+    if (p.mode === 'fixed' && p.greens.length && p.greens.length === this.phases(nodeId).length) {
+      this.net.setSignalProgram(nodeId, { greens: p.greens, offset: p.offset });
+      return { ok: true, applied: true };
+    }
+    return { ok: true, applied: p.mode === 'actuated' || !p.greens.length };
+  }
+
   getState() { return [...this.states].map(([k, v]) => [k, { ...v }] as [number, { i: number; sub: Light; t0: number; lastCar: number }]); }
   setState(s: ReturnType<Signals['getState']> | undefined): void { this.states = new Map((s ?? []).map(([k, v]) => [k, { ...v }])); }
   reset(): void { this.states.clear(); }
