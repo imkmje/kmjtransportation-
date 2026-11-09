@@ -7,9 +7,9 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneSchool' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
-const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneShop: 'shop', zoneSchool: 'school', zoneErase: null };
-const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneShop: '상업 구역', zoneSchool: '학교 구역', zoneErase: '구역 지우기' } as const;
+type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'zoneHome' | 'zoneHomeMid' | 'zoneHomeHigh' | 'zoneShop' | 'zoneOffice' | 'zoneIndustrial' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneHomeMid: 'homeMid', zoneHomeHigh: 'homeHigh', zoneShop: 'shop', zoneOffice: 'office', zoneIndustrial: 'industrial', zoneErase: null };
+const ZONE_NAME = { zoneHome: '주거(저밀) 구역', zoneHomeMid: '주거(중밀) 구역', zoneHomeHigh: '주거(고밀) 구역', zoneShop: '상업 구역', zoneOffice: '사무 구역', zoneIndustrial: '산업 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -101,11 +101,13 @@ export function createTools(d: Deps) {
         </span>
       </div>
       <div class="sub" id="sub-zone" data-cat="zone" hidden>
-        <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button>
-        <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 구역</button>
-        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역(산업 구역)을 칠합니다">직장(산업) 구역</button>
-        <button data-tool="zoneSchool" class="z-school" title="단축키 K: 드래그해서 학교 구역을 칠합니다. 학생이 아침에 등교하고 오후에 돌아옵니다">학교 구역</button>
-        <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
+        <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 저밀 구역(작은 집)을 칠합니다">주거 저밀 [H]</button>
+        <button data-tool="zoneHomeMid" class="z-homeMid" title="단축키 J: 주거 중밀 구역(중간 크기 건물)">주거 중밀 [J]</button>
+        <button data-tool="zoneHomeHigh" class="z-homeHigh" title="단축키 K: 주거 고밀 구역(큰 아파트, 2×2칸)">주거 고밀 [K]</button>
+        <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 [C]</button>
+        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 사무 구역(사무 건물)">사무 [O]</button>
+        <button data-tool="zoneIndustrial" class="z-industrial" title="단축키 I: 산업 구역(공장). 화물 트럭이 다닙니다">산업 [I]</button>
+        <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기 [E]</button>
       </div>
       <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
         <button data-tool="stop" title="단축키 S">정지 표지</button>
@@ -530,10 +532,12 @@ export function createTools(d: Deps) {
     else if (k === 't') setTool('road4');
     else if (k === 'x') setTool('demolish');
     else if (k === 'h') setTool('zoneHome');
+    else if (k === 'j') setTool('zoneHomeMid');
+    else if (k === 'i') setTool('zoneIndustrial');
     else if (k === 'o') setTool('zoneOffice');
     else if (k === 'e') setTool('zoneErase');
     else if (k === 'c') setTool('zoneShop');
-    else if (k === 'k') setTool('zoneSchool');
+    else if (k === 'k') setTool('zoneHomeHigh');
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
     else if (k === 'l') setTool('limit');

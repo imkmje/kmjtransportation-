@@ -119,7 +119,7 @@ describe('저장 형식 4', () => {
     expect(d.zones).toEqual([]);
     expect(d.buildings[0].variant).toBe(0);
     expect(d.segments[0].locked).toBe(false);
-    expect(() => Network.parse({ ...v3, formatVersion: 4, zones: [[1, 2, 5]] }, config)).toThrow('손상');
+    expect(() => Network.parse({ ...v3, formatVersion: 4, zones: [[1, 2, 9]] }, config)).toThrow('손상');
     expect(() => Network.parse({ ...v3, formatVersion: 4, zones: 'x' }, config)).toThrow('손상');
   });
 });

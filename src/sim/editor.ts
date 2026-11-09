@@ -38,8 +38,8 @@ export class Editor {
   }
 
   // 건물·구역은 실행 취소 대상이 아니다(취소·다시 실행은 도로·표지·속도만 되돌린다). 그래서 기록을 남기지 않는다
-  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: 'player' | 'map' | 'auto' = 'player', deletable = true, variant = 0): ReturnType<Network['addBuilding']> {
-    return this.network.addBuilding(kind, size, x, y, source, deletable, variant);
+  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: 'player' | 'map' | 'auto' = 'player', deletable = true, variant = 0, density: 0 | 1 | 2 = 0): ReturnType<Network['addBuilding']> {
+    return this.network.addBuilding(kind, size, x, y, source, deletable, variant, density);
   }
 
   removeBuilding(id: number): ReturnType<Network['removeBuilding']> {

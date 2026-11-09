@@ -7,10 +7,12 @@ const GRADE_COLORS = ['#3a9d5a', '#7fae3a', '#d98a1f', '#d65a2a', '#b3302a'];
 // 오른쪽 통계 패널: 정체 지수(등급·게이지), 완료율, 평균 통행시간, 처리량, 차량 수, 안전·교착, 하루 그래프
 export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconnected: () => number, rciRoot: HTMLElement, topCi: HTMLElement, onPick: (segId: number) => void) {
   rciRoot.innerHTML = `
-    <div class="rb" title="주거 수요"><span><i id="st-dh"></i></span><em>주거</em></div>
+    <div class="rb" title="주거 저밀 수요"><span><i id="st-dh"></i></span><em>저밀</em></div>
+    <div class="rb" title="주거 중밀 수요"><span><i id="st-dm"></i></span><em>중밀</em></div>
+    <div class="rb" title="주거 고밀 수요"><span><i id="st-dg"></i></span><em>고밀</em></div>
     <div class="rb" title="상업 수요"><span><i id="st-ds"></i></span><em>상업</em></div>
-    <div class="rb" title="직장 수요"><span><i id="st-do"></i></span><em>직장</em></div>
-    <div class="rb" title="학교 수요"><span><i id="st-dc"></i></span><em>학교</em></div>`;
+    <div class="rb" title="사무 수요"><span><i id="st-do"></i></span><em>사무</em></div>
+    <div class="rb" title="산업 수요"><span><i id="st-di"></i></span><em>산업</em></div>`;
   root.innerHTML = `
     <h4 id="st-head">교통 현황 <span style="font-weight:400">(최근 시뮬 2.5분)</span> <em>▾</em></h4><div id="st-body">
     <div class="ci"><b id="st-ci">-</b><span id="st-grade"></span></div>
@@ -31,7 +33,7 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
     <div id="st-yesterday" class="yday"></div></div>`;
   root.querySelector<HTMLElement>('#st-head')!.onclick = () => root.classList.toggle('closed'); // 머리글을 누르면 접고 편다
   const $ = (id: string) => document.getElementById(id)!;
-  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dsc: $('st-dc'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
+  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dmid: $('st-dm'), dhigh: $('st-dg'), dind: $('st-di'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
   const topEl = $('st-top');
   let lastTop = '';
   topEl.onclick = (e) => { const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-seg]'); if (li) onPick(Number(li.dataset.seg)); };
@@ -50,9 +52,11 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
       el.mark.style.left = `${ci === null ? 0 : Math.min(100, ci)}%`;
       const bars = sim.growth.bars();
       el.dh.style.height = `${bars.home}%`;
+      el.dmid.style.height = `${bars.homeMid}%`;
+      el.dhigh.style.height = `${bars.homeHigh}%`;
+      el.dind.style.height = `${bars.industrial}%`;
       el.dof.style.height = `${bars.office}%`;
       el.dsh.style.height = `${bars.shop}%`;
-      el.dsc.style.height = `${bars.school}%`;
       const completion = m.completion();
       el.comp.textContent = completion === null ? '-' : `${completion.toFixed(0)}% (진행 중 ${dm.inFlight()})`;
       el.avg.textContent = num(m.avgTravelMin(), 0, '분');

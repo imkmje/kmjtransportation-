@@ -32,15 +32,6 @@ describe('학교와 학생', () => {
     expect(sim.metrics.lost.abandoned + sim.metrics.lost.noRoute).toBe(0);
   }, 120_000);
 
-  it('학교 구역을 칠하면 학교가 자란다', () => {
-    const e = base();
-    e.addBuilding('home', 'large', -200, 40, 'map', false);
-    e.network.paintZone(-3, 1, 3, 1, 'school');
-    const sim = new Sim(config, e.network);
-    expect(sim.growth.bars().school).toBeGreaterThan(0);
-    run(sim, 3);
-    expect([...e.network.buildings.values()].some((b) => b.kind === 'school' && b.source === 'auto')).toBe(true);
-  }, 60_000);
 });
 
 describe('공장과 화물 트럭', () => {
@@ -76,15 +67,17 @@ describe('공장과 화물 트럭', () => {
     expect(trucks).toBe(0);
   }, 60_000);
 
-  it('직장 구역에 사무 건물과 공장이 함께 자라고, 공장 구역 칸을 다른 종류로 칠하면 철거된다. 저장·불러오기 후 이어 돌려도 같다', () => {
+  it('산업 구역에는 공장, 사무 구역에는 사무 건물이 자라고, 공장 칸을 다른 종류로 칠하면 철거된다. 저장·불러오기 후 이어 돌려도 같다', () => {
     const e = base();
     e.addBuilding('home', 'large', -200, 40, 'map', false);
-    e.network.paintZone(-4, 1, 6, 1, 'office');
+    e.network.paintZone(-4, 1, 1, 1, 'industrial');
+    e.network.paintZone(2, 1, 6, 1, 'office');
     const sim = new Sim(config, e.network);
     sim.traffic.signals.reset();
     run(sim, 6);
     const kinds = new Set([...e.network.buildings.values()].filter((b) => b.source === 'auto').map((b) => b.kind));
     expect(kinds.has('office') && kinds.has('factory')).toBe(true);
+    for (const b of e.network.buildings.values()) if (b.source === 'auto') expect(b.kind === 'factory' ? b.x < 50 : b.x > 20).toBe(true); // 산업 구역은 왼쪽(−80~20), 사무 구역은 오른쪽
     const saved = exportGame(e, sim);
     const e2 = new Editor(config), s2 = new Sim(config, e2.network);
     importGame(saved, e2, s2);

@@ -29,7 +29,7 @@ describe('도로 넓히기', () => {
 
   it('옆에 건물이 있어 4차로 폭이 걸리면 아무 구간도 바뀌지 않는다', () => {
     const e = make();
-    expect(e.addBuilding('home', 'large', 100, 17, 'map', false).ok).toBe(true); // 2차로는 되지만 4차로(7+11+1=19)는 걸린다
+    expect(e.addBuilding('home', 'medium', 100, 13, 'map', false).ok).toBe(true); // 2차로(3.5+7+1=11.5)는 되지만 4차로(7+7+1=15)는 걸린다
     const r = e.upgrade(seg(e, 300, 0).id);
     expect(r).toEqual({ ok: false, error: 'onBuilding' });
     expect([...e.network.segments.values()].every((s) => s.kind === 'road2')).toBe(true);

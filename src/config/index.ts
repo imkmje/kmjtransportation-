@@ -47,7 +47,7 @@ export const config = {
   deadlock: { detectSec: 5, persistSec: 300, stage2Sec: 30 },
   // 건물 (rules.md 8항 + 제안값). footprint: 건물 한 변의 절반(m)
   buildings: {
-    footprint: { small: 4, medium: 7, large: 11 },
+    footprint: { small: 4, medium: 7, large: 17 }, // 대형은 2×2칸(40m)을 차지한다
     capacity: { small: 10, medium: 30, large: 100 }, // 주거는 거주 인원, 직장은 일자리 수
     height: { home: { small: 3, medium: 5, large: 9 }, office: { small: 6, medium: 12, large: 22 }, shop: { small: 3, medium: 4, large: 6 }, factory: { small: 4, medium: 6, large: 9 }, school: { small: 4, medium: 6, large: 9 } }, // 화면 표시용
     connectRadius: 50, // 가장 가까운 도로 구간에 자동 연결되는 반경(m)
@@ -61,7 +61,18 @@ export const config = {
   // 외부 연결: 지도 가장자리에서 들어오는 시작 도로. 직장인 수의 share만큼 외부 사람이 들어와 일하고(남은 일자리 안에서), 시민의 outShare는 외부로 출근한다
   external: { x: 0, y: -1000, roadEndY: -400, share: 0.15, outShare: 0.1 },
   // 건물 성장: stepSec(시뮬 초)마다 수요 막대만큼 자란다. base: 도시가 작을 때의 기본 수요(이주·사업 의욕)
-  growth: { shopPerResident: 0.5, schoolPerResident: 0.15, factoryShare: 0.4, stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3, sizeWeights: { small: 0.4, medium: 0.45, large: 0.15 } },
+  growth: {
+    shopPerResident: 0.5, industrialShare: 0.4, stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3,
+    // 구역 종류별 건물 크기 확률. 주거는 밀도가 높을수록 큰 건물(고밀은 대형만). 대형은 2×2칸
+    sizeWeights: {
+      home: { small: 0.55, medium: 0.45, large: 0 }, homeMid: { small: 0, medium: 0.5, large: 0.5 }, homeHigh: { small: 0, medium: 0, large: 1 },
+      shop: { small: 0.5, medium: 0.4, large: 0.1 }, office: { small: 0.3, medium: 0.4, large: 0.3 }, industrial: { small: 0.2, medium: 0.4, large: 0.4 },
+    } as Record<'home' | 'homeMid' | 'homeHigh' | 'shop' | 'office' | 'industrial', { small: number; medium: number; large: number }>,
+    // 주거 밀도 수요 배분: 거주자가 적은 도시는 저밀, 커질수록 중·고밀 수요가 늘어난다(거주자 수 기준)
+    densityMix: { lowMin: 0.25, lowDiv: 800, midMin: 0.3, highMin: 0.2, highMax: 0.5, highDiv: 1600 },
+  },
+  densityCap: [1, 1.5, 2.5] as number[], // 주거 밀도별 수용량 배율(저·중·고)
+  densityHeight: [1, 1.5, 2.4] as number[], // 화면 표시용 높이 배율
   // 수요 (rules.md 8항). 시간대는 시계 시각, 가중치 피크 = 100
   demand: {
     workerShare: 0.6, // 거주 인원 중 직장인 비율(1.0.0은 직장인의 출근·퇴근만)

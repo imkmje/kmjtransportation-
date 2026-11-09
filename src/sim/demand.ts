@@ -70,7 +70,8 @@ export class Demand {
 
   // ---------------- 계획 ----------------
   private cap(id: number): number {
-    return this.cfg.buildings.capacity[this.net.buildings.get(id)!.size];
+    const b = this.net.buildings.get(id)!;
+    return this.cfg.buildings.capacity[b.size] * (b.kind === 'home' ? this.cfg.densityCap[b.density] : 1);
   }
 
   private weights(list: [number, number, number][], now: number, day: number) {

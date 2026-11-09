@@ -3,7 +3,7 @@ import { addExternalGate } from './start';
 import type { BuildingKind, BuildingSize, NetworkData } from '../sim/network';
 
 /** 비어 있는 도로망(새로 시작하거나 샘플 맵을 열기 전에) */
-export const EMPTY_NETWORK: NetworkData = { formatVersion: 9, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] };
+export const EMPTY_NETWORK: NetworkData = { formatVersion: 10, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] };
 
 type B = [BuildingKind, BuildingSize, number, number];
 // 큰길 양쪽(y=±40)에 서쪽은 주거, 동쪽은 직장. 작은 길 옆에도 몇 채 두어 정지 표지 쪽 흐름도 생기게 한다
