@@ -17,6 +17,17 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
+// ---- 카메라 기울기 슬라이더 ----
+{
+  const t0 = await page.evaluate(() => window.__game.getTilt());
+  await page.evaluate(() => { const el = document.getElementById('tilt'); el.value = '30'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(300);
+  const t1 = await page.evaluate(() => window.__game.getTilt());
+  const shown = await page.evaluate(() => document.getElementById('tilt').value);
+  check('기울기 슬라이더가 카메라 기울기를 바꿈', Math.abs(t1 - 30) < 1 && t0 > 40 && shown === '30', `${t0.toFixed(0)} → ${t1.toFixed(0)}`);
+  await page.evaluate(() => { const el = document.getElementById('tilt'); el.value = '55'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(200);
+}
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
