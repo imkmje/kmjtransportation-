@@ -7,6 +7,7 @@ export const config = {
   startClockHour: 5, // 1일차 월요일 05:00 시작
   dayBoundaryHour: 4, // 하루 경계 = 시계 04:00
   seed: 12345,
+  speedChoicesKmh: [30, 40, 50, 60, 80, 100, 110], // 속도 제한 도구가 고를 수 있는 값(도로 종류의 상한 이하만)
   // 도로 종류 (rules.md 7항). 속도 단위 km/h, 폭 단위 m
   roads: {
     road2: { name: '왕복 2차로', lanesPerDir: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60, rank: 1 },
@@ -53,6 +54,14 @@ export const config = {
     gap: 2, // 건물 사이 최소 간격(m)
     worldHalf: 1000,
   },
+  // 신호등(1.2.0): 초 단위(시뮬 시간). 녹색·황색·전적색. 기본 프로그램은 자동 생성
+  signals: { greenSec: 15, yellowSec: 3, allRedSec: 1 },
+  // 구역(심시티식): 칸 하나 = 20m. 도로에서 이 거리(중심선 기준) 안의 칸만 칠할 수 있다
+  zones: { cell: 20, maxDist: 45, maxRect: 60 },
+  // 외부 연결: 지도 가장자리에서 들어오는 시작 도로. 직장인 수의 share만큼 외부 사람이 들어와 일하고(남은 일자리 안에서), 시민의 outShare는 외부로 출근한다
+  external: { x: 0, y: -1000, roadEndY: -400, share: 0.15, outShare: 0.1 },
+  // 건물 성장: stepSec(시뮬 초)마다 수요 막대만큼 자란다. base: 도시가 작을 때의 기본 수요(이주·사업 의욕)
+  growth: { stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3, sizeWeights: { small: 0.4, medium: 0.45, large: 0.15 } },
   // 수요 (rules.md 8항). 시간대는 시계 시각, 가중치 피크 = 100
   demand: {
     workerShare: 0.6, // 거주 인원 중 직장인 비율(1.0.0은 직장인의 출근·퇴근만)
@@ -63,7 +72,7 @@ export const config = {
     worldSize: 2000,
   },
   // 통계 (rules.md 1항)
-  metrics: { bucketSec: 10, windowSec: 150 }, // CI 롤링 윈도우 = 시뮬 2.5분
+  metrics: { bucketSec: 10, windowSec: 150, minPasses: 5 }, // CI 롤링 윈도우 = 시뮬 2.5분. minPasses: 도로 한 곳의 통과 차량이 이보다 적으면 판정 없음(회색)
   // 기하 제약 (rules.md 7항)
   geometry: { minSegmentLength: 20, mergeRadius: 8, minAngleDeg: 30, maxRoadsPerNode: 6 },
   // 건설 도구 (제안값)

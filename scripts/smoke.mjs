@@ -48,6 +48,26 @@ check('탭 숨김 시 자동 일시정지', (await page.evaluate(() => window.__
 await page.waitForTimeout(200);
 check('자동 일시정지 안내 문구', (await page.locator('#note').innerText()).includes('자동 일시정지'));
 
+// ---- 새 도시: 외부에서 들어오는 철거 불가 도로 하나로 시작 ----
+const startInfo = await page.evaluate(() => { const n = window.__game.editor.network; return { s: n.segments.size, locked: [...n.segments.values()].every((x) => x.locked), b: [...n.buildings.values()].map((b) => b.kind) }; });
+check('새 도시: 잠긴 도로 1개와 외부 연결점 1개', startInfo.s === 1 && startInfo.locked && startInfo.b.join() === 'external', JSON.stringify(startInfo));
+await page.click('button[data-tool="demolish"]');
+{
+  const p0 = await page.evaluate(() => window.__game.project({ x: 0, y: -500 }));
+  await page.mouse.move(p0.x, p0.y);
+  await page.mouse.click(p0.x, p0.y);
+}
+check('외부 연결 도로는 철거할 수 없다(쉬운 안내)', (await page.locator('#msg').innerText()).includes('철거할 수 없습니다') && (await page.evaluate(() => window.__game.editor.network.segments.size)) === 1, await page.locator('#msg').innerText());
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+// 이후 검사들은 빈 지도에서 시작한다
+await page.evaluate(() => {
+  const g = window.__game;
+  g.editor.loadData({ formatVersion: 5, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
+});
+await page.waitForTimeout(200);
+
 // ---- 2단계: 도로 건설 (드래그) ----
 const counts = () => page.evaluate(() => ({ n: window.__game.editor.network.nodes.size, s: window.__game.editor.network.segments.size }));
 const toScreen = (x, y) => page.evaluate(([x, y]) => window.__game.project({ x, y }), [x, y]);
@@ -171,13 +191,14 @@ await page.keyboard.press('Escape');
   const tref = () => tp.evaluate(() => [[300, 0], [0, 300], [-300, 0], [0, 0]].map(([x, y]) => window.__game.project({ x, y })));
   const tsegs = () => tp.evaluate(() => window.__game.editor.network.segments.size);
   const tt = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
+  const tbase = await tsegs(); // 새 도시는 외부 연결 도로 1개로 시작
   await tp.click('button[data-tool="road2"]');
   let t0 = await tref();
   await tt('touchStart', [{ x: 500, y: 520 }]);
   for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 25, y: 520 + i * 5 }]); await tp.waitForTimeout(20); }
   await tt('touchEnd', []);
   await tp.waitForTimeout(400);
-  check('터치: 한 손가락 드래그로 도로가 그려짐', (await tsegs()) === 1, String(await tsegs()));
+  check('터치: 한 손가락 드래그로 도로가 그려짐', (await tsegs()) === tbase + 1, String(await tsegs()));
   check('터치: 도로를 그리는 동안 카메라가 이동도 회전도 안 함', moved(t0, await tref()) < 1, String(moved(t0, await tref())));
   await tp.keyboard.press('Escape');
   t0 = await tref();
@@ -185,7 +206,7 @@ await page.keyboard.press('Escape');
   for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 500 + i * 15, y: 400 + i * 5 }]); await tp.waitForTimeout(20); }
   await tt('touchEnd', []);
   await tp.waitForTimeout(500);
-  check('터치: 도구가 없을 때 한 손가락 드래그는 화면 이동', moved(t0, await tref()) > 20 && (await tsegs()) === 1, String(moved(t0, await tref())));
+  check('터치: 도구가 없을 때 한 손가락 드래그는 화면 이동', moved(t0, await tref()) > 20 && (await tsegs()) === tbase + 1, String(moved(t0, await tref())));
   t0 = await tref();
   await tt('touchStart', [{ x: 560, y: 360 }, { x: 720, y: 360 }]);
   for (let i = 1; i <= 8; i++) { await tt('touchMove', [{ x: 560 - i * 15, y: 360 }, { x: 720 + i * 15, y: 360 }]); await tp.waitForTimeout(20); }
@@ -267,7 +288,7 @@ const ff = (day, hour) => page.evaluate(([day, hour]) => { const s = window.__ga
 await page.click('button[data-speed="0"]');
 await page.click('#sample');
 await page.waitForTimeout(300);
-check('샘플 맵 열기: 건물 23채, 미연결 0', (await bcount()) === 23 && (await page.evaluate(() => window.__game.sim.demand.unconnected().length)) === 0, String(await bcount()));
+check('샘플 맵 열기: 건물 23채 + 외부 연결점, 미연결 0', (await bcount()) === 24 && (await page.evaluate(() => window.__game.sim.demand.unconnected().length)) === 0, String(await bcount()));
 await ff(1, 8);
 await page.waitForTimeout(400);
 let g0 = await game();
@@ -276,21 +297,42 @@ await page.waitForTimeout(600);
 const ciText = await page.locator('#st-ci').innerText();
 check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciText) && (await page.locator('#stats').innerText()).includes('완료율'), `CI=${ciText}`);
 
+// 신호등: 큰길과 세로 길이 만나는 교차로를 클릭하면 켜지고, 다시 클릭하면 꺼진다
+const sigCount = () => page.evaluate(() => [...window.__game.editor.network.nodes.values()].filter((n) => window.__game.editor.network.hasSignal(n.id)).length);
+await page.keyboard.press('g');
+await clickWorld(0, 0);
+check('신호등 켜기', (await sigCount()) === 1 && (await page.locator('#msg').innerText()).includes('켰습니다'), await page.locator('#msg').innerText());
+await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 60; while (s.tickCount < t) s.step(); });
+await page.waitForTimeout(300);
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-signal.png') });
+await clickWorld(0, 0);
+check('신호등 끄기', (await sigCount()) === 0, String(await sigCount()));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+// 구역: 도로 옆을 드래그해서 칠하고, 지우고, 건물이 자라는지 본다
+const zcount = () => page.evaluate(() => window.__game.editor.network.zones.size);
+const [zx, zy] = await freeSpot([[-160, -20], [160, -20], [-160, 20], [160, 20]]);
 await page.keyboard.press('h');
-await page.selectOption('#bsize', 'small');
-await clickWorld(-20, -40);
-check('주거 건물을 클릭으로 놓음', (await bcount()) === 24, String(await bcount()));
-await clickWorld(0, 0); // 교차로 한가운데: 도로 위
-check('도로 위에는 건물을 못 놓음(쉬운 안내)', (await bcount()) === 24 && (await page.locator('#msg').innerText()).includes('도로'), await page.locator('#msg').innerText());
-await page.keyboard.press('o');
-const [fx, fy] = await freeSpot([[-160, -120], [-160, 120], [160, -120], [160, 120]]); // 격자(20m) 교점이라 반올림 경계에 걸리지 않는다 // 도로에서 50m 넘게 떨어진 빈 땅
-await clickWorld(fx, fy);
-await page.waitForTimeout(500); // 통계 패널은 0.2초마다 갱신된다
-check('도로에서 먼 건물은 놓이되 미연결 경고', (await bcount()) === 25 && (await page.locator('#msg').innerText()).includes('연결되지 않았습니다') && (await page.locator('#st-warn').innerText()).endsWith('· 1'), `msg='${await page.locator('#msg').innerText()}' warn='${await page.locator('#st-warn').innerText()}' 지점=${fx},${fy} 건물수=${await bcount()}`);
-await page.keyboard.press('x');
-await clickWorld(fx, fy);
-await clickWorld(-20, -40);
-check('철거 도구로 건물을 지움', (await bcount()) === 23, String(await bcount()));
+await dragWorld(zx, zy, zx + 60, zy);
+check('주거 구역 드래그로 4칸 칠함', (await zcount()) === 4 && (await page.locator('#msg').innerText()).includes('주거 구역 4칸'), `${await zcount()} / ${await page.locator('#msg').innerText()}`);
+await page.keyboard.press('e');
+await dragWorld(zx, zy, zx + 60, zy);
+check('구역 지우기 도구로 구역이 사라짐', (await zcount()) === 0, String(await zcount()));
+await page.keyboard.press('h');
+await dragWorld(zx, zy, zx + 60, zy);
+await page.evaluate(() => { const s = window.__game.sim; const t = s.tickCount + 20 * 120; while (s.tickCount < t) s.step(); }); // 시뮬 2분
+await page.waitForTimeout(300);
+const grown = await page.evaluate(() => [...window.__game.editor.network.buildings.values()].filter((b) => b.source === 'auto').length);
+check('수요가 있으면 구역에 건물이 자람', grown >= 1, String(grown));
+check('통계 패널에 수요 막대 표시', (await page.locator('#stats').innerText()).includes('주거 수요') && (await page.locator('#st-dh').evaluate((e) => e.style.width)) !== '', '');
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-zones.png') });
+// 이후 검사(하루 완료율 등)는 구역을 칠하지 않은 샘플로 다시 시작해서 본다
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.click('#sample');
+await page.waitForTimeout(300);
+await ff(1, 8);
+await page.waitForTimeout(400);
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 
@@ -318,13 +360,44 @@ await ff(2, 4.5);
 await page.waitForTimeout(800);
 const yday = await page.locator('#st-yesterday').innerText();
 const rec = await page.evaluate(() => window.__game.sim.metrics.history[0]);
-check('하루가 끝나면 어제 요약이 표시됨(완료율 95% 이상)', yday.includes('어제(1일차)') && rec.completion >= 95 && rec.generated === 504, `${yday} / ${JSON.stringify(rec)}`);
+check('하루가 끝나면 어제 요약이 표시됨(완료율 95% 이상)', yday.includes('어제(1일차)') && rec.completion >= 95 && rec.generated > 504, `${yday} / ${JSON.stringify(rec)}`);
 check('샘플 하루 동안 안전망 개입·교착·충돌 점유 0', await page.evaluate(() => { const s = window.__game.sim.traffic.stats; return s.interventions === 0 && s.deadlocks === 0 && s.conflicts === 0; }));
 
 await page.reload();
 await page.waitForSelector('canvas');
 await page.waitForTimeout(800);
 check('다시 열면 자동 저장이 있다고 알려 줌', (await page.locator('#msg').innerText()).includes('자동 저장'), await page.locator('#msg').innerText());
+
+// ---- 1.1.0 1단계: 정체 히트맵, 색약 친화 색상, 속도 제한 ----
+await page.click('button[data-speed="0"]');
+await page.click('#sample');
+await ff(1, 8);
+await page.keyboard.press('m');
+check('히트맵 켜기: 범례가 나타남(등급 5 + 통행 적음)', (await page.locator('#legend').isVisible()) && (await page.locator('#legend span').count()) === 6, String(await page.locator('#legend span').count()));
+const legendColor = () => page.locator('#legend i').first().evaluate((e) => getComputedStyle(e).backgroundColor);
+const c1 = await legendColor();
+await page.click('#cb');
+const c2 = await legendColor();
+check('색약 친화 색상으로 바꾸면 범례 색이 달라짐', c1 !== c2, `${c1} → ${c2}`);
+await page.click('#cb');
+await page.click('button[data-speed="1"]');
+await page.waitForTimeout(2500);
+const heatColors = await page.evaluate(() => [...window.__game.heat.colors().values()]);
+check('출근 중에는 통행이 있는 도로가 회색이 아닌 등급 색으로 칠해짐', heatColors.some((c) => c !== '#9aa0a6') && heatColors.some((c) => c === '#9aa0a6'), JSON.stringify([...new Set(heatColors)]));
+await page.click('button[data-speed="0"]');
+await page.keyboard.press('m');
+check('히트맵 끄기: 범례가 사라짐', !(await page.locator('#legend').isVisible()));
+
+await page.keyboard.press('l');
+await clickWorld(60, 0); // 큰길(왕복 4차로, 기본 60, 상한 80)
+const limits = () => page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((sg) => sg.playerSpeedKmh !== null).map((sg) => sg.playerSpeedKmh));
+check('속도 제한 도구: 첫 클릭은 한 단계 올라감(60→80)', JSON.stringify(await limits()) === '[80]', JSON.stringify(await limits()));
+await clickWorld(60, 0);
+check('상한 다음 클릭은 가장 낮은 값(30)으로 돌아감', JSON.stringify(await limits()) === '[30]', JSON.stringify(await limits()));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Control+z');
+check('속도 제한도 실행 취소됨', JSON.stringify(await limits()) === '[80]', JSON.stringify(await limits()));
+await page.keyboard.press('Escape');
 
 // 카메라 조작: 휠 줌과 드래그 후에도 오류 없이 렌더
 await page.mouse.move(640, 360);

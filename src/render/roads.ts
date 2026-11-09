@@ -27,6 +27,23 @@ function place(m: THREE.Mesh, a: Pt, b: Pt, width: number, height: number, botto
   m.rotation.y = Math.atan2(b.y - a.y, b.x - a.x);
 }
 
+// 속도 제한 표지판: 하얀 원에 빨간 테두리, 가운데 숫자. 같은 숫자는 한 번만 만든다
+const limitMats = new Map<number, THREE.SpriteMaterial>();
+function limitMaterial(kmh: number): THREE.SpriteMaterial {
+  let m = limitMats.get(kmh);
+  if (!m) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#d63a31'; g.lineWidth = 12; g.beginPath(); g.arc(64, 64, 54, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#1d2630'; g.font = 'bold 56px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(kmh), 64, 68);
+    m = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthWrite: false });
+    limitMats.set(kmh, m);
+  }
+  return m;
+}
+
 export function createRoadLayer(scene: THREE.Scene, net: Network) {
   const group = new THREE.Group();
   scene.add(group);
@@ -85,6 +102,16 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
         g.rotation.y = Math.atan2(-tx, ty); // 표지 앞면이 달려오는 차량 쪽(-진행방향)을 향한다
         group.add(g);
       }
+    }
+    // 속도를 바꾼 도로: 도로 가운데 위에 제한속도 표지판
+    for (const s of net.segments.values()) {
+      if (s.playerSpeedKmh === null) continue;
+      const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
+      const sp = new THREE.Sprite(limitMaterial(s.playerSpeedKmh));
+      const p = toThree((a.x + b.x) / 2, (a.y + b.y) / 2, 7);
+      sp.position.set(p.x, p.y, p.z);
+      sp.scale.set(9, 9, 1);
+      group.add(sp);
     }
     // 교차로·끝점은 둥근 판으로 덮어 이음새를 가린다(조금 더 높게: 겹침 깜빡임 방지)
     for (const [id, r] of radius) {

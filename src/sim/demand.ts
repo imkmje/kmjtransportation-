@@ -116,14 +116,26 @@ export class Demand {
     if (this.isWeekend(day)) return;
     const offices = this.ofKind('office');
     const remaining = new Map(offices.map((o) => [o.id, Math.max(0, this.cap(o.id) - (this.committed.get(o.id) ?? 0))]));
-    for (const h of this.ofKind('home')) { // 건물 ID 순서
-      const workers = Math.round(this.cap(h.id) * this.cfg.demand.workerShare) - (this.departed.get(h.id) ?? 0);
+    const extId = this.net.externalId();
+    const ext = extId === null ? null : this.net.buildings.get(extId)!;
+    const homes = this.ofKind('home');
+    const totalWorkers = homes.reduce((a, h) => a + Math.round(this.cap(h.id) * this.cfg.demand.workerShare), 0);
+    const ex = this.cfg.external;
+    // 주민(건물 ID 순) 다음에 외부 사람들이 남은 일자리를 채운다. 외부 사람은 연결점에서 출발한다
+    for (const h of [...homes, ...(ext ? [ext] : [])]) {
+      const outsider = h.kind === 'external';
+      const workers = (outsider ? Math.round(totalWorkers * ex.share) : Math.round(this.cap(h.id) * this.cfg.demand.workerShare)) - (this.departed.get(h.id) ?? 0);
       for (let i = 0; i < workers; i++) {
-        const o = this.choose(h, offices.map((b) => ({ id: b.id, x: b.x, y: b.y, cap: remaining.get(b.id)! > 0 ? this.cap(b.id) : 0 })));  // 가중치는 전체 수용량, 남은 수용량이 없으면 후보에서 제외
+        let o: number | null;
+        if (ext && !outsider && this.rng.next() < ex.outShare) o = ext.id; // 일부는 외부로 출근한다
+        else {
+          o = this.choose(h, offices.map((b) => ({ id: b.id, x: b.x, y: b.y, cap: remaining.get(b.id)! > 0 ? this.cap(b.id) : 0 }))); // 가중치는 전체 수용량, 남은 수용량이 없으면 후보에서 제외
+          if (o === null && ext && !outsider) o = ext.id; // 도시 안에 일자리가 없으면 외부에서 일한다
+        }
         if (o === null) { this.unemployed++; continue; } // 일자리가 모자라 출근하지 못한다
         const time = this.sampleTime(this.cfg.demand.commuteWeights, now, day);
         if (time === null) continue; // 출근 시간대가 이미 지났다
-        remaining.set(o, remaining.get(o)! - 1);
+        if (o !== ext?.id) remaining.set(o, remaining.get(o)! - 1);
         this.insert({ time, kind: 'commute', from: h.id, to: o, ghost: null });
       }
     }

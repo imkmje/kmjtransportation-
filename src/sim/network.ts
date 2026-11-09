@@ -2,7 +2,7 @@ import type { Config } from '../config';
 
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
-export interface NetNode { id: number; x: number; y: number; z: number }
+export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동)
 export type SignKind = 'stop' | 'yield';
 export interface Segment {
   id: number;
@@ -13,9 +13,11 @@ export interface Segment {
   playerSpeedKmh: number | null; // 플레이어가 바꾼 제한속도(기본값은 도로 종류에서)
   signA: SignKind | null; // a쪽 끝으로 들어오는 방향의 표지
   signB: SignKind | null; // b쪽 끝으로 들어오는 방향의 표지
+  locked: boolean; // 철거할 수 없는 도로(외부 연결 도로)
 }
 
-export type BuildingKind = 'home' | 'office'; // 1.0.0: 주거, 사무형 직장. 이후 버전에서 늘어난다
+export type BuildingKind = 'home' | 'office' | 'external'; // 주거, 사무형 직장, 외부 연결점(지도 가장자리의 가상 건물). 이후 버전에서 늘어난다
+export type ZoneType = 'home' | 'office'; // 심시티식 구역: 주거 구역, 직장 구역
 export type BuildingSize = 'small' | 'medium' | 'large';
 export type BuildingSource = 'player' | 'map' | 'auto'; // 4.0.0(구역 시스템) 대비
 export interface Building {
@@ -27,15 +29,18 @@ export interface Building {
   source: BuildingSource;
   deletable: boolean; // 맵 제공 건물은 지울 수 없다
   parking: number; // 3.0.0 예약(주차 수용량). 지금은 항상 0
+  variant: number; // 건물 모양(높이·지붕·층 등)을 정하는 값. 자동으로 자란 건물은 난수로, 나머지는 0
 }
 export type BuildingError = 'onRoad' | 'overlap' | 'outOfBounds' | 'locked';
+export type CellStatus = 'ok' | 'out' | 'road' | 'far'; // 구역 칸 상태: 칠할 수 있음 / 지도 밖 / 도로와 겹침 / 도로에서 너무 멂
+export type ZoneCell = [number, number, 0 | 1]; // 칸 번호 i, j와 종류(0 = 주거, 1 = 직장). 칸 (i,j)의 중심은 (20i, 20j)
 
-export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads';
+export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads' | 'onBuilding';
 interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 3; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가
+export const NETWORK_FORMAT_VERSION = 5; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -44,11 +49,14 @@ export interface NetworkData {
   segments: Segment[];
   nextBuildingId: number;
   buildings: Building[];
+  zones: ZoneCell[];
 }
 
-type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings'>;
+type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh' | 'zones'>;
 const EPS = 1e-9;
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+const zkey = (i: number, j: number) => (i + 1024) * 2048 + (j + 1024);
+const zcell = (k: number): [number, number] => [Math.floor(k / 2048) - 1024, (k % 2048) - 1024];
 const cross = (ax: number, ay: number, bx: number, by: number) => ax * by - ay * bx;
 
 function distToSegment(p: Pt, a: Pt, b: Pt) {
@@ -81,6 +89,10 @@ export class Network {
   readonly nodes = new Map<number, NetNode>();
   readonly segments = new Map<number, Segment>();
   readonly buildings = new Map<number, Building>();
+  /** 구역 칸. 키 = 칸 번호(i, j)를 하나의 수로 만든 값 */
+  readonly zones = new Map<number, ZoneType>();
+  /** 구역이 바뀔 때마다 증가(화면이 구역 칸을 다시 그릴 때 확인) */
+  zonesRevision = 0;
   /** 도로망(도로·표지·건물)이 바뀔 때마다 증가. 화면이 다시 그릴 때 확인 */
   revision = 0;
   /** 건물이 바뀔 때마다 증가(수요가 다시 계획할 때 확인) */
@@ -151,6 +163,13 @@ export class Network {
       if (distToSegment(n, s1, s2).d < g.mergeRadius) return fail('nodeTooClose');
     }
 
+    // 건물 위로 지나가는 도로는 불가(외부 연결점은 지도 밖이라 제외)
+    const rd = this.rules.roads[kind];
+    for (const b of this.buildings.values()) {
+      if (b.kind === 'external') continue;
+      if (distToSegment(b, s1, s2).d < rd.lanesPerDir * rd.laneWidth + this.rules.buildings.footprint[b.size] + 1) return fail('onBuilding');
+    }
+
     // 기존 도로와의 교차점(양 끝이 걸쳐진 도로는 제외)
     const skip = new Set<number>();
     if (s1.segId !== undefined) skip.add(s1.segId);
@@ -215,14 +234,15 @@ export class Network {
     });
     const ids: number[] = [];
     for (let i = 0; i < nodeIds.length - 1; i++) ids.push(this.addSegment(nodeIds[i], nodeIds[i + 1], kind));
+    this.pruneZones();
     this.revision++;
     return { ok: true, ids, length: plan.length };
   }
 
   /** 철거. 연결이 모두 없어진 노드도 같이 지운다(2개만 남은 이음 노드는 그대로 둔다) */
-  removeSegment(id: number): boolean {
+  removeSegment(id: number, force = false): boolean {
     const seg = this.segments.get(id);
-    if (!seg) return false;
+    if (!seg || (seg.locked && !force)) return false;
     this.segments.delete(id);
     for (const nid of [seg.a, seg.b]) if (this.segmentsAt(nid).length === 0) this.nodes.delete(nid);
     this.revision++;
@@ -256,14 +276,106 @@ export class Network {
     return { ok: true };
   }
 
-  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: BuildingSource = 'player', deletable = true): { ok: true; id: number } | { ok: false; error: BuildingError } {
+  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: BuildingSource = 'player', deletable = true, variant = 0): { ok: true; id: number } | { ok: false; error: BuildingError } {
     const p = this.planBuilding(kind, size, x, y);
     if (!p.ok) return p;
     const id = this.nextBuildingId++;
-    this.buildings.set(id, { id, kind, size, x, y, source, deletable, parking: 0 });
+    this.buildings.set(id, { id, kind, size, x, y, source, deletable, parking: 0, variant });
     this.revision++;
     this.buildingsRevision++;
     return { ok: true, id };
+  }
+
+  /** 지도 가장자리의 외부 연결점(가상 건물). 지울 수 없고 도로와 겹침 검사를 받지 않는다 */
+  addExternal(x: number, y: number): number {
+    const id = this.nextBuildingId++;
+    this.buildings.set(id, { id, kind: 'external', size: 'small', x, y, source: 'map', deletable: false, parking: 0, variant: 0 });
+    this.revision++;
+    this.buildingsRevision++;
+    return id;
+  }
+
+  externalId(): number | null {
+    for (const b of this.buildings.values()) if (b.kind === 'external') return b.id;
+    return null;
+  }
+
+  // ---------------- 구역 ----------------
+
+  /** 구역 칸 (i, j)의 상태. 칸 중심이 어떤 도로에서든 (도로 반폭 + 칸 반쪽) 이상 떨어져야 하고, 어떤 도로에서든 maxDist 안이어야 칠할 수 있다 */
+  cellStatus(i: number, j: number): CellStatus {
+    const { cell, maxDist } = this.rules.zones;
+    const x = i * cell, y = j * cell, lim = this.rules.buildings.worldHalf - cell / 2;
+    if (Math.abs(x) > lim || Math.abs(y) > lim) return 'out';
+    let near = false;
+    for (const s of this.segments.values()) {
+      const r = this.rules.roads[s.kind];
+      const d = distToSegment({ x, y }, this.nodes.get(s.a)!, this.nodes.get(s.b)!).d;
+      if (d < r.lanesPerDir * r.laneWidth + cell / 2) return 'road';
+      if (d <= maxDist) near = true;
+    }
+    return near ? 'ok' : 'far';
+  }
+
+  /** 건물이 차지한 칸(중심이 가장 가까운 칸). 외부 연결점은 제외 */
+  occupiedCells(): Map<number, Building> {
+    const c = this.rules.zones.cell, m = new Map<number, Building>();
+    for (const b of this.buildings.values()) if (b.kind !== 'external') m.set(zkey(Math.round(b.x / c), Math.round(b.y / c)), b);
+    return m;
+  }
+
+  /** 구역 칸 목록(칸 번호 순). 키가 같으면 하나 */
+  zoneList(): { i: number; j: number; type: ZoneType }[] {
+    return [...this.zones.keys()].sort((a, b) => a - b).map((k) => { const [i, j] = zcell(k); return { i, j, type: this.zones.get(k)! }; });
+  }
+
+  /** 건물이 아직 없고 도로 가까이에 있는, 이 종류 구역 칸(칸 번호 순) */
+  freeZoneCells(type: ZoneType): { i: number; j: number }[] {
+    const occ = this.occupiedCells();
+    return this.zoneList().filter((z) => z.type === type && !occ.has(zkey(z.i, z.j)) && this.cellStatus(z.i, z.j) === 'ok');
+  }
+
+  /** 사각형(칸 번호 범위)을 구역으로 칠하거나(type) 지운다(null). 한 변은 maxRect칸까지. 바뀐 칸 수를 돌려준다.
+   * 칠할 수 없는 칸(지도 밖·도로 위·도로에서 먼 곳·직접 놓은 건물이 있는 칸)은 건너뛴다. 자동으로 자란 건물이 다른 종류 구역이 되면 철거한다 */
+  paintZone(i0: number, j0: number, i1: number, j1: number, type: ZoneType | null): number {
+    const max = this.rules.zones.maxRect;
+    const a = Math.min(i0, i1), b = Math.min(Math.max(i0, i1), a + max - 1);
+    const c = Math.min(j0, j1), d = Math.min(Math.max(j0, j1), c + max - 1);
+    const occ = this.occupiedCells();
+    let n = 0;
+    for (let i = a; i <= b; i++) for (let j = c; j <= d; j++) {
+      const k = zkey(i, j), had = this.zones.get(k), o = occ.get(k);
+      if (type === null) {
+        if (had === undefined) continue;
+        this.zones.delete(k);
+        if (o && o.source === 'auto') this.removeBuilding(o.id, true);
+        n++;
+        continue;
+      }
+      if (had === type || this.cellStatus(i, j) !== 'ok') continue;
+      if (o && o.source !== 'auto' && o.kind !== type) continue;
+      if (o && o.source === 'auto' && o.kind !== type) this.removeBuilding(o.id, true);
+      this.zones.set(k, type);
+      n++;
+    }
+    if (n) this.zonesRevision++;
+    return n;
+  }
+
+  /** 새 도로가 깔린 칸의 구역을 지운다 */
+  private pruneZones(): void {
+    let n = 0;
+    for (const k of [...this.zones.keys()]) {
+      const [i, j] = zcell(k);
+      if (this.cellStatus(i, j) === 'road') { this.zones.delete(k); n++; }
+    }
+    if (n) this.zonesRevision++;
+  }
+
+  /** 도로를 철거 불가로 만든다(외부 연결 도로) */
+  lockSegment(id: number): void {
+    const s = this.segments.get(id);
+    if (s) { s.locked = true; this.revision++; }
   }
 
   /** 맵이 제공한 건물(deletable=false)은 force 없이는 지울 수 없다 */
@@ -292,6 +404,32 @@ export class Network {
     return best;
   }
 
+  /** 도로 구간의 제한속도를 바꾼다. 기본값과 같으면 "바꾸지 않음"(null)으로 돌아간다. 도로 종류의 상한을 넘거나 고를 수 없는 값이면 거부 */
+  setSpeedLimit(segId: number, kmh: number | null): { ok: true } | { ok: false; error: 'noSuchSegment' | 'badSpeed' } {
+    const seg = this.segments.get(segId);
+    if (!seg) return { ok: false, error: 'noSuchSegment' };
+    const r = this.rules.roads[seg.kind];
+    if (kmh !== null && (!this.rules.speedChoicesKmh.includes(kmh) || kmh > r.maxSpeedKmh)) return { ok: false, error: 'badSpeed' };
+    seg.playerSpeedKmh = kmh === r.defaultSpeedKmh ? null : kmh;
+    this.revision++;
+    return { ok: true };
+  }
+
+  /** 교차로의 신호등을 켜거나 끈다. 도로 3개 이상이 만나는 곳만 가능. 켜면 그 교차로의 정지·양보 표지는 무시된다 */
+  setSignal(nodeId: number, on: boolean): { ok: true } | { ok: false; error: 'notIntersection' | 'noSuchNode' } {
+    const n = this.nodes.get(nodeId);
+    if (!n) return { ok: false, error: 'noSuchNode' };
+    if (on && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
+    n.signal = on;
+    this.revision++;
+    return { ok: true };
+  }
+
+  /** 신호등이 실제로 작동하는 교차로인가 */
+  hasSignal(nodeId: number): boolean {
+    return !!this.nodes.get(nodeId)?.signal && this.segmentsAt(nodeId).length >= 3;
+  }
+
   signAt(segId: number, nodeId: number): SignKind | null {
     const s = this.segments.get(segId);
     return !s ? null : s.a === nodeId ? s.signA : s.b === nodeId ? s.signB : null;
@@ -299,13 +437,13 @@ export class Network {
 
   private addNode(x: number, y: number): number {
     const id = this.nextNodeId++;
-    this.nodes.set(id, { id, x, y, z: 0 });
+    this.nodes.set(id, { id, x, y, z: 0, signal: false });
     return id;
   }
 
   private addSegment(a: number, b: number, kind: RoadKind): number {
     const id = this.nextSegmentId++;
-    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null, signA: null, signB: null });
+    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null, signA: null, signB: null, locked: false });
     return id;
   }
 
@@ -329,6 +467,7 @@ export class Network {
       segments: [...this.segments.values()].map((s) => ({ ...s })),
       nextBuildingId: this.nextBuildingId,
       buildings: [...this.buildings.values()].map((b) => ({ ...b })),
+      zones: this.zoneList().map((z): ZoneCell => [z.i, z.j, z.type === 'home' ? 0 : 1]),
     };
   }
 
@@ -349,16 +488,20 @@ export class Network {
     }
     const okSign = (v: unknown) => v === null || v === 'stop' || v === 'yield';
     // 형식 1 → 2: 표지 필드를 비워서 채운다
-    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null }));
+    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null, locked: (sg as Partial<Segment>).locked === true }));
     if (!segments.every((sg) => okSign(sg.signA) && okSign(sg.signB))) throw new Error('도로망 파일이 손상되었습니다');
     // 형식 1·2 → 3: 건물이 없는 것으로 채운다
     const rawB = (d as Partial<NetworkData>).buildings ?? [];
     if (!Array.isArray(rawB)) throw new Error('도로망 파일이 손상되었습니다');
-    const kinds = ['home', 'office'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
+    const kinds = ['home', 'office', 'external'], sizes = Object.keys(rules.buildings.footprint), sources = ['player', 'map', 'auto'];
     for (const b of rawB) {
       if (![b?.id, b?.x, b?.y].every((v) => typeof v === 'number' && Number.isFinite(v)) || !kinds.includes(b.kind) || !sizes.includes(b.size) || !sources.includes(b.source)) throw new Error('도로망 파일이 손상되었습니다');
     }
-    const buildings = rawB.map((b) => ({ ...b, deletable: b.deletable !== false, parking: b.parking ?? 0 }));
+    // 형식 3 → 4: 건물 모양은 0, 도로는 철거 가능, 구역은 없는 것으로 채운다
+    const buildings = rawB.map((b) => ({ ...b, deletable: b.deletable !== false, parking: b.parking ?? 0, variant: (b as Partial<Building>).variant ?? 0 }));
+    if (!buildings.every((b) => typeof b.variant === 'number' && Number.isFinite(b.variant))) throw new Error('도로망 파일이 손상되었습니다');
+    const rawZ = (d as Partial<NetworkData>).zones ?? [];
+    if (!Array.isArray(rawZ) || !rawZ.every((z) => Array.isArray(z) && Number.isInteger(z[0]) && Number.isInteger(z[1]) && (z[2] === 0 || z[2] === 1) && Math.abs(z[0]) < 1000 && Math.abs(z[1]) < 1000)) throw new Error('도로망 파일이 손상되었습니다');
     const maxBuilding = Math.max(0, ...buildings.map((b) => b.id));
     const maxNode = Math.max(0, ...d.nodes.map((n) => n.id));
     const maxSeg = Math.max(0, ...d.segments.map((s) => s.id));
@@ -366,10 +509,11 @@ export class Network {
       formatVersion: NETWORK_FORMAT_VERSION,
       nextNodeId: Math.max(d.nextNodeId ?? 0, maxNode + 1),
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
-      nodes: d.nodes,
+      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true })),
       segments,
       nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
       buildings,
+      zones: rawZ,
     };
   }
 
@@ -383,6 +527,9 @@ export class Network {
     this.buildings.clear();
     for (const b of [...data.buildings].sort((a, c) => a.id - c.id)) this.buildings.set(b.id, { ...b });
     this.nextBuildingId = data.nextBuildingId;
+    this.zones.clear();
+    for (const [i, j, t] of [...data.zones].sort((a, b) => zkey(a[0], a[1]) - zkey(b[0], b[1]))) this.zones.set(zkey(i, j), t === 0 ? 'home' : 'office');
+    this.zonesRevision++;
     this.revision++;
     this.buildingsRevision++;
   }

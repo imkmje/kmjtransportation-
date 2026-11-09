@@ -8,6 +8,7 @@ const cone = new THREE.ConeGeometry(1, 1, 4);
 const HOME_COLORS = [0xecc9a0, 0xe5a99b, 0xf2dcae, 0xd9bda3, 0xefb98a].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const HOME_ROOFS = [0xc9a07a, 0xc3837a, 0xd0b988, 0xb89b82, 0xcf9560].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const OFFICE_COLORS = [0x8da9c6, 0x7d9bb9, 0xa1b6cb, 0x6f8fb0].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const gateMat = new THREE.MeshLambertMaterial({ color: 0xe8b93c });
 const linkMat = new THREE.MeshBasicMaterial({ color: 0x6c7480, transparent: true, opacity: 0.55 });
 const warnMat = new THREE.MeshBasicMaterial({ color: 0xe0443c });
 const goodMat = new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true, opacity: 0.55, depthWrite: false });
@@ -27,20 +28,40 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
     m.position.set(p.x, p.y, p.z);
     m.scale.set(w, h, w);
   };
-  const size = (kind: BuildingKind, s: BuildingSize) => ({ half: config.buildings.footprint[s], h: config.buildings.height[kind][s] });
+  const size = (kind: BuildingKind, s: BuildingSize, variant = 0) => ({
+    half: config.buildings.footprint[s],
+    h: config.buildings.height[kind === 'office' ? 'office' : 'home'][s] * (variant === 0 ? 1 : 0.8 + ((variant >> 2) % 5) * 0.1), // 자란 건물은 높이가 조금씩 다르다
+  });
 
   function rebuild() {
     group.clear();
     for (const b of net.buildings.values()) {
-      const { half, h } = size(b.kind, b.size);
-      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[b.id % HOME_COLORS.length] : OFFICE_COLORS[b.id % OFFICE_COLORS.length]);
+      if (b.kind === 'external') { // 외부 연결점: 노란 표지판이 달린 문
+        const pad = new THREE.Mesh(unitBox, gateMat);
+        place(pad, b.x, b.y, 16, 0.4);
+        const sign = new THREE.Mesh(unitBox, gateMat);
+        place(sign, b.x, b.y, 3, 14);
+        sign.scale.set(14, 4, 1.2);
+        const p = toThree(b.x, b.y, 12);
+        sign.position.set(p.x, p.y, p.z);
+        group.add(pad, sign);
+        continue;
+      }
+      const { half, h } = size(b.kind, b.size, b.variant);
+      const pick = b.id + b.variant;
+      const body = new THREE.Mesh(unitBox, b.kind === 'home' ? HOME_COLORS[pick % HOME_COLORS.length] : OFFICE_COLORS[pick % OFFICE_COLORS.length]);
       place(body, b.x, b.y, half * 2, h);
       group.add(body);
-      if (b.kind === 'home') { // 지붕
-        const roof = new THREE.Mesh(cone, HOME_ROOFS[b.id % HOME_ROOFS.length]);
+      if (b.kind === 'office' && b.variant % 2 === 1) { // 위층이 좁아지는 계단형 탑
+        const top = new THREE.Mesh(unitBox, OFFICE_COLORS[(pick + 1) % OFFICE_COLORS.length]);
+        place(top, b.x, b.y, half * 1.2, h * 0.35, h);
+        group.add(top);
+      }
+      if (b.kind === 'home' && b.variant % 3 !== 2) { // 지붕(변형 2는 평평한 지붕)
+        const roof = new THREE.Mesh(cone, HOME_ROOFS[pick % HOME_ROOFS.length]);
         const p = toThree(b.x, b.y, h + half * 0.35);
         roof.position.set(p.x, p.y, p.z);
-        roof.scale.set(half * 1.45, half * 0.7, half * 1.45);
+        roof.scale.set(half * 1.45, half * (b.variant % 3 === 1 ? 1.1 : 0.7), half * 1.45);
         roof.rotation.y = Math.PI / 4;
         group.add(roof);
       }

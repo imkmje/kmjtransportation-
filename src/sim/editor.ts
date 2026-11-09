@@ -7,7 +7,7 @@ export class Editor {
   private history: string[] = [];
   private index = 0;
 
-  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings'>) {
+  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings' | 'speedChoicesKmh' | 'zones'>) {
     this.network = new Network(cfg);
     this.history.push(this.snapshot());
   }
@@ -35,20 +35,29 @@ export class Editor {
     return r;
   }
 
-  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: 'player' | 'map' | 'auto' = 'player', deletable = true): ReturnType<Network['addBuilding']> {
-    const r = this.network.addBuilding(kind, size, x, y, source, deletable);
+  // 건물·구역은 실행 취소 대상이 아니다(취소·다시 실행은 도로·표지·속도만 되돌린다). 그래서 기록을 남기지 않는다
+  addBuilding(kind: BuildingKind, size: BuildingSize, x: number, y: number, source: 'player' | 'map' | 'auto' = 'player', deletable = true, variant = 0): ReturnType<Network['addBuilding']> {
+    return this.network.addBuilding(kind, size, x, y, source, deletable, variant);
+  }
+
+  removeBuilding(id: number): ReturnType<Network['removeBuilding']> {
+    return this.network.removeBuilding(id);
+  }
+
+  setSignal(nodeId: number, on: boolean): ReturnType<Network['setSignal']> {
+    const r = this.network.setSignal(nodeId, on);
     if (r.ok) this.commit();
     return r;
   }
 
-  removeBuilding(id: number): ReturnType<Network['removeBuilding']> {
-    const r = this.network.removeBuilding(id);
+  setSpeedLimit(segId: number, kmh: number | null): ReturnType<Network['setSpeedLimit']> {
+    const r = this.network.setSpeedLimit(segId, kmh);
     if (r.ok) this.commit();
     return r;
   }
 
   demolish(segId: number): boolean {
-    const ok = this.network.removeSegment(segId);
+    const ok = this.network.removeSegment(segId); // 외부 연결 도로(locked)는 false
     if (ok) this.commit();
     return ok;
   }
@@ -78,17 +87,23 @@ export class Editor {
   get canUndo(): boolean { return this.index > 0; }
   get canRedo(): boolean { return this.index < this.history.length - 1; }
 
+  /** 도로 쪽만 기록으로 되돌리고, 건물·구역은 지금 것을 그대로 둔다 */
+  private restore(text: string): void {
+    const live = this.network.toJSON();
+    this.network.load({ ...(JSON.parse(text) as NetworkData), buildings: live.buildings, nextBuildingId: live.nextBuildingId, zones: live.zones });
+  }
+
   undo(): boolean {
     if (!this.canUndo) return false;
     this.index--;
-    this.network.load(JSON.parse(this.history[this.index]) as NetworkData);
+    this.restore(this.history[this.index]);
     return true;
   }
 
   redo(): boolean {
     if (!this.canRedo) return false;
     this.index++;
-    this.network.load(JSON.parse(this.history[this.index]) as NetworkData);
+    this.restore(this.history[this.index]);
     return true;
   }
 }

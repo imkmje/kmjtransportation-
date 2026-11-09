@@ -18,9 +18,16 @@
       #stats .ci b { font-size: 34px; line-height: 1; } #stats .ci span { font-weight: 700; }
       #stats .gauge { position: relative; height: 10px; border-radius: 5px; margin: 8px 0 10px; background: linear-gradient(90deg,#4caf6a 0 10%,#a5cf5b 10% 25%,#f0b13a 25% 40%,#e8743a 40% 60%,#c93c34 60% 100%); }
       #stats .gauge i { position: absolute; top: -4px; width: 4px; height: 18px; background: #1d2630; border-radius: 2px; transform: translateX(-2px); }
+      #stats .dem { display: grid; gap: 3px; margin-bottom: 6px; font-size: 11px; color: #55655a; }
+      #stats .dem div { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 6px; }
+      #stats .dem span { height: 8px; background: #dfe8df; border-radius: 4px; overflow: hidden; } #stats .dem i { display: block; height: 100%; width: 0; }
+      #stats .dem div:first-child i { background: #4fb866; } #stats .dem div:last-child i { background: #4f86d6; }
       #stats .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin-top: 4px; }
       #stats .kv div:nth-child(odd) { color: #55655a; } #stats .kv div:nth-child(even) { font-weight: 700; text-align: right; }
       #stats svg { margin-top: 8px; display: block; } #stats .yday { margin-top: 6px; font-size: 11px; color: #55655a; }
+      #legend { position: fixed; bottom: 66px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 5px 10px; background: #fffd; border-radius: 8px; font-size: 12px; }
+      #legend[hidden] { display: none; }
+      #legend span { display: flex; align-items: center; gap: 4px; } #legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
       #toolbar { position: fixed; top: 100px; left: 12px; display: flex; flex-direction: column; gap: 6px; width: 170px; max-height: calc(100vh - 160px); overflow-y: auto; padding-right: 4px; }
       #toolbar button, #filebar button, #filebar select { padding: 7px 10px; border: 0; border-radius: 8px; background: #fffd; cursor: pointer; font-size: 13px; }
       #toolbar button.on { background: #f2a65a; font-weight: 700; }
@@ -48,6 +55,7 @@
     <div id="toolbar"></div>
     <div id="filebar"></div>
     <div id="stats"></div>
+    <div id="legend" hidden></div>
     <div id="tip" hidden></div>
     <div id="debug" hidden></div>
     <div id="labels"></div>

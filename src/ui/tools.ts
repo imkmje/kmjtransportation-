@@ -1,12 +1,15 @@
 import { config } from '../config';
 import type { Editor } from '../sim/editor';
-import type { BuildingError, BuildingKind, BuildingSize, PlanError, Pt, RoadKind, SignKind } from '../sim/network';
+import type { BuildingError, PlanError, Pt, RoadKind, SignKind, ZoneType } from '../sim/network';
 import type { RoadPos } from '../sim/route';
 import type { RoadLayer } from '../render/roads';
 import type { BuildingLayer } from '../render/buildings';
+import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | BuildingKind | 'demolish' | 'trip';
+type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneErase' | 'demolish' | 'trip' | 'limit';
+const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneErase: null };
+const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -15,25 +18,29 @@ const ERR: Record<PlanError, string> = {
   nodeTooClose: `다른 교차점·끝점과 너무 가깝습니다 (최소 ${config.geometry.mergeRadius}m)`,
   angle: `다른 도로와 각도가 너무 작습니다 (최소 ${config.geometry.minAngleDeg}°)`,
   tooManyRoads: `한 교차로에 연결할 수 있는 도로는 최대 ${config.geometry.maxRoadsPerNode}개입니다`,
+  onBuilding: '건물 위로는 도로를 놓을 수 없습니다',
 };
 
 const BERR: Record<BuildingError | 'noSuchBuilding', string> = {
   onRoad: '도로와 너무 가깝습니다',
   overlap: '다른 건물과 겹칩니다',
   outOfBounds: '지도 밖입니다',
-  locked: '맵이 제공한 건물은 지울 수 없습니다',
+  locked: '이 건물은 지울 수 없습니다',
   noSuchBuilding: '그 건물이 없습니다',
 };
-const SIZE_NAME: Record<BuildingSize, string> = { small: '소', medium: '중', large: '대' };
 
 interface Deps {
   editor: Editor;
   roads: RoadLayer;
   buildings: BuildingLayer;
+  zones: ZoneLayer;
   /** 도로망 + 건물 + 시뮬레이션 전체 상태를 글자로 / 글자에서 복원(문제가 있으면 Error) */
   save: () => string;
   load: (text: string) => void;
   loadSample: () => void;
+  loadNew: () => void;
+  setHeat: (on: boolean) => void;
+  setColorblind: (on: boolean) => void;
   pick: (clientX: number, clientY: number) => Pt | null;
   canvas: HTMLElement;
   setDrawMode: (on: boolean) => void;
@@ -58,7 +65,9 @@ export function createTools(d: Deps) {
   let gridSnap = true;
   let angleSnap = false;
   let tripFrom: RoadHit | null = null;
-  let dragging = false; // 도로 그리기 드래그 중
+  let dragging = false; // 도로 그리기·구역 칠하기 드래그 중
+  let zoneFrom: { i: number; j: number } | null = null; // 구역 드래그를 시작한 칸
+  const cellOf = (p: Pt) => ({ i: Math.round(p.x / config.zones.cell), j: Math.round(p.y / config.zones.cell) });
 
   // ---- 화면 요소 ----
   d.toolbar.innerHTML = `
@@ -66,20 +75,24 @@ export function createTools(d: Deps) {
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
     <button data-tool="stop" title="단축키 S">정지 표지</button>
     <button data-tool="yield" title="단축키 Y">양보 표지</button>
-    <div class="row"><button data-tool="home" title="단축키 H">주거 건물</button><button data-tool="office" title="단축키 O">직장 건물</button></div>
-    <div class="row"><select id="bsize"><option value="small">소 (10)</option><option value="medium" selected>중 (30)</option><option value="large">대 (100)</option></select></div>
+    <button data-tool="signal" title="단축키 G: 교차로를 클릭하면 신호등이 켜지고 꺼집니다">신호등</button>
+    <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
+    <div class="row"><button data-tool="zoneHome" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button><button data-tool="zoneOffice" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button></div>
+    <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
     <button data-tool="demolish" title="단축키 X">철거</button>
     <button data-tool="trip" title="단축키 V">차량 투입 (테스트)</button>
     <div class="row"><select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select><button id="clearveh">차량 제거</button></div>
     <div class="row"><button id="undo" title="Ctrl+Z">↶ 취소</button><button id="redo" title="Ctrl+Y">↷ 다시</button></div>
     <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
     <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
+    <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
+    <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
     <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />건물: 빈 땅 클릭 (도로 50m 안에 놓으면 연결)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭 (켜면 그 교차로의 표지는 무시)<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
-    <button id="export">파일로 저장</button><button id="import">파일 열기</button><button id="sample" title="큰길 하나와 작은 길, 주거·직장 건물이 있는 예제 도시">샘플 맵</button>
+    <button id="export">파일로 저장</button><button id="import">파일 열기</button><button id="sample" title="큰길 하나와 작은 길, 주거·직장 건물이 있는 예제 도시">샘플 맵</button><button id="newcity" title="외부에서 들어오는 도로 하나만 있는 새 도시">새 도시</button>
     <input type="file" id="file" accept="application/json,.json" hidden />
     <div id="msg"></div>`;
   const $ = <T extends HTMLElement>(root: HTMLElement, sel: string) => root.querySelector<T>(sel)!;
@@ -123,12 +136,23 @@ export function createTools(d: Deps) {
     return { segId: seg.id, nodeId, x: node.x + ((other.x - node.x) / len) * 8, y: node.y + ((other.y - node.y) / len) * 8 };
   }
 
+  // 클릭 지점에서 20m 안의 가장 가까운 교차로(도로 3개 이상)
+  function signalNode(p: Pt) {
+    let best: { id: number; x: number; y: number } | null = null, bd = 20;
+    for (const n of net.nodes.values()) {
+      const dd = Math.hypot(n.x - p.x, n.y - p.y);
+      if (dd < bd && net.segmentsAt(n.id).length >= 3) { bd = dd; best = n; }
+    }
+    return best;
+  }
+
   // ---- 갱신 ----
   function refresh() {
     d.roads.clearGhost();
     d.roads.setHover(null);
     d.buildings.clearGhost();
     d.buildings.setHover(null);
+    d.zones.clearGhost();
     d.roads.setCursor(null, true);
     d.tip.hidden = true;
     undoBtn.disabled = !d.editor.canUndo;
@@ -141,23 +165,36 @@ export function createTools(d: Deps) {
       d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
       return;
     }
+    if (tool === 'limit') {
+      const h = d.pickRoad(last);
+      d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
+      if (h) {
+        const seg = net.segments.get(h.segId)!, r = config.roads[seg.kind];
+        d.tip.textContent = `제한속도 ${seg.playerSpeedKmh ?? r.defaultSpeedKmh}km/h${seg.playerSpeedKmh === null ? ' (기본)' : ''} · 클릭하면 바뀜 (최대 ${r.maxSpeedKmh})`;
+        d.tip.classList.remove('bad');
+        d.tip.style.left = `${lastClient.x + 16}px`;
+        d.tip.style.top = `${lastClient.y + 16}px`;
+        d.tip.hidden = false;
+      }
+      return;
+    }
+    if (tool === 'signal') {
+      const n = signalNode(last);
+      d.roads.setCursor(n ? { x: n.x, y: n.y } : null, !!n);
+      return;
+    }
     if (tool === 'stop' || tool === 'yield') {
       const t = signTarget(last);
       const ok = !!t && net.segmentsAt(t.nodeId).length >= 3;
       d.roads.setCursor(t ? { x: t.x, y: t.y } : null, ok);
       return;
     }
-    if (tool === 'home' || tool === 'office') {
-      const size = $<HTMLSelectElement>(d.toolbar, '#bsize').value as BuildingSize;
-      const g = config.editor.gridSnap;
-      const p = gridSnap ? { x: Math.round(last.x / g) * g, y: Math.round(last.y / g) * g } : last;
-      const plan = net.planBuilding(tool, size, p.x, p.y);
-      d.buildings.setGhost(tool, size, p.x, p.y, plan.ok);
-      const cap = config.buildings.capacity[size];
-      const info = tool === 'home' ? `주거 ${SIZE_NAME[size]} · 직장인 ${Math.round(cap * config.demand.workerShare)}명` : `직장 ${SIZE_NAME[size]} · 일자리 ${cap}개`;
-      const linked = net.projectOnRoad(p, config.buildings.connectRadius) !== null;
-      d.tip.textContent = plan.ok ? `${info}${linked ? '' : ' — 도로에 연결 안 됨(50m 안에 도로 없음)'}` : `${info} — ${BERR[plan.error]}`;
-      d.tip.classList.toggle('bad', !plan.ok || !linked);
+    if (tool in ZONE_TOOLS) {
+      const cell = cellOf(last), from = zoneFrom ?? cell;
+      d.zones.setGhost(from.i, from.j, cell.i, cell.j, ZONE_TOOLS[tool]!);
+      const w = Math.abs(cell.i - from.i) + 1, h = Math.abs(cell.j - from.j) + 1;
+      d.tip.textContent = zoneFrom ? `${ZONE_NAME[tool as keyof typeof ZONE_NAME]} ${w}×${h}칸 (도로 옆 ${config.zones.maxDist}m 안의 칸만 칠해집니다)` : `${ZONE_NAME[tool as keyof typeof ZONE_NAME]}: 드래그해서 칠하세요`;
+      d.tip.classList.remove('bad');
       d.tip.style.left = `${lastClient.x + 16}px`;
       d.tip.style.top = `${lastClient.y + 16}px`;
       d.tip.hidden = false;
@@ -171,8 +208,8 @@ export function createTools(d: Deps) {
     }
     const p = cursorPoint(last);
     if (!start) { d.roads.setCursor(p, true); return; }
-    const plan = net.planRoad(start, p, tool);
-    d.roads.setGhost(start, p, tool, plan.ok);
+    const plan = net.planRoad(start, p, tool as RoadKind);
+    d.roads.setGhost(start, p, tool as RoadKind, plan.ok);
     const len = plan.ok ? plan.length : Math.hypot(p.x - start.x, p.y - start.y);
     d.tip.textContent = `${Math.round(len)} m${plan.ok ? '' : ' — ' + ERR[plan.error]}`;
     d.tip.classList.toggle('bad', !plan.ok);
@@ -186,7 +223,8 @@ export function createTools(d: Deps) {
     start = null;
     tripFrom = null;
     dragging = false;
-    d.setDrawMode(!!tool && tool in config.roads);
+    zoneFrom = null;
+    d.setDrawMode(!!tool && (tool in config.roads || tool in ZONE_TOOLS));
     refresh();
   }
 
@@ -203,6 +241,27 @@ export function createTools(d: Deps) {
       refresh();
       return;
     }
+    if (tool === 'limit') {
+      const h = d.pickRoad(last);
+      if (!h) { say('도로 위를 클릭하세요'); return; }
+      const seg = net.segments.get(h.segId)!, r = config.roads[seg.kind];
+      const choices = config.speedChoicesKmh.filter((v) => v <= r.maxSpeedKmh);
+      const cur = seg.playerSpeedKmh ?? r.defaultSpeedKmh;
+      const next = choices[(choices.indexOf(cur) + 1) % choices.length]; // 한 칸씩 올라가고, 끝에서 가장 낮은 값으로
+      d.editor.setSpeedLimit(seg.id, next);
+      say(`제한속도 ${next}km/h${next === r.defaultSpeedKmh ? ' (기본)' : ''}`);
+      refresh();
+      return;
+    }
+    if (tool === 'signal') {
+      const n = signalNode(last);
+      if (!n) { say('교차로(도로 3개 이상이 만나는 곳) 가까이를 클릭하세요'); return; }
+      const on = !net.hasSignal(n.id);
+      d.editor.setSignal(n.id, on);
+      say(on ? '신호등을 켰습니다 (녹색 15초, 황색 3초, 전적색 1초)' : '신호등을 껐습니다');
+      refresh();
+      return;
+    }
     if (tool === 'stop' || tool === 'yield') {
       const t = signTarget(last);
       if (!t) { say('도로 위를 클릭하세요'); return; }
@@ -212,21 +271,11 @@ export function createTools(d: Deps) {
       refresh();
       return;
     }
-    if (tool === 'home' || tool === 'office') {
-      const size = $<HTMLSelectElement>(d.toolbar, '#bsize').value as BuildingSize;
-      const g = config.editor.gridSnap;
-      const p = gridSnap ? { x: Math.round(last.x / g) * g, y: Math.round(last.y / g) * g } : last;
-      const r = d.editor.addBuilding(tool, size, p.x, p.y);
-      if (!r.ok) say(BERR[r.error]);
-      else if (net.accessOf(r.id) === null) say('놓았습니다. 하지만 도로에서 50m 넘게 떨어져 연결되지 않았습니다 (빨간 표시)');
-      refresh();
-      return;
-    }
     if (tool === 'demolish') {
       const b = net.nearestBuilding(last);
       if (b) { const r = d.editor.removeBuilding(b.id); if (!r.ok) say(BERR[r.error]); refresh(); return; }
       const h = net.nearestSegment(last.x, last.y, config.geometry.mergeRadius);
-      if (h) d.editor.demolish(h.id);
+      if (h) { if (!d.editor.demolish(h.id)) say('외부로 연결되는 도로는 철거할 수 없습니다'); }
       refresh();
       return;
     }
@@ -234,7 +283,7 @@ export function createTools(d: Deps) {
   }
 
   function cancel() {
-    if (start || tripFrom) { start = null; tripFrom = null; dragging = false; }
+    if (start || tripFrom || zoneFrom) { start = null; tripFrom = null; zoneFrom = null; dragging = false; }
     else { tool = null; d.setDrawMode(false); }
     refresh();
   }
@@ -247,10 +296,11 @@ export function createTools(d: Deps) {
     refresh();
   });
   const drawing = () => tool !== null && tool in config.roads;
+  const zoning = () => tool !== null && tool in ZONE_TOOLS;
   // 그리기 시작은 카메라 컨트롤보다 먼저(캡처 단계) 받아서, 카메라가 같은 입력으로 같이 움직이지 않게 막는다.
   d.canvas.parentElement!.addEventListener('pointerdown', (e) => {
     down = { x: e.clientX, y: e.clientY, button: e.button };
-    if (dragging && !e.isPrimary) { start = null; dragging = false; refresh(); return; } // 두 번째 손가락: 그리기를 취소하고 확대·이동에 양보
+    if (dragging && !e.isPrimary) { start = null; zoneFrom = null; dragging = false; refresh(); return; } // 두 번째 손가락: 그리기를 취소하고 확대·이동에 양보
     if (drawing() && e.button === 0 && e.isPrimary) {
       const p = d.pick(e.clientX, e.clientY);
       e.stopPropagation(); // 카메라 컨트롤이 이 입력을 받지 못하게 한다
@@ -260,15 +310,29 @@ export function createTools(d: Deps) {
       dragging = true;
       d.canvas.setPointerCapture(e.pointerId);
       refresh();
-    } else if (dragging && e.button === 2) { start = null; dragging = false; refresh(); } // 그리는 중 우클릭 = 취소
+    } else if (zoning() && e.button === 0 && e.isPrimary) {
+      const p = d.pick(e.clientX, e.clientY);
+      e.stopPropagation();
+      if (!p) return;
+      last = p;
+      zoneFrom = cellOf(p);
+      dragging = true;
+      d.canvas.setPointerCapture(e.pointerId);
+      refresh();
+    } else if (dragging && e.button === 2) { start = null; zoneFrom = null; dragging = false; refresh(); } // 그리는 중 우클릭 = 취소
   }, true);
-  d.canvas.addEventListener('pointercancel', () => { if (dragging) { start = null; dragging = false; refresh(); } });
+  d.canvas.addEventListener('pointercancel', () => { if (dragging) { start = null; zoneFrom = null; dragging = false; refresh(); } });
   d.canvas.addEventListener('pointerup', (e) => {
     if (dragging && e.button === 0) {
       dragging = false;
-      const from = start;
+      const from = start, zf = zoneFrom;
       start = null;
+      zoneFrom = null;
       last = d.pick(e.clientX, e.clientY) ?? last;
+      if (zf && last && zoning()) {
+        const c = cellOf(last), n = net.paintZone(zf.i, zf.j, c.i, c.j, ZONE_TOOLS[tool!]!);
+        say(n > 0 ? `${ZONE_NAME[tool as keyof typeof ZONE_NAME]} ${n}칸` : '칠할 수 있는 칸이 없습니다 (도로 옆 45m 안의 빈 땅만 가능)');
+      }
       if (from && last && drawing()) {
         const to = cursorPoint({ ...last });
         if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) d.editor.build(from, to, tool as RoadKind);
@@ -298,10 +362,14 @@ export function createTools(d: Deps) {
     else if (k === 'r') setTool('road2');
     else if (k === 't') setTool('road4');
     else if (k === 'x') setTool('demolish');
-    else if (k === 'h') setTool('home');
-    else if (k === 'o') setTool('office');
+    else if (k === 'h') setTool('zoneHome');
+    else if (k === 'o') setTool('zoneOffice');
+    else if (k === 'e') setTool('zoneErase');
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
+    else if (k === 'l') setTool('limit');
+    else if (k === 'g') setTool('signal');
+    else if (k === 'm') { const c = $<HTMLInputElement>(d.toolbar, '#heat'); c.checked = !c.checked; d.setHeat(c.checked); }
     else if (k === 'v') setTool('trip');
     else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }
     else if (k === ' ') { e.preventDefault(); d.togglePause(); }
@@ -315,7 +383,8 @@ export function createTools(d: Deps) {
   $<HTMLInputElement>(d.toolbar, '#debugToggle').onchange = (e) => d.setDebug((e.target as HTMLInputElement).checked);
   $(d.toolbar, '#clearveh').onclick = () => { d.clearVehicles(); say('차량을 모두 제거했습니다'); };
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
-  $<HTMLSelectElement>(d.toolbar, '#bsize').onchange = () => refresh();
+  $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#cb').onchange = (e) => d.setColorblind((e.target as HTMLInputElement).checked);
 
   const slot = () => Number($<HTMLSelectElement>(d.filebar, '#slot').value);
   const guard = async (fn: () => Promise<void> | void) => {
@@ -341,6 +410,7 @@ export function createTools(d: Deps) {
     d.load(await f.text());
     say('파일을 불러왔습니다');
   });
+  $(d.filebar, '#newcity').onclick = () => guard(() => { d.loadNew(); say('새 도시를 시작합니다. 외부에서 들어오는 도로 옆에 구역을 칠해 보세요'); });
   $(d.filebar, '#sample').onclick = () => guard(() => { d.loadSample(); say('샘플 맵을 열었습니다. 평일 아침 6시부터 출근이 시작됩니다'); });
 
   refresh();

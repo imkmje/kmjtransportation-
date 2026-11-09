@@ -11,9 +11,13 @@ import { createTools } from './ui/tools';
 import { createDebug } from './ui/debug';
 import { createBuildingLayer } from './render/buildings';
 import { createStats } from './ui/stats';
+import { createHeatmap } from './render/heatmap';
 import { exportGame, importGame } from './io/game';
 import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
+import { buildStartMap } from './maps/start';
+import { createZoneLayer } from './render/zones';
+import { createSignalLayer } from './render/signals';
 
 const editor = new Editor(config);
 const sim = new Sim(config, editor.network);
@@ -30,6 +34,9 @@ function setSpeed(s: number) {
 const view = createScene(document.getElementById('view')!);
 const roads = createRoadLayer(view.scene, editor.network);
 const buildings = createBuildingLayer(view.scene, editor.network);
+const zones = createZoneLayer(view.scene, editor.network);
+const signalLayer = createSignalLayer(view.scene, editor.network, sim.traffic.signals, () => sim.tickCount);
+const heat = createHeatmap(view.scene, editor.network, sim.metrics, document.getElementById('legend')!);
 const vehicles = createVehicleLayer(view.scene, sim.traffic);
 const laneDebug = createLaneDebug(view.scene, sim.traffic);
 const debug = createDebug({ panel: document.getElementById('debug')!, labels: document.getElementById('labels')!, sim, project: view.project });
@@ -45,9 +52,13 @@ const tools = createTools({
   editor,
   roads,
   buildings,
+  zones,
   save: () => exportGame(editor, sim),
   load: (text) => { importGame(text, editor, sim); },
-  loadSample: () => { buildSampleMap(editor); sim.reset(); },
+  loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },
+  loadNew: () => { buildStartMap(editor); sim.reset(); view.focus({ x: 0, y: config.external.roadEndY - 100 }); },
+  setHeat: (on) => heat.setVisible(on),
+  setColorblind: (on) => heat.setColorblind(on),
   pick: view.pickGround,
   canvas: view.domElement,
   setDrawMode: view.setDrawMode,
@@ -63,6 +74,10 @@ const tools = createTools({
   clearVehicles: () => sim.traffic.clear(),
   setDebug: (on) => debug.set(on),
 });
+
+// 새 게임은 외부에서 들어오는 도로 하나로 시작한다(시티즈 스카이라인처럼)
+buildStartMap(editor);
+view.focus({ x: 0, y: config.external.roadEndY - 100 });
 
 // 탭이 가려지면 자동 일시정지 (돌아와도 정지 상태 유지)
 document.addEventListener('visibilitychange', () => {
@@ -81,6 +96,8 @@ function frame(now: number) {
   sim.traffic.sync(); // 정지 중에도 도로가 바뀌면 그래프를 새로 만든다
   roads.sync();
   buildings.sync();
+  zones.sync();
+  signalLayer.update();
   vehicles.update(loop.alpha);
   laneDebug.update(debug.on);
   view.render();
@@ -88,7 +105,7 @@ function frame(now: number) {
   frames++;
   if (now - fpsStart >= 500) { fps = (frames * 1000) / (now - fpsStart); frames = 0; fpsStart = now; }
   debug.update(fps);
-  if (++statFrame % 10 === 0) stats.update();
+  if (++statFrame % 10 === 0) { stats.update(); heat.update(); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -101,4 +118,4 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) autos
 loadSlot(0).then((t) => { if (t) tools.say('자동 저장된 게임이 있습니다. 위에서 "자동 저장"을 고르고 불러오기를 누르세요'); }).catch(() => {});
 
 // 스모크 테스트와 디버깅용
-(window as unknown as { __game: unknown }).__game = { sim, editor, scene: view.scene, getSpeed: () => speed, project: view.project };
+(window as unknown as { __game: unknown }).__game = { sim, editor, heat, scene: view.scene, focus: view.focus, getSpeed: () => speed, project: view.project };

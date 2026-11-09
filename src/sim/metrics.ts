@@ -15,6 +15,7 @@ export interface DayRecord {
 }
 
 interface Bucket { loss: number; ref: number }
+interface SegAcc { loss: number; ref: number; passes: number }
 interface Tally { generated: number; arrived: number; incomplete: number; travelSec: number }
 const zero = (): Tally => ({ generated: 0, arrived: 0, incomplete: 0, travelSec: 0 });
 
@@ -32,6 +33,8 @@ export const ciGrade = (ci: number | null): string => (ci === null ? '-' : CI_GR
 export class Metrics {
   private bucket: Bucket = { loss: 0, ref: 0 };
   private ring: Bucket[] = [];
+  private segCur = new Map<number, SegAcc>(); // 도로 구간별(히트맵·병목 판단용)
+  private segRing: Map<number, SegAcc>[] = [];
   private readonly bucketTicks: number;
   private readonly ringMax: number;
   private readonly K: number;
@@ -65,6 +68,9 @@ export class Metrics {
     for (const v of vehicles) this.foldVehicle(v);
     this.ring.push(this.bucket);
     if (this.ring.length > this.ringMax) this.ring.shift();
+    this.segRing.push(this.segCur);
+    if (this.segRing.length > this.ringMax) this.segRing.shift();
+    this.segCur = new Map();
     this.dayLoss += this.bucket.loss;
     this.dayRef += this.bucket.ref;
     this.bucket = { loss: 0, ref: 0 };
@@ -80,6 +86,32 @@ export class Metrics {
 
   dayCI(): number | null {
     return this.dayRef > 1e-9 ? Math.min(100, (100 * this.dayLoss) / this.dayRef) : null;
+  }
+
+  private seg(id: number): SegAcc {
+    let a = this.segCur.get(id);
+    if (!a) { a = { loss: 0, ref: 0, passes: 0 }; this.segCur.set(id, a); }
+    return a;
+  }
+
+  /** 도로 구간에서 한 tick 동안의 기준 이동거리와 손실(Traffic이 호출) */
+  segAdd(id: number, ref: number, loss: number): void { const a = this.seg(id); a.ref += ref; a.loss += loss; }
+  /** 차량이 도로 구간에 들어섰다(통과 차량 수) */
+  segPass(id: number): void { this.seg(id).passes++; }
+
+  /** 도로 구간별 롤링 CI. 최근 윈도우 안의 통과 차량이 minPasses보다 적으면 null(판정 없음) */
+  segmentCIs(): Map<number, number | null> {
+    const sum = new Map<number, SegAcc>();
+    for (const m of [...this.segRing, this.segCur]) {
+      for (const [id, a] of m) {
+        const t = sum.get(id) ?? { loss: 0, ref: 0, passes: 0 };
+        t.loss += a.loss; t.ref += a.ref; t.passes += a.passes;
+        sum.set(id, t);
+      }
+    }
+    const out = new Map<number, number | null>();
+    for (const [id, a] of sum) out.set(id, a.passes < this.cfg.metrics.minPasses || a.ref <= 1e-9 ? null : Math.min(100, (100 * a.loss) / a.ref));
+    return out;
   }
 
   generated(): void { this.today.generated++; this.total.generated++; }
@@ -129,6 +161,7 @@ export class Metrics {
     this.bucket = { loss: 0, ref: 0 }; this.ring = []; this.dayLoss = 0; this.dayRef = 0;
     this.today = zero(); this.total = zero(); this.lost = { noRoute: 0, abandoned: 0, removed: 0, deadlock: 0 };
     this.history = []; this.ciSeries = []; this.arrivals = []; this.todayArrivals = 0;
+    this.segCur = new Map(); this.segRing = [];
   }
 
   // ---- 저장·불러오기 ----
@@ -136,6 +169,7 @@ export class Metrics {
     return {
       bucket: this.bucket, ring: this.ring, dayLoss: this.dayLoss, dayRef: this.dayRef, today: this.today, total: this.total, lost: this.lost,
       history: this.history, ciSeries: this.ciSeries, arrivals: this.arrivals, todayArrivals: this.todayArrivals,
+      segCur: [...this.segCur], segRing: this.segRing.map((m) => [...m]),
     };
   }
 
@@ -146,5 +180,7 @@ export class Metrics {
     this.today = { ...s.today }; this.total = { ...s.total }; this.lost = { ...s.lost };
     this.history = s.history.map((h) => ({ ...h }));
     this.ciSeries = [...s.ciSeries]; this.arrivals = [...s.arrivals]; this.todayArrivals = s.todayArrivals;
+    this.segCur = new Map(s.segCur.map(([k, a]) => [k, { ...a }]));
+    this.segRing = s.segRing.map((m) => new Map(m.map(([k, a]) => [k, { ...a }])));
   }
 }

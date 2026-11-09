@@ -15,7 +15,9 @@ describe('샘플 맵', () => {
   it('만들어지고, 모든 건물이 도로에 연결되며, 큰길 교차로에 정지 표지가 있다', () => {
     const { e, sim } = make();
     const n = e.network;
-    expect(n.buildings.size).toBe(23);
+    expect(n.buildings.size).toBe(24); // 주거·직장 23채 + 외부 연결점
+    expect(n.externalId()).not.toBeNull();
+    expect([...n.segments.values()].some((s) => s.locked)).toBe(true);
     expect(sim.demand.unconnected()).toEqual([]);
     expect([...n.segments.values()].filter((s) => s.signA === 'stop').length + [...n.segments.values()].filter((s) => s.signB === 'stop').length).toBe(6);
     expect([...n.segments.values()].some((s) => s.kind === 'road4')).toBe(true);
@@ -28,12 +30,12 @@ describe('샘플 맵', () => {
     const rec = sim.metrics.history[0];
     const st = sim.traffic.stats;
     expect(rec.day).toBe(1);
-    expect(rec.generated).toBe(504); // 직장인 252명 × (출근 + 퇴근)
+    expect(rec.generated).toBeGreaterThan(504); // 직장인 252명 × (출근 + 퇴근) + 외부 사람과 외부로 나가는 이동
     expect(rec.completion!).toBeGreaterThanOrEqual(95);
     expect(st.interventions).toBe(0);
     expect(st.deadlocks).toBe(0);
     expect(st.conflicts).toBe(0);
-    expect(rec.ci!).toBeLessThan(25); // 샘플은 "붐비지만 풀리는" 도시
+    expect(rec.ci!).toBeLessThan(50); // 샘플은 "붐비지만 풀리는" 도시(외부 통근이 더해져 1.0.0의 15보다 높다)
     expect(sim.demand.poolSize()).toBe(0);
   }, 120_000);
 
