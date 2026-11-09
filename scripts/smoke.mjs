@@ -35,21 +35,10 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
-// ---- 카메라 기울기 슬라이더 ----
-{
-  const t0 = await page.evaluate(() => window.__game.getTilt());
-  await page.evaluate(() => { const el = document.getElementById('tilt'); el.value = '30'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.waitForTimeout(300);
-  const t1 = await page.evaluate(() => window.__game.getTilt());
-  const shown = await page.evaluate(() => document.getElementById('tilt').value);
-  check('기울기 슬라이더가 카메라 기울기를 바꿈', Math.abs(t1 - 30) < 1 && t0 > 40 && shown === '30', `${t0.toFixed(0)} → ${t1.toFixed(0)}`);
-  await page.evaluate(() => { const el = document.getElementById('tilt'); el.value = '55'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.waitForTimeout(200);
-}
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.2.0') && titleText.includes('업데이트 내역') && titleText.includes('감응식'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.4.0') && titleText.includes('업데이트 내역') && titleText.includes('좌회전 금지'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -112,7 +101,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 6, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 7, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -392,6 +381,21 @@ check('직각 맞추기: 큰길 근처에서 끝내도 직각으로 닿음', per
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.evaluate(() => window.__game.editor.undo());
+// 통행 제한: 좌회전 금지·진입 금지를 교차로 쪽 도로 끝에 놓고 다시 눌러 푼다
+const resCount = (k) => page.evaluate((kk) => [...window.__game.editor.network.segments.values()].filter((x) => x.restrictA === kk || x.restrictB === kk).length, k);
+await page.keyboard.press('n');
+await clickWorld(-30, 0);
+check('좌회전 금지 놓기', (await resCount('noLeft')) === 1 && (await page.locator('#msg').innerText()).includes('좌회전을 금지'), await page.locator('#msg').innerText());
+await clickWorld(-30, 0);
+check('다시 누르면 좌회전 금지 해제', (await resCount('noLeft')) === 0);
+await page.keyboard.press('b');
+await clickWorld(-30, 0);
+check('진입 금지 놓기', (await resCount('noEntry')) === 1 && (await page.locator('#msg').innerText()).includes('진입을 금지'), await page.locator('#msg').innerText());
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-restrict.png') });
+await clickWorld(-30, 0);
+check('진입 금지 해제', (await resCount('noEntry')) === 0);
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
 // 도로 넓히기: 왕복 2차로 구간을 클릭하면 4차로가 되고, 실행 취소로 돌아온다
 const road4Count = () => page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((s) => s.kind === 'road4').length);
 const r4before = await road4Count();

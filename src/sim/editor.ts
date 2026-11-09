@@ -1,4 +1,4 @@
-import { SignalMode, BuildingKind, BuildingSize, Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
+import { RestrictKind, SignalMode, BuildingKind, BuildingSize, Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
 import type { Config } from '../config';
 
 // 도로망 + 실행 취소/다시 실행. 전체 상태 스냅샷 방식(도로망이 작은 동안은 가장 단순하고 안전)
@@ -46,6 +46,12 @@ export class Editor {
 
   upgrade(segId: number): ReturnType<Network['upgradeRoad']> {
     const r = this.network.upgradeRoad(segId);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  setRestrict(segId: number, nodeId: number, kind: RestrictKind | null): ReturnType<Network['setRestrict']> {
+    const r = this.network.setRestrict(segId, nodeId, kind);
     if (r.ok) this.commit();
     return r;
   }

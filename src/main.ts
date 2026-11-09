@@ -76,16 +76,6 @@ const tools = createTools({
   setDebug: (on) => debug.set(on),
 });
 
-// 카메라 기울기 슬라이더(터치에서는 두 손가락 비틀기가 회전이라 기울기는 여기서 조절한다. 마우스는 오른쪽 드래그로도 된다)
-const tiltBox = document.createElement('div');
-tiltBox.id = 'tiltbox';
-tiltBox.innerHTML = '<label for="tilt">기울기</label><input id="tilt" type="range" min="10" max="80" step="1" />';
-document.body.appendChild(tiltBox);
-const tilt = tiltBox.querySelector<HTMLInputElement>('#tilt')!;
-let tiltDrag = false;
-tilt.addEventListener('input', () => { tiltDrag = true; view.setTilt(Number(tilt.value)); });
-tilt.addEventListener('change', () => { tiltDrag = false; });
-
 // 새 게임은 외부에서 들어오는 도로 하나로 시작한다(시티즈 스카이라인처럼)
 buildStartMap(editor);
 view.focus({ x: 0, y: config.external.roadEndY - 100 });
@@ -133,7 +123,6 @@ function frame(now: number) {
   vehicles.update(loop.alpha);
   laneDebug.update(debug.on);
   view.render();
-  if (!tiltDrag) tilt.value = String(Math.round(view.getTilt()));
   hud.update(sim.clock(), speed, loop.actualSpeed, autoPaused);
   frames++;
   if (now - fpsStart >= 500) { fps = (frames * 1000) / (now - fpsStart); frames = 0; fpsStart = now; }

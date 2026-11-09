@@ -7,7 +7,7 @@ import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
 const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneShop: 'shop', zoneErase: null };
 const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneShop: '상업 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
@@ -71,6 +71,18 @@ export function createTools(d: Deps) {
   const cellOf = (p: Pt) => ({ i: Math.round(p.x / config.zones.cell), j: Math.round(p.y / config.zones.cell) });
 
   // ---- 화면 요소 ----
+  // 아래 도구 모음 아이콘(선 그림 SVG). 색은 글자색을 따른다
+  const svg = (inner: string) => `<svg viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+  const ICON = {
+    road: svg('<path d="M9 25 12 3M19 25 16 3"/><path d="M14 6v3M14 12v3M14 18v3" stroke-width="2.2"/>'),
+    zone: svg('<rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="#4fb866" stroke="none"/><rect x="15.5" y="3.5" width="9" height="9" rx="1.5" fill="#4f86d6" stroke="none"/><rect x="3.5" y="15.5" width="9" height="9" rx="1.5" fill="#e8b93c" stroke="none"/><rect x="15.5" y="15.5" width="9" height="9" rx="1.5" stroke-dasharray="2.5 2.5"/>'),
+    traffic: svg('<rect x="9" y="2.5" width="10" height="23" rx="4"/><circle cx="14" cy="8.5" r="2.4" fill="#e0443c" stroke="none"/><circle cx="14" cy="14" r="2.4" fill="#f5c518" stroke="none"/><circle cx="14" cy="19.5" r="2.4" fill="#2fcf5a" stroke="none"/>'),
+    demolish: svg('<path d="M3 6v14"/><path d="M3 13h6"/><rect x="9" y="9" width="10" height="7" rx="1.5"/><path d="M12 9V5h4l3 4"/><rect x="7" y="17" width="18" height="6" rx="3"/><circle cx="11" cy="20" r="0.8" fill="currentColor"/><circle cx="21" cy="20" r="0.8" fill="currentColor"/>'),
+    view: svg('<path d="M4 24h20"/><rect x="5.5" y="14" width="4" height="10" rx="1" fill="currentColor"/><rect x="12" y="8" width="4" height="16" rx="1" fill="currentColor"/><rect x="18.5" y="11" width="4" height="13" rx="1" fill="currentColor"/>'),
+    tools: svg('<path d="M18 4a6 6 0 0 0-5.6 8L4.5 20a2.2 2.2 0 0 0 3.2 3.2L15.6 15.5A6 6 0 0 0 24 10l-3.6 3.2-3.4-.8-.8-3.4L19.6 5.6A6 6 0 0 0 18 4z"/>'),
+    undo: svg('<path d="M10 5 5 10l5 5"/><path d="M5 10h11.5a5.5 5.5 0 0 1 0 11H9"/>'),
+    redo: svg('<path d="M18 5l5 5-5 5"/><path d="M23 10H11.5a5.5 5.5 0 0 0 0 11H19"/>'),
+  };
   d.toolbar.innerHTML = `
     <div class="subs">
       <div class="sub" id="sub-road" data-cat="road" hidden>
@@ -86,12 +98,14 @@ export function createTools(d: Deps) {
       <div class="sub" id="sub-zone" data-cat="zone" hidden>
         <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button>
         <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 구역</button>
-        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역을 칠합니다">직장 구역</button>
+        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역(산업 구역)을 칠합니다">직장(산업) 구역</button>
         <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
       </div>
       <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
         <button data-tool="stop" title="단축키 S">정지 표지</button>
         <button data-tool="yield" title="단축키 Y">양보 표지</button>
+ <button data-tool="noleft" title="단축키 N: 교차로로 들어오는 도로 끝을 클릭하면 그 방향의 좌회전이 금지됩니다(다시 클릭하면 해제)">좌회전 금지</button>
+        <button data-tool="noentry" title="단축키 B: 교차로 쪽 도로 끝을 클릭하면 교차로에서 그 도로로 들어가는 것이 금지됩니다(다시 클릭하면 해제)">진입 금지</button>
         <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
         <select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select>
         <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
@@ -108,15 +122,15 @@ export function createTools(d: Deps) {
       </div>
     </div>
     <div class="cats">
-      <button id="undo" class="small" title="Ctrl+Z">↶<small>취소</small></button>
-      <button id="redo" class="small" title="Ctrl+Y">↷<small>다시</small></button>
+      <button id="undo" class="small" title="Ctrl+Z">${ICON.undo}<small>취소</small></button>
+      <button id="redo" class="small" title="Ctrl+Y">${ICON.redo}<small>다시</small></button>
       <i></i>
-      <button data-catbtn="road"><b>🛣</b>도로</button>
-      <button data-catbtn="zone"><b>🏘</b>구역</button>
-      <button data-catbtn="traffic"><b>🚦</b>교통</button>
-      <button data-tool="demolish" title="단축키 X"><b>🚧</b>철거</button>
-      <button data-catbtn="view"><b>📊</b>보기</button>
-      <button data-catbtn="tools"><b>🧪</b>도구</button>
+      <button data-catbtn="road">${ICON.road}도로</button>
+      <button data-catbtn="zone">${ICON.zone}구역</button>
+      <button data-catbtn="traffic">${ICON.traffic}교통</button>
+      <button data-tool="demolish" title="단축키 X">${ICON.demolish}철거</button>
+      <button data-catbtn="view">${ICON.view}보기</button>
+      <button data-catbtn="tools">${ICON.tools}도구</button>
     </div>`;
   d.filebar.innerHTML = `
     <h4>메뉴</h4>
@@ -260,7 +274,7 @@ export function createTools(d: Deps) {
       d.roads.setCursor(n ? { x: n.x, y: n.y } : null, !!n);
       return;
     }
-    if (tool === 'stop' || tool === 'yield') {
+    if (tool === 'stop' || tool === 'yield' || tool === 'noleft' || tool === 'noentry') {
       const t = signTarget(last);
       const ok = !!t && net.segmentsAt(t.nodeId).length >= 3;
       d.roads.setCursor(t ? { x: t.x, y: t.y } : null, ok);
@@ -347,6 +361,16 @@ export function createTools(d: Deps) {
       if (cur === 'off') { d.editor.setSignal(n.id, true, 'fixed', green); say(`고정식 신호등을 켰습니다 (녹색 ${green}초, 황색 ${config.signals.yellowSec}초, 전적색 ${config.signals.allRedSec}초 · 큰 도로가 낀 방향은 녹색 2배)`); }
       else if (cur === 'fixed') { d.editor.setSignal(n.id, true, 'actuated'); say(`감응식으로 바꿨습니다 (차가 오는 방향에 녹색 ${config.signals.minGreenSec}~${config.signals.maxGreenSec}초, 차가 없으면 넘깁니다)`); }
       else { d.editor.setSignal(n.id, false); say('신호등을 껐습니다'); }
+      refresh();
+      return;
+    }
+    if (tool === 'noleft' || tool === 'noentry') {
+      const t = signTarget(last);
+      if (!t) { say('도로 위를 클릭하세요'); return; }
+      const kind = tool === 'noleft' ? 'noLeft' : 'noEntry';
+      const cur = net.restrictAt(t.segId, t.nodeId);
+      const r = d.editor.setRestrict(t.segId, t.nodeId, cur === kind ? null : kind);
+      say(!r.ok ? '통행 제한은 도로 3개 이상이 만나는 교차로 쪽에서만 놓을 수 있습니다' : cur === kind ? '제한을 풀었습니다' : tool === 'noleft' ? '좌회전을 금지했습니다 (이 도로 끝으로 들어오는 차량)' : '진입을 금지했습니다 (교차로에서 이 도로로 들어가는 것). 갈 수 없는 목적지는 미완료로 집계됩니다');
       refresh();
       return;
     }
@@ -461,6 +485,8 @@ export function createTools(d: Deps) {
     else if (k === 'l') setTool('limit');
     else if (k === 'u') setTool('upgrade');
     else if (k === 'g') setTool('signal');
+    else if (k === 'n') setTool('noleft');
+    else if (k === 'b') setTool('noentry');
     else if (k === 'm') { const c = $<HTMLInputElement>(d.toolbar, '#heat'); c.checked = !c.checked; d.setHeat(c.checked); }
     else if (k === 'v') setTool('trip');
     else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }

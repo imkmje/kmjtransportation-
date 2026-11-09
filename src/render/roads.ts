@@ -44,6 +44,31 @@ function limitMaterial(kmh: number): THREE.SpriteMaterial {
   return m;
 }
 
+// 통행 제한 표지판(스프라이트): 진입 금지 = 빨간 원에 흰 막대, 좌회전 금지 = 흰 원에 빨간 테두리·왼쪽 꺾는 화살표·빨간 사선
+const restrictMats = new Map<string, THREE.SpriteMaterial>();
+function restrictMaterial(kind: 'noEntry' | 'noLeft'): THREE.SpriteMaterial {
+  let m = restrictMats.get(kind);
+  if (!m) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d')!;
+    if (kind === 'noEntry') {
+      g.fillStyle = '#d63a31'; g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#fff'; g.fillRect(24, 54, 80, 20);
+    } else {
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#d63a31'; g.lineWidth = 12; g.beginPath(); g.arc(64, 64, 54, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = '#1d2630'; g.lineWidth = 11; g.lineCap = 'round'; g.lineJoin = 'round';
+      g.beginPath(); g.moveTo(70, 98); g.lineTo(70, 56); g.lineTo(40, 56); g.stroke(); // 위로 가다 왼쪽으로 꺾는 선
+      g.beginPath(); g.moveTo(54, 40); g.lineTo(38, 56); g.lineTo(54, 72); g.stroke(); // 화살촉
+      g.strokeStyle = '#d63a31'; g.lineWidth = 12; g.beginPath(); g.moveTo(30, 98); g.lineTo(98, 30); g.stroke(); // 사선
+    }
+    m = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthWrite: false });
+    restrictMats.set(kind, m);
+  }
+  return m;
+}
+
 export function createRoadLayer(scene: THREE.Scene, net: Network) {
   const group = new THREE.Group();
   scene.add(group);
@@ -101,6 +126,25 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
         g.position.set(p.x, p.y, p.z);
         g.rotation.y = Math.atan2(-tx, ty); // 표지 앞면이 달려오는 차량 쪽(-진행방향)을 향한다
         group.add(g);
+      }
+    }
+    // 통행 제한 표지판: 도로 끝에서 조금 떨어진 오른쪽 길가에 기둥 위로(항상 카메라를 향한다)
+    for (const s of net.segments.values()) {
+      const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+      for (const [kind, node, dir] of [[s.restrictB, b, 1], [s.restrictA, a, -1]] as const) {
+        if (!kind) continue;
+        const hw = roadWidth(s.kind) / 2, tx = dir * ux, ty = dir * uy;
+        const x = node.x - tx * (hw + 9) + ty * (hw + 1.2), y = node.y - ty * (hw + 9) - tx * (hw + 1.2);
+        const pole = new THREE.Mesh(poleGeo, poleMat);
+        const pp = toThree(x, y, 1.2);
+        pole.position.set(pp.x, pp.y, pp.z);
+        const sp = new THREE.Sprite(restrictMaterial(kind));
+        const q = toThree(x, y, 3.6);
+        sp.position.set(q.x, q.y, q.z);
+        sp.scale.set(3.2, 3.2, 1);
+        group.add(pole, sp);
       }
     }
     // 속도를 바꾼 도로: 도로 가운데 위에 제한속도 표지판
