@@ -17,6 +17,18 @@ await page.goto('http://localhost:4173/');
 await page.waitForSelector('canvas');
 await page.waitForTimeout(1500);
 
+// ---- 시작 화면 ----
+await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
+const titleText = await page.locator('#title').innerText();
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.2.0') && titleText.includes('업데이트 내역') && titleText.includes('감응식'), titleText.slice(0, 120).replace(/\n/g, ' '));
+const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
+await page.waitForTimeout(600);
+check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
+await page.click('#t-start');
+check('시작하기를 누르면 화면이 닫히고 시간이 흐름', !(await page.locator('#title').isVisible()) && await page.waitForFunction((t) => window.__game.sim.tickCount > t, tk0, { timeout: 3000 }).then(() => true).catch(() => false));
+await page.click('#about');
+check('업데이트 내역 버튼으로 다시 열면 멈춤', (await page.locator('#title').isVisible()) && (await page.evaluate(() => window.__game.getSpeed())) === 0);
+await page.click('#t-start');
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-start.png') });
 check('캔버스 존재', (await page.locator('canvas').count()) === 1);
 check('버전 표시', /v\d+\.\d+\.\d+/.test(await page.locator('#version').innerText()), await page.locator('#version').innerText());
@@ -187,6 +199,7 @@ await page.keyboard.press('Escape');
   const cdp = await tctx.newCDPSession(tp);
   await tp.goto('http://localhost:4173/');
   await tp.waitForSelector('canvas');
+  await tp.click('#t-start');
   await tp.click('button[data-speed="0"]');
   const tref = () => tp.evaluate(() => [[300, 0], [0, 300], [-300, 0], [0, 0]].map(([x, y]) => window.__game.project({ x, y })));
   const tsegs = () => tp.evaluate(() => window.__game.editor.network.segments.size);
@@ -396,6 +409,7 @@ check('샘플 하루 동안 안전망 개입·교착·충돌 점유 0', await pa
 
 await page.reload();
 await page.waitForSelector('canvas');
+await page.click('#t-start');
 await page.waitForTimeout(800);
 check('다시 열면 자동 저장이 있다고 알려 줌', (await page.locator('#msg').innerText()).includes('자동 저장'), await page.locator('#msg').innerText());
 

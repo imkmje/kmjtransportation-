@@ -18,6 +18,7 @@ import { buildSampleMap } from './maps/sample';
 import { buildStartMap } from './maps/start';
 import { createZoneLayer } from './render/zones';
 import { createSignalLayer } from './render/signals';
+import { createTitle } from './ui/title';
 
 const editor = new Editor(config);
 const sim = new Sim(config, editor.network);
@@ -78,6 +79,22 @@ const tools = createTools({
 // 새 게임은 외부에서 들어오는 도로 하나로 시작한다(시티즈 스카이라인처럼)
 buildStartMap(editor);
 view.focus({ x: 0, y: config.external.roadEndY - 100 });
+
+// 시작 화면: 열려 있는 동안 시간이 멈춘다. 닫으면 이어서 흐른다. 오른쪽 위 "업데이트 내역" 버튼으로 다시 열 수 있다
+const title = createTitle(
+  document.getElementById('title')!, __APP_VERSION__,
+  async () => (await loadSlot(0)) !== undefined,
+  () => { if (speed > 0) resumeSpeed = speed; speed = 0; },
+  (loadAuto) => {
+    if (loadAuto) void loadSlot(0).then((t) => { if (t) { importGame(t, editor, sim); tools.say('자동 저장을 불러왔습니다'); } }).catch(() => tools.say('자동 저장을 불러오지 못했습니다'));
+    setSpeed(resumeSpeed);
+  },
+);
+const aboutBtn = document.createElement('button');
+aboutBtn.id = 'about'; aboutBtn.textContent = '업데이트 내역';
+aboutBtn.onclick = () => void title.show();
+document.getElementById('filebar')!.insertBefore(aboutBtn, document.getElementById('msg'));
+void title.show();
 
 // 탭이 가려지면 자동 일시정지 (돌아와도 정지 상태 유지)
 document.addEventListener('visibilitychange', () => {
