@@ -13,9 +13,10 @@ exports[`샘플 맵 > [회귀 스냅샷] 시드·tick 수를 고정한 시나리
     "throughput": 922,
   },
   "live": 0,
-  "stateHash": "c83b11a1",
+  "stateHash": "c27249f",
   "stats": {
     "abandoned": 24,
+    "accidents": 0,
     "arrived": 922,
     "conflicts": 0,
     "deadlocks": 0,

@@ -15,6 +15,7 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
   scene.add(mesh);
   const dummy = new THREE.Object3D();
   const moving = new THREE.Color(0x3d7be0), stopped = new THREE.Color(0xe8893c);
+  const crashedColor = new THREE.Color(0xd62828); // 사고로 멈춘 차량
   const tMoving = new THREE.Color(0x8a5a3c), tStopped = new THREE.Color(0xc0392b); // 트럭은 갈색(멈추면 붉은 갈색)
 
   return {
@@ -30,7 +31,7 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
         dummy.scale.set(truck ? v.length / car.length : 1, truck ? 1.5 : 1, truck ? config.demand.freight.width / car.width : 1);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
-        mesh.setColorAt(i, truck ? (v.v < 0.3 ? tStopped : tMoving) : v.v < 0.3 ? stopped : moving);
+        mesh.setColorAt(i, traffic.crashed.has(v.id) ? crashedColor : truck ? (v.v < 0.3 ? tStopped : tMoving) : v.v < 0.3 ? stopped : moving);
         i++;
       }
       mesh.count = i;

@@ -1,15 +1,16 @@
 import { config } from '../config';
 import type { Editor } from '../sim/editor';
-import type { BuildingError, PlanError, Pt, RoadKind, SignKind, ZoneType } from '../sim/network';
+import type { BuildingError, BuildingSize, PlanError, Pt, RoadKind, SignKind, ZoneType } from '../sim/network';
 import type { RoadPos } from '../sim/route';
+import { curvePoints } from '../sim/curve';
 import type { RoadLayer } from '../render/roads';
 import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'zoneHome' | 'zoneOffice' | 'zoneShop' | 'zoneSchool' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
-const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneOffice: 'office', zoneShop: 'shop', zoneSchool: 'school', zoneErase: null };
-const ZONE_NAME = { zoneHome: '주거 구역', zoneOffice: '직장 구역', zoneShop: '상업 구역', zoneSchool: '학교 구역', zoneErase: '구역 지우기' } as const;
+type Tool = null | RoadKind | SignKind | 'noleft' | 'noentry' | 'oneway' | 'signal' | 'roundabout' | 'downgrade' | 'school' | 'zoneHome' | 'zoneHomeMid' | 'zoneHomeHigh' | 'zoneShop' | 'zoneOffice' | 'zoneIndustrial' | 'zoneErase' | 'demolish' | 'trip' | 'limit' | 'upgrade';
+const ZONE_TOOLS: Partial<Record<NonNullable<Tool>, ZoneType | null>> = { zoneHome: 'home', zoneHomeMid: 'homeMid', zoneHomeHigh: 'homeHigh', zoneShop: 'shop', zoneOffice: 'office', zoneIndustrial: 'industrial', zoneErase: null };
+const ZONE_NAME = { zoneHome: '주거(저밀) 구역', zoneHomeMid: '주거(중밀) 구역', zoneHomeHigh: '주거(고밀) 구역', zoneShop: '상업 구역', zoneOffice: '사무 구역', zoneIndustrial: '산업 구역', zoneErase: '구역 지우기' } as const;
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -43,6 +44,7 @@ interface Deps {
   load: (text: string) => void;
   loadSample: () => void;
   loadNew: () => void;
+  loadGrid: () => void;
   setHeat: (on: boolean) => void;
   setColorblind: (on: boolean) => void;
   pick: (clientX: number, clientY: number) => Pt | null;
@@ -58,6 +60,12 @@ interface Deps {
   requestTrip: (from: RoadPos, to: RoadPos, count: number) => string | null;
   clearVehicles: () => void;
   setDebug: (on: boolean) => void;
+  /** 사고·날씨 이벤트 켜기/끄기 */
+  setEvents: (on: boolean) => void;
+  /** 배속을 한 단계 올리거나(1) 내린다(-1) */
+  stepSpeed: (dir: 1 | -1) => void;
+  /** 단축키 도움말 창 열기/닫기 */
+  toggleHelp: () => void;
 }
 
 export function createTools(d: Deps) {
@@ -68,6 +76,8 @@ export function createTools(d: Deps) {
   let lastClient = { x: 0, y: 0 };
   let gridSnap = true;
   let angleSnap = false;
+  let curveMode = false; // 곡선 모드: 도로 도구가 세 번 클릭(시작 → 휘는 점 → 끝)으로 곡선을 만든다
+  let curvePts: Pt[] = [];
   let ortho = true; // 직각 맞추기: 도로에서 출발하거나 도로에 닿을 때 거의 직각이면 정확히 90°로
   let tripFrom: RoadHit | null = null;
   let dragging = false; // 도로 그리기·구역 칠하기 드래그 중
@@ -84,16 +94,21 @@ export function createTools(d: Deps) {
     demolish: svg('<path d="M3 6v14"/><path d="M3 13h6"/><rect x="9" y="9" width="10" height="7" rx="1.5"/><path d="M12 9V5h4l3 4"/><rect x="7" y="17" width="18" height="6" rx="3"/><circle cx="11" cy="20" r="0.8" fill="currentColor"/><circle cx="21" cy="20" r="0.8" fill="currentColor"/>'),
     view: svg('<path d="M4 24h20"/><rect x="5.5" y="14" width="4" height="10" rx="1" fill="currentColor"/><rect x="12" y="8" width="4" height="16" rx="1" fill="currentColor"/><rect x="18.5" y="11" width="4" height="13" rx="1" fill="currentColor"/>'),
     tools: svg('<path d="M18 4a6 6 0 0 0-5.6 8L4.5 20a2.2 2.2 0 0 0 3.2 3.2L15.6 15.5A6 6 0 0 0 24 10l-3.6 3.2-3.4-.8-.8-3.4L19.6 5.6A6 6 0 0 0 18 4z"/>'),
+    school: svg('<path d="M3 12 14 5l11 7"/><path d="M6 12v10h16V12"/><rect x="11" y="16" width="6" height="6"/><path d="M14 5V2"/>'),
     undo: svg('<path d="M10 5 5 10l5 5"/><path d="M5 10h11.5a5.5 5.5 0 0 1 0 11H9"/>'),
     redo: svg('<path d="M18 5l5 5-5 5"/><path d="M23 10H11.5a5.5 5.5 0 0 0 0 11H19"/>'),
   };
   d.toolbar.innerHTML = `
     <div class="subs">
       <div class="sub" id="sub-road" data-cat="road" hidden>
-        <button data-tool="road2" title="단축키 R">${config.roads.road2.name}</button>
-        <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
- <button data-tool="oneway" title="단축키 W: 도로를 클릭할 때마다 양방향 → 한쪽 방향 → 반대 방향 → 양방향. 도로 위 화살표가 가는 방향입니다">일방통행</button>
-        <button data-tool="upgrade" title="단축키 U: 왕복 2차로를 4차로로 넓힙니다. 교차로 사이 한 구간씩">도로 넓히기</button>
+        <button data-tool="road2" title="단축키 2: 드래그로 왕복 2차로를 그립니다">${config.roads.road2.name} [2]</button>
+        <button data-tool="road4" title="단축키 4: 왕복 4차로">${config.roads.road4.name} [4]</button>
+        <button data-tool="road6" title="단축키 6: 왕복 6차로">${config.roads.road6.name} [6]</button>
+        <label class="chip" title="단축키 Q: 켜면 세 번 클릭해(시작 → 휘는 점 → 끝) 곡선 도로를 만듭니다"><input type="checkbox" id="curve" /> 곡선 [Q]</label>
+        <button data-tool="roundabout" title="단축키 R: 교차로를 클릭하면 회전교차로로 바꿉니다(도로가 환형 반지름 + 20m보다 길어야 함)">회전교차로 [R]</button>
+        <button data-tool="oneway" title="단축키 W: 도로를 클릭할 때마다 양방향 → 한쪽 방향 → 반대 방향 → 양방향. 도로 위 화살표가 가는 방향입니다">일방통행 [W]</button>
+        <button data-tool="upgrade" title="단축키 U: 도로를 한 단계 넓힙니다(2→4→6차로). 교차로 사이 한 구간씩">넓히기 [U]</button>
+        <button data-tool="downgrade" title="단축키 Shift+U: 도로를 한 단계 좁힙니다(6→4→2차로)">좁히기 [⇧U]</button>
         <span class="opts">
           <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
           <label><input type="checkbox" id="ortho" checked /> 직각 맞추기</label>
@@ -101,28 +116,36 @@ export function createTools(d: Deps) {
         </span>
       </div>
       <div class="sub" id="sub-zone" data-cat="zone" hidden>
-        <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 구역을 칠합니다">주거 구역</button>
-        <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 구역</button>
-        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 드래그해서 직장 구역(산업 구역)을 칠합니다">직장(산업) 구역</button>
-        <button data-tool="zoneSchool" class="z-school" title="단축키 K: 드래그해서 학교 구역을 칠합니다. 학생이 아침에 등교하고 오후에 돌아옵니다">학교 구역</button>
-        <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기</button>
+        <button data-tool="zoneHome" class="z-home" title="단축키 H: 드래그해서 주거 저밀 구역(작은 집)을 칠합니다">주거 저밀 [H]</button>
+        <button data-tool="zoneHomeMid" class="z-homeMid" title="단축키 J: 주거 중밀 구역(중간 크기 건물)">주거 중밀 [J]</button>
+        <button data-tool="zoneHomeHigh" class="z-homeHigh" title="단축키 K: 주거 고밀 구역(큰 아파트, 2×2칸)">주거 고밀 [K]</button>
+        <button data-tool="zoneShop" class="z-shop" title="단축키 C: 드래그해서 상업 구역(상점)을 칠합니다. 점심·쇼핑·여가 이동이 생깁니다">상업 [C]</button>
+        <button data-tool="zoneOffice" class="z-office" title="단축키 O: 사무 구역(사무 건물)">사무 [O]</button>
+        <button data-tool="zoneIndustrial" class="z-industrial" title="단축키 I: 산업 구역(공장). 화물 트럭이 다닙니다">산업 [I]</button>
+        <button data-tool="zoneErase" title="단축키 E: 드래그해서 구역을 지웁니다">구역 지우기 [E]</button>
       </div>
       <div class="sub" id="sub-traffic" data-cat="traffic" hidden>
-        <button data-tool="stop" title="단축키 S">정지 표지</button>
-        <button data-tool="yield" title="단축키 Y">양보 표지</button>
- <button data-tool="noleft" title="단축키 N: 교차로로 들어오는 도로 끝을 클릭하면 그 방향의 좌회전이 금지됩니다(다시 클릭하면 해제)">좌회전 금지</button>
-        <button data-tool="noentry" title="단축키 B: 교차로 쪽 도로 끝을 클릭하면 교차로에서 그 도로로 들어가는 것이 금지됩니다(다시 클릭하면 해제)">진입 금지</button>
-        <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등</button>
+        <button data-tool="stop" title="단축키 S">정지 표지 [S]</button>
+        <button data-tool="yield" title="단축키 Y">양보 표지 [Y]</button>
+ <button data-tool="noleft" title="단축키 N: 교차로로 들어오는 도로 끝을 클릭하면 그 방향의 좌회전이 금지됩니다(다시 클릭하면 해제)">좌회전 금지 [N]</button>
+        <button data-tool="noentry" title="단축키 B: 교차로 쪽 도로 끝을 클릭하면 교차로에서 그 도로로 들어가는 것이 금지됩니다(다시 클릭하면 해제)">진입 금지 [B]</button>
+        <button data-tool="signal" title="단축키 G: 교차로를 클릭할 때마다 꺼짐 → 고정식 → 감응식 → 꺼짐">신호등 [G]</button>
         <select id="sgreen" title="고정식 신호의 기본 녹색 시간(큰 도로가 낀 방향은 2배)">${config.signals.greenChoices.map((g) => `<option value="${g}"${g === config.signals.greenSec ? ' selected' : ''}>녹색 ${g}초</option>`).join('')}</select>
-        <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
+        <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한 [L]</button>
+      </div>
+      <div class="sub" id="sub-facility" data-cat="facility" hidden>
+        <button data-tool="school" title="단축키 P: 학교를 직접 놓습니다. 학생이 아침에 등교하고 오후에 돌아옵니다(거주자의 15%)">학교 [P]</button>
+        <select id="bsize" title="학교 크기(대형은 2×2칸)"><option value="small">소 (수용 10)</option><option value="medium" selected>중 (30)</option><option value="large">대 (100)</option></select>
       </div>
       <div class="sub" id="sub-view" data-cat="view" hidden>
         <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
         <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
         <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
+        <label title="단축키 F: 사고(차량이 갑자기 서서 차선을 막음)와 비(속도 저하, 사고 증가)"><input type="checkbox" id="events" checked /> 사고·날씨 (F)</label>
+        <button id="helpbtn" title="단축키 ?">단축키 도움말 [?]</button>
       </div>
       <div class="sub" id="sub-tools" data-cat="tools" hidden>
-        <button data-tool="trip" title="단축키 V">차량 투입 (테스트)</button>
+        <button data-tool="trip" title="단축키 V">차량 투입 (테스트) [V]</button>
         <select id="count"><option>1</option><option>10</option><option>50</option><option>200</option></select>
         <button id="clearveh">차량 제거</button>
       </div>
@@ -134,6 +157,7 @@ export function createTools(d: Deps) {
       <button data-catbtn="road">${ICON.road}도로</button>
       <button data-catbtn="zone">${ICON.zone}구역</button>
       <button data-catbtn="traffic">${ICON.traffic}교통</button>
+      <button data-catbtn="facility">${ICON.school}시설</button>
       <button data-tool="demolish" title="단축키 X">${ICON.demolish}철거</button>
       <button data-catbtn="view">${ICON.view}보기</button>
       <button data-catbtn="tools">${ICON.tools}도구</button>
@@ -144,6 +168,7 @@ export function createTools(d: Deps) {
     <button id="save">저장</button><button id="load">불러오기</button></div>
     <div class="mrow"><button id="export">파일로 저장</button><button id="import">파일 열기</button></div>
     <div class="mrow"><button id="sample" title="큰길 하나와 작은 길, 주거·직장·상점이 있는 예제 도시">샘플 맵</button><button id="newcity" title="외부에서 들어오는 도로 하나만 있는 새 도시">새 도시</button></div>
+    <div class="mrow"><button id="gridcity" title="큰길·세로 길·신호등·회전교차로·구역이 갖춰진 격자 도시. 신호와 병목 찾기를 시험해 보기 좋습니다">격자 도시</button></div>
     <input type="file" id="file" accept="application/json,.json" hidden />
     <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />마우스: 가운데 드래그 = 이동, 오른쪽 드래그 = 회전·기울기, 휠 = 확대<br />터치: 한 손가락 = 이동, 두 손가락 벌리기 = 확대, 비틀기 = 회전, 같이 위아래 = 기울기, 좌우 = 이동<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다(주거·상업·직장)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   const $ = <T extends HTMLElement>(root: HTMLElement, sel: string) => root.querySelector<T>(sel)!;
@@ -248,6 +273,20 @@ export function createTools(d: Deps) {
     return best;
   }
 
+  // 커서 옆 안내 글자(tip)
+  function tipAt(text: string, bad: boolean) {
+    d.tip.textContent = text;
+    d.tip.classList.toggle('bad', bad);
+    d.tip.style.left = `${lastClient.x + 16}px`;
+    d.tip.style.top = `${lastClient.y + 16}px`;
+    d.tip.hidden = false;
+  }
+  // 학교를 놓을 자리: 소·중은 칸 중심, 대(2×2칸)는 칸 모서리에 맞춘다
+  function schoolSpot(p: Pt, size: BuildingSize): Pt {
+    const c = config.zones.cell;
+    return size === 'large' ? { x: (Math.round(p.x / c - 0.5) + 0.5) * c, y: (Math.round(p.y / c - 0.5) + 0.5) * c } : { x: Math.round(p.x / c) * c, y: Math.round(p.y / c) * c };
+  }
+
   // ---- 갱신 ----
   function refresh() {
     d.roads.clearGhost();
@@ -255,6 +294,7 @@ export function createTools(d: Deps) {
     d.buildings.clearGhost();
     d.buildings.setHover(null);
     d.zones.clearGhost();
+    d.roads.setCurve(null, 'road2', true);
     d.roads.setCursor(null, true);
     d.tip.hidden = true;
     undoBtn.disabled = !d.editor.canUndo;
@@ -280,16 +320,27 @@ export function createTools(d: Deps) {
       }
       return;
     }
-    if (tool === 'upgrade') {
+    if (tool === 'roundabout') {
+      const n = signalNode(last);
+      d.roads.setCursor(n ? { x: n.x, y: n.y } : null, !!n);
+      tipAt(n ? '회전교차로로 바꾸기 (반시계 방향 환형, 들어가는 도로는 양보)' : '교차로를 클릭하세요', !n);
+      return;
+    }
+    if (tool === 'school') {
+      const size = $<HTMLSelectElement>(d.toolbar, '#bsize').value as BuildingSize;
+      const p = schoolSpot(last, size);
+      const plan = net.planBuilding('school', size, p.x, p.y);
+      d.buildings.setGhost('school', size, p.x, p.y, plan.ok);
+      const linked = net.projectOnRoad(p, config.buildings.connectRadius) !== null;
+      tipAt(plan.ok ? `학교 (${size === 'small' ? '소' : size === 'medium' ? '중' : '대'}) · 수용 ${config.buildings.capacity[size]}명${linked ? '' : ' — 도로에 연결 안 됨'}` : `학교 — ${BERR[plan.error]}`, !plan.ok || !linked);
+      return;
+    }
+    if (tool === 'upgrade' || tool === 'downgrade') {
       const h = d.pickRoad(last);
-      d.roads.setCursor(h ? { x: h.x, y: h.y } : null, !!h && net.upgradeChain(h.segId).length > 0);
+      d.roads.setCursor(h ? { x: h.x, y: h.y } : null, !!h && net.upgradeChain(h.segId, tool === 'upgrade' ? 'up' : 'down').length > 0);
       if (h) {
-        const n = net.upgradeChain(h.segId).length;
-        d.tip.textContent = n ? `왕복 4차로로 넓히기 (교차로 사이 ${n}구간)` : '이미 왕복 4차로입니다';
-        d.tip.classList.toggle('bad', !n);
-        d.tip.style.left = `${lastClient.x + 16}px`;
-        d.tip.style.top = `${lastClient.y + 16}px`;
-        d.tip.hidden = false;
+        const n = net.upgradeChain(h.segId, tool === 'upgrade' ? 'up' : 'down').length;
+        tipAt(n ? `${tool === 'upgrade' ? '넓히기' : '좁히기'} (교차로 사이 ${n}구간)` : tool === 'upgrade' ? '더 넓힐 수 없습니다 (최대 왕복 6차로)' : '더 좁힐 수 없습니다 (왕복 2차로)', !n);
       }
       return;
     }
@@ -335,6 +386,17 @@ export function createTools(d: Deps) {
       return;
     }
     const p = cursorPoint(last);
+    if (curveMode) { // 곡선 모드: 클릭한 점들과 커서로 곡선 미리보기
+      d.roads.setCursor(p, true);
+      const kind = tool as RoadKind;
+      if (curvePts.length === 0) { tipAt('곡선: 시작점을 클릭하세요', false); return; }
+      const pts = curvePts.length === 1 ? [curvePts[0], p] : curvePoints(curvePts[0], curvePts[1], p);
+      const ok = pts.slice(1).every((q, i) => net.planRoad(pts[i], q, kind).ok);
+      d.roads.setCurve(pts, kind, ok);
+      const len = pts.slice(1).reduce((n, q, i) => n + Math.hypot(q.x - pts[i].x, q.y - pts[i].y), 0);
+      tipAt(`${Math.round(len)} m${ok ? '' : ' — 건설할 수 없는 구간이 있습니다'}`, !ok);
+      return;
+    }
     if (!start) { d.roads.setCursor(p, true); return; }
     const plan = net.planRoad(start, p, tool as RoadKind);
     d.roads.setGhost(start, p, tool as RoadKind, plan.ok);
@@ -354,7 +416,8 @@ export function createTools(d: Deps) {
     tripFrom = null;
     dragging = false;
     zoneFrom = null;
-    d.setDrawMode(!!tool && (tool in config.roads || tool in ZONE_TOOLS));
+    curvePts = [];
+    syncDrawMode();
     refresh();
   }
 
@@ -386,11 +449,38 @@ export function createTools(d: Deps) {
       refresh();
       return;
     }
-    if (tool === 'upgrade') {
+    if (tool === 'upgrade' || tool === 'downgrade') {
       const h = d.pickRoad(last);
       if (!h) { say('도로 위를 클릭하세요'); return; }
-      const r = d.editor.upgrade(h.segId);
-      say(r.ok ? `왕복 4차로로 넓혔습니다 (${r.ids.length}구간)` : r.error === 'onBuilding' ? '옆에 건물이 있어 넓힐 수 없습니다' : '이미 왕복 4차로입니다');
+      const up = tool === 'upgrade', r = d.editor.upgrade(h.segId, up ? 'up' : 'down');
+      say(r.ok ? `${config.roads[net.segments.get(h.segId)!.kind].name}로 ${up ? '넓혔' : '좁혔'}습니다 (${r.ids.length}구간)` : r.error === 'onBuilding' ? '옆에 건물이 있어 넓힐 수 없습니다' : up ? '더 넓힐 수 없습니다 (최대 왕복 6차로)' : '더 좁힐 수 없습니다 (왕복 2차로)');
+      refresh();
+      return;
+    }
+    if (tool === 'roundabout') {
+      const n = signalNode(last);
+      if (!n) { say('교차로(도로 3개 이상이 만나는 곳)를 클릭하세요'); return; }
+      const r = d.editor.makeRoundabout(n.id);
+      say(r.ok ? `회전교차로를 만들었습니다 (도로 ${r.ring.length}개 연결)` : r.error === 'tooShort' ? '연결된 도로가 짧습니다 (환형 반지름 + 20m보다 길어야 합니다)' : r.error === 'tooTight' ? '도로 사이 각도가 너무 좁아 환형을 만들 수 없습니다' : r.error === 'onBuilding' ? '교차로 가까이에 건물이 있어 만들 수 없습니다' : '교차로를 클릭하세요');
+      refresh();
+      return;
+    }
+    if (tool === 'school') {
+      const size = $<HTMLSelectElement>(d.toolbar, '#bsize').value as BuildingSize;
+      const p = schoolSpot(last, size);
+      const r = d.editor.addBuilding('school', size, p.x, p.y, 'player', true);
+      if (!r.ok) say(BERR[r.error]);
+      else say(net.accessOf(r.id) === null ? '학교를 놓았지만 도로에 연결되지 않았습니다 (도로 가까이에 놓으세요)' : '학교를 놓았습니다');
+      refresh();
+      return;
+    }
+    if (roadTool() && curveMode) { // 곡선: 시작 → 휘는 점 → 끝 세 번 클릭
+      curvePts.push(cursorPoint(last));
+      if (curvePts.length === 3) {
+        const r = d.editor.buildCurve(curvePts[0], curvePts[1], curvePts[2], tool as RoadKind);
+        say(r.ok ? `곡선 도로를 만들었습니다 (${Math.round(r.length)} m)` : r.error === 'tooSharp' ? '곡선이 너무 급하거나 다른 도로와 너무 가깝습니다' : ERR[r.error]);
+        curvePts = [];
+      } else say(curvePts.length === 1 ? '곡선: 휘어지는 점을 클릭하세요' : '곡선: 끝점을 클릭하세요');
       refresh();
       return;
     }
@@ -448,7 +538,7 @@ export function createTools(d: Deps) {
   }
 
   function cancel() {
-    if (start || tripFrom || zoneFrom) { start = null; tripFrom = null; zoneFrom = null; dragging = false; }
+    if (start || tripFrom || zoneFrom || curvePts.length) { start = null; tripFrom = null; zoneFrom = null; curvePts = []; dragging = false; }
     else { tool = null; d.setDrawMode(false); }
     refresh();
   }
@@ -460,7 +550,9 @@ export function createTools(d: Deps) {
     last = d.pick(e.clientX, e.clientY);
     refresh();
   });
-  const drawing = () => tool !== null && tool in config.roads;
+  const roadTool = () => tool !== null && tool in config.roads;
+  const drawing = () => roadTool() && !curveMode; // 곡선 모드에서는 드래그로 그리지 않는다
+  const syncDrawMode = () => d.setDrawMode((roadTool() && !curveMode) || tool !== null && tool in ZONE_TOOLS);
   const zoning = () => tool !== null && tool in ZONE_TOOLS;
   // 그리기 시작은 카메라 컨트롤보다 먼저(캡처 단계) 받아서, 카메라가 같은 입력으로 같이 움직이지 않게 막는다.
   d.canvas.parentElement!.addEventListener('pointerdown', (e) => {
@@ -518,34 +610,28 @@ export function createTools(d: Deps) {
   });
   d.canvas.addEventListener('pointerleave', () => { last = null; refresh(); });
 
+  // 단축키(CS2처럼 도구 모음과 같은 분류로 묶고, 글자는 기억하기 쉬운 것으로): 도로 2·4·6·Q(곡선)·R(회전교차로)·W(일방통행)·U/Shift+U(넓히기/좁히기),
+  // 구역 H·J·K(주거 저·중·고밀)·C(상업)·O(사무)·I(산업)·E(지우기), 시설 P(학교), 교통 S·Y·G·N·B·L, 철거 X, 보기 M·D·F, 도구 V
+  const KEYS: Record<string, Tool> = { '2': 'road2', '4': 'road4', '6': 'road6', r: 'roundabout', w: 'oneway', h: 'zoneHome', j: 'zoneHomeMid', k: 'zoneHomeHigh', c: 'zoneShop', o: 'zoneOffice', i: 'zoneIndustrial', e: 'zoneErase', p: 'school', s: 'stop', y: 'yield', g: 'signal', n: 'noleft', b: 'noentry', l: 'limit', x: 'demolish', v: 'trip' };
+  const toggleBox = (id: string, fn: (on: boolean) => void) => { const c = $<HTMLInputElement>(d.toolbar, id); c.checked = !c.checked; fn(c.checked); };
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
-    if (t.tagName === 'INPUT' || t.tagName === 'SELECT') return;
+    if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') return;
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); if (e.shiftKey) d.editor.redo(); else d.editor.undo(); start = null; refresh(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); d.editor.redo(); start = null; refresh(); }
     else if (e.ctrlKey || e.metaKey || e.altKey) return;
     else if (k === 'escape') cancel();
-    else if (k === 'r') setTool('road2');
-    else if (k === 't') setTool('road4');
-    else if (k === 'x') setTool('demolish');
-    else if (k === 'h') setTool('zoneHome');
-    else if (k === 'o') setTool('zoneOffice');
-    else if (k === 'e') setTool('zoneErase');
-    else if (k === 'c') setTool('zoneShop');
-    else if (k === 'k') setTool('zoneSchool');
-    else if (k === 's') setTool('stop');
-    else if (k === 'y') setTool('yield');
-    else if (k === 'l') setTool('limit');
-    else if (k === 'u') setTool('upgrade');
-    else if (k === 'w') setTool('oneway');
-    else if (k === 'g') setTool('signal');
-    else if (k === 'n') setTool('noleft');
-    else if (k === 'b') setTool('noentry');
-    else if (k === 'm') { const c = $<HTMLInputElement>(d.toolbar, '#heat'); c.checked = !c.checked; d.setHeat(c.checked); }
-    else if (k === 'v') setTool('trip');
-    else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }
+    else if (k === 'u') setTool(e.shiftKey ? 'downgrade' : 'upgrade');
+    else if (k === 'q') toggleBox('#curve', (on) => { curveMode = on; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); say(on ? '곡선 모드: 도로 도구를 고르고 세 번 클릭하세요 (시작 → 휘는 점 → 끝)' : '직선 모드'); });
+    else if (k === 'm') toggleBox('#heat', (on) => d.setHeat(on));
+    else if (k === 'd') toggleBox('#debugToggle', (on) => d.setDebug(on));
+    else if (k === 'f') toggleBox('#events', (on) => { d.setEvents(on); say(on ? '사고·날씨 이벤트를 켰습니다' : '사고·날씨 이벤트를 껐습니다'); });
     else if (k === ' ') { e.preventDefault(); d.togglePause(); }
+    else if (k === '+' || k === '=') d.stepSpeed(1);
+    else if (k === '-' || k === '_') d.stepSpeed(-1);
+    else if (k === '?' || k === '/') d.toggleHelp();
+    else if (KEYS[k]) setTool(KEYS[k]);
   });
 
   // ---- 버튼 ----
@@ -558,6 +644,10 @@ export function createTools(d: Deps) {
   $<HTMLInputElement>(d.toolbar, '#ortho').onchange = (e) => (ortho = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#curve').onchange = (e) => { curveMode = (e.target as HTMLInputElement).checked; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); };
+  $<HTMLInputElement>(d.toolbar, '#events').onchange = (e) => d.setEvents((e.target as HTMLInputElement).checked);
+  $<HTMLSelectElement>(d.toolbar, '#bsize').onchange = () => refresh();
+  $(d.toolbar, '#helpbtn').onclick = () => d.toggleHelp();
   $<HTMLInputElement>(d.toolbar, '#cb').onchange = (e) => d.setColorblind((e.target as HTMLInputElement).checked);
 
   const slot = () => Number($<HTMLSelectElement>(d.filebar, '#slot').value);
@@ -585,6 +675,7 @@ export function createTools(d: Deps) {
     say('파일을 불러왔습니다');
   });
   $(d.filebar, '#newcity').onclick = () => guard(() => { d.loadNew(); say('새 도시를 시작합니다. 외부에서 들어오는 도로 옆에 구역을 칠해 보세요'); });
+  $(d.filebar, '#gridcity').onclick = () => guard(() => { d.loadGrid(); say('격자 도시를 열었습니다. 구역에 건물이 자라고 신호등이 켜져 있습니다'); });
   $(d.filebar, '#sample').onclick = () => guard(() => { d.loadSample(); say('샘플 맵을 열었습니다. 평일 아침 6시부터 출근이 시작됩니다'); });
 
   refresh();

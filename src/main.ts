@@ -16,10 +16,12 @@ import { exportGame, importGame } from './io/game';
 import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
 import { buildStartMap } from './maps/start';
+import { buildGridMap } from './maps/grid';
 import { createZoneLayer } from './render/zones';
 import { createSignalLayer } from './render/signals';
 import { createTitle } from './ui/title';
 import { createInfo } from './ui/info';
+import { createHelp } from './ui/help';
 
 const editor = new Editor(config);
 const sim = new Sim(config, editor.network);
@@ -51,23 +53,37 @@ const stats = createStats(document.getElementById('stats')!, sim, editor.network
   return uncCount;
 }, document.getElementById('rci')!, document.getElementById('topci')!, (id) => pickSegment(id, true));
 // 도로 정보 창: 도로를 클릭하거나 병목 목록을 누르면 열린다
-const info = createInfo(document.getElementById('info')!, config, editor, sim.metrics, sim.traffic.signals, (t) => tools.say(t), () => roads.setSelect(null), (segId) => { const r = editor.upgrade(segId); tools.say(r.ok ? `왕복 4차로로 넓혔습니다 (${r.ids.length}구간)` : '옆에 건물이 있어 넓힐 수 없습니다'); });
+const info = createInfo(document.getElementById('info')!, config, editor, sim.metrics, sim.traffic.signals, (t) => tools.say(t), () => roads.setSelect(null), (segId, dir) => { const r = editor.upgrade(segId, dir); tools.say(r.ok ? `${dir === 'up' ? '넓혔' : '좁혔'}습니다 (${r.ids.length}구간)` : '건물이 있어 넓힐 수 없습니다'); });
 function pickSegment(id: number | null, focus = false) {
   roads.setSelect(id);
   info.showSegment(id);
   const s = id === null ? undefined : editor.network.segments.get(id);
   if (focus && s) { const a = editor.network.nodes.get(s.a)!, b = editor.network.nodes.get(s.b)!; view.focus({ x: (a.x + b.x) / 2, y: (b.y + a.y) / 2 }); }
 }
+const help = createHelp(document.getElementById('help')!);
+function stepSpeed(dir: 1 | -1) {
+  const order = [1, 2, 4];
+  if (speed === 0) { setSpeed(resumeSpeed); return; }
+  const i = Math.min(order.length - 1, Math.max(0, order.indexOf(speed) + dir));
+  setSpeed(order[i]);
+}
+sim.setEvents(true); // 사고·날씨는 기본으로 켠다(보기 → 사고·날씨, F 키로 끌 수 있다)
+let lastAccidentToast = -1e9;
+sim.traffic.onAccident = () => { if (performance.now() - lastAccidentToast > 4000) { lastAccidentToast = performance.now(); tools.say('🚨 사고 발생 — 잠시 그 차선이 막힙니다'); } };
 const tools = createTools({
   editor,
   roads,
   buildings,
   zones,
   selectRoad: (id) => pickSegment(id),
+  setEvents: (on) => sim.setEvents(on),
+  stepSpeed,
+  toggleHelp: () => help.toggle(),
   selectNode: (id) => { roads.setSelect(null); info.showNode(id); },
   save: () => exportGame(editor, sim),
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },
+  loadGrid: () => { buildGridMap(editor); sim.reset(); view.focus({ x: 0, y: -100 }); },
   loadNew: () => { buildStartMap(editor); sim.reset(); view.focus({ x: 0, y: config.external.roadEndY - 100 }); },
   setHeat: (on) => heat.setVisible(on),
   setColorblind: (on) => heat.setColorblind(on),
@@ -130,6 +146,7 @@ function frame(now: number) {
   roads.sync();
   buildings.sync();
   zones.sync();
+  view.setWeather(sim.raining);
   signalLayer.update();
   vehicles.update(loop.alpha);
   laneDebug.update(debug.on);

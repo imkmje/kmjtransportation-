@@ -13,9 +13,10 @@ type Sel = { kind: 'seg'; id: number } | { kind: 'node'; id: number } | null;
  * 정보 창: 도로를 클릭하면 종류·제한속도·통과 차량·정체 지수·양 끝의 제어를, 교차로를 클릭하면 신호 방식과 단계별 녹색 시간을 보여 준다.
  * 신호 편집(방식 고르기, 녹색 시간 늘리고 줄이기, 녹색파 맞추기)도 여기서 한다
  */
-export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metrics: Metrics, signals: Signals, say: (t: string) => void, onClose: () => void, onUpgrade: (segId: number) => void) {
+export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metrics: Metrics, signals: Signals, say: (t: string) => void, onClose: () => void, onUpgrade: (segId: number, dir: 'up' | 'down') => void) {
   const net = editor.network;
   let sel: Sel = null;
+  let clip: ReturnType<Signals['copyProgram']> = null; // 복사해 둔 신호 프로그램
   let last = '';
   root.hidden = true;
 
@@ -33,13 +34,25 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     return segs.map((id) => { const s = net.segments.get(id)!, o = net.nodes.get(s.a === nodeId ? s.b : s.a)!; const dx = Math.abs(o.x - n.x), dy = Math.abs(o.y - n.y); return dx > 2 * dy ? '가로' : dy > 2 * dx ? '세로' : '대각선'; }).filter((v, i, a) => a.indexOf(v) === i).join('·');
   };
 
+  const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  // 차선별 방향: 교차로로 들어오는 끝마다, 차선(오른쪽부터)에 좌회전(←)·직진(↑)·우회전(→) 허용 여부를 켜고 끈다
+  function laneHtml(s: Segment): string {
+    const lanes = cfg.roads[s.kind].lanesPerDir;
+    const ends = [s.a, s.b].filter((n) => net.segmentsAt(n).length >= 3 && !(s.oneWay === 'ab' && n === s.a) && !(s.oneWay === 'ba' && n === s.b));
+    return ends.map((n) => {
+      const cur = net.laneDirsAt(s.id, n), node = net.nodes.get(n)!;
+      const rows = Array.from({ length: lanes }, (_, i) => { const m = cur[i] || 7; return `<div class="ln"><span>${i + 1}차선${i === 0 ? '(오른쪽)' : i === lanes - 1 && lanes > 1 ? '(왼쪽)' : ''}</span>${[[1, '←', '좌'], [2, '↑', '직'], [4, '→', '우']].map(([bit, ar, nm]) => `<button data-ld="${n}:${i}:${bit}" class="${m & (bit as number) ? 'on' : ''}" title="${nm}">${ar}</button>`).join('')}</div>`; }).join('');
+      return `<div class="sub-h">차선 방향 · 끝 (${Math.round(node.x)}, ${Math.round(node.y)})</div>${rows}<div class="two"><button class="wide" data-ld-auto="${n}">자동 배정</button><button class="wide" data-ld-reset="${n}">모두 허용</button></div>`;
+    }).join('');
+  }
+
   function segHtml(s: Segment): string {
     const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!, r = cfg.roads[s.kind];
     const rep = metrics.segmentReport().get(s.id);
     const ci = rep?.ci ?? null;
     const wave = net.hasSignal(s.a) && net.hasSignal(s.b) && !net.isActuated(s.a) && !net.isActuated(s.b);
     return `
-      <h4>도로 정보 <button id="in-close" title="닫기">✕</button></h4>
+      <h4>도로 정보${s.name ? ` · ${escapeHtml(s.name)}` : ''} <button id="in-close" title="닫기">✕</button></h4>
       <div class="kv">
         <div>종류</div><div>${r.name}${s.locked ? ' (철거 불가)' : ''}</div>
         <div>길이</div><div>${Math.round(net.segmentLength(s))} m</div>
@@ -50,7 +63,9 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
         <div>한쪽 끝 (${Math.round(a.x)}, ${Math.round(a.y)})</div><div>${endText(s, s.a)}</div>
         <div>반대쪽 끝 (${Math.round(b.x)}, ${Math.round(b.y)})</div><div>${endText(s, s.b)}</div>
       </div>
-      ${s.kind === 'road2' && net.upgradeChain(s.id).length ? '<button class="wide" id="in-up">왕복 4차로로 넓히기</button>' : ''}
+      <div class="namebox"><input id="in-name" maxlength="30" placeholder="도로 이름" value="${escapeHtml(s.name)}" /><button id="in-name-ok">이름 저장</button></div>
+      <div class="two">${net.upgradeChain(s.id, 'up').length ? '<button class="wide" id="in-up">넓히기</button>' : ''}${net.upgradeChain(s.id, 'down').length ? '<button class="wide" id="in-down">좁히기</button>' : ''}</div>
+      ${laneHtml(s)}
       ${wave ? `<div class="sub-h">녹색파 (고정식 신호끼리)</div><button class="wide" data-wave="${s.a}">(${Math.round(a.x)}, ${Math.round(a.y)}) → (${Math.round(b.x)}, ${Math.round(b.y)}) 방향으로 맞추기</button><button class="wide" data-wave="${s.b}">(${Math.round(b.x)}, ${Math.round(b.y)}) → (${Math.round(a.x)}, ${Math.round(a.y)}) 방향으로 맞추기</button>` : ''}`;
   }
 
@@ -69,7 +84,10 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     return `
       <h4>교차로 정보 <button id="in-close" title="닫기">✕</button></h4>
       <div class="kv"><div>위치</div><div>(${Math.round(n.x)}, ${Math.round(n.y)})</div><div>연결 도로</div><div>${net.segmentsAt(id).length}개</div></div>
-      <div class="sub-h">신호등</div><div class="seg3">${seg('off', '없음')}${seg('fix', '고정식')}${seg('act', '감응식')}</div>${prog}`;
+      <div class="sub-h">신호등</div><div class="seg3">${seg('off', '없음')}${seg('fix', '고정식')}${seg('act', '감응식')}</div>${prog}
+      <div class="two">${on ? '<button class="wide" id="in-copy">신호 복사</button>' : ''}${clip ? '<button class="wide" id="in-paste">붙여넣기</button>' : ''}</div>
+      ${clip ? `<div class="hint">복사됨: ${clip.mode === 'actuated' ? '감응식' : `고정식 ${clip.greens.join('·')}초`}</div>` : ''}
+      <button class="wide" id="in-round">회전교차로로 바꾸기</button>`;
   }
 
   function render() {
@@ -83,7 +101,28 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     root.innerHTML = html;
     root.querySelector<HTMLElement>('#in-close')!.onclick = () => { sel = null; root.hidden = true; last = ''; onClose(); };
     const up = root.querySelector<HTMLElement>('#in-up');
-    if (up && sel?.kind === 'seg') { const id = sel.id; up.onclick = () => onUpgrade(id); }
+    if (up && sel?.kind === 'seg') { const id = sel.id; up.onclick = () => onUpgrade(id, 'up'); }
+    const down = root.querySelector<HTMLElement>('#in-down');
+    if (down && sel?.kind === 'seg') { const id = sel.id; down.onclick = () => onUpgrade(id, 'down'); }
+    if (sel?.kind === 'seg') {
+      const id = sel.id, seg = net.segments.get(id)!, lanes = cfg.roads[seg.kind].lanesPerDir;
+      const nameOk = root.querySelector<HTMLElement>('#in-name-ok'), nameIn = root.querySelector<HTMLInputElement>('#in-name');
+      if (nameOk && nameIn) nameOk.onclick = () => { const n = editor.setName(id, nameIn.value); say(nameIn.value.trim() ? `이름을 붙였습니다 (${n}구간)` : `이름을 지웠습니다 (${n}구간)`); };
+      root.querySelectorAll<HTMLElement>('[data-ld]').forEach((b) => (b.onclick = () => {
+        const [n, i, bit] = b.dataset.ld!.split(':').map(Number);
+        const cur = net.laneDirsAt(id, n), m = Array.from({ length: lanes }, (_, k) => cur[k] || 7);
+        m[i] ^= bit;
+        if (m[i] === 0) { say('차선에는 방향이 하나 이상 있어야 합니다'); return; }
+        editor.setLaneDirs(id, n, m.every((x) => x === 7) ? [] : m);
+      }));
+      root.querySelectorAll<HTMLElement>('[data-ld-reset]').forEach((b) => (b.onclick = () => { editor.setLaneDirs(id, Number(b.dataset.ldReset), []); }));
+      root.querySelectorAll<HTMLElement>('[data-ld-auto]').forEach((b) => (b.onclick = () => {
+        // 오른쪽 차선 = 직진+우회전, 가운데 = 직진, 왼쪽 차선 = 좌회전+직진
+        const auto = lanes === 1 ? [] : lanes === 2 ? [6, 3] : [6, ...Array(lanes - 2).fill(2), 3];
+        editor.setLaneDirs(id, Number(b.dataset.ldAuto), auto);
+        say('차선 방향을 자동으로 배정했습니다');
+      }));
+    }
     root.querySelectorAll<HTMLElement>('[data-wave]').forEach((b) => (b.onclick = () => {
       if (sel?.kind !== 'seg') return;
       const r = editor.greenWave(sel.id, Number(b.dataset.wave), signals);
@@ -102,6 +141,10 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
         p[i] = Math.min(90, Math.max(5, p[i] + Number(b.dataset.d)));
         editor.setSignalProgram(id, { greens: p });
       }));
+      const copy = root.querySelector<HTMLElement>('#in-copy'), paste = root.querySelector<HTMLElement>('#in-paste'), round = root.querySelector<HTMLElement>('#in-round');
+      if (copy) copy.onclick = () => { clip = signals.copyProgram(id); last = ''; say('신호 프로그램을 복사했습니다. 다른 교차로를 눌러 붙여넣으세요'); render(); };
+      if (paste) paste.onclick = () => { const r = clip ? editor.pasteSignal(id, clip, signals) : null; say(!r ? '' : !r.ok ? '교차로가 아닙니다' : r.applied ? '신호 프로그램을 붙여넣었습니다' : '방식만 붙여넣었습니다 (단계 수가 달라 녹색 시간은 복사하지 못했습니다)'); };
+      if (round) round.onclick = () => { const r = editor.makeRoundabout(id); say(r.ok ? '회전교차로로 바꿨습니다' : r.error === 'tooShort' ? '연결된 도로가 짧아 만들 수 없습니다' : r.error === 'tooTight' ? '도로 사이 각도가 너무 좁습니다' : '가까이에 건물이 있어 만들 수 없습니다'); };
       const off = root.querySelector<HTMLElement>('#in-off');
       if (off) off.onclick = () => { editor.setSignalProgram(id, { offset: 0 }); };
     }

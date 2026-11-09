@@ -12,6 +12,7 @@ export const config = {
   roads: {
     road2: { name: '왕복 2차로', lanesPerDir: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60, rank: 1 },
     road4: { name: '왕복 4차로', lanesPerDir: 2, laneWidth: 3.5, defaultSpeedKmh: 60, maxSpeedKmh: 80, rank: 2 }, // rank: 교차로 우선순위(큰 쪽이 먼저)
+    road6: { name: '왕복 6차로', lanesPerDir: 3, laneWidth: 3.5, defaultSpeedKmh: 70, maxSpeedKmh: 100, rank: 3 },
   },
   // 차종 (rules.md 10항). 단위: m, m/s², s, km/h
   vehicles: { car: { length: 4.5, width: 1.8, a: 1.5, b: 2.0, T: 1.5, s0: 2.0, vmaxKmh: 120 } },
@@ -40,6 +41,7 @@ export const config = {
     yieldKmh: 20, // 양보 표지: 정지선에서의 속도
     simultaneousSec: 1.0, // 이 시간 안에 도착하면 동시 도착으로 보고 좌회전이 양보
     straightDeg: 35, // 이 각도 안의 방향 전환은 직진
+    ringEntryGap: 14, // 회전교차로 진입에 필요한 추가 빈 공간(m). 환형이 꽉 차 서로 막히는 것을 막는다
   },
   // 차선 변경 (rules.md 10항 MOBIL 단순화)
   laneChange: { politeness: 0.2, threshold: 0.2, rightBias: 0.1, safeDecel: 4.0, cooldownSec: 5, durationSec: 2, noChangeNearLine: 30, noChangeAfterEntry: 10, evalTicks: 10 }, // noChangeAfterEntry: 차선에 들어선 뒤 차 길이 + 이 거리(m)까지는 변경 금지(연결선에서 들어오는 차량을 아직 볼 수 없다)
@@ -47,13 +49,17 @@ export const config = {
   deadlock: { detectSec: 5, persistSec: 300, stage2Sec: 30 },
   // 건물 (rules.md 8항 + 제안값). footprint: 건물 한 변의 절반(m)
   buildings: {
-    footprint: { small: 4, medium: 7, large: 11 },
+    footprint: { small: 4, medium: 7, large: 17 }, // 대형은 2×2칸(40m)을 차지한다
     capacity: { small: 10, medium: 30, large: 100 }, // 주거는 거주 인원, 직장은 일자리 수
     height: { home: { small: 3, medium: 5, large: 9 }, office: { small: 6, medium: 12, large: 22 }, shop: { small: 3, medium: 4, large: 6 }, factory: { small: 4, medium: 6, large: 9 }, school: { small: 4, medium: 6, large: 9 } }, // 화면 표시용
     connectRadius: 50, // 가장 가까운 도로 구간에 자동 연결되는 반경(m)
     gap: 2, // 건물 사이 최소 간격(m)
     worldHalf: 1000,
   },
+  // 사고·날씨(CS2의 사고·날씨 이벤트 방향). 사고는 달리는 차량 한 대가 갑자기 서서 그 차선을 durationSec 동안 막는다(긴급 서비스는 없어 시간이 지나면 치워진다). 비는 속도를 낮추고 사고 확률을 높인다
+  events: { accidentPerVehicleSec: 8e-6, accidentDurationSec: 45, rainDayChance: 0.3, rainSpeedFactor: 0.85, rainAccidentMult: 2.5 },
+  // 회전교차로: 환형 도로 반지름(m). 이웃한 두 도로 사이 각도가 좁으면 반지름을 키워 환형 조각 길이를 최소 길이 이상으로 맞춘다
+  roundabout: { radius: 28, maxRadius: 50 },
   // 신호등(1.2.0): 초 단위(시뮬 시간). 녹색·황색·전적색. 기본 프로그램은 자동 생성
   signals: { greenSec: 15, yellowSec: 3, allRedSec: 1, minGreenSec: 7, maxGreenSec: 45, gapSec: 2.5, detectM: 30, greenChoices: [10, 15, 20, 30, 45] }, // 감응식: 감지 구간 detectM, 최소 녹색, 차가 없는 시간이 gapSec를 넘으면 전환, 최대 녹색
   // 구역(심시티식): 칸 하나 = 20m. 도로에서 이 거리(중심선 기준) 안의 칸만 칠할 수 있다
@@ -61,7 +67,18 @@ export const config = {
   // 외부 연결: 지도 가장자리에서 들어오는 시작 도로. 직장인 수의 share만큼 외부 사람이 들어와 일하고(남은 일자리 안에서), 시민의 outShare는 외부로 출근한다
   external: { x: 0, y: -1000, roadEndY: -400, share: 0.15, outShare: 0.1 },
   // 건물 성장: stepSec(시뮬 초)마다 수요 막대만큼 자란다. base: 도시가 작을 때의 기본 수요(이주·사업 의욕)
-  growth: { shopPerResident: 0.5, schoolPerResident: 0.15, factoryShare: 0.4, stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3, sizeWeights: { small: 0.4, medium: 0.45, large: 0.15 } },
+  growth: {
+    shopPerResident: 0.5, industrialShare: 0.4, stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3,
+    // 구역 종류별 건물 크기 확률. 주거는 밀도가 높을수록 큰 건물(고밀은 대형만). 대형은 2×2칸
+    sizeWeights: {
+      home: { small: 0.55, medium: 0.45, large: 0 }, homeMid: { small: 0, medium: 0.5, large: 0.5 }, homeHigh: { small: 0, medium: 0, large: 1 },
+      shop: { small: 0.5, medium: 0.4, large: 0.1 }, office: { small: 0.3, medium: 0.4, large: 0.3 }, industrial: { small: 0.2, medium: 0.4, large: 0.4 },
+    } as Record<'home' | 'homeMid' | 'homeHigh' | 'shop' | 'office' | 'industrial', { small: number; medium: number; large: number }>,
+    // 주거 밀도 수요 배분: 거주자가 적은 도시는 저밀, 커질수록 중·고밀 수요가 늘어난다(거주자 수 기준)
+    densityMix: { lowMin: 0.25, lowDiv: 800, midMin: 0.3, highMin: 0.2, highMax: 0.5, highDiv: 1600 },
+  },
+  densityCap: [1, 1.5, 2.5] as number[], // 주거 밀도별 수용량 배율(저·중·고)
+  densityHeight: [1, 1.5, 2.4] as number[], // 화면 표시용 높이 배율
   // 수요 (rules.md 8항). 시간대는 시계 시각, 가중치 피크 = 100
   demand: {
     workerShare: 0.6, // 거주 인원 중 직장인 비율(1.0.0은 직장인의 출근·퇴근만)

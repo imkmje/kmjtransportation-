@@ -131,19 +131,26 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
   // 교차로 연결: 다른 도로의 모든 차선으로(차선 변경이 생기는 4단계에서 다듬음). 막다른 끝에서는 같은 번호 반대 차선으로 회차
   for (const n of net.nodes.values()) {
     for (const a of ins.get(n.id) ?? []) {
+      const inSeg = net.segments.get(a.segId)!;
+      const mask = (inSeg.b === n.id ? inSeg.laneDirsB : inSeg.laneDirsA)[a.index - 1] ?? 0; // 이 차선에서 허용한 방향(0 = 모두)
+      const made: Track[] = [];
       for (const b of outs.get(n.id) ?? []) {
         const turnBack = a.segId === b.segId;
         if (turnBack && !(segCount.get(n.id) === 1 && a.index === b.index)) continue;
-        const c = makeConnector(tracks.length, a, b, turnBack, rules);
+        const c = makeConnector(tracks.length + made.length, a, b, turnBack, rules);
         // 통행 제한: 들어오는 도로 끝의 좌회전 금지, 나가는 도로 끝의 진입 금지(막다른 끝의 회차는 제한하지 않는다)
         if (!turnBack) {
-          const inSeg = net.segments.get(a.segId)!, outSeg = net.segments.get(b.segId)!;
+          const outSeg = net.segments.get(b.segId)!;
           if (c.turn === 'left' && (inSeg.b === n.id ? inSeg.restrictB : inSeg.restrictA) === 'noLeft') continue;
           if ((outSeg.a === n.id ? outSeg.restrictA : outSeg.restrictB) === 'noEntry') continue;
         }
-        tracks.push(c);
-        a.next.push(c.id);
+        made.push(c);
       }
+      // 차선별 방향 지정(좌 1·직 2·우 4): 허용한 방향의 연결만 남긴다. 남는 연결이 하나도 없으면(그 교차로에 없는 방향만 골랐을 때) 지정을 무시한다
+      const bit = (t: string) => (t === 'left' ? 1 : t === 'right' ? 4 : 2);
+      const kept = mask ? made.filter((c) => c.uturn || mask & bit(c.turn)) : made;
+      const use = kept.length ? kept : made;
+      use.forEach((c) => { c.id = tracks.length; tracks.push(c); a.next.push(c.id); });
     }
   }
   computeConflicts(tracks);
