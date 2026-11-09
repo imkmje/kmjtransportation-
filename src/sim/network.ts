@@ -5,6 +5,7 @@ export interface Pt { x: number; y: number }
 export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean; sigMode: SignalMode; sigGreen: number; sigGreens: number[]; sigOffset: number } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동), sigMode: 고정/감응식, sigGreen: 고정식 녹색 시간 초(0 = 기본값)
 export type SignalMode = 'fixed' | 'actuated';
 export type SignKind = 'stop' | 'yield';
+export type OneWay = 'ab' | 'ba'; // 일방통행: 시작 노드(a)에서 끝 노드(b)로만 / b에서 a로만
 export type RestrictKind = 'noLeft' | 'noEntry'; // 좌회전 금지(그 끝으로 들어오는 차량) / 진입 금지(그 끝에서 이 도로로 들어가는 것)
 export interface Segment {
   id: number;
@@ -16,6 +17,7 @@ export interface Segment {
   signA: SignKind | null; // a쪽 끝으로 들어오는 방향의 표지
   signB: SignKind | null; // b쪽 끝으로 들어오는 방향의 표지
   locked: boolean; // 철거할 수 없는 도로(외부 연결 도로)
+  oneWay: OneWay | null; // 일방통행(차선은 가운데로 모아 한 방향만 만든다)
   restrictA: RestrictKind | null; // a쪽 끝의 통행 제한(교차로에서만)
   restrictB: RestrictKind | null; // b쪽 끝의 통행 제한
 }
@@ -46,7 +48,7 @@ interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 8; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가
+export const NETWORK_FORMAT_VERSION = 9; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -495,6 +497,15 @@ export class Network {
     return !!this.nodes.get(nodeId)?.signal && this.segmentsAt(nodeId).length >= 3;
   }
 
+  /** 일방통행을 정하거나(ab: 시작 노드 → 끝 노드, ba: 반대) 양방향으로 되돌린다(null) */
+  setOneWay(segId: number, v: OneWay | null): { ok: true } | { ok: false; error: 'noSuchSegment' } {
+    const s = this.segments.get(segId);
+    if (!s) return { ok: false, error: 'noSuchSegment' };
+    s.oneWay = v;
+    this.revision++;
+    return { ok: true };
+  }
+
   /** 교차로로 들어오는 도로 끝에 통행 제한(좌회전 금지·진입 금지)을 놓거나(kind) 치운다(null) */
   setRestrict(segId: number, nodeId: number, kind: RestrictKind | null): { ok: true } | { ok: false; error: 'notIntersection' | 'noSuchEnd' } {
     const seg = this.segments.get(segId);
@@ -523,7 +534,7 @@ export class Network {
 
   private addSegment(a: number, b: number, kind: RoadKind): number {
     const id = this.nextSegmentId++;
-    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null, signA: null, signB: null, locked: false, restrictA: null, restrictB: null });
+    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null, signA: null, signB: null, locked: false, oneWay: null, restrictA: null, restrictB: null });
     return id;
   }
 
@@ -570,9 +581,9 @@ export class Network {
     }
     const okSign = (v: unknown) => v === null || v === 'stop' || v === 'yield';
     // 형식 1 → 2: 표지 필드를 비워서 채운다
-    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null, locked: (sg as Partial<Segment>).locked === true, restrictA: (sg as Partial<Segment>).restrictA ?? null, restrictB: (sg as Partial<Segment>).restrictB ?? null }));
+    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null, locked: (sg as Partial<Segment>).locked === true, oneWay: (sg as Partial<Segment>).oneWay ?? null, restrictA: (sg as Partial<Segment>).restrictA ?? null, restrictB: (sg as Partial<Segment>).restrictB ?? null }));
     const okRes = (v: unknown) => v === null || v === 'noLeft' || v === 'noEntry';
-    if (!segments.every((sg) => okSign(sg.signA) && okSign(sg.signB) && okRes(sg.restrictA) && okRes(sg.restrictB))) throw new Error('도로망 파일이 손상되었습니다');
+    if (!segments.every((sg) => okSign(sg.signA) && okSign(sg.signB) && okRes(sg.restrictA) && okRes(sg.restrictB) && (sg.oneWay === null || sg.oneWay === 'ab' || sg.oneWay === 'ba'))) throw new Error('도로망 파일이 손상되었습니다');
     // 형식 1·2 → 3: 건물이 없는 것으로 채운다
     const rawB = (d as Partial<NetworkData>).buildings ?? [];
     if (!Array.isArray(rawB)) throw new Error('도로망 파일이 손상되었습니다');

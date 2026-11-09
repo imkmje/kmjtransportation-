@@ -108,8 +108,9 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
     const vbase = r.defaultSpeedKmh * KMH;
     const list: Track[] = [];
     for (const fwd of [true, false]) {
+      if ((s.oneWay === 'ab' && !fwd) || (s.oneWay === 'ba' && fwd)) continue; // 일방통행: 반대 방향 차선은 만들지 않는다
       for (let i = 1; i <= k; i++) {
-        const off = (k - i + 0.5) * r.laneWidth * (fwd ? -1 : 1); // 진행 방향 오른쪽. 1번 차선이 중앙선에서 가장 멀다
+        const off = (k - i + 0.5 - (s.oneWay ? k / 2 : 0)) * r.laneWidth * (fwd ? -1 : 1); // 진행 방향 오른쪽(일방통행은 도로 가운데로 모은다). 1번 차선이 중앙선에서 가장 멀다
         const d0 = fwd ? inset.get(s.a)! : len - inset.get(s.b)!;
         const d1 = fwd ? len - inset.get(s.b)! : inset.get(s.a)!;
         const pts = [

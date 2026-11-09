@@ -1,3 +1,4 @@
+import type { OneWay } from './network';
 import type { Signals } from './signals';
 import { RestrictKind, SignalMode, BuildingKind, BuildingSize, Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
 import type { Config } from '../config';
@@ -47,6 +48,12 @@ export class Editor {
 
   upgrade(segId: number): ReturnType<Network['upgradeRoad']> {
     const r = this.network.upgradeRoad(segId);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  setOneWay(segId: number, v: OneWay | null): ReturnType<Network['setOneWay']> {
+    const r = this.network.setOneWay(segId, v);
     if (r.ok) this.commit();
     return r;
   }

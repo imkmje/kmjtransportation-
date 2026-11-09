@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.4.0') && titleText.includes('업데이트 내역') && titleText.includes('좌회전 금지'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.5.0') && titleText.includes('업데이트 내역') && titleText.includes('병목'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -101,7 +101,7 @@ await page.keyboard.press('Escape');
 // 이후 검사들은 빈 지도에서 시작한다
 await page.evaluate(() => {
   const g = window.__game;
-  g.editor.loadData({ formatVersion: 8, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
+  g.editor.loadData({ formatVersion: 9, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] });
   g.editor.resetHistory(); g.sim.reset(); g.focus({ x: 0, y: 0 });
 });
 await page.waitForTimeout(200);
@@ -423,6 +423,21 @@ check('직각 맞추기: 큰길 근처에서 끝내도 직각으로 닿음', per
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.evaluate(() => window.__game.editor.undo());
+// 일방통행: 도로를 클릭할 때마다 양방향 → 한쪽 → 반대쪽 → 양방향
+{
+  const ow = () => page.evaluate(() => [...window.__game.editor.network.segments.values()].map((s) => s.oneWay).filter(Boolean));
+  await page.keyboard.press('w');
+  const [wx, wy] = await freeSpot([[-120, 0], [120, 0], [-60, 0]]);
+  await clickWorld(wx, wy);
+  check('일방통행: 첫 클릭은 한쪽 방향', JSON.stringify(await ow()) === '["ab"]' && (await page.locator('#msg').innerText()).includes('일방통행'), JSON.stringify(await ow()));
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-oneway.png') });
+  await clickWorld(wx, wy);
+  check('일방통행: 두 번째 클릭은 반대 방향', JSON.stringify(await ow()) === '["ba"]');
+  await clickWorld(wx, wy);
+  check('일방통행: 세 번째 클릭은 양방향으로 복귀', (await ow()).length === 0);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+}
 // 통행 제한: 좌회전 금지·진입 금지를 교차로 쪽 도로 끝에 놓고 다시 눌러 푼다
 const resCount = (k) => page.evaluate((kk) => [...window.__game.editor.network.segments.values()].filter((x) => x.restrictA === kk || x.restrictB === kk).length, k);
 await page.keyboard.press('n');

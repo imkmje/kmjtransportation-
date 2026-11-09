@@ -129,6 +129,24 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
         group.add(g);
       }
     }
+    // 일방통행: 도로 위에 가는 방향을 가리키는 흰 화살표를 일정 간격으로 그린다
+    for (const s of net.segments.values()) {
+      if (!s.oneWay) continue;
+      const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const sgn = s.oneWay === 'ab' ? 1 : -1;
+      const dx = ((b.x - a.x) / len) * sgn, dy = ((b.y - a.y) / len) * sgn;
+      const n = Math.max(1, Math.floor(len / 28));
+      for (let i = 0; i < n; i++) {
+        const f = (i + 0.5) / n;
+        const p = toThree(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, 0.26);
+        const m = new THREE.Mesh(triangle, whiteMat);
+        m.position.set(p.x, p.y, p.z);
+        m.scale.set(2.2, 1, 2.2);
+        m.rotation.y = Math.atan2(dx, -dy); // 삼각형 꼭짓점이 가는 방향을 향한다
+        group.add(m);
+      }
+    }
     // 통행 제한 표지판: 도로 끝에서 조금 떨어진 오른쪽 길가에 기둥 위로(항상 카메라를 향한다)
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;

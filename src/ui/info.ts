@@ -43,6 +43,7 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
       <div class="kv">
         <div>종류</div><div>${r.name}${s.locked ? ' (철거 불가)' : ''}</div>
         <div>길이</div><div>${Math.round(net.segmentLength(s))} m</div>
+        <div>통행</div><div>${s.oneWay === null ? '양방향' : s.oneWay === 'ab' ? `일방통행 (${Math.round(a.x)}, ${Math.round(a.y)}) → (${Math.round(b.x)}, ${Math.round(b.y)})` : `일방통행 (${Math.round(b.x)}, ${Math.round(b.y)}) → (${Math.round(a.x)}, ${Math.round(a.y)})`}</div>
         <div>제한속도</div><div>${s.playerSpeedKmh ?? r.defaultSpeedKmh} km/h${s.playerSpeedKmh === null ? ' (기본)' : ''}</div>
         <div>최근 통과 차량</div><div>${rep?.passes ?? 0}대 <small>(시뮬 ${cfg.metrics.windowSec / 60}분)</small></div>
         <div>정체 지수</div><div>${ci === null ? '판정 없음 (통과 적음)' : `${ci.toFixed(0)} · ${ciGrade(ci)}`}</div>
