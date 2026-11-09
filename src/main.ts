@@ -67,7 +67,7 @@ function stepSpeed(dir: 1 | -1) {
   const i = Math.min(order.length - 1, Math.max(0, order.indexOf(speed) + dir));
   setSpeed(order[i]);
 }
-sim.setEvents(true); // 사고·날씨는 기본으로 켠다(보기 → 사고·날씨, F 키로 끌 수 있다)
+sim.setEvents(false); // 사고·날씨는 기본으로 꺼 둔다(추후 다듬을 예정). 보기 → 사고·날씨 또는 F 키로 켠다
 let lastAccidentToast = -1e9;
 sim.traffic.onAccident = () => { if (performance.now() - lastAccidentToast > 4000) { lastAccidentToast = performance.now(); tools.say('🚨 사고 발생 — 잠시 그 차선이 막힙니다'); } };
 const tools = createTools({
