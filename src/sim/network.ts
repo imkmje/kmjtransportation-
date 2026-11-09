@@ -46,7 +46,7 @@ export interface NetworkData {
   buildings: Building[];
 }
 
-type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings'>;
+type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh'>;
 const EPS = 1e-9;
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 const cross = (ax: number, ay: number, bx: number, by: number) => ax * by - ay * bx;
@@ -290,6 +290,17 @@ export class Network {
       if (d <= this.rules.buildings.footprint[b.size] * 1.45 + extra && d < bd) { bd = d; best = b; }
     }
     return best;
+  }
+
+  /** 도로 구간의 제한속도를 바꾼다. 기본값과 같으면 "바꾸지 않음"(null)으로 돌아간다. 도로 종류의 상한을 넘거나 고를 수 없는 값이면 거부 */
+  setSpeedLimit(segId: number, kmh: number | null): { ok: true } | { ok: false; error: 'noSuchSegment' | 'badSpeed' } {
+    const seg = this.segments.get(segId);
+    if (!seg) return { ok: false, error: 'noSuchSegment' };
+    const r = this.rules.roads[seg.kind];
+    if (kmh !== null && (!this.rules.speedChoicesKmh.includes(kmh) || kmh > r.maxSpeedKmh)) return { ok: false, error: 'badSpeed' };
+    seg.playerSpeedKmh = kmh === r.defaultSpeedKmh ? null : kmh;
+    this.revision++;
+    return { ok: true };
   }
 
   signAt(segId: number, nodeId: number): SignKind | null {

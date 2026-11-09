@@ -11,6 +11,7 @@ import { createTools } from './ui/tools';
 import { createDebug } from './ui/debug';
 import { createBuildingLayer } from './render/buildings';
 import { createStats } from './ui/stats';
+import { createHeatmap } from './render/heatmap';
 import { exportGame, importGame } from './io/game';
 import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
@@ -30,6 +31,7 @@ function setSpeed(s: number) {
 const view = createScene(document.getElementById('view')!);
 const roads = createRoadLayer(view.scene, editor.network);
 const buildings = createBuildingLayer(view.scene, editor.network);
+const heat = createHeatmap(view.scene, editor.network, sim.metrics, document.getElementById('legend')!);
 const vehicles = createVehicleLayer(view.scene, sim.traffic);
 const laneDebug = createLaneDebug(view.scene, sim.traffic);
 const debug = createDebug({ panel: document.getElementById('debug')!, labels: document.getElementById('labels')!, sim, project: view.project });
@@ -48,6 +50,8 @@ const tools = createTools({
   save: () => exportGame(editor, sim),
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); },
+  setHeat: (on) => heat.setVisible(on),
+  setColorblind: (on) => heat.setColorblind(on),
   pick: view.pickGround,
   canvas: view.domElement,
   setDrawMode: view.setDrawMode,
@@ -88,7 +92,7 @@ function frame(now: number) {
   frames++;
   if (now - fpsStart >= 500) { fps = (frames * 1000) / (now - fpsStart); frames = 0; fpsStart = now; }
   debug.update(fps);
-  if (++statFrame % 10 === 0) stats.update();
+  if (++statFrame % 10 === 0) { stats.update(); heat.update(); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -101,4 +105,4 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) autos
 loadSlot(0).then((t) => { if (t) tools.say('자동 저장된 게임이 있습니다. 위에서 "자동 저장"을 고르고 불러오기를 누르세요'); }).catch(() => {});
 
 // 스모크 테스트와 디버깅용
-(window as unknown as { __game: unknown }).__game = { sim, editor, scene: view.scene, getSpeed: () => speed, project: view.project };
+(window as unknown as { __game: unknown }).__game = { sim, editor, heat, scene: view.scene, getSpeed: () => speed, project: view.project };

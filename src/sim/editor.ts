@@ -7,7 +7,7 @@ export class Editor {
   private history: string[] = [];
   private index = 0;
 
-  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings'>) {
+  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings' | 'speedChoicesKmh'>) {
     this.network = new Network(cfg);
     this.history.push(this.snapshot());
   }
@@ -43,6 +43,12 @@ export class Editor {
 
   removeBuilding(id: number): ReturnType<Network['removeBuilding']> {
     const r = this.network.removeBuilding(id);
+    if (r.ok) this.commit();
+    return r;
+  }
+
+  setSpeedLimit(segId: number, kmh: number | null): ReturnType<Network['setSpeedLimit']> {
+    const r = this.network.setSpeedLimit(segId, kmh);
     if (r.ok) this.commit();
     return r;
   }

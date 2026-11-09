@@ -6,7 +6,7 @@ import type { RoadLayer } from '../render/roads';
 import type { BuildingLayer } from '../render/buildings';
 import { downloadText, loadSlot, saveSlot } from '../io/storage';
 
-type Tool = null | RoadKind | SignKind | BuildingKind | 'demolish' | 'trip';
+type Tool = null | RoadKind | SignKind | BuildingKind | 'demolish' | 'trip' | 'limit';
 type RoadHit = RoadPos & Pt;
 
 const ERR: Record<PlanError, string> = {
@@ -34,6 +34,8 @@ interface Deps {
   save: () => string;
   load: (text: string) => void;
   loadSample: () => void;
+  setHeat: (on: boolean) => void;
+  setColorblind: (on: boolean) => void;
   pick: (clientX: number, clientY: number) => Pt | null;
   canvas: HTMLElement;
   setDrawMode: (on: boolean) => void;
@@ -66,6 +68,7 @@ export function createTools(d: Deps) {
     <button data-tool="road4" title="단축키 T">${config.roads.road4.name}</button>
     <button data-tool="stop" title="단축키 S">정지 표지</button>
     <button data-tool="yield" title="단축키 Y">양보 표지</button>
+    <button data-tool="limit" title="단축키 L: 도로를 클릭할 때마다 제한속도가 바뀝니다">속도 제한</button>
     <div class="row"><button data-tool="home" title="단축키 H">주거 건물</button><button data-tool="office" title="단축키 O">직장 건물</button></div>
     <div class="row"><select id="bsize"><option value="small">소 (10)</option><option value="medium" selected>중 (30)</option><option value="large">대 (100)</option></select></div>
     <button data-tool="demolish" title="단축키 X">철거</button>
@@ -74,8 +77,10 @@ export function createTools(d: Deps) {
     <div class="row"><button id="undo" title="Ctrl+Z">↶ 취소</button><button id="redo" title="Ctrl+Y">↷ 다시</button></div>
     <label><input type="checkbox" id="grid" checked /> 격자 스냅 (${config.editor.gridSnap}m)</label>
     <label><input type="checkbox" id="angle" /> 각도 스냅 (${config.editor.angleSnapDeg}°)</label>
+    <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
+    <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
     <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
-    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />건물: 빈 땅 클릭 (도로 50m 안에 놓으면 연결)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
+    <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />가운데 드래그: 이동 · 오른쪽 드래그: 회전<br />건물: 빈 땅 클릭 (도로 50m 안에 놓으면 연결)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   d.filebar.innerHTML = `
     <select id="slot"><option value="1">슬롯 1</option><option value="2">슬롯 2</option><option value="3">슬롯 3</option><option value="0">자동 저장</option></select>
     <button id="save">저장</button><button id="load">불러오기</button>
@@ -141,6 +146,19 @@ export function createTools(d: Deps) {
       d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
       return;
     }
+    if (tool === 'limit') {
+      const h = d.pickRoad(last);
+      d.roads.setCursor(h ? { x: h.x, y: h.y } : null, true);
+      if (h) {
+        const seg = net.segments.get(h.segId)!, r = config.roads[seg.kind];
+        d.tip.textContent = `제한속도 ${seg.playerSpeedKmh ?? r.defaultSpeedKmh}km/h${seg.playerSpeedKmh === null ? ' (기본)' : ''} · 클릭하면 바뀜 (최대 ${r.maxSpeedKmh})`;
+        d.tip.classList.remove('bad');
+        d.tip.style.left = `${lastClient.x + 16}px`;
+        d.tip.style.top = `${lastClient.y + 16}px`;
+        d.tip.hidden = false;
+      }
+      return;
+    }
     if (tool === 'stop' || tool === 'yield') {
       const t = signTarget(last);
       const ok = !!t && net.segmentsAt(t.nodeId).length >= 3;
@@ -200,6 +218,18 @@ export function createTools(d: Deps) {
       const err = d.requestTrip(tripFrom, h, count);
       say(err ?? `차량 ${count}대를 투입합니다`);
       tripFrom = null;
+      refresh();
+      return;
+    }
+    if (tool === 'limit') {
+      const h = d.pickRoad(last);
+      if (!h) { say('도로 위를 클릭하세요'); return; }
+      const seg = net.segments.get(h.segId)!, r = config.roads[seg.kind];
+      const choices = config.speedChoicesKmh.filter((v) => v <= r.maxSpeedKmh);
+      const cur = seg.playerSpeedKmh ?? r.defaultSpeedKmh;
+      const next = choices[(choices.indexOf(cur) + 1) % choices.length]; // 한 칸씩 올라가고, 끝에서 가장 낮은 값으로
+      d.editor.setSpeedLimit(seg.id, next);
+      say(`제한속도 ${next}km/h${next === r.defaultSpeedKmh ? ' (기본)' : ''}`);
       refresh();
       return;
     }
@@ -302,6 +332,8 @@ export function createTools(d: Deps) {
     else if (k === 'o') setTool('office');
     else if (k === 's') setTool('stop');
     else if (k === 'y') setTool('yield');
+    else if (k === 'l') setTool('limit');
+    else if (k === 'm') { const c = $<HTMLInputElement>(d.toolbar, '#heat'); c.checked = !c.checked; d.setHeat(c.checked); }
     else if (k === 'v') setTool('trip');
     else if (k === 'd') { const c = $<HTMLInputElement>(d.toolbar, '#debugToggle'); c.checked = !c.checked; d.setDebug(c.checked); }
     else if (k === ' ') { e.preventDefault(); d.togglePause(); }
@@ -316,6 +348,8 @@ export function createTools(d: Deps) {
   $(d.toolbar, '#clearveh').onclick = () => { d.clearVehicles(); say('차량을 모두 제거했습니다'); };
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
   $<HTMLSelectElement>(d.toolbar, '#bsize').onchange = () => refresh();
+  $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#cb').onchange = (e) => d.setColorblind((e.target as HTMLInputElement).checked);
 
   const slot = () => Number($<HTMLSelectElement>(d.filebar, '#slot').value);
   const guard = async (fn: () => Promise<void> | void) => {

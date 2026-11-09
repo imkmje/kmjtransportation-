@@ -20,6 +20,8 @@ export class Sim {
     this.demand = new Demand(cfg, network, this.rng, this.traffic, this.metrics);
     // 차량이 도착하거나 사라지면 통계(마지막 구간 정산)와 수요(귀환 풀, 미완료)에 알린다
     this.traffic.onArrive = (v, tick) => { this.metrics.foldVehicle(v); this.demand.onArrive(v, tick); };
+    this.traffic.onSeg = (seg, ref, loss) => this.metrics.segAdd(seg, ref, loss);
+    this.traffic.onPass = (seg) => this.metrics.segPass(seg);
     this.traffic.onLost = (v, meta, reason) => { if (v) this.metrics.foldVehicle(v); this.demand.onLost(meta, reason); };
   }
   /** 처음 상태로(도로망은 그대로) */

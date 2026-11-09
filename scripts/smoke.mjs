@@ -326,6 +326,37 @@ await page.waitForSelector('canvas');
 await page.waitForTimeout(800);
 check('다시 열면 자동 저장이 있다고 알려 줌', (await page.locator('#msg').innerText()).includes('자동 저장'), await page.locator('#msg').innerText());
 
+// ---- 1.1.0 1단계: 정체 히트맵, 색약 친화 색상, 속도 제한 ----
+await page.click('button[data-speed="0"]');
+await page.click('#sample');
+await ff(1, 8);
+await page.keyboard.press('m');
+check('히트맵 켜기: 범례가 나타남(등급 5 + 통행 적음)', (await page.locator('#legend').isVisible()) && (await page.locator('#legend span').count()) === 6, String(await page.locator('#legend span').count()));
+const legendColor = () => page.locator('#legend i').first().evaluate((e) => getComputedStyle(e).backgroundColor);
+const c1 = await legendColor();
+await page.click('#cb');
+const c2 = await legendColor();
+check('색약 친화 색상으로 바꾸면 범례 색이 달라짐', c1 !== c2, `${c1} → ${c2}`);
+await page.click('#cb');
+await page.click('button[data-speed="1"]');
+await page.waitForTimeout(2500);
+const heatColors = await page.evaluate(() => [...window.__game.heat.colors().values()]);
+check('출근 중에는 통행이 있는 도로가 회색이 아닌 등급 색으로 칠해짐', heatColors.some((c) => c !== '#9aa0a6') && heatColors.some((c) => c === '#9aa0a6'), JSON.stringify([...new Set(heatColors)]));
+await page.click('button[data-speed="0"]');
+await page.keyboard.press('m');
+check('히트맵 끄기: 범례가 사라짐', !(await page.locator('#legend').isVisible()));
+
+await page.keyboard.press('l');
+await clickWorld(60, 0); // 큰길(왕복 4차로, 기본 60, 상한 80)
+const limits = () => page.evaluate(() => [...window.__game.editor.network.segments.values()].filter((sg) => sg.playerSpeedKmh !== null).map((sg) => sg.playerSpeedKmh));
+check('속도 제한 도구: 첫 클릭은 한 단계 올라감(60→80)', JSON.stringify(await limits()) === '[80]', JSON.stringify(await limits()));
+await clickWorld(60, 0);
+check('상한 다음 클릭은 가장 낮은 값(30)으로 돌아감', JSON.stringify(await limits()) === '[30]', JSON.stringify(await limits()));
+await page.keyboard.press('Escape');
+await page.keyboard.press('Control+z');
+check('속도 제한도 실행 취소됨', JSON.stringify(await limits()) === '[80]', JSON.stringify(await limits()));
+await page.keyboard.press('Escape');
+
 // 카메라 조작: 휠 줌과 드래그 후에도 오류 없이 렌더
 await page.mouse.move(640, 360);
 await page.mouse.wheel(0, -400);

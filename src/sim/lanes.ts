@@ -16,7 +16,8 @@ export interface Track {
   length: number;
   pts: Pt[];
   cum: number[]; // pts 각 지점까지의 누적 거리
-  vmax: number; // m/s
+  vmax: number; // m/s (플레이어가 바꾼 제한속도 반영)
+  vbase: number; // m/s 도로 종류의 기본 제한속도 기준. 정체 지수의 기준 속도에 쓴다(제한을 낮춰 지수를 좋게 만드는 것 방지)
   next: number[];
   uturn: boolean;
   t0: number; // 차선: 도로 중심선 위 차선 시작 지점의 거리(시작 노드 a 기준)
@@ -73,9 +74,10 @@ function makeConnector(id: number, a: Track, b: Track, uturn: boolean, rules: Ru
   }
   const curveV = kmax > 1e-6 ? Math.sqrt(rules.driving.curveLatAccel / kmax) : Infinity;
   const vmax = Math.min(a.vmax, b.vmax, Math.max(curveV, rules.driving.minTurnKmh * KMH));
+  const vbase = Math.min(a.vbase, b.vbase, Math.max(curveV, rules.driving.minTurnKmh * KMH));
   const dth = wrap(h3 - h0);
   const turn: Turn = uturn ? 'uturn' : Math.abs(dth) < (rules.intersection.straightDeg * Math.PI) / 180 ? 'straight' : dth > 0 ? 'left' : 'right';
-  return { id, key: `C${a.key}>${b.key}`, kind: 'conn', segId: -1, fwd: true, index: 0, from: a.to, to: b.from, length: cum[cum.length - 1], pts, cum, vmax, next: [b.id], uturn, t0: 0, lanes: 0, rank: a.rank, sign: a.sign, turn, node: a.to, src: a.id, conflicts: [] };
+  return { id, key: `C${a.key}>${b.key}`, kind: 'conn', segId: -1, fwd: true, index: 0, from: a.to, to: b.from, length: cum[cum.length - 1], pts, cum, vmax, vbase, next: [b.id], uturn, t0: 0, lanes: 0, rank: a.rank, sign: a.sign, turn, node: a.to, src: a.id, conflicts: [] };
 }
 
 /** 도로망 → 차선 + 연결선 그래프. ID는 도로 ID 순서로 정해져 항상 같은 결과가 나온다 */
@@ -103,6 +105,7 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
     const r = rules.roads[s.kind];
     const k = r.lanesPerDir;
     const vmax = (s.playerSpeedKmh ?? r.defaultSpeedKmh) * KMH;
+    const vbase = r.defaultSpeedKmh * KMH;
     const list: Track[] = [];
     for (const fwd of [true, false]) {
       for (let i = 1; i <= k; i++) {
@@ -114,7 +117,7 @@ export function buildLaneGraph(net: Network, rules: Rules): LaneGraph {
           { x: A.x + ux * d1 + nx * off, y: A.y + uy * d1 + ny * off },
         ];
         const cum = polyline(pts);
-        const t: Track = { id: tracks.length, key: `L${s.id}:${fwd ? 1 : 0}:${i}`, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
+        const t: Track = { id: tracks.length, key: `L${s.id}:${fwd ? 1 : 0}:${i}`, kind: 'lane', segId: s.id, fwd, index: i, from: fwd ? s.a : s.b, to: fwd ? s.b : s.a, length: cum[1], pts, cum, vmax, vbase, next: [], uturn: false, t0: d0, lanes: k, rank: r.rank, sign: fwd ? s.signB : s.signA, turn: 'straight', node: -1, src: -1, conflicts: [] };
         tracks.push(t);
         list.push(t);
         push(outs, t.from, t);

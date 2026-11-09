@@ -21,6 +21,9 @@
       #stats .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin-top: 4px; }
       #stats .kv div:nth-child(odd) { color: #55655a; } #stats .kv div:nth-child(even) { font-weight: 700; text-align: right; }
       #stats svg { margin-top: 8px; display: block; } #stats .yday { margin-top: 6px; font-size: 11px; color: #55655a; }
+      #legend { position: fixed; bottom: 66px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 5px 10px; background: #fffd; border-radius: 8px; font-size: 12px; }
+      #legend[hidden] { display: none; }
+      #legend span { display: flex; align-items: center; gap: 4px; } #legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
       #toolbar { position: fixed; top: 100px; left: 12px; display: flex; flex-direction: column; gap: 6px; width: 170px; max-height: calc(100vh - 160px); overflow-y: auto; padding-right: 4px; }
       #toolbar button, #filebar button, #filebar select { padding: 7px 10px; border: 0; border-radius: 8px; background: #fffd; cursor: pointer; font-size: 13px; }
       #toolbar button.on { background: #f2a65a; font-weight: 700; }
@@ -48,6 +51,7 @@
     <div id="toolbar"></div>
     <div id="filebar"></div>
     <div id="stats"></div>
+    <div id="legend" hidden></div>
     <div id="tip" hidden></div>
     <div id="debug" hidden></div>
     <div id="labels"></div>

@@ -19,6 +19,7 @@ interface Job { meta: TripMeta; from: RoadPos; to: RoadPos; born: number }
 export interface Vehicle {
   id: number;
   meta: TripMeta | null;
+  seg: number; // 통계용: 지금(또는 마지막으로) 달린 도로 구간. 교차로 안 지연은 들어온 도로에 붙인다
   mRef: number; mAct: number; // 통계용: 현재 구간(버킷)에서 기준 이동거리와 실제 이동거리
   gv: number; // 통계용: 방해받지 않는 "기준 차량"의 속도(같은 가속 모델로 출발했다면 도달했을 속도)
   path: number[]; // 지나갈 트랙 ID 순서(차선 변경 때 이 차량 것만 고쳐 쓰므로 투입 때 복사한다)
@@ -103,6 +104,9 @@ export class Traffic {
   /** 차량이 도착했을 때 / 도착하지 못하고 사라질 때(미완료) 알림 */
   onArrive: ((v: Vehicle, tick: number) => void) | null = null;
   onLost: ((v: Vehicle | null, meta: TripMeta, reason: LostReason, tick: number) => void) | null = null;
+  /** 도로 구간별 통계: 기준 거리·손실을 쌓을 때 / 차량이 그 도로에 들어설 때 */
+  onSeg: ((seg: number, ref: number, loss: number) => void) | null = null;
+  onPass: ((seg: number) => void) | null = null;
   private routeCache = new Map<string, Route | null>();
   private requests: SpawnRequest[] = [];
   private lists = new Map<number, Entry[]>();
@@ -225,12 +229,13 @@ export class Traffic {
     const f = factor ?? Math.min(1.15, Math.max(0.85, 1 + 0.08 * this.gauss()));
     const p = posAt(this.graph.tracks[first], startS);
     const v: Vehicle = {
-      id: this.nextId++, meta, mRef: 0, mAct: 0, gv: 0, path: path.slice(), pi: 0, s: startS, v: 0, acc: 0, endS, factor: f, length: car.length, waitTicks: 0, uturnDone: -1, status: '',
+      id: this.nextId++, meta, seg: this.graph.tracks[first].segId, mRef: 0, mAct: 0, gv: 0, path: path.slice(), pi: 0, s: startS, v: 0, acc: 0, endS, factor: f, length: car.length, waitTicks: 0, uturnDone: -1, status: '',
       x: p.x, y: p.y, h: p.h, px: p.x, py: p.y, ph: p.h, ss: startS, sv: 0, spi: 0, li: 0,
       zoned: false, granted: false, reason: '', reqTick: 0, reqPi: -1, grantPi: -1, stopTicks: 0, stopPi: -1, waiver: false, waitFor: 0, waitSince: 0, hold: false, holdFor: 0,
       lcCool: 0, lcPhantom: 0, lcFrom: -1, lcPi: -1, lcTicks: 0, lcOffX: 0, lcOffY: 0,
     };
     this.vehicles.set(v.id, v);
+    this.onPass?.(v.seg);
     if (this.occ) { const e = { s: v.s, len: v.length, v: v.v }; const l = this.occ.get(first); if (l) l.push(e); else this.occ.set(first, [e]); }
     this.stats.spawned++;
     return v;
@@ -495,6 +500,15 @@ export class Traffic {
       dist += k === last ? v.endS : t2.length;
     }
     v0 = vGeo;
+    // 통계의 기준 속도는 플레이어가 바꾼 제한속도가 아니라 도로 종류의 기본 제한속도로 계산한다
+    const capBase = (t: Track) => (t.kind === 'lane' ? t.vbase * v.factor : t.vbase);
+    let vBase = Math.min(capBase(tr), car.vmaxKmh / 3.6);
+    let distB = distEnd;
+    for (let k = v.pi + 1; distB < d.lookahead && k <= last; k++) {
+      const t2 = tracks[v.path[k]];
+      vBase = Math.min(vBase, Math.sqrt(capBase(t2) ** 2 + 2 * car.b * distB));
+      distB += k === last ? v.endS : t2.length;
+    }
     if (nextConn?.sign === 'yield') v0 = Math.min(v0, Math.sqrt((ix.yieldKmh / 3.6) ** 2 + 2 * 0.7 * car.b * Math.max(0, distEnd))); // 정지선에서 양보 속도가 되도록 미리 줄인다(IDM이 목표를 따라가는 지연을 감안해 여유 30%)
 
     // 장애물마다 IDM 가속도를 구하고 가장 작은 값(가장 조심스러운 쪽)을 쓴다
@@ -539,9 +553,11 @@ export class Traffic {
     // 통계: "기준 차량"(같은 경로·제한속도·커브·목적지 정차를 따르되 다른 차량·표지·교차로 대기가 없는 혼자 달리는 차량)이 갔을 거리와 실제 거리를 쌓는다.
     // 출발 직후 가속이나 목적지 앞 감속은 기준 차량도 똑같이 하므로 손실이 아니다. 정체·표지·양보·교차로 대기만 손실이 된다
     {
-      const ga = v.pi === last ? idm(car, v.gv, Math.max(vGeo, 0.1), distEnd, 0, 0.5) : idm(car, v.gv, Math.max(vGeo, 0.1), Infinity, 0, car.s0);
-      v.gv = Math.max(0, Math.min(vGeo, v.gv + Math.max(-d.brakeMax, ga) * dt));
+      const ga = v.pi === last ? idm(car, v.gv, Math.max(vBase, 0.1), distEnd, 0, 0.5) : idm(car, v.gv, Math.max(vBase, 0.1), Infinity, 0, car.s0);
+      v.gv = Math.max(0, Math.min(vBase, v.gv + Math.max(-d.brakeMax, ga) * dt));
       v.mRef += v.gv * dt; v.mAct += ds;
+      if (tr.kind === 'lane') v.seg = tr.segId;
+      this.onSeg?.(v.seg, v.gv * dt, Math.max(0, v.gv * dt - ds));
     }
     let cur = tr;
     while (v.pi < last && v.s >= cur.length) {
@@ -551,6 +567,7 @@ export class Traffic {
       v.s -= cur.length;
       v.pi++;
       cur = tracks[v.path[v.pi]];
+      if (cur.kind === 'lane') this.onPass?.(cur.segId);
       v.granted = false; v.zoned = false; v.waiver = false;
     }
     if (v.pi < last && v.s > cur.length) v.s = cur.length; // 막혀서 못 넘어간 경우 트랙 끝에 붙여 둔다
