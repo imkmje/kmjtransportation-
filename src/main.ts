@@ -168,4 +168,4 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) autos
 loadSlot(0).then((t) => { if (t) tools.say('자동 저장된 게임이 있습니다. 위에서 "자동 저장"을 고르고 불러오기를 누르세요'); }).catch(() => {});
 
 // 스모크 테스트와 디버깅용
-(window as unknown as { __game: unknown }).__game = { sim, editor, heat, scene: view.scene, focus: view.focus, getTilt: view.getTilt, getSpeed: () => speed, project: view.project };
+(window as unknown as { __game: unknown }).__game = { sim, editor, heat, scene: view.scene, focus: view.focus, getTilt: view.getTilt, renderInfo: () => ({ calls: view.info.render.calls, triangles: view.info.render.triangles }), getSpeed: () => speed, project: view.project };
