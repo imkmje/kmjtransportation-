@@ -36,27 +36,53 @@ export function createScene(canvasParent: HTMLElement) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   controls.screenSpacePanning = false; // 지면 위에서 이동
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }; // 터치: 한 손가락 이동, 두 손가락 확대·이동. 회전(비틀기)은 아래에서 따로 처리
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: -1 as THREE.TOUCH }; // 터치: 한 손가락 이동. 두 손가락 제스처(확대·회전·기울기·이동)는 아래에서 직접 처리
   controls.enableDamping = true;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(80);
   controls.minDistance = 30;
   controls.maxDistance = 1500;
 
-  // 두 손가락을 비틀면 그 각도만큼 화면이 돈다(OrbitControls 기본 방식은 두 손가락 중간점을 위아래·좌우로 끌어야 돌아서 알아차리기 어렵다)
+  // 두 손가락 제스처(구글맵처럼): 벌리고 오므리기 = 확대·축소, 비틀기 = 회전, 두 손가락을 같이 위아래로 = 기울기, 좌우로 = 이동.
+  // 위아래/좌우는 처음 움직인 방향으로 정해져 그 제스처가 끝날 때까지 유지된다(떨림으로 기울기와 이동이 섞이지 않게)
   const touches = new Map<number, { x: number; y: number }>();
-  const twist = () => { const [a, b] = [...touches.values()]; return Math.atan2(b.y - a.y, b.x - a.x); };
-  renderer.domElement.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+  let g: { mid: { x: number; y: number }; dist: number; ang: number; sx: number; sy: number; mode: 'none' | 'tilt' | 'pan' } | null = null;
+  const pair = () => { const [a, b] = [...touches.values()]; return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
+  const up = new THREE.Vector3(0, 1, 0);
+  function applyGesture() {
+    const cur = pair();
+    if (!g) { g = { ...cur, sx: 0, sy: 0, mode: 'none' }; return; }
+    const off = camera.position.clone().sub(controls.target);
+    // 확대·축소
+    if (g.dist > 10 && cur.dist > 10) off.setLength(THREE.MathUtils.clamp(off.length() * (g.dist / cur.dist), controls.minDistance, controls.maxDistance));
+    // 회전(비틀기)
+    let d = cur.ang - g.ang;
+    if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+    off.applyAxisAngle(up, d);
+    // 기울기 / 이동
+    const dx = cur.mid.x - g.mid.x, dy = cur.mid.y - g.mid.y;
+    if (g.mode === 'none') {
+      g.sx += dx; g.sy += dy;
+      if (Math.hypot(g.sx, g.sy) > 12) g.mode = Math.abs(g.sy) > Math.abs(g.sx) ? 'tilt' : 'pan';
+    } else if (g.mode === 'tilt') {
+      const sph = new THREE.Spherical().setFromVector3(off);
+      sph.phi = THREE.MathUtils.clamp(sph.phi - dy * 0.004, 0.05, controls.maxPolarAngle); // 위로 밀면 눕고(수평에 가깝게), 아래로 밀면 일어선다
+      off.setFromSpherical(sph);
+    } else {
+      const upp = (2 * off.length() * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / renderer.domElement.clientHeight; // 화면 1px = 지면 몇 m
+      const fwd = off.clone().negate().setY(0).normalize();
+      const right = new THREE.Vector3().crossVectors(fwd, up);
+      controls.target.addScaledVector(right, -dx * upp).addScaledVector(fwd, dy * upp);
+    }
+    camera.position.copy(controls.target).add(off);
+    g = { ...g, ...cur };
+  }
+  renderer.domElement.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); g = null; } });
   renderer.domElement.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return;
-    if (touches.size !== 2) { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); return; }
-    const before = twist();
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    let d = twist() - before;
-    if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
-    const v = camera.position.clone().sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), d);
-    camera.position.copy(controls.target).add(v);
+    if (touches.size === 2) applyGesture();
   });
-  const lift = (e: PointerEvent) => touches.delete(e.pointerId);
+  const lift = (e: PointerEvent) => { touches.delete(e.pointerId); g = null; };
   renderer.domElement.addEventListener('pointerup', lift);
   renderer.domElement.addEventListener('pointercancel', lift);
 

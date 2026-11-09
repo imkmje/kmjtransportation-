@@ -249,6 +249,22 @@ await page.keyboard.press('Escape');
   await tp.waitForTimeout(400);
   const dRot = ((await trot()) - a0 + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
   check('터치: 두 손가락 비틀기는 같은 방향으로 회전', dRot > 0.3 && dRot < 1.2, dRot.toFixed(2));
+  // 두 손가락을 같이 위로 밀면 기울기가 커지고(눕는다), 아래로 밀면 줄어든다
+  const tilt0 = await tp.evaluate(() => window.__game.getTilt());
+  await tt('touchStart', [{ x: 560, y: 420 }, { x: 720, y: 420 }]);
+  for (let i = 1; i <= 12; i++) { await tt('touchMove', [{ x: 560, y: 420 - i * 10 }, { x: 720, y: 420 - i * 10 }]); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(300);
+  const tilt1 = await tp.evaluate(() => window.__game.getTilt());
+  check('터치: 두 손가락을 위로 밀면 기울기가 바뀜', tilt1 - tilt0 > 5, `${tilt0.toFixed(0)} → ${tilt1.toFixed(0)}`);
+  // 두 손가락을 같이 오른쪽으로 끌면 지도가 손가락을 따라 오른쪽으로 움직인다
+  const o0 = await tp.evaluate(() => window.__game.project({ x: 0, y: 0 }));
+  await tt('touchStart', [{ x: 400, y: 360 }, { x: 560, y: 360 }]);
+  for (let i = 1; i <= 12; i++) { await tt('touchMove', [{ x: 400 + i * 12, y: 360 }, { x: 560 + i * 12, y: 360 }]); await tp.waitForTimeout(20); }
+  await tt('touchEnd', []);
+  await tp.waitForTimeout(300);
+  const o1 = await tp.evaluate(() => window.__game.project({ x: 0, y: 0 }));
+  check('터치: 두 손가락을 좌우로 끌면 지도가 손가락을 따라 이동', o1.x - o0.x > 60 && Math.abs(o1.y - o0.y) < 40, `${(o1.x - o0.x).toFixed(0)}, ${(o1.y - o0.y).toFixed(0)}`);
   await tctx.close();
 }
 
