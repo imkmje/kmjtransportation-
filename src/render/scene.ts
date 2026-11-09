@@ -31,6 +31,16 @@ export function createScene(canvasParent: HTMLElement) {
   sun.position.set(300, 500, 200);
   scene.add(sun);
 
+  // 비: 카메라가 보는 지점 주변에서 떨어지는 빗줄기(보기 전용 효과)
+  const RAIN = 700, rainPos = new Float32Array(RAIN * 6), rainSeed = new Float32Array(RAIN * 3);
+  let rs = 12345; const rnd = () => ((rs = (Math.imul(rs, 1664525) + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < RAIN; i++) { rainSeed[i * 3] = (rnd() - 0.5) * 360; rainSeed[i * 3 + 1] = rnd() * 160; rainSeed[i * 3 + 2] = (rnd() - 0.5) * 360; }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+  const rainLines = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xcfe0f0, transparent: true, opacity: 0.55 }));
+  rainLines.frustumCulled = false; rainLines.visible = false;
+  scene.add(rainLines);
+  let rainT = 0;
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 6000);
   camera.position.set(250, 250, 250);
 
@@ -121,11 +131,18 @@ export function createScene(canvasParent: HTMLElement) {
     },
     /** 비 오는 날은 하늘·안개가 회색으로, 햇빛이 약해진다 */
     setWeather(rain: boolean) {
+      rainLines.visible = rain;
       const c = rain ? 0x8d99a6 : 0xcfe8f7;
       (scene.background as THREE.Color).setHex(c);
       (scene.fog as THREE.Fog).color.setHex(c);
       hemi.intensity = rain ? 1.0 : 1.6;
       sun.intensity = rain ? 0.5 : 1.2;
+    },
+    /** 카메라를 보는 방향·거리 그대로 시뮬 좌표 p 위로 옮긴다(차량 따라가기) */
+    panTo(p: Pt) {
+      const t = toThree(p.x, p.y, 0);
+      const dx = t.x - controls.target.x, dz = t.z - controls.target.z;
+      controls.target.x += dx; controls.target.z += dz; camera.position.x += dx; camera.position.z += dz;
     },
     /** 렌더러 통계(그리기 호출 수·삼각형 수). 성능 점검용 */
     info: renderer.info,
@@ -146,6 +163,14 @@ export function createScene(canvasParent: HTMLElement) {
     },
     render() {
       controls.update();
+      if (rainLines.visible) { // 빗줄기를 아래로 흘리고, 바닥에 닿으면 위로 되돌린다
+        rainT += 1;
+        for (let i = 0; i < RAIN; i++) {
+          const y = ((rainSeed[i * 3 + 1] - rainT * 2.2) % 160 + 160) % 160, x = controls.target.x + rainSeed[i * 3], z = controls.target.z + rainSeed[i * 3 + 2];
+          rainPos.set([x, y, z, x - 0.6, y + 3.2, z], i * 6);
+        }
+        rainGeo.attributes.position.needsUpdate = true;
+      }
       controls.target.x = THREE.MathUtils.clamp(controls.target.x, -limit, limit);
       controls.target.z = THREE.MathUtils.clamp(controls.target.z, -limit, limit);
       renderer.render(scene, camera);

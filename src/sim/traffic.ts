@@ -124,7 +124,7 @@ export class Traffic {
   private lists = new Map<number, Entry[]>();
   private cycleState = new Map<string, { since: number; stage: number; stageTick: number; vid: number }>();
   private nextId = 1;
-  private tick = 0;
+  tick = 0; // 마지막으로 처리한 tick(화면·정보 창이 읽는다)
 
   constructor(private cfg: Config, private net: Network, private rng: Rng) {
     this.graph = buildLaneGraph(net, cfg);
@@ -340,6 +340,36 @@ export class Traffic {
     this.laneChanges(tick);
     this.countConflicts();
     if (tick % Math.round(this.cfg.deadlock.detectSec * this.cfg.tickRate) === 0) this.deadlocks(tick);
+  }
+
+  // ---------------- 화면용 조회(차량 정보·이동 흐름) ----------------
+
+  /** 점 p에서 radius m 안의 가장 가까운 차량(없으면 null). ID 순으로 훑어 같은 거리면 ID가 작은 차 */
+  vehicleNear(p: { x: number; y: number }, radius: number): Vehicle | null {
+    let best: Vehicle | null = null, bd = radius;
+    for (const v of this.vehicles.values()) { const d = Math.hypot(v.x - p.x, v.y - p.y); if (d < bd) { bd = d; best = v; } }
+    return best;
+  }
+
+  /** 차량이 앞으로 갈 경로를 점 목록으로(지금 위치 → 남은 차선·연결선). 그래프가 바뀌어 길이 어긋나면 빈 목록 */
+  routePoints(v: Vehicle): { x: number; y: number }[] {
+    const pts: { x: number; y: number }[] = [{ x: v.x, y: v.y }];
+    for (let k = v.pi; k < v.path.length; k++) {
+      const t = this.graph.tracks[v.path[k]];
+      if (!t) return [];
+      const s0 = k === v.pi ? v.s : 0, s1 = k === v.path.length - 1 ? Math.min(v.endS, t.length) : t.length; // 마지막 차선은 목적지 위치까지만
+      for (let i = 1; i < t.pts.length - 1; i++) if (t.cum[i] > s0 && t.cum[i] < s1) pts.push({ x: t.pts[i].x, y: t.pts[i].y }); // 곡선 연결선의 중간 점
+      const e = posAt(t, s1);
+      pts.push({ x: e.x, y: e.y });
+    }
+    return pts;
+  }
+
+  /** 도로 구간 segId를 지났거나 지나갈 차량들(경로에 그 구간의 차선이 들어 있는 차량) */
+  vehiclesUsing(segId: number): Vehicle[] {
+    const out: Vehicle[] = [];
+    for (const v of this.vehicles.values()) if (v.path.some((id) => this.graph.tracks[id]?.segId === segId)) out.push(v);
+    return out;
   }
 
   // ---------------- 사고 ----------------

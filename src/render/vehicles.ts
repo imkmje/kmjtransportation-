@@ -14,6 +14,10 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
   mesh.count = 0;
   scene.add(mesh);
   const dummy = new THREE.Object3D();
+  // 사고 표시: 사고 차량 위에 떠서 맥박처럼 커졌다 작아지는 빨간 원뿔(최대 40개)
+  const mark = new THREE.InstancedMesh(new THREE.ConeGeometry(2.2, 5, 4), new THREE.MeshBasicMaterial({ color: 0xff3b30 }), 40);
+  mark.frustumCulled = false; mark.count = 0; scene.add(mark);
+  let pulse = 0;
   const moving = new THREE.Color(0x3d7be0), stopped = new THREE.Color(0xe8893c);
   const crashedColor = new THREE.Color(0xd62828); // 사고로 멈춘 차량
   const tMoving = new THREE.Color(0x8a5a3c), tStopped = new THREE.Color(0xc0392b); // 트럭은 갈색(멈추면 붉은 갈색)
@@ -35,6 +39,18 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
         i++;
       }
       mesh.count = i;
+      pulse += 0.12;
+      let mi = 0;
+      for (const id of traffic.crashed.keys()) {
+        const v = traffic.vehicles.get(id);
+        if (!v || mi >= 40) continue;
+        const p = toThree(v.x, v.y, 8 + Math.sin(pulse) * 1.2), k = 1 + 0.25 * Math.sin(pulse * 2);
+        dummy.position.set(p.x, p.y, p.z); dummy.rotation.set(Math.PI, 0, 0); dummy.scale.set(k, k, k); dummy.updateMatrix();
+        mark.setMatrixAt(mi++, dummy.matrix);
+      }
+      mark.count = mi;
+      mark.instanceMatrix.needsUpdate = true;
+      dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     },
