@@ -75,6 +75,12 @@ export function createScene(canvasParent: HTMLElement) {
       const p = fromThree(hit.x, hit.y, hit.z);
       return Math.abs(p.x) > limit || Math.abs(p.y) > limit ? null : p;
     },
+    /** 카메라를 시뮬 좌표 p 위쪽으로 옮긴다 */
+    focus(p: Pt) {
+      const t = toThree(p.x, p.y, 0);
+      controls.target.set(t.x, 0, t.z);
+      camera.position.set(t.x + 250, 250, t.z + 250);
+    },
     /** 시뮬 좌표 → 화면 좌표(client). 테스트·디버깅용 */
     project(p: Pt): { x: number; y: number } {
       const t = toThree(p.x, p.y, 0);

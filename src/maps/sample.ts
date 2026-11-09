@@ -1,8 +1,9 @@
 import type { Editor } from '../sim/editor';
+import { addExternalGate } from './start';
 import type { BuildingKind, BuildingSize, NetworkData } from '../sim/network';
 
 /** 비어 있는 도로망(새로 시작하거나 샘플 맵을 열기 전에) */
-export const EMPTY_NETWORK: NetworkData = { formatVersion: 3, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [] };
+export const EMPTY_NETWORK: NetworkData = { formatVersion: 4, nextNodeId: 1, nextSegmentId: 1, nodes: [], segments: [], nextBuildingId: 1, buildings: [], zones: [] };
 
 type B = [BuildingKind, BuildingSize, number, number];
 // 큰길 양쪽(y=±40)에 서쪽은 주거, 동쪽은 직장. 작은 길 옆에도 몇 채 두어 정지 표지 쪽 흐름도 생기게 한다
@@ -39,6 +40,7 @@ export function buildSampleMap(editor: Editor): void {
       if (other.x === x) editor.setSign(seg.id, node.id, 'stop'); // 세로 길 쪽(큰길이 아닌 쪽)
     }
   }
+  addExternalGate(editor, -300); // 외부 연결 도로: 가운데 세로 길의 북쪽 끝으로 이어진다
   for (const [kind, size, x, y] of BUILDINGS) {
     const r = editor.addBuilding(kind, size, x, y, 'map', true);
     if (!r.ok) throw new Error(`샘플 맵 건물 배치 실패(${r.error}): ${kind} ${x},${y}`);

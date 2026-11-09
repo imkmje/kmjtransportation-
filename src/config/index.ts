@@ -54,6 +54,12 @@ export const config = {
     gap: 2, // 건물 사이 최소 간격(m)
     worldHalf: 1000,
   },
+  // 구역(심시티식): 칸 하나 = 20m. 도로에서 이 거리(중심선 기준) 안의 칸만 칠할 수 있다
+  zones: { cell: 20, maxDist: 45, maxRect: 60 },
+  // 외부 연결: 지도 가장자리에서 들어오는 시작 도로. 직장인 수의 share만큼 외부 사람이 들어와 일하고(남은 일자리 안에서), 시민의 outShare는 외부로 출근한다
+  external: { x: 0, y: -1000, roadEndY: -400, share: 0.15, outShare: 0.1 },
+  // 건물 성장: stepSec(시뮬 초)마다 수요 막대만큼 자란다. base: 도시가 작을 때의 기본 수요(이주·사업 의욕)
+  growth: { stepSec: 20, base: 25, scaleBase: 60, scaleDiv: 0.25, trafficPenalty: 0.5, trafficFull: 60, maxAccum: 3, sizeWeights: { small: 0.4, medium: 0.45, large: 0.15 } },
   // 수요 (rules.md 8항). 시간대는 시계 시각, 가중치 피크 = 100
   demand: {
     workerShare: 0.6, // 거주 인원 중 직장인 비율(1.0.0은 직장인의 출근·퇴근만)

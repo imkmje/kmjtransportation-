@@ -9,6 +9,7 @@ export function createStats(root: HTMLElement, sim: Sim, getUnconnected: () => n
     <h4>교통 현황 <span style="font-weight:400">(최근 시뮬 2.5분)</span></h4>
     <div class="ci"><b id="st-ci">-</b><span id="st-grade"></span></div>
     <div class="gauge"><i id="st-mark" style="left:0"></i></div>
+    <div class="dem"><div>주거 수요<span><i id="st-dh"></i></span></div><div>직장 수요<span><i id="st-do"></i></span></div></div>
     <div class="kv">
       <div>완료율 (오늘)</div><div id="st-comp">-</div>
       <div>평균 통행시간</div><div id="st-avg">-</div>
@@ -21,7 +22,7 @@ export function createStats(root: HTMLElement, sim: Sim, getUnconnected: () => n
     <svg id="st-chart" width="236" height="64" viewBox="0 0 236 64"></svg>
     <div id="st-yesterday" class="yday"></div>`;
   const $ = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
-  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
+  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), chart: $('st-chart'), yday: $('st-yesterday') };
   const num = (n: number | null, d = 0, unit = '') => (n === null ? '-' : `${n.toFixed(d)}${unit}`);
 
   return {
@@ -33,6 +34,9 @@ export function createStats(root: HTMLElement, sim: Sim, getUnconnected: () => n
       el.grade.textContent = grade;
       el.grade.style.color = ci === null ? '#55655a' : GRADE_COLORS[CI_GRADES.findIndex((g) => g.name === grade)];
       el.mark.style.left = `${ci === null ? 0 : Math.min(100, ci)}%`;
+      const bars = sim.growth.bars();
+      el.dh.style.width = `${bars.home}%`;
+      el.dof.style.width = `${bars.office}%`;
       const completion = m.completion();
       el.comp.textContent = completion === null ? '-' : `${completion.toFixed(0)}% (진행 중 ${dm.inFlight()})`;
       el.avg.textContent = num(m.avgTravelMin(), 0, '분');

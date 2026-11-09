@@ -3,8 +3,8 @@ import { Network } from '../sim/network';
 import type { Editor } from '../sim/editor';
 import type { Sim } from '../sim/sim';
 
-/** 저장 파일 형식 번호. 3: 전체 상태(도로망 + 건물 + 시뮬레이션). 도로망만 있는 옛 파일(형식 1·2·3)도 열린다 */
-export const GAME_FORMAT_VERSION = 3;
+/** 저장 파일 형식 번호. 3: 전체 상태(도로망 + 건물 + 시뮬레이션) / 4: 구역·외부 연결·건물 성장 상태 추가(형식 3 파일도 열리고, 구역은 비어 있다). 도로망만 있는 옛 파일(형식 1·2·3)도 열린다 */
+export const GAME_FORMAT_VERSION = 4;
 
 /** 도로망 + 건물 + 시뮬레이션 전체 상태를 글자 하나로 */
 export function exportGame(editor: Editor, sim: Sim): string {

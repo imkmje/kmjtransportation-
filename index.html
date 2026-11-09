@@ -18,6 +18,10 @@
       #stats .ci b { font-size: 34px; line-height: 1; } #stats .ci span { font-weight: 700; }
       #stats .gauge { position: relative; height: 10px; border-radius: 5px; margin: 8px 0 10px; background: linear-gradient(90deg,#4caf6a 0 10%,#a5cf5b 10% 25%,#f0b13a 25% 40%,#e8743a 40% 60%,#c93c34 60% 100%); }
       #stats .gauge i { position: absolute; top: -4px; width: 4px; height: 18px; background: #1d2630; border-radius: 2px; transform: translateX(-2px); }
+      #stats .dem { display: grid; gap: 3px; margin-bottom: 6px; font-size: 11px; color: #55655a; }
+      #stats .dem div { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 6px; }
+      #stats .dem span { height: 8px; background: #dfe8df; border-radius: 4px; overflow: hidden; } #stats .dem i { display: block; height: 100%; width: 0; }
+      #stats .dem div:first-child i { background: #4fb866; } #stats .dem div:last-child i { background: #4f86d6; }
       #stats .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin-top: 4px; }
       #stats .kv div:nth-child(odd) { color: #55655a; } #stats .kv div:nth-child(even) { font-weight: 700; text-align: right; }
       #stats svg { margin-top: 8px; display: block; } #stats .yday { margin-top: 6px; font-size: 11px; color: #55655a; }
