@@ -2,7 +2,8 @@ import type { Config } from '../config';
 
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
-export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동)
+export interface NetNode { id: number; x: number; y: number; z: number; signal: boolean; sigMode: SignalMode; sigGreen: number } // signal: 신호등 켬(도로 3개 이상이 만날 때만 작동), sigMode: 고정/감응식, sigGreen: 고정식 녹색 시간 초(0 = 기본값)
+export type SignalMode = 'fixed' | 'actuated';
 export type SignKind = 'stop' | 'yield';
 export interface Segment {
   id: number;
@@ -40,7 +41,7 @@ interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 5; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가
+export const NETWORK_FORMAT_VERSION = 6; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -416,13 +417,17 @@ export class Network {
   }
 
   /** 교차로의 신호등을 켜거나 끈다. 도로 3개 이상이 만나는 곳만 가능. 켜면 그 교차로의 정지·양보 표지는 무시된다 */
-  setSignal(nodeId: number, on: boolean): { ok: true } | { ok: false; error: 'notIntersection' | 'noSuchNode' } {
+  setSignal(nodeId: number, on: boolean, mode: SignalMode = 'fixed', green = 0): { ok: true } | { ok: false; error: 'notIntersection' | 'noSuchNode' } {
     const n = this.nodes.get(nodeId);
     if (!n) return { ok: false, error: 'noSuchNode' };
     if (on && this.segmentsAt(nodeId).length < 3) return { ok: false, error: 'notIntersection' };
-    n.signal = on;
+    n.signal = on; n.sigMode = mode; n.sigGreen = green;
     this.revision++;
     return { ok: true };
+  }
+
+  isActuated(nodeId: number): boolean {
+    return this.hasSignal(nodeId) && this.nodes.get(nodeId)!.sigMode === 'actuated';
   }
 
   /** 신호등이 실제로 작동하는 교차로인가 */
@@ -437,7 +442,7 @@ export class Network {
 
   private addNode(x: number, y: number): number {
     const id = this.nextNodeId++;
-    this.nodes.set(id, { id, x, y, z: 0, signal: false });
+    this.nodes.set(id, { id, x, y, z: 0, signal: false, sigMode: 'fixed', sigGreen: 0 });
     return id;
   }
 
@@ -509,7 +514,7 @@ export class Network {
       formatVersion: NETWORK_FORMAT_VERSION,
       nextNodeId: Math.max(d.nextNodeId ?? 0, maxNode + 1),
       nextSegmentId: Math.max(d.nextSegmentId ?? 0, maxSeg + 1),
-      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true })),
+      nodes: d.nodes.map((n) => ({ ...n, signal: (n as Partial<NetNode>).signal === true, sigMode: (n as Partial<NetNode>).sigMode === 'actuated' ? 'actuated' as const : 'fixed' as const, sigGreen: typeof (n as Partial<NetNode>).sigGreen === 'number' ? (n as NetNode).sigGreen : 0 })),
       segments,
       nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
       buildings,

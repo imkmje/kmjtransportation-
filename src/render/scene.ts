@@ -36,11 +36,29 @@ export function createScene(canvasParent: HTMLElement) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   controls.screenSpacePanning = false; // 지면 위에서 이동
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }; // 터치: 한 손가락 이동, 두 손가락 확대·회전
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }; // 터치: 한 손가락 이동, 두 손가락 확대·이동. 회전(비틀기)은 아래에서 따로 처리
   controls.enableDamping = true;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(80);
   controls.minDistance = 30;
   controls.maxDistance = 1500;
+
+  // 두 손가락을 비틀면 그 각도만큼 화면이 돈다(OrbitControls 기본 방식은 두 손가락 중간점을 위아래·좌우로 끌어야 돌아서 알아차리기 어렵다)
+  const touches = new Map<number, { x: number; y: number }>();
+  const twist = () => { const [a, b] = [...touches.values()]; return Math.atan2(b.y - a.y, b.x - a.x); };
+  renderer.domElement.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return;
+    if (touches.size !== 2) { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); return; }
+    const before = twist();
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    let d = twist() - before;
+    if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+    const v = camera.position.clone().sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), d);
+    camera.position.copy(controls.target).add(v);
+  });
+  const lift = (e: PointerEvent) => touches.delete(e.pointerId);
+  renderer.domElement.addEventListener('pointerup', lift);
+  renderer.domElement.addEventListener('pointercancel', lift);
 
   function resize() {
     const w = canvasParent.clientWidth;
@@ -64,7 +82,6 @@ export function createScene(canvasParent: HTMLElement) {
     setDrawMode(on: boolean) {
       controls.mouseButtons.LEFT = on ? (-1 as THREE.MOUSE) : THREE.MOUSE.PAN;
       controls.touches.ONE = on ? (-1 as THREE.TOUCH) : THREE.TOUCH.PAN;
-      controls.touches.TWO = on ? THREE.TOUCH.DOLLY_PAN : THREE.TOUCH.DOLLY_ROTATE;
     },
     /** 화면 좌표(client) → 지면 위 시뮬 좌표. 지면 밖이면 null */
     pickGround(clientX: number, clientY: number): Pt | null {

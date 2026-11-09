@@ -87,3 +87,49 @@ describe('신호등', () => {
     expect(sim.traffic.stats.deadlocks).toBe(0);
   }, 120_000);
 });
+
+describe('감응식 신호', () => {
+  it('차가 없는 방향은 건너뛰고, 차가 온 방향에 최소 녹색 뒤 넘어가며, 최대 녹색을 넘기지 않는다', () => {
+    const { n, c } = make();
+    n.setSignal(c, true, 'actuated');
+    const sim = new Sim(config, n);
+    const s = config.signals, rate = config.tickRate;
+    const ph = sim.traffic.signals.phases(c);
+    const west = arm(n, -200, 0).id, north = arm(n, 0, -200).id;
+    const cur = () => ph.findIndex((p) => sim.traffic.signals.light(c, p[0], sim.tickCount) !== 'red');
+    for (let i = 0; i < rate * 60; i++) sim.step(); // 차가 하나도 없으면 한 방향에 녹색으로 머문다
+    const idle = cur();
+    expect(idle).toBeGreaterThanOrEqual(0);
+    expect(sim.traffic.signals.light(c, ph[idle][0], sim.tickCount)).toBe('green');
+    // 녹색을 받지 않는 방향에 차 한 대
+    const other = ph[1 - idle][0] === west || ph[1 - idle][0] === north ? ph[1 - idle][0] : ph[1 - idle][0];
+    const seg = n.segments.get(other)!;
+    const ox = n.nodes.get(seg.a === c ? seg.b : seg.a)!;
+    const t0 = sim.tickCount;
+    sim.traffic.requestTrip(onArm(n, ox.x, ox.y, 10), onArm(n, -ox.x, -ox.y, 10), 1);
+    let switched = -1;
+    for (let i = 0; i < rate * 80 && switched < 0; i++) { sim.step(); if (sim.traffic.signals.light(c, other, sim.tickCount) === 'green') switched = (sim.tickCount - t0) / rate; }
+    expect(switched).toBeGreaterThan(0);
+    expect(switched).toBeLessThan(s.maxGreenSec + s.yellowSec + s.allRedSec + 5);
+    for (let i = 0; i < rate * 60; i++) sim.step();
+    expect(sim.traffic.stats.arrived).toBe(1);
+  }, 60_000);
+
+  it('사방 교통에서 모두 도착하고 충돌·교착이 없으며, 저장했다 이어 돌려도 같다', () => {
+    const { n, c } = make();
+    n.setSignal(c, true, 'actuated');
+    const sim = new Sim(config, n);
+    const arms: [number, number][] = [[-200, 0], [200, 0], [0, -200], [0, 200]];
+    let total = 0;
+    for (const [dx, dy] of arms) for (const [ex, ey] of arms) if (dx !== ex || dy !== ey) { sim.traffic.requestTrip(onArm(n, dx, dy, 10), onArm(n, ex, ey, 10), 3); total += 3; }
+    for (let i = 0; i < 20 * 100; i++) sim.step();
+    const saved = JSON.parse(JSON.stringify(sim.getState()));
+    const n2 = new Network(config); n2.load(JSON.parse(JSON.stringify(n.toJSON())));
+    const sim2 = new Sim(config, n2);
+    sim2.setState(saved);
+    for (let i = 0; i < 20 * 300; i++) { sim.step(); sim2.step(); }
+    expect(sim2.getState()).toEqual(sim.getState());
+    expect(sim.traffic.stats.arrived).toBe(total);
+    expect(sim.traffic.stats.conflicts + sim.traffic.stats.interventions + sim.traffic.stats.deadlocks).toBe(0);
+  }, 120_000);
+});
