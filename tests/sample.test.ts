@@ -15,7 +15,12 @@ describe('샘플 맵', () => {
   it('만들어지고, 모든 건물이 도로에 연결되며, 큰길 교차로에 정지 표지가 있다', () => {
     const { e, sim } = make();
     const n = e.network;
-    expect(n.buildings.size).toBe(27); // 주거·직장 23채 + 상점 3채 + 외부 연결점
+    expect(n.buildings.size).toBe(28); // 주거·사무·공장 23채 + 상점 3채 + 학교 1채 + 외부 연결점
+    const count = (k: string) => [...n.buildings.values()].filter((b) => b.kind === k).length;
+    expect(count('factory')).toBe(2); expect(count('school')).toBe(1); expect(count('shop')).toBe(3);
+    expect([...n.buildings.values()].filter((b) => b.kind === 'home' && b.density === 1).length).toBe(3);
+    expect(new Set(n.zones.values())).toEqual(new Set(['homeMid', 'home', 'industrial', 'shop'])); // 빈 땅에 칠해 둔 구역
+    expect([...n.segments.values()].filter((s) => s.kind === 'road6').length).toBeGreaterThan(0); // 큰길은 왕복 6차로
     expect(n.externalId()).not.toBeNull();
     expect([...n.segments.values()].some((s) => s.locked)).toBe(true);
     expect(sim.demand.unconnected()).toEqual([]);

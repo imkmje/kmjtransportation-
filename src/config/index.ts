@@ -7,7 +7,7 @@ export const config = {
   startClockHour: 5, // 1일차 월요일 05:00 시작
   dayBoundaryHour: 4, // 하루 경계 = 시계 04:00
   seed: 12345,
-  speedChoicesKmh: [30, 40, 50, 60, 80, 100, 110], // 속도 제한 도구가 고를 수 있는 값(도로 종류의 상한 이하만)
+  speedChoicesKmh: [30, 40, 50, 60, 70, 80, 100, 110], // 속도 제한 도구가 고를 수 있는 값(도로 종류의 상한 이하만)
   // 도로 종류 (rules.md 7항). 속도 단위 km/h, 폭 단위 m
   roads: {
     road2: { name: '왕복 2차로', lanesPerDir: 1, laneWidth: 3.5, defaultSpeedKmh: 50, maxSpeedKmh: 60, rank: 1 },
