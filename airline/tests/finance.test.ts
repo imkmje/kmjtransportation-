@@ -92,12 +92,12 @@ describe('사건 대응·계속하기', () => {
   });
 });
 
-describe('저장 형식 2', () => {
+describe('저장 형식 변환', () => {
   it('형식 1 파일을 읽으면 대출 0·목표 모드·나이 0으로 변환되고 이어서 실행된다', () => {
     const g = new Game(4); const o = g.openRoute('ICN', 'CJU'); if (!o.ok) throw new Error(); g.assign(g.state.planes[0].id, o.routeId, 20); g.advanceDays(40);
     const v1 = JSON.parse(JSON.stringify(g.toJSON())); v1.formatVersion = 1; delete v1.loan; delete v1.sandbox; for (const p of v1.planes) delete p.age; for (const h of v1.history) delete h.interest;
     const back = Game.fromJSON(v1);
-    expect(back.state.formatVersion).toBe(2); expect(back.state.loan).toBe(0); expect(back.state.sandbox).toBe(false); expect(back.state.planes[0].age).toBe(0);
+    expect(back.state.formatVersion).toBe(3); expect(back.state.loan).toBe(0); expect(back.state.sandbox).toBe(false); expect(back.state.planes[0].age).toBe(0);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
 });

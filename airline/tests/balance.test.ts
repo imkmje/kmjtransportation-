@@ -20,6 +20,8 @@ describe('균형 점검(전략별 24개월 × 20개 시드)', () => {
     expect(by('보수적').승리).toBeLessThan(SEEDS.length * 0.5); // 쉬운 전략이 절반 넘게 이기면 너무 쉬운 게임
     expect(by('대출형').승리).toBeGreaterThan(0); // 대출을 잘 쓰면 이길 수 있어야 한다
     expect(by('대출형').승리).toBeLessThan(SEEDS.length * 0.9); // 그래도 항상 이기면 위험이 없는 게임
+    expect(by('종합형').승리).toBeGreaterThanOrEqual(by('대출형').승리); // 새 기능(등급·화물·허브)을 쓰는 쪽이 더 낫다
+    expect(by('종합형').승리).toBeLessThan(SEEDS.length); // 그래도 항상 이기지는 않는다
     expect(by('무모형').중간이익).toBeLessThan(by('대출형').중간이익); // 과한 확장은 신중한 대출보다 못하다
   }, 300_000);
 });

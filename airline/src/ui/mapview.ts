@@ -54,6 +54,10 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         ctx.closePath(); ctx.fill(); ctx.stroke();
       }
     }
+    // 경쟁사 노선(보라색 가는 선)
+    ctx.strokeStyle = 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
+    for (const k of g.state.competitors) for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
+    ctx.setLineDash([]);
     // 노선: 이익이면 초록, 적자면 빨강, 항공기가 없으면 회색 점선
     for (const r of g.state.routes) {
       if (!r.open) continue;

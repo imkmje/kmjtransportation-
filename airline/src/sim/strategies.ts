@@ -4,6 +4,22 @@ import { Game } from './game';
 import { canFly, distanceKm, maxWeeklyRoundTrips, priceFactor, baseFare } from './model';
 import { Rng } from './rng';
 
+/** 배정을 시도하고, 슬롯이 모자라면 필요한 만큼 사서 다시 시도한다(그래도 안 되면 횟수를 줄인다) */
+export function assignWithSlots(g: Game, planeId: number, routeId: number, weekly: number): boolean {
+  for (let w = weekly; w >= 1; w = Math.floor(w * 0.7) || 0) {
+    for (let tries = 0; tries < 6; tries++) {
+      const r = g.assign(planeId, routeId, w);
+      if (r.ok) return true;
+      if (!r.error.includes('슬롯')) return false;
+      const rt = g.route(routeId)!;
+      const full = [rt.a, rt.b].find((c) => g.slotsUsed(c) + (w * 2) / 7 > g.slotCapacity(c) + 1e-9);
+      if (!full || !g.buySlot(full).ok) break;
+    }
+    if (w === 1) break;
+  }
+  return false;
+}
+
 /** 용량을 다 채우는 가장 높은 운임(수요 = 좌석이 되는 운임)을 기준으로 운임을 조정 */
 export function fillFare(g: Game, routeId: number): void {
   const r = g.route(routeId)!, base = g.routeBaseFare(r);
@@ -50,7 +66,7 @@ function deployIdle(g: Game, typeFilter?: (id: string) => boolean): void {
     const o = g.openRoute(pick.a, pick.b);
     if (!o.ok) continue;
     const km = distanceKm(cityById(pick.a), cityById(pick.b));
-    g.assign(p.id, o.routeId, maxWeeklyRoundTrips(km, typeById(p.type)));
+    assignWithSlots(g, p.id, o.routeId, maxWeeklyRoundTrips(km, typeById(p.type)));
     fillFare(g, o.routeId);
   }
 }
@@ -96,6 +112,28 @@ export const leveraged: Strategy = {
   },
 };
 
+/** 종합형: 대출형에 새 기능을 더한다 — 장거리 노선은 비즈니스석 20%, 현금이 넉넉하면 화물기, 슬롯은 필요한 만큼 */
+export const smart: Strategy = {
+  name: '종합형',
+  step(g, rng) {
+    leveraged.step(g, rng);
+    if (g.state.day % 30 !== 0) return;
+    for (const p of g.state.planes) {
+      const r = p.routeId ? g.route(p.routeId) : null;
+      if (!r || typeById(p.type).seats === 0) continue;
+      const km = distanceKm(cityById(r.a), cityById(r.b));
+      const want = km > 3000 ? 0.2 : km > 1500 ? 0.1 : 0;
+      if (p.bizShare !== want) g.setCabin(p.id, want);
+      if (km > 3000) g.setFareBiz(r.id, g.routeBaseFareBiz(r) * 1.0);
+    }
+    const hasFreighter = g.state.planes.some((p) => p.type === 'F77');
+    if (!hasFreighter && g.state.cash > typeById('F77').price + 40) {
+      const b = g.buyPlane('F77');
+      if (b.ok) { const pick = bestRouteFor(g, 'F77'); if (pick) { const o = g.openRoute(pick.a, pick.b); if (o.ok) assignWithSlots(g, b.planeId, o.routeId, maxWeeklyRoundTrips(distanceKm(cityById(pick.a), cityById(pick.b)), typeById('F77'))); } }
+    }
+  },
+};
+
 /** 무모형: 한도까지 빌려 현금 여유 없이 사고 또 산다(과한 확장이 파산으로 이어지는지 점검) */
 export const reckless: Strategy = {
   name: '무모형',
@@ -128,13 +166,13 @@ export const random: Strategy = {
       if (!canFly(t, A, B).ok) continue;
       const max = maxWeeklyRoundTrips(distanceKm(A, B), t);
       if (max < 1) continue;
-      g.assign(p.id, o.routeId, 1 + rng.int(max));
+      assignWithSlots(g, p.id, o.routeId, 1 + rng.int(max));
       const r = g.route(o.routeId)!; g.setFare(r.id, g.routeBaseFare(r) * (0.6 + rng.next() * 1.2));
     }
   },
 };
 
-export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, reckless, random];
+export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, smart, reckless, random];
 
 export interface RunResult { strategy: string; seed: number; status: string; months: number; cash: number; cumProfit: number; planes: number; routes: number }
 /** 한 전략을 한 시드로 끝날 때까지(또는 maxMonths까지) 돌린다 */

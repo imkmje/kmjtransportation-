@@ -12,23 +12,33 @@ const SAVE_KEY = 'the-air-save';
 const MONTH_NAMES = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 const SECONDS_PER_DAY = 3; // 1× 속도에서 하루가 흐르는 실제 시간
 
+/** 작은 선 그래프(값 배열 → SVG). zero가 true면 0선을 그린다 */
+function spark(values: number[], color: string, opts: { zero?: boolean; min?: number; max?: number } = {}): string {
+  if (values.length < 2) return '<div class="hint">하루가 지나면 그래프가 나옵니다.</div>';
+  const mn = opts.min ?? Math.min(0, ...values), mx = opts.max ?? Math.max(0.0001, ...values), W = 300, H = 56;
+  const y = (v: number) => (H - 4 - ((v - mn) / (mx - mn || 1)) * (H - 8)).toFixed(1);
+  const pts = values.map((v, i) => `${((i / (values.length - 1)) * W).toFixed(1)},${y(v)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" class="spark" preserveAspectRatio="none">${opts.zero ? `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="#9fb0bf" stroke-dasharray="3 3"/>` : ''}<polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}"/></svg>`;
+}
+
 const $ = <T extends HTMLElement>(s: string, root: ParentNode = document) => root.querySelector<T>(s)!;
 
 export function startApp(): void {
   let game = new Game(1);
   let tab: Tab = 'map';
   let selCity: string | null = null, selRoute: number | null = null;
-  let speed = 0, acc = 0, last = performance.now(), lastMonth = 0;
-  let toastTimer = 0;
+  let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
+  let toastTimer = 0, seenLog = 0, seenEvents = new Set<string>();
+  let autoPause = (() => { try { return localStorage.getItem('the-air-autopause') !== '0'; } catch { return true; } })();
 
   const panel = $('#panel'), top = { date: $('#date'), cash: $('#cash'), rep: $('#rep') };
-  const toast = (msg: string) => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => t.classList.remove('show'), 2600); };
+  const toast = (msg: string, ms = 2600) => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => t.classList.remove('show'), ms); };
 
   // ---- 저장 ----
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(game.toJSON())); } catch { /* 저장 불가 환경 */ } };
   const hasSave = (): boolean => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
   const load = (): boolean => {
-    try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false; game = Game.fromJSON(JSON.parse(raw)); lastMonth = game.monthsPassed; return true; } catch { toast('저장 파일을 불러오지 못했습니다'); return false; }
+    try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false; game = Game.fromJSON(JSON.parse(raw)); lastMonth = game.monthsPassed; seenLog = game.state.log.length; seenEvents = new Set(); return true; } catch { toast('저장 파일을 불러오지 못했습니다'); return false; }
   };
 
   const map = createMapView($<HTMLCanvasElement>('#map'), () => game, {
@@ -44,8 +54,28 @@ export function startApp(): void {
     top.cash.textContent = money(s.cash);
     top.cash.classList.toggle('neg', s.cash < 0);
     top.rep.textContent = `평판 ${pct(s.reputation)}`;
+    renderAlerts();
     document.querySelectorAll<HTMLElement>('#speeds button').forEach((b) => b.classList.toggle('on', Number(b.dataset.speed) === speed));
   }
+
+  // ---- 알림 띠(지도 위에 항상 보임)와 탭 표시 ----
+  function renderAlerts() {
+    const s = game.state, el = $('#alerts');
+    const unread = Math.max(0, s.log.length - seenLog), open = s.events.filter((e) => { const d = EVENTS.find((x) => x.id === e.def)!; return !!d.option && !e.handled; }).length;
+    const newsBtn = $('#tabs button[data-tab="news"]');
+    const n = tab === 'news' ? 0 : Math.max(unread, open);
+    if (n > 0) newsBtn.dataset.badge = String(n); else delete newsBtn.dataset.badge;
+    const html = s.events.map((e, i) => {
+      const def = EVENTS.find((x) => x.id === e.def)!, key = `${e.def}:${e.city ?? ''}:${s.day - (def.months - e.monthsLeft) * config.daysPerMonth}`, fresh = !seenEvents.has(key);
+      return `<div class="chip${fresh ? ' new' : ''}" data-key="${key}"><span>⚠</span><div class="grow" data-act="goNews"><b>${esc(def.name)}${e.city ? ` · ${esc(cityById(e.city).name)}` : ''}</b> <small>${e.monthsLeft}개월 남음${e.handled ? ' · 대응함' : ''}</small></div>${def.option && !e.handled ? `<button data-act="respond" data-id="${i}" ${s.cash < def.option.cost ? 'disabled' : ''}>${esc(def.option.label)} ${money(def.option.cost)}</button>` : ''}</div>`;
+    }).join('');
+    if (el.innerHTML !== html) { el.innerHTML = html; el.querySelectorAll<HTMLElement>('.chip').forEach((c) => seenEvents.add(c.dataset.key!)); }
+  }
+  $('#alerts').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'goNews') { tab = 'news'; seenLog = game.state.log.length; lastHtml = ''; render(); }
+    else if (b.dataset.act === 'respond') { const r = game.respondEvent(Number(b.dataset.id)); if (!r.ok) return toast(r.error); toast('사건에 대응했습니다'); lastHtml = ''; render(); }
+  });
 
   // ---- 패널 내용 ----
   function routeLabel(a: string, b: string) { return `${cityById(a).name} ⇄ ${cityById(b).name}`; }
@@ -62,6 +92,7 @@ export function startApp(): void {
           <div class="bar"><i style="width:${Math.min(100, (s.cumProfit / config.rules.winProfit) * 100)}%"></i></div><small>누적 이익 ${money(s.cumProfit)} / ${money(config.rules.winProfit)}</small>
           <div class="bar"><i style="width:${(served.size / config.rules.winCities) * 100}%"></i></div><small>운항 중인 도시 ${served.size} / ${config.rules.winCities}</small>
           <small>남은 기간 ${Math.max(0, config.rules.timeLimitMonths - game.monthsPassed)}개월</small></div>
+        <h3>경쟁사</h3><div class="list">${s.competitors.map((k) => `<div class="row"><div class="grow"><b>${esc(k.name)}</b><small>${k.style === 'low' ? '저가형' : '프리미엄형'} · 거점 ${esc(cityById(k.hub).name)} · 항공기 ${k.planes}대 · 노선 ${k.routes.length}개</small></div></div>`).join('')}${s.routes.some((r) => r.open) ? `<div class="row"><div class="grow"><b>우리 시장 점유율</b><small>경쟁사와 겹치는 노선에서의 좌석 점유</small></div><div class="right">${pct(game.marketShare)}</div></div>` : ''}</div>
         <h3>시작하기</h3><ol class="steps"><li>서울이나 제주를 눌러 <b>노선을 엽니다</b>.</li><li>노선 탭에서 <b>항공기를 배정</b>합니다.</li><li>▶ 를 눌러 시간을 흘리고, <b>운임</b>을 조절해 이익을 냅니다.</li></ol>`;
     }
     const c = cityById(selCity);
@@ -71,7 +102,9 @@ export function startApp(): void {
     }).sort((x, y) => y.demand - x.demand);
     const peak = c.peak.months.map((m) => `${m}월`).join('·');
     return `<h2>${esc(c.name)} <small>${c.id}</small></h2>
-      <div class="kv"><div>시장 규모</div><div>인구 ${c.pop}백만 · 소득 ${c.income}배</div><div>활주로</div><div>${num(c.runway)} m</div><div>성수기</div><div>${peak} (수요 ×${c.peak.factor})</div></div>
+      <div class="kv"><div>시장 규모</div><div>인구 ${c.pop}백만 · 소득 ${c.income}배</div><div>시장 성장</div><div>${s.growth[c.id] ? `${(s.growth[c.id] >= 1 ? '+' : '') + Math.round((s.growth[c.id] - 1) * 100)}%` : '0%'}</div><div>활주로</div><div>${num(c.runway)} m</div><div>성수기</div><div>${peak} (수요 ×${c.peak.factor})</div><div>허브 효과</div><div>${game.linksAt(c.id)}개 노선 · 수요 +${Math.round(game.hubBonus(c.id) * 100)}%</div></div>
+      <div class="goal"><div><b>공항 슬롯</b> <small>하루 이착륙 한도</small></div><div class="bar"><i style="width:${Math.min(100, (game.slotsUsed(c.id) / game.slotCapacity(c.id)) * 100)}%"></i></div><small>${game.slotsUsed(c.id).toFixed(1)} / ${game.slotCapacity(c.id)}${(s.slots[c.id] ?? 0) ? ` (구매 ${s.slots[c.id]}개 포함)` : ''}</small><button data-act="buySlot" data-city="${c.id}" ${s.cash < game.slotPrice(c.id) ? 'disabled' : ''}>슬롯 1개 구매 ${money(game.slotPrice(c.id))} <small>(월 임대 ${money(config.slot.lease)})</small></button></div>
+      ${s.competitors.filter((k) => k.routes.some((r) => r.a === c.id || r.b === c.id)).map((k) => `<p class="hint">경쟁: <b>${esc(k.name)}</b>이(가) ${esc(c.name)}에 취항 중입니다.</p>`).join('')}
       <h3>${esc(c.name)}에서 노선 열기</h3><p class="hint">월 수요가 큰 순서입니다(기준 운임일 때). 먼 거리는 큰 비행기가 필요합니다.</p>
       <div class="list">${dests.map(({ d, dist, demand, ex }) => `<div class="row"><div class="grow"><b>${esc(d.name)}</b><small>${km(dist)} · 기준 운임 ${fare(baseFare(dist))} · 월 수요 ${num(demand)}명</small></div>
         ${ex ? `<button data-act="goRoute" data-id="${ex.id}" class="ghost">운항 중</button>` : `<button data-act="open" data-a="${c.id}" data-b="${d.id}">열기</button>`}</div>`).join('')}</div>`;
@@ -100,15 +133,20 @@ export function startApp(): void {
       <h2>${routeLabel(r.a, r.b)}</h2>
       <div class="kv"><div>거리</div><div>${km(dist)}</div><div>월 수요</div><div>${num(d.demand * config.daysPerMonth)}명</div><div>월 좌석</div><div>${num(d.seats * config.daysPerMonth)}석</div>
         <div>탑승률</div><div>${planes.length ? pct(lf) : '-'}</div><div>예상 월 수익</div><div>${money(d.revenue * config.daysPerMonth)}</div><div>예상 월 비용</div><div>${money(d.cost * config.daysPerMonth)}</div>
-        <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div></div>
+        <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div>
+        ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
+      <h3>최근 ${r.daily.length}일</h3><div class="chartlabel"><small>일 이익(${money(r.daily.at(-1)?.profit ?? 0)})</small></div>${spark(r.daily.map((x) => x.profit), '#1f9d57', { zero: true })}
+      <div class="chartlabel"><small>탑승률(${pct(r.daily.at(-1) && r.daily.at(-1)!.seats ? r.daily.at(-1)!.pax / r.daily.at(-1)!.seats : 0)})</small></div>${spark(r.daily.map((x) => (x.seats ? x.pax / x.seats : 0)), '#1f7ae0', { min: 0, max: 1 })}
       <h3>운임 <b>${fare(r.fare)}</b> <small>(기준 ${fare(base)})</small></h3>
       <input type="range" id="fare" min="${lo}" max="${hi}" step="1" value="${r.fare}" />
       <div class="two"><small>${fare(lo)}</small><small class="right">${fare(hi)}</small></div>
       <button class="wide" data-act="fillFare">자리를 꽉 채우는 운임으로 맞추기</button>
+      ${d.seatsB > 0 || planes.some((p) => p.bizShare > 0) ? `<h3>비즈니스 운임 <b>${fare(r.fareBiz)}</b> <small>(기준 ${fare(game.routeBaseFareBiz(r))})</small></h3><input type="range" id="fareBiz" min="${Math.round(game.routeBaseFareBiz(r) * config.fare.minRatio)}" max="${Math.round(game.routeBaseFareBiz(r) * config.fare.maxRatio)}" step="1" value="${r.fareBiz}" />` : ''}
+      ${d.cargoCap > 0 ? `<h3>화물 운임 배율 <b>×${r.cargoRatio.toFixed(2)}</b></h3><input type="range" id="cargoRatio" min="${config.fare.minRatio}" max="${config.fare.maxRatio}" step="0.05" value="${r.cargoRatio}" />` : ''}
       <p class="hint">운임이 높으면 수익은 늘지만 손님이 줄어요. 비행기가 비면 내리고, 자리가 모자라면 올려 보세요.</p>
       <h3>배정된 항공기</h3>
-      ${planes.length ? planes.map((p) => { const t = typeById(p.type), max = maxWeeklyRoundTrips(dist, t); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석 · 주 ${p.weekly}회 왕복 (최대 ${max})</small></div>
-        <div class="stepper"><button data-act="weekly" data-id="${p.id}" data-d="-1" aria-label="횟수 줄이기">−</button><button data-act="weekly" data-id="${p.id}" data-d="1" aria-label="횟수 늘리기">+</button><button class="ghost" data-act="unassign" data-id="${p.id}">빼기</button></div></div>`; }).join('') : '<p class="hint">배정된 항공기가 없습니다.</p>'}
+      ${planes.length ? planes.map((p) => { const t = typeById(p.type), max = maxWeeklyRoundTrips(dist, t); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석${t.seats ? ` (비즈니스 ${Math.round(p.bizShare * 100)}%)` : ' · 화물기'} · 주 ${p.weekly}회 왕복 (최대 ${max})</small></div>
+        <div class="stepper"><button data-act="weekly" data-id="${p.id}" data-d="-1" aria-label="횟수 줄이기">−</button><button data-act="weekly" data-id="${p.id}" data-d="1" aria-label="횟수 늘리기">+</button><button class="ghost" data-act="unassign" data-id="${p.id}">빼기</button></div></div>${t.seats ? `<div class="cabin"><small>객실:</small>${config.cabin.shares.map((sh) => `<button class="ghost small ${p.bizShare === sh ? 'on' : ''}" data-act="cabin" data-id="${p.id}" data-share="${sh}">${sh === 0 ? '일반석만' : `비즈 ${sh * 100}%`}</button>`).join('')}</div>` : ''}`; }).join('') : '<p class="hint">배정된 항공기가 없습니다.</p>'}
       ${idle.length ? `<h3>대기 중인 항공기 배정</h3>${idle.map((p) => { const t = typeById(p.type); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석 · 최대 주 ${maxWeeklyRoundTrips(dist, t)}회</small></div><button data-act="assign" data-id="${p.id}">배정</button></div>`; }).join('')}` : ''}
       <button class="wide danger" data-act="close">노선 닫기</button>`;
   }
@@ -118,7 +156,7 @@ export function startApp(): void {
     const s = game.state;
     const owned = s.planes.map((p) => { const t = typeById(p.type), r = p.routeId ? game.route(p.routeId) : null;
       return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats}석 · 장부가 ${money(p.book)} · ${p.age}개월 사용(정비비 +${Math.round((game.agingMult(p) - 1) * 100)}%)</small></div><div class="right">${r ? routeLabel(r.a, r.b) : '<span class="warn">대기 중</span>'}<br><button class="ghost small" data-act="sell" data-id="${p.id}">매각 ${money(p.book * config.sale.ratio)}</button></div></div>`; }).join('');
-    const shop = AIRCRAFT.map((t) => `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats}석 · 항속 ${km(t.range)} · 활주로 ${num(t.runway)}m 필요</small></div>
+    const shop = AIRCRAFT.map((t) => `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats ? `${t.seats}석` : '좌석 없음'} · 화물 ${t.cargo}t · 항속 ${km(t.range)} · 활주로 ${num(t.runway)}m 필요</small></div>
       <button data-act="buy" data-id="${t.id}" ${s.cash < t.price ? 'disabled' : ''}>${money(t.price)} 구매</button></div>`).join('');
     return `<h2>기단 <small>${s.planes.length}대</small></h2><div class="list">${owned}</div><h3>항공기 구매</h3><p class="hint">구매한 비행기는 노선 탭에서 배정해야 돈을 벌어요.</p><div class="list">${shop}</div>`;
   }
@@ -146,6 +184,7 @@ export function startApp(): void {
   function render() {
     renderTop();
     document.querySelectorAll<HTMLElement>('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+    if (tab === 'news') seenLog = game.state.log.length;
     const html = tab === 'map' ? viewMap() : tab === 'routes' ? viewRoutes() : tab === 'fleet' ? viewFleet() : tab === 'money' ? viewMoney() : viewNews();
     if (html !== lastHtml) { const y = panel.scrollTop; panel.innerHTML = html; panel.scrollTop = y; lastHtml = html; }
     renderEnd();
@@ -177,6 +216,8 @@ export function startApp(): void {
     else if (act === 'unassign') { game.unassign(id); done(); }
     else if (act === 'weekly') { const p = game.plane(id)!; const r = game.assign(id, p.routeId!, p.weekly + Number(b.dataset.d)); if (!r.ok) toast(r.error); done(); }
     else if (act === 'assign' && selRoute !== null) { const r = game.route(selRoute)!, p = game.plane(id)!; const max = maxWeeklyRoundTrips(distanceKm(cityById(r.a), cityById(r.b)), typeById(p.type)); const res = game.assign(id, selRoute, max); if (!res.ok) return toast(res.error); fillFare(game, selRoute); done('배정했습니다 (운임도 자동으로 맞췄어요)'); }
+    else if (act === 'buySlot') { const r = game.buySlot(b.dataset.city!); if (!r.ok) return toast(r.error); done(`슬롯을 샀습니다 (${money(r.price)})`); }
+    else if (act === 'cabin') { const r = game.setCabin(id, Number(b.dataset.share)); if (!r.ok) return toast(r.error); done(); }
     else if (act === 'borrow') { const r = game.borrow(config.loan.step); if (!r.ok) return toast(r.error); done(`${money(config.loan.step)}를 대출받았습니다`); }
     else if (act === 'repay') { const r = game.repay(config.loan.step); if (!r.ok) return toast(r.error); done('대출을 갚았습니다'); }
     else if (act === 'sell') { const p = game.plane(id); if (!p) return; if (!window.confirm(`${typeById(p.type).name}을(를) ${money(p.book * config.sale.ratio)}에 팔까요?`)) return; const r = game.sellPlane(id); if (!r.ok) return toast(r.error); done(`항공기를 ${money(r.price)}에 팔았습니다`); }
@@ -185,9 +226,11 @@ export function startApp(): void {
   });
   panel.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement;
+    if (t.id === 'fareBiz' && selRoute !== null) { game.setFareBiz(selRoute, Number(t.value)); const hs = panel.querySelectorAll('h3 b'); hs.forEach((h) => { if (h.parentElement?.textContent?.includes('비즈니스 운임')) h.textContent = fare(game.route(selRoute!)!.fareBiz); }); }
+    if (t.id === 'cargoRatio' && selRoute !== null) { game.setCargoRatio(selRoute, Number(t.value)); panel.querySelectorAll('h3').forEach((h) => { if (h.textContent?.includes('화물 운임 배율')) h.querySelector('b')!.textContent = `×${game.route(selRoute!)!.cargoRatio.toFixed(2)}`; }); }
     if (t.id === 'fare' && selRoute !== null) { game.setFare(selRoute, Number(t.value)); const h3 = panel.querySelector('h3 b'); if (h3) h3.textContent = fare(game.route(selRoute)!.fare); }
   });
-  panel.addEventListener('change', (e) => { if ((e.target as HTMLElement).id === 'fare') { lastHtml = ''; render(); } });
+  panel.addEventListener('change', (e) => { if (['fare', 'fareBiz', 'cargoRatio'].includes((e.target as HTMLElement).id)) { lastHtml = ''; render(); } });
 
   // ---- 탭·속도·메뉴 ----
   $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; lastHtml = ''; render(); });
@@ -200,13 +243,14 @@ export function startApp(): void {
     if (m === 'save') { save(); toast('저장했습니다'); }
     else if (m === 'load') { if (load()) { selCity = selRoute = null; syncMap(); lastHtml = ''; toast('불러왔습니다'); } else toast('저장된 게임이 없습니다'); }
     else if (m === 'new') { newGame(); }
+    else if (m === 'autopause') { autoPause = !autoPause; try { localStorage.setItem('the-air-autopause', autoPause ? '1' : '0'); } catch { /* 저장 불가 */ } b.textContent = `사건 시 자동 정지: ${autoPause ? '켜짐' : '꺼짐'}`; toast(autoPause ? '사건이 생기면 시간이 멈춥니다' : '사건이 생겨도 시간이 계속 흐릅니다'); menu.hidden = false; render(); return; }
     else if (m === 'title') { showTitle(); }
     menu.hidden = true; render();
   });
   $('#end-new').addEventListener('click', () => newGame());
   $('#end-continue').addEventListener('click', () => { const r = game.continuePlay(); if (r.ok) { lastHtml = ''; render(); toast('자유 모드로 계속합니다'); } });
 
-  function newGame() { game = new Game((Date.now() & 0x7fffffff) || 1); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; render(); toast('새 게임을 시작했습니다. 지도에서 도시를 눌러 보세요.'); }
+  function newGame() { game = new Game((Date.now() & 0x7fffffff) || 1); seenLog = 0; seenEvents = new Set(); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; render(); toast('새 게임을 시작했습니다. 지도에서 도시를 눌러 보세요.'); }
 
   // ---- 시작 화면 ----
   function showTitle() {
@@ -225,7 +269,13 @@ export function startApp(): void {
       let n = 0;
       while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; }
       if (n) {
-        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; save(); const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}`); const lg = game.state.log[game.state.log.length - 1]; if (lg && lg.startsWith(`${game.monthsPassed + 1}개월차`)) toast(lg); }
+        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; save(); const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}`); }
+        const lg = game.state.log;
+        if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다
+          const msg = lg[lg.length - 1]; toast(msg, 6000);
+          if (autoPause && game.state.status === 'playing') { speed = 0; renderTop(); }
+        }
+        prevLog = lg.length;
         lastHtml = tab === 'map' && !selCity ? '' : lastHtml; render();
         if (game.state.status !== 'playing') speed = 0;
       }
@@ -234,6 +284,7 @@ export function startApp(): void {
   }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') { speed = 0; renderTop(); } });
 
+  prevLog = game.state.log.length;
   (window as unknown as { __air: unknown }).__air = { get game() { return game; }, render, setSpeed: (s: number) => { speed = s; renderTop(); }, screenOf: (id: string) => map.screenOf(id) };
   showTitle();
   render();
