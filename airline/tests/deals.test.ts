@@ -12,24 +12,58 @@ const fly = (g: Game, a: string, b: string, planeId: number, w = 5) => {
 };
 
 describe('임대·중고·제휴·환승', () => {
-  it('임대: 현금이 들지 않고 월 고정비가 임대료만큼 늘며, 담보·감가상각이 없다', () => {
+  it('임대: 보증금만 내고, 월 고정비가 임대료만큼 늘며, 담보·감가상각이 없다', () => {
     const g = new Game(3), cash = g.state.cash, fixed = g.fixedMonthly, limit = g.loanLimit, t = typeById('A350');
     const r = g.leasePlane('A350'); if (!r.ok) throw new Error(r.error);
-    const p = g.plane(r.planeId)!;
-    expect(g.state.cash).toBe(cash);
+    const p = g.plane(r.planeId)!, rent = t.price * config.lease.rate;
+    expect(g.state.cash).toBeCloseTo(cash - rent * config.lease.deposit, 6); expect(p.deposit).toBeCloseTo(rent * config.lease.deposit, 6);
     expect(p.leased).toBe(true); expect(p.book).toBe(0);
-    expect(g.fixedMonthly - fixed).toBeCloseTo(t.price * config.lease.rate + config.cost.perPlaneMonthly, 6);
+    expect(g.fixedMonthly - fixed).toBeCloseTo(rent + config.cost.perPlaneMonthly, 6);
     expect(g.loanLimit).toBe(limit);
     g.advanceDays(30);
     expect(g.state.history[0].depreciation).toBeCloseTo(typeById('B737').price / config.cost.depreciationMonths, 6); // 시작 기체 것만
     expect(p.book).toBe(0);
   });
-  it('임대기 반납: 위약금(임대료 1개월치)이 나가고 기체가 사라진다', () => {
+  it('임대: 보증금이 모자라면 거절, 임대기는 내 항공기 수 + 2대까지만', () => {
+    const g = new Game(3); g.state.cash = 1;
+    expect(g.leasePlane('A350').ok).toBe(false);
+    g.state.cash = 500;
+    for (let i = 0; i < 3; i++) expect(g.leasePlane('T72').ok).toBe(true); // 내 항공기 1대 + 2 = 3대
+    const r = g.leasePlane('T72'); expect(r.ok).toBe(false); if (!r.ok) expect(r.error).toContain('임대는');
+    g.buyPlane('B737'); // 내 항공기가 늘면 한도도 는다
+    expect(g.leasePlane('T72').ok).toBe(true);
+  });
+  it('임대기 조기 반납: 보증금을 돌려받고 남은 개월 임대료를 위약금으로 낸다(12개월이 지나면 1개월치)', () => {
     const g = new Game(3), r = g.leasePlane('B737'); if (!r.ok) throw new Error(r.error);
-    const cash = g.state.cash, s = g.sellPlane(r.planeId);
-    expect(s.ok).toBe(true);
-    expect(g.state.cash).toBeCloseTo(cash - typeById('B737').price * config.lease.rate * config.lease.returnMonths, 6);
+    const p = g.plane(r.planeId)!, rent = typeById('B737').price * config.lease.rate, cash = g.state.cash;
+    p.age = 4;
+    expect(g.leaseReturnFee(p)).toBeCloseTo(rent * 8, 6);
+    expect(g.sellPlane(r.planeId).ok).toBe(true);
+    expect(g.state.cash).toBeCloseTo(cash + rent * config.lease.deposit - rent * 8, 6);
     expect(g.plane(r.planeId)).toBeUndefined();
+    const r2 = g.leasePlane('B737'); if (!r2.ok) throw new Error(r2.error);
+    g.plane(r2.planeId)!.age = 30;
+    expect(g.leaseReturnFee(g.plane(r2.planeId)!)).toBeCloseTo(rent, 6);
+  });
+  it('임대기 매입: 보증금을 빼고 사서 내 항공기가 되고, 오래 쓸수록 싸진다', () => {
+    const g = new Game(3); g.state.cash = 200;
+    const r = g.leasePlane('B737'); if (!r.ok) throw new Error(r.error);
+    const p = g.plane(r.planeId)!, dep = p.deposit!, t = typeById('B737');
+    expect(g.leaseBuyoutPrice(p)).toBeCloseTo(t.price, 1);
+    p.age = 40;
+    const price = g.leaseBuyoutPrice(p); expect(price).toBeCloseTo(t.price * 0.8, 1);
+    const cash = g.state.cash, own = g.state.planes.filter((x) => !x.leased).length;
+    const b = g.buyOutLease(r.planeId); expect(b.ok).toBe(true);
+    expect(g.state.cash).toBeCloseTo(cash - (price - dep), 6);
+    expect(p.leased).toBe(false); expect(p.book).toBeCloseTo(price, 6); expect(p.deposit).toBe(0);
+    expect(g.state.planes.filter((x) => !x.leased).length).toBe(own + 1);
+    expect(g.buyOutLease(r.planeId).ok).toBe(false); // 이미 내 항공기
+    p.age = 400; expect(g.leaseBuyoutPrice({ ...p, leased: true })).toBeCloseTo(t.price * config.lease.buyoutMin, 1);
+  });
+  it('임대기 매입: 현금이 모자라면 거절', () => {
+    const g = new Game(3), r = g.leasePlane('B737'); if (!r.ok) throw new Error(r.error);
+    g.state.cash = 1;
+    expect(g.buyOutLease(r.planeId).ok).toBe(false); expect(g.plane(r.planeId)!.leased).toBe(true);
   });
   it('중고: 값이 싸고, 나이가 많아 운영비가 더 들며 정비 상태가 낮다', () => {
     const g = new Game(3); g.state.cash = 100;

@@ -204,7 +204,28 @@ export class Game {
   /** 항공기를 빌린다: 살 돈은 안 들지만 매달 임대료를 낸다. 내 자산이 아니라서 담보(대출 한도)가 되지 않는다 */
   leasePlane(typeId: string): Result<{ planeId: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
-    return { ok: true, planeId: this.addPlane(typeId, 0, { leased: true }).id };
+    if (this.leasedCount >= this.leaseCap) return fail(`임대는 내 항공기 수 + ${config.lease.extra}대(지금 ${this.leaseCap}대)까지 가능합니다`);
+    const deposit = typeById(typeId).price * config.lease.rate * config.lease.deposit;
+    if (this.state.cash < deposit) return fail(`보증금 $${deposit.toFixed(1)}M이 모자랍니다`);
+    this.state.cash -= deposit;
+    return { ok: true, planeId: this.addPlane(typeId, 0, { leased: true, deposit }).id };
+  }
+  get leasedCount(): number { return this.state.planes.filter((p) => p.leased).length; }
+  /** 임대 가능한 최대 대수 = 내 항공기(임대 아닌 것) 수 + 2 */
+  get leaseCap(): number { return this.state.planes.filter((p) => !p.leased).length + config.lease.extra; }
+  /** 임대기 반납 위약금: 최소 임대 기간(12개월)이 안 찼으면 남은 개월 임대료, 최소 1개월치 */
+  leaseReturnFee(p: Plane): number { return typeById(p.type).price * config.lease.rate * Math.max(1, config.lease.minMonths - p.age); }
+  /** 임대기 매입가: 새 기체 값 × (1 − 0.5% × 사용 개월), 최소 50% */
+  leaseBuyoutPrice(p: Plane): number { return Math.round(typeById(p.type).price * Math.max(config.lease.buyoutMin, 1 - config.lease.buyoutDrop * p.age) * 10) / 10; }
+  /** 임대기를 사서 내 항공기로 만든다(보증금은 돌려받아 매입가에서 뺀다). 이후 감가상각·담보·매각이 내 항공기와 같다 */
+  buyOutLease(planeId: number): Result<{ price: number }> {
+    if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
+    const p = this.plane(planeId);
+    if (!p || !p.leased) return fail('임대 중인 항공기가 아닙니다');
+    const price = this.leaseBuyoutPrice(p), net = price - (p.deposit ?? 0);
+    if (this.state.cash < net) return fail('현금이 모자랍니다');
+    this.state.cash -= net; p.leased = false; p.book = price; p.deposit = 0;
+    return { ok: true, price };
   }
   /** 제휴(공동 운항)할 경쟁사를 정한다(null이면 해지). 한 번에 한 곳만 */
   setAlly(compId: number | null): Result {
@@ -218,7 +239,7 @@ export class Game {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     const i = this.state.planes.findIndex((p) => p.id === planeId);
     if (i < 0) return fail('없는 항공기입니다');
-    const pl = this.state.planes[i], price = pl.leased ? -typeById(pl.type).price * config.lease.rate * config.lease.returnMonths : pl.book * config.sale.ratio; // 임대기는 반납: 위약금을 낸다
+    const pl = this.state.planes[i], price = pl.leased ? (pl.deposit ?? 0) - this.leaseReturnFee(pl) : pl.book * config.sale.ratio; // 임대기는 반납: 보증금을 돌려받고 위약금을 낸다
     this.state.events = this.state.events.filter((e) => e.planeId !== planeId);
     this.state.planes.splice(i, 1);
     this.state.cash += price;
