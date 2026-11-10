@@ -59,7 +59,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       }
     }
     // 세계 낮밤(장식): 해가 있는 곳의 반대편을 어둡게 칠한다. 게임 날짜에 따라 움직인다
-    { const sun = subsolar(g.state.day, (now / 3000) % 1), south = sun.lat >= 0; // south: 밤이 경계선 아래(남쪽)쪽인가
+    if (nightOn) { const sun = subsolar(g.state.day, (now / 3000) % 1), south = sun.lat >= 0; // south: 밤이 경계선 아래(남쪽)쪽인가
       ctx.fillStyle = 'rgba(14, 24, 60, 0.2)';
       for (const shift of [-360, 0, 360]) {
         ctx.beginPath();
@@ -176,7 +176,9 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   resize();
   raf = requestAnimationFrame(loop);
 
+  let nightOn = true;
   return {
+    setNight(v: boolean) { nightOn = v; },
     select(city: string | null, route: number | null) { selCity = city; selRoute = route; },
     /** 안내용: 이 도시 둘레에 퍼지는 주황색 원을 그린다(null이면 끔) */
     setPulse(city: string | null) { pulseCity = city; },
