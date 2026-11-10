@@ -1,0 +1,57 @@
+// The Air 브라우저 점검: 시작 → 도시 누르기 → 노선 열기 → 항공기 배정 → 시간 진행 → 저장·불러오기. 사용: npm run build && node scripts/air-smoke.mjs [스크린샷 경로]
+import { createRequire } from 'node:module';
+import { preview } from 'vite';
+const { chromium } = createRequire(import.meta.url)('playwright');
+const server = await preview({ preview: { port: 4190, strictPort: true } });
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+const errors = [];
+page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+page.on('pageerror', (e) => errors.push(String(e)));
+const fails = [];
+const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
+const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').replace('.png', `-${n}.png`) });
+
+await page.goto('http://localhost:4190/air/');
+await page.waitForSelector('canvas');
+check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
+await shot('title');
+await page.click('#t-new');
+check('새 게임: 시작 화면이 닫히고 현금 $20.0M', !(await page.locator('#title').isVisible()) && (await page.locator('#cash').innerText()) === '$20.0M', await page.locator('#cash').innerText());
+
+const tapCity = async (id) => { const p = await page.evaluate((i) => window.__air.screenOf(i), id); await page.mouse.click(p.x, p.y); };
+await tapCity('ICN');
+check('도시를 누르면 도시 정보와 노선 열기 목록이 나옴', (await page.locator('#panel').innerText()).includes('서울에서 노선 열기') && (await page.locator('#panel button[data-act="open"]').count()) === 11);
+await shot('city');
+await page.locator('#panel button[data-act="open"][data-b="CJU"]').click();
+check('노선 열기: 노선 탭으로 이동하고 서울 ⇄ 제주가 보임', (await page.locator('#panel').innerText()).includes('서울 ⇄ 제주'));
+await page.locator('#panel button[data-act="assign"]').first().click();
+check('항공기 배정: 배정 목록에 보임, 탑승률이 표시됨', (await page.locator('#panel').innerText()).includes('주') && (await page.locator('#panel').innerText()).includes('탑승률'), (await page.locator('#panel').innerText()).replace(/\n/g, ' ').slice(0, 120));
+await shot('route');
+// 운임 슬라이더
+const before = await page.evaluate(() => window.__air.game.state.routes[0].fare);
+await page.locator('#fare').fill(String(before + 20));
+check('운임 슬라이더가 운임을 바꿈', (await page.evaluate(() => window.__air.game.state.routes[0].fare)) === before + 20);
+// 시간 진행(속도 4×로 몇 초) + 직접 진행
+await page.click('#speeds button[data-speed="4"]');
+await page.waitForTimeout(2500);
+await page.evaluate(() => { window.__air.setSpeed(0); window.__air.game.advanceDays(65); window.__air.render(); });
+const st = await page.evaluate(() => ({ day: window.__air.game.state.day, hist: window.__air.game.state.history.length, cash: window.__air.game.state.cash }));
+check('시간이 흘러 월 정산이 쌓임', st.day >= 60 && st.hist >= 2, JSON.stringify(st));
+await page.click('#tabs button[data-tab="money"]');
+check('재무 탭: 월별 정산이 보임', (await page.locator('#panel').innerText()).includes('월말 정산') && (await page.locator('#panel .chart i').count()) >= 2);
+await shot('money');
+await page.click('#tabs button[data-tab="fleet"]');
+check('기단 탭: 항공기 구매 목록(3종)', (await page.locator('#panel button[data-act="buy"]').count()) === 3);
+// 저장·불러오기
+await page.click('#menubtn'); await page.click('#menu button[data-m="save"]');
+const saved = await page.evaluate(() => window.__air.game.state.day);
+await page.evaluate(() => window.__air.game.advanceDays(30));
+await page.click('#menubtn'); await page.click('#menu button[data-m="load"]');
+check('저장·불러오기: 저장한 날짜로 돌아감', (await page.evaluate(() => window.__air.game.state.day)) === saved);
+await tapCity('JFK');
+await shot('map');
+check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
+await browser.close();
+await server.close();
+process.exit(fails.length ? 1 : 0);

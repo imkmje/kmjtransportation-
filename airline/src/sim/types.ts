@@ -1,4 +1,4 @@
-export interface City { id: string; name: string; lat: number; lon: number; pop: number; income: number; runway: number; peak: { months: number[]; factor: number }; base?: boolean }
+export interface City { id: string; name: string; lat: number; lon: number; pop: number; income: number; runway: number; peak: { months: number[]; factor: number }; base?: boolean; label?: { dx: number; dy: number; align?: 'right' } }
 export interface AircraftType { id: string; name: string; cls: string; seats: number; speed: number; range: number; runway: number; price: number; hourly: number }
 export interface EventDef { id: string; name: string; months: number; effect: { cost?: number; demand?: number; cityCap?: number; routeDemand?: number }; text: string; snowCities?: string[]; boomCities?: string[] }
 

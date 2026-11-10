@@ -25,7 +25,7 @@ export class Game {
       planes: [], routes: [], events: [], cumProfit: 0, history: [],
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [],
     };
-    this.addPlane(config.start.plane, 0);
+    this.addPlane(config.start.plane, typeById(config.start.plane).price); // 시작 항공기는 무료로 받지만 장부가·감가상각은 같다
   }
 
   // ---------- 조회 ----------
