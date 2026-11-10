@@ -1,0 +1,101 @@
+[
+ {
+  "id": "free",
+  "name": "자유 경영",
+  "desc": "서울이든 어디든, 24개월 안에 누적 이익 $100M을 내거나 12개 도시에 취항하세요.",
+  "lockBase": false,
+  "cash": 20,
+  "plane": "B737",
+  "economy": 1,
+  "events": [],
+  "loan": 0,
+  "timeLimit": 24,
+  "mode": "any",
+  "goals": [
+   {
+    "type": "profit",
+    "value": 100
+   },
+   {
+    "type": "cities",
+    "value": 12
+   }
+  ]
+ },
+ {
+  "id": "crisis",
+  "name": "감염병 위기",
+  "desc": "감염병이 막 퍼진 시기에 시작합니다. 수요가 급감한 상태에서 18개월 동안 파산하지 않고 누적 이익 $45M을 만드세요.",
+  "lockBase": false,
+  "cash": 35,
+  "plane": "B737",
+  "economy": 0.82,
+  "events": [
+   {
+    "def": "pandemic",
+    "monthsLeft": 4
+   }
+  ],
+  "loan": 10,
+  "timeLimit": 18,
+  "mode": "all",
+  "goals": [
+   {
+    "type": "survive",
+    "months": 18,
+    "minProfit": 45
+   }
+  ]
+ },
+ {
+  "id": "europe",
+  "name": "유럽 허브",
+  "desc": "프랑크푸르트에서 시작해 30개월 안에 유럽·중동 도시 7곳에 취항하세요. 허브의 슬롯을 잘 관리해야 합니다.",
+  "lockBase": true,
+  "base": "FRA",
+  "cash": 40,
+  "plane": "B737",
+  "economy": 1,
+  "events": [],
+  "loan": 0,
+  "timeLimit": 30,
+  "mode": "any",
+  "goals": [
+   {
+    "type": "region",
+    "value": 7,
+    "cities": [
+     "FRA",
+     "LHR",
+     "CDG",
+     "IST",
+     "SVO",
+     "CAI",
+     "DXB",
+     "JFK"
+    ],
+    "label": "유럽·중동 도시"
+   }
+  ]
+ },
+ {
+  "id": "lowcost",
+  "name": "저가 항공 도전",
+  "desc": "부산에서 현금이 적고 작은 비행기 한 대로 시작합니다. 24개월 안에 한 달 탑승객 4만 명을 달성하세요.",
+  "lockBase": true,
+  "base": "PUS",
+  "cash": 15,
+  "plane": "A220",
+  "economy": 1,
+  "events": [],
+  "loan": 0,
+  "timeLimit": 24,
+  "mode": "any",
+  "goals": [
+   {
+    "type": "pax",
+    "value": 40000
+   }
+  ]
+ }
+]

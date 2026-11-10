@@ -1,6 +1,6 @@
 import { config } from '../config';
 import { AIRCRAFT, CITIES, cityById, typeById } from '../data';
-import { Game } from './game';
+import { Game, type GameOptions } from './game';
 import { canFly, distanceKm, maxWeeklyRoundTrips, priceFactor, baseFare } from './model';
 import { Rng } from './rng';
 
@@ -40,18 +40,21 @@ export const passive: Strategy = { name: '방치', step() { /* 아무것도 안 
 /** 기단이 놀고 있으면 서울에서 갈 수 있는 가장 수요가 큰 노선에 배정, 현금이 남으면 같은 기종을 더 산다 */
 function bestRouteFor(g: Game, typeId: string, minLegsOk = 1): { a: string; b: string } | null {
   const t = typeById(typeId);
+  const rg = g.scenario.goals.find((x) => x.type === 'region'), region = rg && rg.type === 'region' ? rg.cities : null;
   let best: { a: string; b: string; score: number } | null = null;
   for (const A of CITIES) for (const B of CITIES) {
     if (A.id >= B.id) continue;
     if (!canFly(t, A, B).ok) continue;
+    if (region && !(region.includes(A.id) && region.includes(B.id))) continue; // 지역 목표가 있는 시나리오는 그 지역 안의 노선만
     const km = distanceKm(A, B);
     if (maxWeeklyRoundTrips(km, t) < minLegsOk) continue;
     // 서울에서 출발하거나 이미 열린 노선과 연결된 도시를 선호(점수에 가산)
     const connected = g.state.routes.some((r) => r.open && (r.a === A.id || r.b === A.id || r.a === B.id || r.b === B.id));
+    if (region && g.state.routes.some((r) => r.open && g.planesOn(r.id).length && ((r.a === A.id && r.b === B.id) || (r.a === B.id && r.b === A.id)))) continue; // 지역 목표: 이미 비행기가 있는 노선에는 또 보내지 않는다(도시를 넓힌다)
     const base = baseFare(km), season = 1;
     const demandProxy = (A.pop * A.income * B.pop * B.income) / Math.pow(km / 1000 + config.demand.distOffset, config.demand.distExp);
     const revPerSeat = base * priceFactor(base, base);
-    const score = demandProxy * revPerSeat * season * (A.base || B.base || connected ? 1.5 : 1) / (1 + km / 8000);
+    const score = demandProxy * revPerSeat * season * (A.id === g.state.base || B.id === g.state.base || connected ? 1.5 : 1) / (1 + km / 8000);
     if (!best || score > best.score) best = { a: A.id, b: B.id, score };
   }
   return best;
@@ -70,6 +73,8 @@ function deployIdle(g: Game, typeFilter?: (id: string) => boolean): void {
     fillFare(g, o.routeId);
   }
 }
+/** 정비 상태가 나쁜 항공기를 점검한다(현금 여유가 있을 때) */
+const maintain = (g: Game) => { for (const p of g.state.planes) if (p.cond < 0.55 && p.shop <= 0 && g.state.cash > g.serviceCost(p) + 3) g.service(p.id); };
 const retune = (g: Game) => { for (const r of g.state.routes) if (r.open) fillFare(g, r.id); };
 
 /** 보수적: 중형기만, 현금이 넉넉할 때만 한 대씩 추가 */
@@ -79,6 +84,7 @@ export const conservative: Strategy = {
     if (g.state.day % 30 !== 0) return;
     deployIdle(g);
     retune(g);
+    maintain(g);
     const t = typeById('B737');
     if (g.state.cash > t.price + 12) g.buyPlane('B737');
   },
@@ -91,6 +97,7 @@ export const aggressive: Strategy = {
     if (g.state.day % 30 !== 0) return;
     deployIdle(g);
     retune(g);
+    maintain(g);
     for (const id of ['A350', 'B737']) if (g.state.cash > typeById(id).price + 3) { g.buyPlane(id); break; }
   },
 };
@@ -102,6 +109,7 @@ export const leveraged: Strategy = {
     if (g.state.day % 30 !== 0) return;
     deployIdle(g);
     retune(g);
+    maintain(g);
     // 현금이 넉넉해지면 먼저 대출을 갚고, 부족하면 빌려서 산다
     if (g.state.loan > 0 && g.state.cash > g.state.loan + 40) g.repay(g.state.loan);
     for (const id of ['A350', 'B737']) {
@@ -141,6 +149,7 @@ export const reckless: Strategy = {
     if (g.state.day % 30 !== 0) return;
     deployIdle(g);
     retune(g);
+    maintain(g);
     // 현금이 0이 될 때까지 계속 사고, 한도까지 빌려 또 산다(완충 현금 없음)
     for (let i = 0; i < 6; i++) {
       const t = typeById('B737'), room = g.loanLimit - g.state.loan;
@@ -176,8 +185,8 @@ export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, levera
 
 export interface RunResult { strategy: string; seed: number; status: string; months: number; cash: number; cumProfit: number; planes: number; routes: number }
 /** 한 전략을 한 시드로 끝날 때까지(또는 maxMonths까지) 돌린다 */
-export function run(strategy: Strategy, seed: number, maxMonths = 24): RunResult {
-  const g = new Game(seed), rng = new Rng(seed * 7919 + 13);
+export function run(strategy: Strategy, seed: number, maxMonths = 24, opts: GameOptions = {}): RunResult {
+  const g = new Game(seed, undefined, opts), rng = new Rng(seed * 7919 + 13);
   while (g.state.status === 'playing' && g.monthsPassed < maxMonths) {
     strategy.step(g, rng);
     g.advanceDay();

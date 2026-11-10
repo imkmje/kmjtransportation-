@@ -3,9 +3,14 @@ export interface AircraftType { id: string; name: string; cls: string; seats: nu
 export interface EventOption { label: string; cost: number; scale: number; text: string } // cost: 대응 비용(M), scale: 대응하면 효과가 이 배수로 줄어듦
 export interface EventDef { id: string; name: string; months: number; option?: EventOption; effect: { cost?: number; demand?: number; cityCap?: number; routeDemand?: number; cap?: number; ground?: number }; text: string; snowCities?: string[]; boomCities?: string[] } // effect.cap: 전체 운항 증감, effect.ground: 항공기 한 대 운항 불가
 
-export interface Plane { id: number; type: string; book: number; routeId: number | null; weekly: number; age: number; bizShare: number } // age: 보유 개월 수, bizShare: 비즈니스석에 쓰는 객실 면적 비율(0~0.3) // weekly: 주간 왕복 횟수
-export interface DayStat { pax: number; seats: number; profit: number; cargo: number } // 하루 기록(노선별 그래프용, 최근 60일)
-export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[] }
+export type Difficulty = 'easy' | 'normal' | 'hard';
+export type Goal = { type: 'profit'; value: number } | { type: 'cities'; value: number } | { type: 'region'; value: number; cities: string[]; label?: string } | { type: 'survive'; months: number; minProfit: number } | { type: 'pax'; value: number };
+export interface Scenario { id: string; name: string; desc: string; lockBase: boolean; base?: string; cash: number; plane: string; economy: number; events: { def: string; monthsLeft: number; city?: string }[]; loan: number; timeLimit: number; mode: 'any' | 'all'; goals: Goal[] }
+export interface GoalProgress { label: string; value: number; target: number; done: boolean; unit: string }
+
+export interface Plane { id: number; type: string; book: number; routeId: number | null; weekly: number; age: number; bizShare: number; cond: number; shop: number } // age: 보유 개월 수, bizShare: 비즈니스석 비율, cond: 정비 상태(0~1), shop: 정비·수리로 못 나는 남은 일수 // weekly: 주간 왕복 횟수
+export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number } // 하루 기록(노선별 그래프용, 최근 60일)
+export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number } // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
 export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number }
 export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[] }
 export interface ActiveEvent { def: string; monthsLeft: number; city?: string; planeId?: number; handled?: boolean }
@@ -28,6 +33,12 @@ export interface GameState {
   growth: Record<string, number>; // 도시별 시장 성장 배수(기본 1)
   competitors: Competitor[];
   economy: number; // 경기 지수(1 = 보통). 수요에 곱해진다
+  fuel: number; // 연료 가격 지수(1 = 기준)
+  hedge: { price: number; monthsLeft: number } | null; // 연료 계약(가격 고정)
+  freeze: number; // 은행의 대출 중단 남은 개월(0 = 정상)
+  base: string; // 시작(본사) 도시
+  difficulty: Difficulty;
+  scenario: string; // 시나리오 ID
   sandbox: boolean; // 목표·기한 없이 계속 운영
   history: MonthReport[];
   cur: { revenue: number; cost: number; pax: number; seats: number }; // 이번 달 누적
