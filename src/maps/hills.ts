@@ -4,7 +4,7 @@ import { EMPTY_NETWORK } from './sample';
 import { riverX, TERRAIN_PRESETS, type TerrainDef, type TerrainKind } from '../sim/terrain';
 
 /** 시드는 외부 연결 도로와 강이 겹치지 않고 큰길이 다리 하나로 강을 건너는 것으로 골랐다(tests/terrain.test.ts가 확인) */
-export const HILLS_TERRAIN: TerrainDef = { seed: 11, amp: 14, waterLevel: 0, river: true };
+export const HILLS_TERRAIN: TerrainDef = { seed: 11, amp: 24, waterLevel: 0, river: true };
 
 /**
  * 구릉 도시: 강이 굽이쳐 흐르는 지형. 큰길(왕복 4차로)이 다리로 강을 건너고, 강 서쪽(도시 대부분)에는 주거, 동쪽 기슭에는 직장이 있다.

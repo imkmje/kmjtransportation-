@@ -62,7 +62,7 @@ export const config = {
   events: { accidentPerVehicleSec: 8e-6, accidentDurationSec: 45, rainDayChance: 0.3, rainSpeedFactor: 0.85, rainAccidentMult: 2.5 },
   // 회전교차로: 환형 도로 반지름(m). 이웃한 두 도로 사이 각도가 좁으면 반지름을 키워 환형 조각 길이를 최소 길이 이상으로 맞춘다
   roundabout: { radius: 28, maxRadius: 50 },
-  terrain: { maxGrade: 0.15, maxBridge: 120, bridgeClear: 5, tunnelCover: 4, buildGrade: 0.25, overRamp: 70, overHeight: 7, overClear: 5.5 }, // 도로 최대 경사(15%), 다리 최대 길이(물 위, m), 다리·터널로 치는 높이 차(m), 건물 터 최대 경사
+  terrain: { maxGrade: 0.15, maxBridge: 120, bridgeClear: 6, tunnelCover: 9, buildGrade: 0.25, overRamp: 70, overHeight: 7, overClear: 5.5 }, // 도로 최대 경사(15%), 다리 최대 길이(물 위, m), 다리·터널로 치는 높이 차(m), 건물 터 최대 경사
   // 신호등(1.2.0): 초 단위(시뮬 시간). 녹색·황색·전적색. 기본 프로그램은 자동 생성
   signals: { rightOnRed: true, greenSec: 15, yellowSec: 3, allRedSec: 1, minGreenSec: 7, maxGreenSec: 45, gapSec: 2.5, detectM: 30, greenChoices: [10, 15, 20, 30, 45] }, // 감응식: 감지 구간 detectM, 최소 녹색, 차가 없는 시간이 gapSec를 넘으면 전환, 최대 녹색
   // 구역(심시티식): 칸 하나 = 20m. 도로에서 이 거리(중심선 기준) 안의 칸만 칠할 수 있다
