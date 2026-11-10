@@ -10,7 +10,7 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 const fails = [];
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
-const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').replace('.png', `-${n}.png`) });
+const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').replace('.png', `-${n}.png`), timeout: 60000 }).catch((e) => console.log('WARN 스크린샷 실패(참고용이라 계속 진행):', n, String(e.message).split('\n')[0]));
 
 await page.goto('http://localhost:4190/air/');
 await page.waitForSelector('canvas');
