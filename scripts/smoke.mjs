@@ -40,7 +40,7 @@ await page.waitForTimeout(1500);
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 await page.click('#title details.histwrap > summary'); // 업데이트 내역은 접혀 있다
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.3.0') && titleText.includes('업데이트 내역') && titleText.includes('그림자'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.3.1') && titleText.includes('업데이트 내역') && titleText.includes('이음 원'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
