@@ -693,5 +693,116 @@
    "dy": 2,
    "align": "right"
   }
+ },
+ {
+  "id": "MAD",
+  "name": "마드리드",
+  "lat": 40.4983,
+  "lon": -3.5676,
+  "pop": 6.7,
+  "income": 1.1,
+  "runway": 4100,
+  "peak": {
+   "months": [
+    7,
+    8
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "EZE",
+  "name": "부에노스아이레스",
+  "lat": -34.8222,
+  "lon": -58.5358,
+  "pop": 15,
+  "income": 0.7,
+  "runway": 3300,
+  "peak": {
+   "months": [
+    12,
+    1,
+    2
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "SCL",
+  "name": "산티아고",
+  "lat": -33.393,
+  "lon": -70.7858,
+  "pop": 7,
+  "income": 0.8,
+  "runway": 3750,
+  "peak": {
+   "months": [
+    1,
+    2
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "BOG",
+  "name": "보고타",
+  "lat": 4.7016,
+  "lon": -74.1469,
+  "pop": 11,
+  "income": 0.5,
+  "runway": 3800,
+  "peak": {
+   "months": [
+    12,
+    1
+   ],
+   "factor": 1.1
+  }
+ },
+ {
+  "id": "LOS",
+  "name": "라고스",
+  "lat": 6.5774,
+  "lon": 3.3212,
+  "pop": 15,
+  "income": 0.35,
+  "runway": 3900,
+  "peak": {
+   "months": [
+    12
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "NBO",
+  "name": "나이로비",
+  "lat": -1.3192,
+  "lon": 36.9278,
+  "pop": 5,
+  "income": 0.4,
+  "runway": 4100,
+  "peak": {
+   "months": [
+    7,
+    8
+   ],
+   "factor": 1.2
+  }
+ },
+ {
+  "id": "ADD",
+  "name": "아디스아바바",
+  "lat": 8.9779,
+  "lon": 38.7993,
+  "pop": 5,
+  "income": 0.35,
+  "runway": 3800,
+  "peak": {
+   "months": [
+    1
+   ],
+   "factor": 1.1
+  }
  }
 ]

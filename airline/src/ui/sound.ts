@@ -26,3 +26,27 @@ export function play(name: Sfx) {
     }
   } catch { /* 소리를 못 내는 환경은 조용히 넘어간다 */ }
 }
+
+// ---- 배경 음악: 느린 화음 네 개를 돌려 가며 합성한다(파일 없음). 작게 깔리고, 메뉴에서 끌 수 있다 ----
+const MKEY = 'the-air-music';
+const CHORDS = [[220, 261.6, 329.6], [174.6, 220, 261.6], [196, 246.9, 293.7], [164.8, 207.7, 246.9]]; // Am · F · G · E
+let musicWanted = true, timer = 0, bar = 0;
+try { musicWanted = localStorage.getItem(MKEY) !== 'off'; } catch { /* 저장 불가 */ }
+export const musicOn = () => musicWanted;
+function chord() {
+  if (!ctx || document.hidden) return;
+  const t = ctx.currentTime, notes = CHORDS[bar++ % CHORDS.length];
+  for (const f of [...notes, notes[0] / 2]) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.022, t + 1.2); g.gain.linearRampToValueAtTime(0.0001, t + 4.4);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 4.5);
+  }
+}
+/** 음악을 켜거나 끈다. 브라우저 규칙 때문에 첫 터치 뒤에 불러야 소리가 난다 */
+export function setMusic(v: boolean) {
+  musicWanted = v; try { localStorage.setItem(MKEY, v ? 'on' : 'off'); } catch { /* 저장 불가 */ }
+  clearInterval(timer); timer = 0;
+  if (!v) return;
+  try { ctx ??= new AudioContext(); if (ctx.state === 'suspended') void ctx.resume(); chord(); timer = window.setInterval(chord, 4000); } catch { /* 소리를 못 내는 환경 */ }
+}

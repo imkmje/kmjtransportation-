@@ -3,6 +3,7 @@ import { CITIES } from '../data';
 import type { Game } from '../sim/game';
 import { placeLabels, type LabelItem } from './labels';
 import { marketSize } from '../sim/model';
+import { config } from '../config';
 import { subsolar, terminatorLat } from '../sim/report';
 
 /** 세계 지도(등장방형도법) 캔버스: 이동·확대(핀치·휠), 도시·노선 누르기, 노선 위를 나는 작은 비행기 표시 */
@@ -82,6 +83,13 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
       }
       ctx.setLineDash([]);
+      if (served && r.id === selRoute) { // 선택한 노선: 곡선 가운데에 월 이익 표시
+        const [x1, y1, x2, y2] = arcSegments(A, B)[0], [mx, my] = ctrl(x1, y1, x2, y2), lx = 0.25 * x1 + 0.5 * mx + 0.25 * x2, ly = 0.25 * y1 + 0.5 * my + 0.25 * y2;
+        const txt = `월 ${profit >= 0 ? '+' : '−'}$${Math.abs(profit * config.daysPerMonth).toFixed(1)}M`;
+        ctx.font = '700 12px system-ui, sans-serif'; const tw = ctx.measureText(txt).width + 12;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(lx - tw / 2, ly - 22, tw, 18, 9); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, lx, ly - 13);
+      }
       if (served) for (const [x1, y1, x2, y2] of arcSegments(A, B)) {
         const [mx, my] = ctrl(x1, y1, x2, y2);
         for (let k = 0; k < Math.min(3, planes); k++) { // 비행기 점(장식)
@@ -108,7 +116,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       const id = it.id.split('@')[0], c = cityOf(id), sel = id === selCity, connected = connectedOf(id);
       if (id === pulseCity) { const ph = (t % 1.4) / 1.4; ctx.strokeStyle = `rgba(232, 121, 58, ${1 - ph})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + ph * 22, 0, Math.PI * 2); ctx.stroke(); }
       ctx.fillStyle = connected ? '#ffd86b' : '#ffffff'; ctx.strokeStyle = sel ? '#e8793a' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
-      ctx.beginPath(); ctx.arc(it.x, it.y, c.id === g.state.base ? 8 : 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(it.x, it.y, c.id === g.state.base ? 8 : 4 + Math.min(3.5, Math.sqrt(marketSize(c)) * 0.55), 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 시장이 큰 도시일수록 점이 크다
       const p = placed.get(it.id);
       if (!p) continue;
       ctx.fillStyle = '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;

@@ -10,9 +10,9 @@ describe('지리·기본 모델', () => {
     expect(d('ICN', 'CJU')).toBeGreaterThan(420); expect(d('ICN', 'CJU')).toBeLessThan(480);
     expect(d('ICN', 'ICN')).toBe(0);
   });
-  it('데이터: 도시 34개, 중복 없음, 활주로·인구가 양수', () => {
-    expect(CITIES.length).toBe(34);
-    expect(new Set(CITIES.map((c) => c.id)).size).toBe(34);
+  it('데이터: 도시 41개, 중복 없음, 활주로·인구가 양수', () => {
+    expect(CITIES.length).toBe(41);
+    expect(new Set(CITIES.map((c) => c.id)).size).toBe(41);
     for (const c of CITIES) { expect(c.runway).toBeGreaterThan(1000); expect(c.pop * c.income).toBeGreaterThan(0); }
   });
   it('기준 운임은 거리에 비례해 늘고, 운임이 기준이면 수요 계수 1, 두 배면 크게 준다', () => {
