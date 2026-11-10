@@ -1,0 +1,207 @@
+[
+ {
+  "id": "ICN",
+  "name": "서울",
+  "lat": 37.4602,
+  "lon": 126.4407,
+  "pop": 20,
+  "income": 1.2,
+  "runway": 4000,
+  "peak": {
+   "months": [
+    7,
+    8
+   ],
+   "factor": 1.1
+  },
+  "base": true
+ },
+ {
+  "id": "CJU",
+  "name": "제주",
+  "lat": 33.5113,
+  "lon": 126.493,
+  "pop": 12,
+  "income": 1.0,
+  "runway": 3200,
+  "peak": {
+   "months": [
+    7,
+    8,
+    10
+   ],
+   "factor": 1.25
+  }
+ },
+ {
+  "id": "NRT",
+  "name": "도쿄",
+  "lat": 35.772,
+  "lon": 140.3929,
+  "pop": 30,
+  "income": 1.3,
+  "runway": 4000,
+  "peak": {
+   "months": [
+    3,
+    4,
+    11
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "PVG",
+  "name": "상하이",
+  "lat": 31.1443,
+  "lon": 121.8083,
+  "pop": 25,
+  "income": 1.0,
+  "runway": 4000,
+  "peak": {
+   "months": [
+    10
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "HKG",
+  "name": "홍콩",
+  "lat": 22.308,
+  "lon": 113.9185,
+  "pop": 7,
+  "income": 1.4,
+  "runway": 3800,
+  "peak": {
+   "months": [
+    10,
+    11,
+    12
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "BKK",
+  "name": "방콕",
+  "lat": 13.69,
+  "lon": 100.7501,
+  "pop": 10,
+  "income": 0.8,
+  "runway": 4000,
+  "peak": {
+   "months": [
+    11,
+    12,
+    1,
+    2
+   ],
+   "factor": 1.25
+  }
+ },
+ {
+  "id": "SIN",
+  "name": "싱가포르",
+  "lat": 1.3644,
+  "lon": 103.9915,
+  "pop": 6,
+  "income": 1.5,
+  "runway": 4000,
+  "peak": {
+   "months": [
+    6,
+    7,
+    12
+   ],
+   "factor": 1.1
+  }
+ },
+ {
+  "id": "DXB",
+  "name": "두바이",
+  "lat": 25.2532,
+  "lon": 55.3657,
+  "pop": 4,
+  "income": 1.4,
+  "runway": 4000,
+  "peak": {
+   "months": [
+    11,
+    12,
+    1,
+    2,
+    3
+   ],
+   "factor": 1.2
+  }
+ },
+ {
+  "id": "LHR",
+  "name": "런던",
+  "lat": 51.47,
+  "lon": -0.4543,
+  "pop": 14,
+  "income": 1.4,
+  "runway": 3900,
+  "peak": {
+   "months": [
+    6,
+    7,
+    8
+   ],
+   "factor": 1.2
+  }
+ },
+ {
+  "id": "JFK",
+  "name": "뉴욕",
+  "lat": 40.6413,
+  "lon": -73.7781,
+  "pop": 20,
+  "income": 1.5,
+  "runway": 4400,
+  "peak": {
+   "months": [
+    6,
+    7,
+    8,
+    12
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "LAX",
+  "name": "로스앤젤레스",
+  "lat": 33.9416,
+  "lon": -118.4085,
+  "pop": 13,
+  "income": 1.4,
+  "runway": 3900,
+  "peak": {
+   "months": [
+    6,
+    7,
+    8
+   ],
+   "factor": 1.15
+  }
+ },
+ {
+  "id": "SYD",
+  "name": "시드니",
+  "lat": -33.9399,
+  "lon": 151.1753,
+  "pop": 5,
+  "income": 1.3,
+  "runway": 3900,
+  "peak": {
+   "months": [
+    12,
+    1
+   ],
+   "factor": 1.2
+  }
+ }
+]

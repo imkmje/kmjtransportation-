@@ -1,0 +1,48 @@
+[
+ {
+  "id": "fuel",
+  "name": "연료비 급등",
+  "months": 3,
+  "effect": {
+   "cost": 0.25
+  },
+  "text": "국제 유가가 급등해 3개월간 운영비가 25% 늘어납니다."
+ },
+ {
+  "id": "recession",
+  "name": "불황",
+  "months": 3,
+  "effect": {
+   "demand": -0.15
+  },
+  "text": "경기가 나빠져 3개월간 전체 수요가 15% 줄어듭니다."
+ },
+ {
+  "id": "snow",
+  "name": "폭설",
+  "months": 1,
+  "effect": {
+   "cityCap": -0.3
+  },
+  "text": "폭설로 한 공항의 운항이 1개월간 30% 줄어듭니다.",
+  "snowCities": [
+   "LHR",
+   "JFK",
+   "NRT",
+   "ICN"
+  ]
+ },
+ {
+  "id": "boom",
+  "name": "관광 붐",
+  "months": 2,
+  "effect": {
+   "routeDemand": 0.25
+  },
+  "text": "관광 붐으로 한 지역 노선의 수요가 2개월간 25% 늘어납니다.",
+  "boomCities": [
+   "CJU",
+   "BKK"
+  ]
+ }
+]

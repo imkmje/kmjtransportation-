@@ -7,5 +7,5 @@ export default defineConfig({
   // 상대 경로: GitHub Pages의 하위 주소(/저장소이름/)에서도 동작
   base: './',
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  test: { include: ['tests/**/*.test.ts'] },
+  test: { include: ['tests/**/*.test.ts', 'airline/tests/**/*.test.ts'] },
 });
