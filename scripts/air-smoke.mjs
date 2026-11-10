@@ -21,12 +21,17 @@ check('새 게임: 시작 화면이 닫히고 현금 $20.0M', !(await page.locat
 
 const tapCity = async (id) => { const p = await page.evaluate((i) => window.__air.screenOf(i), id); await page.mouse.click(p.x, p.y); };
 await tapCity('ICN');
-check('도시를 누르면 도시 정보와 노선 열기 목록이 나옴', (await page.locator('#panel').innerText()).includes('서울에서 노선 열기') && (await page.locator('#panel button[data-act="open"]').count()) === 11);
+check('도시 정보에 공항 슬롯 칸이 있음', (await page.locator('#panel').innerText()).includes('공항 슬롯'));
+check('도시를 누르면 도시 정보와 노선 열기 목록이 나옴', (await page.locator('#panel').innerText()).includes('서울에서 노선 열기') && (await page.locator('#panel button[data-act="open"]').count()) === 33); // 도시 34개 중 자기 자신 제외
 await shot('city');
 await page.locator('#panel button[data-act="open"][data-b="CJU"]').click();
 check('노선 열기: 노선 탭으로 이동하고 서울 ⇄ 제주가 보임', (await page.locator('#panel').innerText()).includes('서울 ⇄ 제주'));
 await page.locator('#panel button[data-act="assign"]').first().click();
 check('항공기 배정: 배정 목록에 보임, 탑승률이 표시됨', (await page.locator('#panel').innerText()).includes('주') && (await page.locator('#panel').innerText()).includes('탑승률'), (await page.locator('#panel').innerText()).replace(/\n/g, ' ').slice(0, 120));
+await page.evaluate(() => { window.__air.game.advanceDays(4); window.__air.render(); });
+check('노선 화면: 일일 그래프(이익·탑승률)가 있음', (await page.locator('#panel svg.spark').count()) === 2);
+await page.locator('#panel button[data-act="cabin"][data-share="0.2"]').first().click();
+check('객실 설정: 비즈니스 20%로 바뀌고 비즈니스 운임 슬라이더가 나타남', (await page.evaluate(() => window.__air.game.state.planes[0].bizShare)) === 0.2 && (await page.locator('#fareBiz').count()) === 1);
 await shot('route');
 // 운임 슬라이더
 const before = await page.evaluate(() => window.__air.game.state.routes[0].fare);
@@ -42,16 +47,23 @@ await page.click('#tabs button[data-tab="money"]');
 check('재무 탭: 월별 정산이 보임', (await page.locator('#panel').innerText()).includes('월말 정산') && (await page.locator('#panel .chart i').count()) >= 2);
 await shot('money');
 await page.click('#tabs button[data-tab="fleet"]');
-check('기단 탭: 항공기 구매 목록(5종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 5 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
+check('기단 탭: 항공기 구매 목록(6종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 6 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
 await page.click('#tabs button[data-tab="money"]');
 await page.locator('#panel button[data-act="borrow"]').click();
 check('재무 탭: 대출을 받으면 잔액·현금이 늘어남', (await page.evaluate(() => window.__air.game.state.loan)) === 10);
 await page.locator('#panel button[data-act="repay"]').click();
 check('대출 상환', (await page.evaluate(() => window.__air.game.state.loan)) === 0);
 await page.evaluate(() => { window.__air.game.state.events.push({ def: 'fuel', monthsLeft: 2 }); window.__air.render(); });
-await page.click('#tabs button[data-tab="news"]');
-await page.locator('#panel button[data-act="respond"]').last().click(); // 방금 넣은 연료비 사건은 마지막
+check('알림 띠: 알림 탭에 들어가지 않아도 지도 위에 진행 중 사건과 대응 버튼이 보임', (await page.locator('#alerts .chip').count()) >= 1 && (await page.locator('#alerts button[data-act="respond"]').count()) >= 1 && (await page.locator('#tabs button[data-tab="news"]').getAttribute('data-badge')) !== null);
+await page.locator('#alerts button[data-act="respond"]').last().click(); // 방금 넣은 연료비 사건은 마지막
 check('알림 탭: 사건 대응 버튼이 동작', await page.evaluate(() => window.__air.game.state.events.at(-1).handled === true));
+// 슬롯 구매(지도 탭의 도시 화면)
+await page.click('#tabs button[data-tab="map"]'); await tapCity('CJU');
+const cap0 = await page.evaluate(() => window.__air.game.slotCapacity('CJU'));
+await page.locator('#panel button[data-act="buySlot"]').click();
+check('슬롯 구매: 제주 슬롯 한도가 1 늘어남', (await page.evaluate(() => window.__air.game.slotCapacity('CJU'))) === cap0 + 1);
+await page.evaluate(() => { window.__air.setSpeed(0); });
+await page.click('#tabs button[data-tab="map"]');
 // 저장·불러오기
 await page.click('#menubtn'); await page.click('#menu button[data-m="save"]');
 const saved = await page.evaluate(() => window.__air.game.state.day);

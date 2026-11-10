@@ -8,7 +8,8 @@
   "range": 2000,
   "runway": 1300,
   "price": 22,
-  "hourly": 2.0
+  "hourly": 2.0,
+  "cargo": 1.0
  },
  {
   "id": "A220",
@@ -19,7 +20,8 @@
   "range": 5500,
   "runway": 1800,
   "price": 45,
-  "hourly": 3.8
+  "hourly": 3.8,
+  "cargo": 2.5
  },
  {
   "id": "B737",
@@ -30,7 +32,8 @@
   "range": 6000,
   "runway": 2200,
   "price": 60,
-  "hourly": 4.6
+  "hourly": 4.6,
+  "cargo": 4.0
  },
  {
   "id": "A350",
@@ -41,7 +44,8 @@
   "range": 14000,
   "runway": 2800,
   "price": 150,
-  "hourly": 9.5
+  "hourly": 9.5,
+  "cargo": 16.0
  },
  {
   "id": "A380",
@@ -52,6 +56,19 @@
   "range": 15000,
   "runway": 3200,
   "price": 230,
-  "hourly": 14.0
+  "hourly": 14.0,
+  "cargo": 22.0
+ },
+ {
+  "id": "F77",
+  "name": "보임 F7-77 화물기",
+  "cls": "대형 화물기",
+  "seats": 0,
+  "speed": 850,
+  "range": 9000,
+  "runway": 2800,
+  "price": 140,
+  "hourly": 9.0,
+  "cargo": 100.0
  }
 ]
