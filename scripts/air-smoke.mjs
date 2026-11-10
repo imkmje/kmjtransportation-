@@ -125,6 +125,8 @@ check('알림 탭에 업적 목록', (await page.locator('#panel').innerText()).
 await page.click('#menubtn');
 await page.click('#menu button[data-m="sound"]');
 check('메뉴: 소리 끄기', (await page.locator('#menu button[data-m="sound"]').innerText()).includes('꺼짐'));
+await page.click('#menu button[data-m="night"]');
+check('메뉴: 낮밤 표시 끄기', (await page.locator('#menu button[data-m="night"]').innerText()).includes('꺼짐') && (await page.evaluate(() => localStorage.getItem('the-air-night'))) === 'off');
 await page.click('#menubtn');
 await page.evaluate(() => window.__air.setSpeed(0)); await page.locator('#map').focus().catch(() => {}); await page.keyboard.press('2');
 check('단축키 2: 2배속', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
