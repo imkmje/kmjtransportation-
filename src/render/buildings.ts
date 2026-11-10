@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { config } from '../config';
 import type { BuildingKind, BuildingSize, Network } from '../sim/network';
 import { toThree } from './coords';
+import { addWindows } from './look';
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const cone = new THREE.ConeGeometry(1, 1, 4);
@@ -13,7 +14,7 @@ const SCHOOL_COLORS = [0x3fc0b2, 0x2fb5a8, 0x5fd0c4, 0x28a094].map((c) => new TH
 const DARK = new THREE.MeshLambertMaterial({ color: 0x4a4f57 });
 const WHITE = new THREE.MeshLambertMaterial({ color: 0xf2f2f2 });
 const AWNING = new THREE.MeshLambertMaterial({ color: 0xd4503c });
-const OFFICE_COLORS = [0xa88ae0, 0x9a6fd1, 0xb9a0e8, 0x8a62c4].map((c) => new THREE.MeshLambertMaterial({ color: c }));
+const OFFICE_COLORS = [0xa593d6, 0x9a86c9, 0xb4a6de, 0x8e7bc0].map((c) => new THREE.MeshLambertMaterial({ color: c }));
 const gateMat = new THREE.MeshLambertMaterial({ color: 0xe0508f }); // 외부 연결점은 분홍(주거 초록·상업 파랑·사무 보라·산업 노랑과 구분)
 const linkMat = new THREE.MeshBasicMaterial({ color: 0x6c7480, transparent: true, opacity: 0.55 });
 const warnMat = new THREE.MeshBasicMaterial({ color: 0xe0443c });
@@ -41,11 +42,13 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
 
   // 건물 몸체·지붕·연결선·경고 표지는 종류별로 InstancedMesh 하나로 모아 그린다(건물이 수백 채여도 그리기 호출이 몇 번뿐이다)
   type Inst = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; rz: number; color: THREE.Color | null };
-  const white = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  function flush(geo: THREE.BufferGeometry, mat: THREE.Material, list: Inst[], colored: boolean) {
+  const white = addWindows(new THREE.MeshLambertMaterial({ color: 0xffffff })); // 벽에 창문이 그려지는 재질(밤에는 일부 창이 빛남)
+  const plain = new THREE.MeshLambertMaterial({ color: 0xffffff }); // 굴뚝·시계탑·차양 같은 부속물(창문 없음)
+  function flush(geo: THREE.BufferGeometry, mat: THREE.Material, list: Inst[], colored: boolean, shadow = false) {
     if (!list.length) return;
     const m = new THREE.InstancedMesh(geo, mat, list.length);
     m.frustumCulled = false;
+    m.castShadow = m.receiveShadow = shadow;
     const d = new THREE.Object3D();
     list.forEach((it, i) => {
       d.position.set(it.x, it.y, it.z); d.scale.set(it.sx, it.sy, it.sz); d.rotation.set(0, it.ry, it.rz); d.updateMatrix();
@@ -58,11 +61,11 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
   function rebuild() {
     group.children.forEach((c) => (c as THREE.InstancedMesh).dispose?.());
     group.clear();
-    const bodies: Inst[] = [], roofs: Inst[] = [], links: Inst[] = [], warns: Inst[] = [];
+    const bodies: Inst[] = [], props: Inst[] = [], roofs: Inst[] = [], links: Inst[] = [], warns: Inst[] = [];
     // 상자 하나: 바닥 높이 bottom 위에 w×h×w(sx·sz로 바꿔 쓸 수도 있다)
     const box = (mat: THREE.MeshLambertMaterial, x: number, y: number, w: number, h: number, bottom = 0, sx = w, sz = w) => {
       const p = toThree(x, y, bottom + h / 2);
-      bodies.push({ x: p.x, y: p.y, z: p.z, sx, sy: h, sz, ry: 0, rz: 0, color: mat.color });
+      (mat === DARK || mat === AWNING || mat === WHITE ? props : bodies).push({ x: p.x, y: p.y, z: p.z, sx, sy: h, sz, ry: 0, rz: 0, color: mat.color });
     };
     for (const b of net.buildings.values()) {
       if (b.kind === 'external') { // 외부 연결점: 분홍 표지판이 달린 문(지도에 하나뿐이라 따로 그린다)
@@ -98,8 +101,9 @@ export function createBuildingLayer(scene: THREE.Scene, net: Network) {
         warns.push({ x: p.x, y: p.y, z: p.z, sx: 2.4, sy: 5, sz: 2.4, ry: 0, rz: Math.PI, color: null });
       }
     }
-    flush(unitBox, white, bodies, true);
-    flush(cone, white, roofs, true);
+    flush(unitBox, white, bodies, true, true);
+    flush(unitBox, plain, props, true, true);
+    flush(cone, plain, roofs, true, true);
     flush(unitBox, linkMat, links, false);
     flush(cone, warnMat, warns, false);
   }

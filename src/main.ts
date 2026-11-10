@@ -17,6 +17,7 @@ import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
 import { buildStartMap } from './maps/start';
 import { buildGridMap } from './maps/grid';
+import { createDecorLayer } from './render/decor';
 import { buildHillMap, buildTerrainStart } from './maps/hills';
 import { createZoneLayer } from './render/zones';
 import { createSignalLayer } from './render/signals';
@@ -40,6 +41,7 @@ function setSpeed(s: number) {
 const view = createScene(document.getElementById('view')!);
 const roads = createRoadLayer(view.scene, editor.network);
 const buildings = createBuildingLayer(view.scene, editor.network);
+const decor = createDecorLayer(view.scene, editor.network);
 const zones = createZoneLayer(view.scene, editor.network);
 const signalLayer = createSignalLayer(view.scene, editor.network, sim.traffic.signals, () => sim.tickCount);
 const heat = createHeatmap(view.scene, editor.network, sim.metrics, document.getElementById('legend')!);
@@ -66,6 +68,7 @@ const info = createInfo(document.getElementById('info')!, config, editor, sim.me
   onRoute: (pts, o, d) => overlay.setRoute(pts, o, d),
   onFlows: (lines) => overlay.setFlows(lines),
   onFollow: (id) => { followId = id; },
+  onHoverSeg: (id) => roads.setHover(id),
 });
 function pickSegment(id: number | null, focus = false) {
   roads.setSelect(id);
@@ -95,7 +98,7 @@ const tools = createTools({
   setRtor: (on) => { sim.traffic.rightOnRed = on; },
   stepSpeed,
   toggleHelp: () => help.toggle(),
-  selectNode: (id) => { roads.setSelect(null); info.showNode(id); },
+  selectNode: (id) => { roads.setSelect(null); const n = editor.network.nodes.get(id); roads.setNodeSel(n ? { x: n.x, y: n.y, r: editor.network.plateRadius(id) } : null); info.showNode(id); },
   save: () => exportGame(editor, sim),
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },
@@ -104,6 +107,8 @@ const tools = createTools({
   loadHills: () => { buildHillMap(editor); sim.reset(); view.setTerrain(editor.network.terrain); view.focus({ x: 100, y: 0 }); },
   loadNew: () => { buildStartMap(editor); sim.reset(); view.focus({ x: 0, y: config.external.roadEndY - 100 }); },
   setHeat: (on) => heat.setVisible(on),
+  setTrees: (on) => { decor.setVisible(on); try { localStorage.setItem('trees', on ? '1' : '0'); } catch { /* 저장 불가 환경 */ } },
+  setShadows: (on) => { view.setShadows(on); try { localStorage.setItem('shadows', on ? '1' : '0'); } catch { /* 저장 불가 환경 */ } },
   setColorblind: (on) => heat.setColorblind(on),
   pick: view.pickGround,
   canvas: view.domElement,
@@ -124,6 +129,8 @@ const tools = createTools({
 // 새 게임은 외부에서 들어오는 도로 하나로 시작한다(시티즈 스카이라인처럼)
 buildStartMap(editor);
 view.focus({ x: 0, y: config.external.roadEndY - 100 });
+try { if (localStorage.getItem('trees') === '0') { decor.setVisible(false); (document.querySelector('#trees') as HTMLInputElement).checked = false; } } catch { /* 저장 불가 환경 */ }
+try { if (localStorage.getItem('shadows') === '0') { view.setShadows(false); (document.querySelector('#shadow') as HTMLInputElement).checked = false; } } catch { /* 저장 불가 환경 */ }
 
 // 시작 화면: 열려 있는 동안 시간이 멈춘다. 닫으면 이어서 흐른다. 오른쪽 위 "업데이트 내역" 버튼으로 다시 열 수 있다
 const title = createTitle(
@@ -165,7 +172,9 @@ function frame(now: number) {
   roads.sync();
   buildings.sync();
   zones.sync();
+  decor.sync(now);
   view.setWeather(sim.raining);
+  { const c = sim.clock(); view.setHour(c.hour + c.minute / 60); }
   if (followId !== null) { const fv = sim.traffic.vehicles.get(followId); if (fv) view.panTo({ x: fv.x, y: fv.y }); else followId = null; }
   signalLayer.update();
   vehicles.update(loop.alpha);

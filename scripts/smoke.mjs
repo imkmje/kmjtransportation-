@@ -15,7 +15,7 @@ const patch = (pg) => {
     else if (s.startsWith('button[data-tool=')) {
       const cat = await pg.evaluate((q) => document.querySelector(q)?.closest('[data-cat]')?.dataset.cat ?? null, s);
       if (cat && !(await pg.locator(`#sub-${cat}`).isVisible())) await click(`button[data-catbtn="${cat}"]`);
-    } else if (/^#(grid|ortho|angle|heat|cb|debugToggle|count|clearveh|sgreen)$/.test(s)) {
+    } else if (/^#(grid|ortho|angle|heat|shadow|trees|cb|debugToggle|count|clearveh|sgreen)$/.test(s)) {
       const cat = await pg.evaluate((q) => document.querySelector(q)?.closest('[data-cat]')?.dataset.cat ?? null, s);
       if (cat && !(await pg.locator(`#sub-${cat}`).isVisible())) await click(`button[data-catbtn="${cat}"]`);
     }
@@ -24,6 +24,7 @@ const patch = (pg) => {
   pg.selectOption = async (s, v, o) => { await prep(s); return sel(s, v, o); };
 };
 patch(page);
+await page.addInitScript(() => { try { localStorage.setItem('shadows', '0'); localStorage.setItem('trees', '0'); } catch { /* 무시 */ } }); // 소프트웨어 렌더에서는 그림자가 너무 느려 점검 시간 기준이 어긋난다
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -37,8 +38,9 @@ await page.waitForTimeout(1500);
 
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
+await page.click('#title details.histwrap > summary'); // 업데이트 내역은 접혀 있다
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.2.0') && titleText.includes('업데이트 내역') && titleText.includes('연속 녹색파'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.3.0') && titleText.includes('업데이트 내역') && titleText.includes('그림자'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -143,7 +145,7 @@ await page.waitForTimeout(80);
 let c = await counts();
 check('드래그로 도로 1개 건설(노드 2, 도로 1)', c.n === 2 && c.s === 1, JSON.stringify(c));
 
-await dragWorld(0, -100, 0, 100);
+await dragWorld(0, -60, 0, 100);
 c = await counts();
 check('십자 교차(노드 5, 도로 4)', c.n === 5 && c.s === 4, JSON.stringify(c));
 
@@ -409,6 +411,8 @@ check('통계 패널에 정체 지수·완료율이 표시됨', /^\d+$/.test(ciT
     for (const v of g.sim.traffic.vehicles.values()) {
       if (v.meta?.kind !== 'commute') continue;
       const p = g.project({ x: v.x, y: v.y });
+      const nodes = [...g.editor.network.nodes.values()]; // 교차로 안쪽은 교차로가 먼저 선택되므로 피한다
+      if (nodes.some((n) => Math.hypot(n.x - v.x, n.y - v.y) < g.editor.network.plateRadius(n.id) + 14)) continue;
       if (p.x > 120 && p.x < 940 && p.y > 130 && p.y < 460) return { id: v.id, x: p.x, y: p.y };
     }
     return null;
@@ -672,7 +676,7 @@ await page.screenshot({ path: process.argv[2] ?? 'smoke.png' });
   await page.fill('#in-name', '중앙로');
   await page.click('#in-name-ok');
   check('도로 이름 저장', await page.evaluate(() => [...window.__game.editor.network.segments.values()].some((x) => x.name === '중앙로')));
-  await page.click('[data-ld-auto]');
+  await page.locator('[data-ld-auto]').first().click();
   check('차선 방향 자동 배정(오른쪽 직진·우회전, 왼쪽 좌회전·직진)', await page.evaluate(() => [...window.__game.editor.network.segments.values()].some((x) => JSON.stringify(x.laneDirsA) === '[6,3]' || JSON.stringify(x.laneDirsB) === '[6,3]')));
   await page.click('#in-close');
   await page.keyboard.press('r');
@@ -696,6 +700,19 @@ await page.screenshot({ path: process.argv[2] ?? 'smoke.png' });
   await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-help.png') });
   await page.keyboard.press('Escape');
   check('Esc로 도움말이 닫힘', !(await page.locator('#help').isVisible()));
+  // 교차로 정보 창: 좌표 대신 방향 이름, 차선 카드, 교차로 선택 표시
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await page.evaluate(() => window.__game.focus({ x: 0, y: -300 }));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { const g = window.__game; const n = [...g.editor.network.nodes.values()].find((v) => g.editor.network.segmentsAt(v.id).length >= 3); window.__selNode = n ? { x: n.x, y: n.y } : null; });
+  const sn = await page.evaluate(() => window.__selNode);
+  if (sn) {
+    await page.evaluate((p) => window.__game.focus(p), sn);
+    await page.waitForTimeout(300);
+    await clickWorld(sn.x, sn.y);
+    const nt = await page.locator('#info').innerText();
+    check('교차로 정보 창: 방향 이름(쪽)과 차선 카드(1차선…)가 있고 좌표가 없음', nt.includes('교차로 정보') && /쪽에서 들어오는 길/.test(nt) && !/\(-?\d+, -?\d+\)/.test(nt), nt.replace(/\n/g, ' ').slice(0, 140));
+  }
   // 격자 도시
   await page.click('#gridcity');
   await page.waitForTimeout(300);
