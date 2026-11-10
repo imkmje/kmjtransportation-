@@ -388,7 +388,7 @@ export function startApp(): void {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') { speed = 0; renderTop(); } });
 
   prevLog = game.state.log.length;
-  (window as unknown as { __air: unknown }).__air = { get game() { return game; }, render, report: showReport, setSpeed: (s: number) => { speed = s; renderTop(); }, screenOf: (id: string) => map.screenOf(id) };
+  (window as unknown as { __air: unknown }).__air = { get game() { return game; }, render, report: showReport, setSpeed: (s: number) => { speed = s; renderTop(); }, screenOf: (id: string) => map.screenOf(id), mapView: () => map.view() };
   showTitle();
   render();
   requestAnimationFrame(frame);

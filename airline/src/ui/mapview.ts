@@ -118,24 +118,32 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
 
   // ---- 입력: 한 손가락 이동, 두 손가락 확대, 휠, 탭 ----
   const ptrs = new Map<number, { x: number; y: number }>();
-  let tapStart: { x: number; y: number; t: number } | null = null, pinch = 0, moved = 0;
+  let tapStart: { x: number; y: number; t: number } | null = null, pinch = 0, moved = 0, lastMid: { x: number; y: number } | null = null;
   canvas.addEventListener('pointerdown', (e) => {
-    canvas.setPointerCapture(e.pointerId);
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트 등에서는 무시 */ }
     ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
     if (ptrs.size === 1) { tapStart = { x: e.offsetX, y: e.offsetY, t: performance.now() }; moved = 0; }
-    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); tapStart = null; }
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); lastMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; tapStart = null; }
   });
   canvas.addEventListener('pointermove', (e) => {
     const p = ptrs.get(e.pointerId); if (!p) return;
     const dx = e.offsetX - p.x, dy = e.offsetY - p.y;
     p.x = e.offsetX; p.y = e.offsetY;
     if (ptrs.size === 1) { cx -= dx / scale; cy += dy / scale; moved += Math.abs(dx) + Math.abs(dy); clamp(); }
-    else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch > 0) { scale *= d / pinch; clamp(); } pinch = d; }
+    else if (ptrs.size === 2) { // 두 손가락: 벌리고 오므리면 확대·축소, 두 손가락을 같이 움직이면 이동(둘이 동시에 된다)
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (pinch > 0 && lastMid) {
+        const lon = cx + (lastMid.x - W / 2) / scale, lat = cy - (lastMid.y - H / 2) / scale; // 이전 가운데 점 아래의 지리 좌표
+        scale *= d / pinch; clamp();
+        cx = lon - (mid.x - W / 2) / scale; cy = lat + (mid.y - H / 2) / scale; clamp(); // 그 좌표가 새 가운데 점 아래에 오도록
+      }
+      pinch = d; lastMid = mid;
+    }
   });
   const end = (e: PointerEvent) => {
     const had = ptrs.has(e.pointerId); ptrs.delete(e.pointerId);
     if (had && ptrs.size === 0 && tapStart && moved < 8 && performance.now() - tapStart.t < 500) tap(tapStart.x, tapStart.y);
-    if (ptrs.size < 2) pinch = 0;
+    if (ptrs.size < 2) { pinch = 0; lastMid = null; }
   };
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('wheel', (e) => {
@@ -175,6 +183,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     focusCity(id: string) { const c = CITIES.find((x) => x.id === id); if (c) { cx = c.lon; cy = c.lat; clamp(); } },
     /** 도시의 화면 좌표(점검용) */
     screenOf(id: string): { x: number; y: number } | null { const c = CITIES.find((x) => x.id === id); if (!c) return null; const r = canvas.getBoundingClientRect(); return { x: r.left + toX(c.lon), y: r.top + toY(c.lat) }; },
+    /** 지도 시점(점검용) */
+    view() { return { scale, cx, cy }; },
     stop() { cancelAnimationFrame(raf); },
   };
 }
