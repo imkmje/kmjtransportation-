@@ -188,7 +188,7 @@ export function startApp(): void {
   const s_idlePlanes = () => game.state.planes.filter((p) => p.routeId === null);
 
   let shopOpen: boolean | null = null;
-  panel.addEventListener('toggle', (e) => { const d = e.target as HTMLDetailsElement; if (d.id === 'shop') shopOpen = d.open; }, true);
+  panel.addEventListener('click', (e) => { const sm = (e.target as HTMLElement).closest('#shop > summary'); if (sm) shopOpen = !(sm.parentElement as HTMLDetailsElement).open; }); // 사용자가 누른 것만 기억(화면을 다시 그릴 때 생기는 toggle 신호는 무시)
   function viewFleet(): string {
     const s = game.state;
     const owned = s.planes.map((p) => { const t = typeById(p.type), r = p.routeId ? game.route(p.routeId) : null;
