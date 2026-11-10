@@ -64,4 +64,20 @@ describe('곡선 도로', () => {
     expect(sim.traffic.stats.arrived).toBe(40);
     expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks + sim.traffic.stats.conflicts).toBe(0);
   }, 60_000);
+
+  for (const kind of ['road4', 'road6'] as const) {
+    it(`넓은 도로(${kind})의 12m 조각 곡선에서도 양방향 40대가 안전망 개입 없이 도착한다`, () => {
+      const e = new Editor(config);
+      e.build({ x: -200, y: 0 }, { x: 0, y: 0 }, kind);
+      expect(e.buildCurve({ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, kind).ok).toBe(true);
+      e.build({ x: 200, y: 200 }, { x: 200, y: 400 }, kind);
+      const sim = new Sim(config, e.network), n = e.network;
+      const first = [...n.segments.values()][0], last = [...n.segments.values()].pop()!;
+      const A = { segId: first.id, t: 20 }, B = { segId: last.id, t: n.segmentLength(last) - 15 };
+      sim.traffic.requestTrip(A, B, 20); sim.traffic.requestTrip(B, A, 20);
+      for (let i = 0; i < 20 * 400; i++) sim.step();
+      expect(sim.traffic.stats.arrived).toBe(40);
+      expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks + sim.traffic.stats.conflicts).toBe(0);
+    }, 60_000);
+  }
 });

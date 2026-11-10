@@ -131,8 +131,8 @@ export class Editor {
   }
 
   /** 녹색파: segId 도로를 fromNode에서 반대쪽 교차로 방향으로 달리는 차량이 연달아 녹색을 받도록 맞춘다 */
-  greenWave(segId: number, fromNode: number, signals: Signals): ReturnType<Signals['greenWave']> {
-    const r = signals.greenWave(segId, fromNode);
+  greenWave(segId: number, fromNode: number, signals: Signals): ReturnType<Signals['greenWaveChain']> {
+    const r = signals.greenWaveChain(segId, fromNode);
     if (r.ok) this.commit();
     return r;
   }

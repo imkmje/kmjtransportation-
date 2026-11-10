@@ -82,7 +82,7 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
       <div class="two">${net.upgradeChain(s.id, 'up').length ? '<button class="wide" id="in-up">넓히기</button>' : ''}${net.upgradeChain(s.id, 'down').length ? '<button class="wide" id="in-down">좁히기</button>' : ''}</div>
       ${laneHtml(s)}
       <button class="wide" id="in-flow">${flowSeg === s.id ? '이동 흐름 끄기' : '이동 흐름 보기 (지나는 차의 출발지 → 목적지)'}</button>
-      ${wave ? `<div class="sub-h">녹색파 (고정식 신호끼리)</div><button class="wide" data-wave="${s.a}">(${Math.round(a.x)}, ${Math.round(a.y)}) → (${Math.round(b.x)}, ${Math.round(b.y)}) 방향으로 맞추기</button><button class="wide" data-wave="${s.b}">(${Math.round(b.x)}, ${Math.round(b.y)}) → (${Math.round(a.x)}, ${Math.round(a.y)}) 방향으로 맞추기</button>` : ''}`;
+      ${wave ? `<div class="sub-h">녹색파 (고정식 신호끼리)</div><button class="wide" data-wave="${s.a}">(${Math.round(a.x)}, ${Math.round(a.y)}) → (${Math.round(b.x)}, ${Math.round(b.y)}) 방향으로 맞추기(이어지는 신호까지 연속)</button><button class="wide" data-wave="${s.b}">(${Math.round(b.x)}, ${Math.round(b.y)}) → (${Math.round(a.x)}, ${Math.round(a.y)}) 방향으로 맞추기</button>` : ''}`;
   }
 
   function nodeHtml(id: number): string {
@@ -169,7 +169,7 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     root.querySelectorAll<HTMLElement>('[data-wave]').forEach((b) => (b.onclick = () => {
       if (sel?.kind !== 'seg') return;
       const r = editor.greenWave(sel.id, Number(b.dataset.wave), signals);
-      say(r.ok ? `녹색파를 맞췄습니다 (이동 ${r.travelSec.toFixed(0)}초, 반대쪽 시차 ${r.offset.toFixed(0)}초)` : '두 교차로가 모두 고정식 신호여야 합니다');
+      say(r.ok ? `녹색파를 맞췄습니다 (교차로 ${r.linked ?? 2}곳 연속, 첫 구간 이동 ${r.travelSec.toFixed(0)}초)` : '두 교차로가 모두 고정식 신호여야 합니다');
     }));
     if (sel?.kind === 'node') {
       const id = sel.id;

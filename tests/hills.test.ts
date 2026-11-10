@@ -41,7 +41,7 @@ describe('지형 유형', () => {
       for (let x = -900; x <= 900; x += 60) for (let y = -900; y <= 900; y += 60) if (isWater(def, x, y)) water++;
       expect(ok).toBeGreaterThan(20);
       if (kind === 'plain') expect(Math.max(...[0, 1, 2, 3].map((k) => Math.abs(terrainHeight(def, k * 200, 0))))).toBeLessThan(4);
-      if (kind === 'coast' || kind === 'lakes') expect(water).toBeGreaterThan(30); // 바다·호수가 실제로 있다
+      if (kind === 'coast' || kind === 'lakes' || kind === 'fjord' || kind === 'islands') expect(water).toBeGreaterThan(30); // 바다·호수가 실제로 있다
       const sim = new Sim(config, n);
       for (let i = 0; i < 20 * 120; i++) sim.step();
       expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks).toBe(0);
