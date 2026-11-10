@@ -93,6 +93,10 @@ for (let i = 1; i <= 10; i++) { await touch('pointermove', 1, 360 - 3 * i, 330);
 const v2 = await page.evaluate(() => window.__air.mapView());
 check('두 손가락 확대하면서 이동: 확대되고 가운데 좌표도 함께 움직임', v2.scale > v1.scale && Math.abs(v2.cx - v1.cx) > 0.01, JSON.stringify([v1, v2]));
 await touch('pointerup', 1, 330, 330); await touch('pointerup', 2, 510, 330);
+// 도시 화면에서 이미 운항 중인 도시 행을 누르면 그 노선으로 이동(사용자 요청)
+await page.click('#tabs button[data-tab="map"]'); await tapCity('ICN');
+await page.locator('#panel .row.clickable').first().click();
+check('운항 중인 도시 행을 누르면 노선 화면으로 이동', (await page.locator('#tabs button.on').getAttribute('data-tab')) === 'routes' && (await page.locator('#panel').innerText()).includes('서울 ⇄') && (await page.locator('#panel button[data-act="routesHome"]').count()) === 1);
 // 슬롯 구매(지도 탭의 도시 화면)
 await page.click('#tabs button[data-tab="map"]'); await tapCity('CJU');
 const cap0 = await page.evaluate(() => window.__air.game.slotCapacity('CJU'));

@@ -25,6 +25,7 @@
       .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; } .kv > div:nth-child(odd) { color: var(--ink2); } .kv > div:nth-child(even) { text-align: right; }
       .list { display: flex; flex-direction: column; gap: 8px; }
       .row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; } .row .grow { flex: 1; min-width: 0; } .row b { display: block; font-size: 15px; } .row small { display: block; color: var(--ink2); font-size: 12px; margin-top: 2px; line-height: 1.4; } .row .right { text-align: right; font-size: 13px; font-weight: 700; }
+      .row.clickable { cursor: pointer; } .row.clickable:active { background: #eef3f8; }
       button.card { background: transparent; padding: 0; text-align: left; color: inherit; font-weight: 400; min-height: 0; width: 100%; }
       .pos { color: var(--pos); } .neg { color: var(--neg); } .warn { color: var(--warn); }
       button.small { min-height: 30px; padding: 4px 10px; font-size: 12px; margin-top: 4px; }
