@@ -117,6 +117,18 @@ await page.evaluate(() => { window.__air.game.state.status = 'won'; window.__air
 check('목표 달성 화면에 계속하기 버튼', await page.locator('#end-continue').isVisible());
 await page.click('#end-continue');
 check('계속하기: 자유 모드로 이어짐', (await page.evaluate(() => window.__air.game.state.sandbox)) === true && !(await page.locator('#end').isVisible()));
+await page.keyboard.press('Escape'); await page.click('#tabs button[data-tab="map"]');
+const sb = await page.locator('#panel').innerText();
+check('자유 모드에서도 경쟁사 목록이 보임', sb.includes('자유 모드') && sb.includes('경쟁사'), sb.slice(0, 200));
+await page.click('#tabs button[data-tab="news"]');
+check('알림 탭에 업적 목록', (await page.locator('#panel').innerText()).includes('업적'));
+await page.click('#menubtn');
+await page.click('#menu button[data-m="sound"]');
+check('메뉴: 소리 끄기', (await page.locator('#menu button[data-m="sound"]').innerText()).includes('꺼짐'));
+await page.click('#menubtn');
+await page.evaluate(() => window.__air.setSpeed(0)); await page.locator('#map').focus().catch(() => {}); await page.keyboard.press('2');
+check('단축키 2: 2배속', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
+await page.evaluate(() => window.__air.setSpeed(0));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

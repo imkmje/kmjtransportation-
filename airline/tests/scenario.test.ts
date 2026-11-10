@@ -52,9 +52,9 @@ describe('목표 판정과 점수', () => {
     expect(g.state.status).toBe('won');
     const p = g.goalProgress(); expect(p.some((x) => x.done)).toBe(true);
   });
-  it('유럽 허브: 지정 도시 목표(7곳)를 채우면 승리, 목표 진행이 표시된다', () => {
+  it('유럽 허브: 지정 도시 목표(6곳)를 채우면 승리, 목표 진행이 표시된다', () => {
     const g = new Game(1, undefined, { scenario: 'europe' });
-    expect(g.goalProgress()[0]).toMatchObject({ target: 7, value: 0, done: false });
+    expect(g.goalProgress()[0]).toMatchObject({ target: 6, value: 0, done: false });
     g.state.cash = 400;
     // 프랑크푸르트에서 다른 유럽·중동 도시로 노선을 열어 항공기 배정
     const ids = ['LHR', 'CDG', 'IST', 'SVO', 'CAI', 'DXB'];
