@@ -96,6 +96,34 @@ export class Signals {
     return { ok: true, offset: B.sigOffset, travelSec: travel };
   }
 
+  /**
+   * 연속 녹색파: 한 쌍을 맞춘 뒤, 도착한 교차로에서 직진으로 이어지는 도로를 따라 고정식 신호가 이어지는 한 계속 맞춘다.
+   * linked = 맞춘 교차로 수(첫 쌍 포함 2곳 이상이면 연속). 감응식·신호 없는 교차로를 만나면 거기서 멈춘다
+   */
+  greenWaveChain(segId: number, fromNode: number): ReturnType<Signals['greenWave']> & { linked?: number } {
+    const first = this.greenWave(segId, fromNode);
+    if (!first.ok) return first;
+    let linked = 2, seg = segId, from = fromNode;
+    const tol = (this.cfg.intersection.straightDeg * Math.PI) / 180;
+    for (let guard = 0; guard < 40; guard++) {
+      const sg = this.net.segments.get(seg)!, to = sg.a === from ? sg.b : sg.a, T = this.net.nodes.get(to)!, F = this.net.nodes.get(from)!;
+      const inAng = Math.atan2(T.y - F.y, T.x - F.x);
+      let next: { id: number; node: number } | null = null, best = tol;
+      for (const o of this.net.segmentsAt(to)) {
+        if (o.id === seg) continue;
+        const n2 = o.a === to ? o.b : o.a, N = this.net.nodes.get(n2)!;
+        let d = Math.abs(Math.atan2(N.y - T.y, N.x - T.x) - inAng) % (2 * Math.PI);
+        if (d > Math.PI) d = 2 * Math.PI - d;
+        if (d <= best) { best = d; next = { id: o.id, node: n2 }; }
+      }
+      if (!next) break;
+      const r = this.greenWave(next.id, to);
+      if (!r.ok) break;
+      linked++; seg = next.id; from = to;
+    }
+    return { ...first, linked };
+  }
+
   /** 감응식 교차로의 현재 상태: 지금 녹색을 받는 단계 i, 하위 상태, 그 상태가 시작된 tick, 마지막으로 차가 감지된 tick */
   private states = new Map<number, { i: number; sub: Light; t0: number; lastCar: number }>();
 

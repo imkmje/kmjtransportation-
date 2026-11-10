@@ -293,4 +293,22 @@ describe('적색 우회전', () => {
     const n2 = new Network(config); n2.load(JSON.parse(JSON.stringify(n.toJSON())));
     expect(n2.nodes.get(c)!.sigOrder).toEqual([1, 0]);
   });
+
+  it('연속 녹색파: 직진으로 이어지는 고정식 신호 세 곳이 차례로 시차를 받고, 감응식에서 멈춘다', () => {
+    const e = new Editor(config);
+    expect(e.build({ x: -300, y: 0 }, { x: 500, y: 0 }, 'road4').ok).toBe(true);
+    for (const x of [0, 240, 480]) expect(e.build({ x, y: -150 }, { x, y: 150 }, 'road2').ok).toBe(true);
+    const n = e.network, at = (x: number) => [...n.nodes.values()].find((v) => Math.abs(v.x - x) < 1 && Math.abs(v.y) < 1)!.id;
+    for (const x of [0, 240, 480]) n.setSignal(at(x), true);
+    const sim = new Sim(config, n);
+    const seg = n.segmentsAt(at(0)).find((s) => { const o = n.nodes.get(s.a === at(0) ? s.b : s.a)!; return Math.abs(o.y) < 1 && o.x > 0; })!;
+    const r = sim.traffic.signals.greenWaveChain(seg.id, at(0));
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.linked).toBe(3);
+    expect(n.nodes.get(at(240))!.sigOffset).toBeGreaterThan(0);
+    expect(n.nodes.get(at(480))!.sigOffset).toBeGreaterThan(0);
+    // 두 번째 교차로가 감응식이면 첫 쌍만 맞춰지지 않는다(고정식이어야 함)
+    n.setSignal(at(240), true, 'actuated');
+    expect(sim.traffic.signals.greenWaveChain(seg.id, at(0))).toEqual({ ok: false, error: 'notFixed' });
+  });
 });
