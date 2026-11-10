@@ -80,6 +80,22 @@ export class Game {
   monthlySeats(routeId: number): number { return this.planesOn(routeId).reduce((a, p) => a + typeById(p.type).seats * ((p.weekly * 2) / 7) * config.daysPerMonth, 0); }
   /** 이 노선에서 운임 전쟁 중인 경쟁사(없으면 undefined) */
   warOn(r: Route): { comp: Competitor; route: Competitor['routes'][number] } | undefined { return this.competitorsOn(r.a, r.b).find((x) => (x.route.war ?? 0) > 0); }
+  /** 회사 업그레이드의 현재 효과(단계 × 1단계 효과). second면 두 번째 효과 */
+  up(id: string, second = false): number { const u = config.upgrades.list.find((x) => x.id === id), lv = this.state.upgrades?.[id] ?? 0; return u ? lv * ((second ? (u as { effect2?: number }).effect2 : u.effect) ?? 0) : 0; }
+  upgradeLevel(id: string): number { return this.state.upgrades?.[id] ?? 0; }
+  /** 다음 단계 가격(M). 끝까지 올렸으면 null */
+  upgradePrice(id: string): number | null { return config.upgrades.prices[this.upgradeLevel(id)] ?? null; }
+  buyUpgrade(id: string): Result<{ level: number }> {
+    if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
+    if (!config.upgrades.list.some((x) => x.id === id)) return fail('없는 업그레이드입니다');
+    const price = this.upgradePrice(id);
+    if (price === null) return fail('이미 최고 단계입니다');
+    if (this.state.cash < price) return fail('현금이 모자랍니다');
+    this.state.cash -= price; this.state.cur.cost += price;
+    const level = this.upgradeLevel(id) + 1;
+    this.state.upgrades = { ...this.state.upgrades, [id]: level };
+    return { ok: true, level };
+  }
   /** 난이도 보정 */
   get mods() { return config.difficulty[this.state.difficulty ?? 'normal']; }
   agingMult(p: Plane): number { return Math.min(config.aging.maxMult, 1 + config.aging.maintPerMonth * p.age); }
@@ -128,7 +144,7 @@ export class Game {
       if (def.id === 'snow' && e.city && (r.a === e.city || r.b === e.city)) pen += d.snow * k;
       if (def.id === 'strike') pen += d.strike * k;
     }
-    return Math.min(1, Math.max(d.min, 1 - pen));
+    return Math.min(1, Math.max(d.min, 1 - pen * (1 - this.up('ground'))));
   }
   /** 우리 항공사 전체 정시율(좌석 가중 평균) */
   get avgOtp(): number {
@@ -149,7 +165,8 @@ export class Game {
     const eco = s.economy ?? 1;
     const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice; // 계약 중이면 계약 가격
     d0 *= eco; cg0 *= Math.pow(eco, c.economy.cargoPow);
-    let capMult = 1, costMult = 1;
+    let capMult = 1, costMult = 1 - this.up('ops');
+    d0 *= 1 + this.up('marketing');
     for (const e of s.events) {
       const def = EVENTS.find((x) => x.id === e.def)!, k = e.handled && def.option ? def.option.scale : 1; // 대응하면 효과가 줄어든다
       if (def.effect.demand) { d0 *= 1 + def.effect.demand * k; cg0 *= 1 + def.effect.demand * k; }
@@ -181,7 +198,7 @@ export class Game {
       share = Math.min(1, Math.max(0.1, wp / (wp + wc)));
     }
     const demE = (d0 * (1 - sb) * priceFactor(r.fare, base) * share) / c.daysPerMonth;
-    const demB = (d0 * sb * Math.pow(eco, c.economy.bizPow - 1) * priceFactor(r.fareBiz, baseBiz, c.cabin.bizElasticity) * share) / c.daysPerMonth; // 비즈니스는 경기에 더 민감(d0에 이미 한 번 곱함)
+    const demB = (d0 * sb * Math.pow(eco, c.economy.bizPow - 1) * priceFactor(r.fareBiz, baseBiz, c.cabin.bizElasticity) * share * (1 + this.up('service'))) / c.daysPerMonth; // 비즈니스는 경기에 더 민감(d0에 이미 한 번 곱함)
     const paxB = Math.min(demB, seatsB), paxE = Math.min(demE, seatsE), pax = paxE + paxB;
     const cgDem = (cg0 * priceFactor(r.cargoRatio, 1, c.cargo.elasticity) * share) / c.daysPerMonth, cargoT = Math.min(cgDem, cargoCap);
     const cargoRevenue = (cargoT * cargoRate(km) * r.cargoRatio) / 1e6;
@@ -268,7 +285,7 @@ export class Game {
     return { ok: true };
   }
   /** 정비 점검 비용(M): 기종 가격의 2%(최소 $0.5M) */
-  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio); }
+  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * (1 - this.up('hangar', true)); }
   /** 항공기를 정비 점검한다: 7일간 운항하지 못하고, 정비 상태가 100%로 돌아온다 */
   service(planeId: number): Result<{ cost: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
@@ -531,7 +548,7 @@ export class Game {
     for (const p of s.planes) p.age++;
     const mt = config.maint; // 정비 상태: 많이 날수록 빨리 닳고, 낮으면 고장 나서 한 달 못 난다
     for (const p of [...s.planes].sort((a, b) => a.id - b.id)) {
-      p.cond = Math.max(0, p.cond - mt.decayBase - (p.routeId !== null ? mt.decayPerWeekly * p.weekly : 0));
+      p.cond = Math.max(0, p.cond - (mt.decayBase + (p.routeId !== null ? mt.decayPerWeekly * p.weekly : 0)) * (1 - this.up('hangar')));
       if (s.autoMaint && p.cond < mt.autoBelow && p.shop <= 0 && p.routeId !== null && s.cash >= this.serviceCost(p)) { // 자동 정비: 고장 나기 전에 점검(현금이 모자라면 건너뛴다)
         const r = this.service(p.id); if (r.ok) s.log.push(`${this.monthsPassed + 1}개월차: ${typeById(p.type).name} 자동 정비 (${r.cost.toFixed(1)}M)`);
       }

@@ -29,6 +29,16 @@ export const config = {
   used: { price: 0.55, age: 96, cond: 0.7 }, // 중고기: 새 기체 값의 55%, 8년 된 기체(운영비가 더 든다), 정비 상태 70%
   ally: { fee: 0.4, weight: 0.5 }, // 제휴(공동 운항): 월 수수료(M). 제휴사가 같은 노선에서 우리 손님을 빼앗는 힘이 절반이 된다
   transfer: { share: 0.1, maxDetour: 1.4, seatCap: 0.3 }, // seatCap: 이어지는 노선 좌석의 30%까지만 환승 손님으로 센다 // 환승: 직항이 없는 도시 쌍 수요의 10%가 우리 허브를 거쳐 간다(돌아가는 거리가 직선의 1.4배 이내일 때)
+  upgrades: { // 회사 업그레이드: 돈을 내고 영구히 올린다(각 3단계, 단계가 오를수록 비싸다). effect는 1단계당 효과
+    prices: [8, 18, 35],
+    list: [
+      { id: 'marketing', name: '브랜드 마케팅', desc: '모든 노선의 손님 수요 +4%', effect: 0.04 },
+      { id: 'ops', name: '운항 최적화', desc: '노선 운영비 −3%', effect: 0.03 },
+      { id: 'hangar', name: '정비 격납고', desc: '정비 상태가 닳는 속도 −25%, 점검 비용 −15%', effect: 0.25, effect2: 0.15 },
+      { id: 'ground', name: '지상 조업 강화', desc: '지연(정시율 하락) −20%', effect: 0.2 },
+      { id: 'service', name: '기내 서비스', desc: '비즈니스석 수요 +10%', effect: 0.1 },
+    ],
+  },
   hub: { perLink: 0.04, max: 0.16 }, // 한 도시에 노선이 여러 개면 그 도시 수요 +4%씩(최대 +16%)
   cabin: { bizSeatArea: 2.5, bizFareMult: 2.8, bizElasticity: 1.2, shares: [0, 0.1, 0.2, 0.3] }, // 비즈니스 좌석 1개 = 일반석 2.5개 면적
   cargo: { K: 240, distExp: 0.6, base: 300, perKm: 0.45, elasticity: 1.5 }, // 화물 수요(톤/월), 운임($/톤) = base + perKm × km

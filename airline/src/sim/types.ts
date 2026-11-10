@@ -35,6 +35,7 @@ export interface GameState {
   economy: number; // 경기 지수(1 = 보통). 수요에 곱해진다
   fuel: number; // 연료 가격 지수(1 = 기준)
   hedge: { price: number; monthsLeft: number } | null; // 연료 계약(가격 고정)
+  upgrades?: Record<string, number>; // 회사 업그레이드 단계(없으면 0)
   autoFare?: boolean; // 자동 운임: 매주 자리를 꽉 채우는 운임으로 맞춘다(없으면 꺼짐)
   autoMaint?: boolean; // 자동 정비: 노선에 배정된 항공기의 정비 상태가 낮아지면 월말에 알아서 점검한다(없으면 꺼짐)
   ally: number | null; // 제휴(공동 운항) 중인 경쟁사 ID

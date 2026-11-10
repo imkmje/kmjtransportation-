@@ -172,6 +172,18 @@ check('노선 탭: 자동 운임 켜기', (await page.evaluate(() => window.__ai
 const peaks = await page.evaluate(() => window.__air.soundPeaks());
 const bad = Object.entries(peaks).filter(([, v]) => !(v > 0.005 && v < 1));
 check('소리 13종(효과음 11·음악·전부 동시)이 무음도 깨짐도 아님', Object.keys(peaks).length === 13 && bad.length === 0, JSON.stringify(Object.fromEntries(Object.entries(peaks).map(([k, v]) => [k, +v.toFixed(3)]))));
+// 0.18.0: 업그레이드, 늘 보이는 예상 이익
+await page.evaluate(() => { window.__air.game.state.cash = 200; window.__air.render(); });
+await page.click('#tabs button[data-tab="money"]');
+await page.locator('#panel button[data-act="upgrade"]').first().click();
+check('재무 탭: 업그레이드 5종이 있고 사면 1단계가 됨', (await page.locator('#panel .pips').count()) === 5 && (await page.evaluate(() => window.__air.game.upgradeLevel('marketing'))) === 1 && (await page.locator('#panel .pips i.on').count()) === 1);
+await page.click('#tabs button[data-tab="routes"]');
+await page.locator('#panel button[data-act="goRoute"]').first().click();
+const pb = await page.locator('#panel').boundingBox(), lb = await page.locator('#live').boundingBox();
+const liveBefore = await page.locator('#live').innerText();
+await page.locator('#fare').evaluate((el) => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });
+check('노선 화면: 예상 월 이익이 패널 아래에 늘 보이고, 운임을 움직이면 바로 바뀜', liveBefore.includes('예상 월 이익') && lb.y + lb.height <= pb.y + pb.height + 1 && lb.y >= pb.y && (await page.locator('#live').innerText()) !== liveBefore, `${liveBefore} -> ${await page.locator('#live').innerText()}`);
+await shot('live');
 check('아이콘: 하단 탭 5개에 직접 그린 아이콘이 있고, 화면에 이모지가 없음', (await page.locator('#tabs button svg.ic').count()) === 5 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(await page.locator('#app').innerText()));
 await page.click('#tabs button[data-tab="news"]'); await shot('icons');
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));

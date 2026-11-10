@@ -159,4 +159,32 @@ describe('임대·중고·제휴·환승', () => {
     g.state.history.push({ month: 1, revenue: 0, cost: 0, depreciation: 0, fixed: 0, interest: 0, cargo: 99, profit: 0, pax: 0, seats: 0, loadFactor: 0, cash: 0 });
     expect(g.goalProgress()[0].done).toBe(true);
   });
+  it('회사 업그레이드: 단계마다 비싸지고 3단계까지, 현금이 모자라면 거절', () => {
+    const g = new Game(3); g.state.cash = 30;
+    expect(g.upgradePrice('ops')).toBe(config.upgrades.prices[0]);
+    expect(g.buyUpgrade('ops').ok).toBe(true); expect(g.state.cash).toBe(30 - config.upgrades.prices[0]); expect(g.upgradeLevel('ops')).toBe(1);
+    expect(g.buyUpgrade('ops').ok).toBe(true);
+    expect(g.buyUpgrade('ops').ok).toBe(false); // 3단계 값이 모자람
+    g.state.cash = 100; expect(g.buyUpgrade('ops').ok).toBe(true);
+    expect(g.upgradePrice('ops')).toBeNull(); expect(g.buyUpgrade('ops').ok).toBe(false);
+    expect(g.buyUpgrade('없음').ok).toBe(false);
+    const back = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON()))); expect(back.upgradeLevel('ops')).toBe(3);
+  });
+  it('회사 업그레이드 효과: 마케팅은 수요를, 운항 최적화는 비용을, 기내 서비스는 비즈니스 수요를, 격납고는 닳는 속도와 점검비를 바꾼다', () => {
+    const mk = () => { const g = new Game(3); g.state.cash = 500; const r = fly(g, 'ICN', 'NRT', g.state.planes[0].id); g.setCabin(g.state.planes[0].id, 0.2); return { g, r }; };
+    const base = mk(), d0 = base.g.routeDay(base.r);
+    const a = mk(); a.g.buyUpgrade('marketing'); expect(a.g.routeDay(a.r).demandE).toBeCloseTo(d0.demandE * 1.04, 6);
+    const b = mk(); b.g.buyUpgrade('ops'); const db = b.g.routeDay(b.r); expect(db.cost - db.compensation).toBeCloseTo((d0.cost - d0.compensation) * 0.97, 6);
+    const c = mk(); c.g.buyUpgrade('service'); expect(c.g.routeDay(c.r).demandB).toBeCloseTo(d0.demandB * 1.1, 6); expect(c.g.routeDay(c.r).demandE).toBeCloseTo(d0.demandE, 6);
+    const h = mk(), p0 = base.g.state.planes[0], ph = h.g.state.planes[0]; h.g.buyUpgrade('hangar');
+    expect(h.g.serviceCost(ph)).toBeCloseTo(base.g.serviceCost(p0) * 0.85, 6);
+    base.g.advanceDays(30); h.g.advanceDays(30);
+    expect(1 - ph.cond).toBeCloseTo((1 - p0.cond) * 0.75, 6);
+  });
+  it('회사 업그레이드 효과: 지상 조업은 지연을 줄인다', () => {
+    const g = new Game(3), r = fly(g, 'ICN', 'NRT', g.state.planes[0].id); g.state.planes[0].cond = 0.2; g.state.cash = 50;
+    const before = g.routeOtp(r); expect(before).toBeLessThan(1);
+    g.buyUpgrade('ground');
+    expect(1 - g.routeOtp(r)).toBeCloseTo((1 - before) * 0.8, 6);
+  });
 });
