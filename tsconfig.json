@@ -9,7 +9,8 @@
     "noUnusedParameters": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "tests", "airline", "vite.config.ts"]
 }

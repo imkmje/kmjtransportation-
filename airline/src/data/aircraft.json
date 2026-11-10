@@ -1,0 +1,35 @@
+[
+ {
+  "id": "A220",
+  "name": "에어바츠 A220",
+  "cls": "소형 근거리",
+  "seats": 120,
+  "speed": 830,
+  "range": 5500,
+  "runway": 1800,
+  "price": 45,
+  "hourly": 3.8
+ },
+ {
+  "id": "B737",
+  "name": "보임 B7-37",
+  "cls": "중형 협동체",
+  "seats": 180,
+  "speed": 840,
+  "range": 6000,
+  "runway": 2200,
+  "price": 60,
+  "hourly": 4.6
+ },
+ {
+  "id": "A350",
+  "name": "에어바츠 A3-50",
+  "cls": "대형 광동체",
+  "seats": 300,
+  "speed": 900,
+  "range": 14000,
+  "runway": 2800,
+  "price": 150,
+  "hourly": 9.5
+ }
+]
