@@ -15,9 +15,11 @@ describe('균형 점검(전략별 24개월 × 20개 시드)', () => {
     // 건전성: 방치는 승리하지 못하고, 어떤 전략도 실행 중 예외 없이 끝난다
     const by = (n: string) => rows.find((r) => r.name === n)!;
     expect(by('방치').승리).toBe(0);
+    expect(by('방치').파산).toBeGreaterThan(SEEDS.length * 0.5); // 아무것도 안 하면 고정비로 파산한다
     expect(by('무작위').승리).toBe(0);
     expect(by('보수적').승리).toBeLessThan(SEEDS.length * 0.5); // 쉬운 전략이 절반 넘게 이기면 너무 쉬운 게임
-    expect(by('공격적').승리).toBeGreaterThan(0); // 좋은 전략은 이길 수 있어야 한다
-    expect(by('보수적').파산 + by('공격적').파산).toBeLessThan(SEEDS.length); // 좋은 전략이 항상 파산하면 너무 어려운 게임
+    expect(by('대출형').승리).toBeGreaterThan(0); // 대출을 잘 쓰면 이길 수 있어야 한다
+    expect(by('대출형').승리).toBeLessThan(SEEDS.length * 0.9); // 그래도 항상 이기면 위험이 없는 게임
+    expect(by('무모형').중간이익).toBeLessThan(by('대출형').중간이익); // 과한 확장은 신중한 대출보다 못하다
   }, 300_000);
 });

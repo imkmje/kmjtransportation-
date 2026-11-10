@@ -42,7 +42,16 @@ await page.click('#tabs button[data-tab="money"]');
 check('재무 탭: 월별 정산이 보임', (await page.locator('#panel').innerText()).includes('월말 정산') && (await page.locator('#panel .chart i').count()) >= 2);
 await shot('money');
 await page.click('#tabs button[data-tab="fleet"]');
-check('기단 탭: 항공기 구매 목록(3종)', (await page.locator('#panel button[data-act="buy"]').count()) === 3);
+check('기단 탭: 항공기 구매 목록(5종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 5 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
+await page.click('#tabs button[data-tab="money"]');
+await page.locator('#panel button[data-act="borrow"]').click();
+check('재무 탭: 대출을 받으면 잔액·현금이 늘어남', (await page.evaluate(() => window.__air.game.state.loan)) === 10);
+await page.locator('#panel button[data-act="repay"]').click();
+check('대출 상환', (await page.evaluate(() => window.__air.game.state.loan)) === 0);
+await page.evaluate(() => { window.__air.game.state.events.push({ def: 'fuel', monthsLeft: 2 }); window.__air.render(); });
+await page.click('#tabs button[data-tab="news"]');
+await page.locator('#panel button[data-act="respond"]').last().click(); // 방금 넣은 연료비 사건은 마지막
+check('알림 탭: 사건 대응 버튼이 동작', await page.evaluate(() => window.__air.game.state.events.at(-1).handled === true));
 // 저장·불러오기
 await page.click('#menubtn'); await page.click('#menu button[data-m="save"]');
 const saved = await page.evaluate(() => window.__air.game.state.day);
@@ -51,6 +60,11 @@ await page.click('#menubtn'); await page.click('#menu button[data-m="load"]');
 check('저장·불러오기: 저장한 날짜로 돌아감', (await page.evaluate(() => window.__air.game.state.day)) === saved);
 await tapCity('JFK');
 await shot('map');
+// 종료 후 계속하기
+await page.evaluate(() => { window.__air.game.state.status = 'won'; window.__air.render(); });
+check('목표 달성 화면에 계속하기 버튼', await page.locator('#end-continue').isVisible());
+await page.click('#end-continue');
+check('계속하기: 자유 모드로 이어짐', (await page.evaluate(() => window.__air.game.state.sandbox)) === true && !(await page.locator('#end').isVisible()));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
