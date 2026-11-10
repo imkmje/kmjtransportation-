@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { toThree, fromThree, setHeightField, groundHeight } from './coords';
-import { terrainHeight } from '../sim/terrain';
-import { roadSpan, type Network } from '../sim/network';
-import { config } from '../config';
+import { terrainHeight, type TerrainDef } from '../sim/terrain';
 import { createLook } from './look';
 import type { Pt } from '../sim/network';
 
@@ -36,113 +34,41 @@ export function createScene(canvasParent: HTMLElement) {
     new THREE.MeshLambertMaterial({ color: 0xb2d99b, map: grassTex }),
   );
   ground.receiveShadow = true;
+  // 지도 밖: 같은 색의 넓은 땅이 안개 속으로 사라지게 해 "떠 있는 판"처럼 보이지 않게 한다
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshLambertMaterial({ color: 0xa6cf8f }));
+  apron.rotation.x = -Math.PI / 2; apron.position.y = -0.4; scene.add(apron);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+  const baseRotation = -Math.PI / 2;
 
   // 지형: 평지면 위의 단순 평면, 지형이 있으면 높이에 맞춰 일그러뜨린 격자 면 + 강물 면
   const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshPhongMaterial({ color: 0x3f86c4, transparent: true, opacity: 0.82, shininess: 90, specular: 0x9fd0ff }));
   water.rotation.x = -Math.PI / 2; water.visible = false; scene.add(water);
-  let curDef = '\u0000', curRev = -1, lastBuild = -1e9; // 처음에는 반드시 한 번 만든다
-  const lowC = new THREE.Color(0xcdbd8e), deepC = new THREE.Color(0x9c9a78), grassA = new THREE.Color(0xc2e5a4), grassB = new THREE.Color(0x8fc47c), highC = new THREE.Color(0x8c9a6a), rockC = new THREE.Color(0x9a8f78), tmp = new THREE.Color();
-  const N = 250, STEP = WORLD / N, W1 = N + 1;
-  let H = new Float32Array(W1 * W1);
-  // 등고선: 높이 4m마다 가는 선을 그려 높낮이가 한눈에 보이게 한다
-  const contour = { value: 0 };
-  (ground.material as THREE.MeshLambertMaterial).onBeforeCompile = (sh) => {
-    sh.uniforms.uContour = contour;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vH;').replace('#include <begin_vertex>', '#include <begin_vertex>\n vH = position.y;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vH; uniform float uContour;').replace('#include <color_fragment>', '#include <color_fragment>\n float cu = vH / 4.0; float cd = abs(fract(cu - 0.5) - 0.5) / max(fwidth(cu), 1e-5); diffuseColor.rgb *= 1.0 - 0.2 * uContour * (1.0 - min(cd, 1.0));');
-  };
-  // 지도 가장자리 단면(디오라마): 땅 아래로 흙색 벽을 내려 "미니어처 도시 모형" 느낌을 준다
-  const skirt = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-  scene.add(skirt);
-  function buildSkirt(edgeH: (x: number, y: number) => number) {
-    const pos: number[] = [], col: number[] = [], idx: number[] = [], top = new THREE.Color(0x8d7a62), bot = new THREE.Color(0x4f4234), half = WORLD / 2, DEPTH = 60;
-    const sides: [number, number, number, number][] = [[-half, -half, half, -half], [half, -half, half, half], [half, half, -half, half], [-half, half, -half, -half]];
-    for (const [x0, y0, x1, y1] of sides) {
-      const base = pos.length / 3;
-      for (let k = 0; k <= 100; k++) {
-        const t = k / 100, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t, h = edgeH(x, y);
-        pos.push(x, h, -y, x, -DEPTH, -y);
-        col.push(top.r, top.g, top.b, bot.r, bot.g, bot.b);
-        if (k < 100) { const a = base + k * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-      }
-    }
-    skirt.geometry.dispose();
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-    skirt.geometry = g;
-  }
-  buildSkirt(() => 0);
-
-  /** 지형 높이(도로가 깎고 메운 뒤)를 칸 사이로 보간해 돌려준다 */
-  const sampleH = (x: number, y: number): number => {
-    const fx = Math.min(N - 1e-6, Math.max(0, (x + WORLD / 2) / STEP)), fy = Math.min(N - 1e-6, Math.max(0, (WORLD / 2 - y) / STEP));
-    const i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j;
-    return H[j * W1 + i] * (1 - u) * (1 - v) + H[j * W1 + i + 1] * u * (1 - v) + H[(j + 1) * W1 + i] * (1 - u) * v + H[(j + 1) * W1 + i + 1] * u * v;
-  };
-  const smooth = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
-
-  /** 지형 면을 다시 만든다: 지형 높이 + 지상 도로 아래를 도로 높이에 맞춰 깎고 메운 땅(도로가 언덕에 묻히거나 떠 보이지 않게) */
-  function rebuildGround(net: Network) {
-    const def = net.terrain!;
-    const base = new Float32Array(W1 * W1);
-    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) base[j * W1 + i] = terrainHeight(def, -WORLD / 2 + i * STEP, WORLD / 2 - j * STEP);
-    const wgt = new Float32Array(W1 * W1), tgt = new Float32Array(W1 * W1), margin = 18;
-    for (const sg of net.segments.values()) {
-      if (sg.structure !== 'ground' || sg.over) continue; // 다리·터널·고가는 땅을 건드리지 않는다
-      const a = net.nodes.get(sg.a)!, b = net.nodes.get(sg.b)!, r = config.roads[sg.kind], half = roadSpan(r, !!sg.oneWay).width / 2 + 3, reach = half + margin;
-      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, l2 = len * len;
-      const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - reach + WORLD / 2) / STEP)), i1 = Math.min(N, Math.ceil((Math.max(a.x, b.x) + reach + WORLD / 2) / STEP));
-      const j0 = Math.max(0, Math.floor((WORLD / 2 - Math.max(a.y, b.y) - reach) / STEP)), j1 = Math.min(N, Math.ceil((WORLD / 2 - Math.min(a.y, b.y) + reach) / STEP));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-        const x = -WORLD / 2 + i * STEP, y = WORLD / 2 - j * STEP, u = Math.min(1, Math.max(0, ((x - a.x) * dx + (y - a.y) * dy) / l2)), d = Math.hypot(x - (a.x + dx * u), y - (a.y + dy * u));
-        if (d >= reach) continue;
-        const w = 1 - smooth(half, reach, d), k = j * W1 + i;
-        if (w > wgt[k]) { wgt[k] = w; tgt[k] = net.segmentZ(sg, u * len) - 0.1; }
-      }
-    }
-    for (let k = 0; k < base.length; k++) H[k] = base[k] * (1 - wgt[k]) + tgt[k] * wgt[k];
-    const g = new THREE.PlaneGeometry(WORLD, WORLD, N, N);
+  let terrainKey = '';
+  const lowC = new THREE.Color(0xc9b98a), midC = new THREE.Color(0xb9dfa3), highC = new THREE.Color(0x9c8f6b), tmp = new THREE.Color();
+  function setTerrain(def: TerrainDef | null) {
+    const key = def ? JSON.stringify(def) : '';
+    if (key === terrainKey) return;
+    terrainKey = key;
+    setHeightField((x, y) => terrainHeight(def, x, y));
+    ground.geometry.dispose();
+    if (!def) { ground.geometry = new THREE.PlaneGeometry(WORLD, WORLD); (ground.material as THREE.MeshLambertMaterial).vertexColors = false; (ground.material as THREE.MeshLambertMaterial).needsUpdate = true; water.visible = false; grid.visible = true; ground.rotation.x = baseRotation; return; }
+    const N = 200, g = new THREE.PlaneGeometry(WORLD, WORLD, N, N);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position, col = new Float32Array(pos.count * 3);
-    for (let k = 0; k < pos.count; k++) {
-      const i = k % W1, j = (k / W1) | 0, h = H[k];
-      pos.setY(k, h);
-      const sx = (H[j * W1 + Math.min(N, i + 1)] - H[j * W1 + Math.max(0, i - 1)]) / (2 * STEP), sy = (H[Math.min(N, j + 1) * W1 + i] - H[Math.max(0, j - 1) * W1 + i]) / (2 * STEP), slope = Math.hypot(sx, sy);
-      if (h < def.waterLevel - 0.3) tmp.copy(deepC);
-      else if (h < def.waterLevel + 0.8) tmp.copy(lowC);
-      else { const t = Math.min(1, Math.max(0, (h - def.waterLevel) / Math.max(8, def.amp * 0.8))); tmp.copy(grassA).lerp(grassB, Math.min(1, t * 1.6)).lerp(highC, smooth(0.55, 1, t)); }
-      tmp.lerp(rockC, smooth(0.28, 0.6, slope) * 0.85); // 가파른 곳은 바위색
-      col[k * 3] = tmp.r; col[k * 3 + 1] = tmp.g; col[k * 3 + 2] = tmp.b;
+    for (let i = 0; i < pos.count; i++) {
+      const h = terrainHeight(def, pos.getX(i), -pos.getZ(i));
+      pos.setY(i, h - 0.08); // 도로 바닥(0.2)·구역 표시보다 살짝 아래
+      if (h < def.waterLevel + 0.6) tmp.copy(lowC); else tmp.copy(midC).lerp(highC, Math.min(1, Math.max(0, (h - def.amp * 0.45) / (def.amp * 0.55))));
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.computeVertexNormals();
-    ground.geometry.dispose();
     ground.geometry = g;
-    buildSkirt((x, y) => sampleH(x, y));
-  }
-
-  /** 지형·도로가 바뀌었으면 땅을 다시 만든다(도로만 바뀐 경우는 0.3초 간격으로 모아서) */
-  function syncTerrain(net: Network, now: number, force = false) {
-    const def = net.terrain, defKey = def ? JSON.stringify(def) : '', rev = def ? net.revision : 0;
-    if (defKey === curDef && rev === curRev) return;
-    if (!force && defKey === curDef && now - lastBuild < 300) return; // 도로만 바뀐 경우는 모아서
-    curDef = defKey; curRev = rev; lastBuild = now;
-    if (!def) {
-      setHeightField(() => 0);
-      ground.geometry.dispose(); ground.geometry = new THREE.PlaneGeometry(WORLD, WORLD);
-      ground.rotation.x = -Math.PI / 2; ground.castShadow = false; contour.value = 0;
-      (ground.material as THREE.MeshLambertMaterial).vertexColors = false; (ground.material as THREE.MeshLambertMaterial).needsUpdate = true;
-      water.visible = false; grid.visible = true; buildSkirt(() => 0);
-      return;
-    }
-    rebuildGround(net);
-    setHeightField(sampleH);
-    ground.rotation.x = 0; ground.castShadow = true; contour.value = 1;
+    ground.rotation.x = 0; // 이미 눕힌 형태
     (ground.material as THREE.MeshLambertMaterial).vertexColors = true; (ground.material as THREE.MeshLambertMaterial).needsUpdate = true;
     water.position.y = def.waterLevel; water.visible = true;
-    grid.visible = false;
+    grid.visible = false; // 울퉁불퉁한 지형에서는 평평한 격자를 숨긴다
   }
 
   const grid = new THREE.GridHelper(WORLD, WORLD / 20, 0x6f9f5c, 0x86b572); // 20m 칸(은은하게)
@@ -250,7 +176,7 @@ export function createScene(canvasParent: HTMLElement) {
       const r = renderer.domElement.getBoundingClientRect();
       const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
-      if (curDef) { // 지형이 있으면 광선을 따라가며 지면과 만나는 곳을 찾는다
+      if (terrainKey) { // 지형이 있으면 광선을 따라가며 지면과 만나는 곳을 찾는다
         const o = raycaster.ray.origin, d = raycaster.ray.direction;
         const f = (t: number) => o.y + d.y * t - groundHeight(o.x + d.x * t, -(o.z + d.z * t));
         let lo = 0, hi = -1;
@@ -263,7 +189,7 @@ export function createScene(canvasParent: HTMLElement) {
       return Math.abs(p.x) > limit || Math.abs(p.y) > limit ? null : p;
     },
     /** 비 오는 날은 하늘·안개가 회색으로, 햇빛이 약해진다 */
-    syncTerrain,
+    setTerrain,
     setWeather(rain: boolean) { rainLines.visible = rain; raining = rain; },
     /** 시계 시각(0~24, 시간+분/60): 햇빛·하늘·밤 조명에 쓴다 */
     setHour(h: number) { hour = h; },

@@ -103,8 +103,8 @@ const tools = createTools({
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },
   loadGrid: () => { buildGridMap(editor); sim.reset(); view.focus({ x: 0, y: -100 }); },
-  loadTerrain: (kind) => { buildTerrainStart(editor, kind); sim.reset(); view.syncTerrain(editor.network, performance.now(), true); view.focus({ x: 0, y: -500 }); },
-  loadHills: () => { buildHillMap(editor); sim.reset(); view.syncTerrain(editor.network, performance.now(), true); view.focus({ x: 100, y: 0 }); },
+  loadTerrain: (kind) => { buildTerrainStart(editor, kind); sim.reset(); view.setTerrain(editor.network.terrain); view.focus({ x: 0, y: -500 }); },
+  loadHills: () => { buildHillMap(editor); sim.reset(); view.setTerrain(editor.network.terrain); view.focus({ x: 100, y: 0 }); },
   loadNew: () => { buildStartMap(editor); sim.reset(); view.focus({ x: 0, y: config.external.roadEndY - 100 }); },
   setHeat: (on) => heat.setVisible(on),
   setTrees: (on) => { decor.setVisible(on); try { localStorage.setItem('trees', on ? '1' : '0'); } catch { /* 저장 불가 환경 */ } },
@@ -168,7 +168,7 @@ function frame(now: number) {
   last = now;
   loop.advance(dt, speed);
   sim.traffic.sync(); // 정지 중에도 도로가 바뀌면 그래프를 새로 만든다
-  view.syncTerrain(editor.network, now); // 지형·도로가 바뀐 경우에만 땅을 다시 만든다(도로 아래를 깎고 메움)
+  view.setTerrain(editor.network.terrain); // 지형이 바뀐 경우(불러오기 등)에만 다시 만든다
   roads.sync();
   buildings.sync();
   zones.sync();

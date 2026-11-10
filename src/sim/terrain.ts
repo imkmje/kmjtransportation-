@@ -8,14 +8,14 @@ export interface TerrainDef { seed: number; amp: number; waterLevel: number; riv
 
 /** 지형 유형(CS2의 맵 구성을 단순화: 평원·강 계곡·호수·해안·산악 등). 시작 시 시드를 바꿔 가며 외부 연결 도로가 놓이는 것을 고른다 */
 export const TERRAIN_PRESETS = {
-  plain: { name: '평원', def: { seed: 3, amp: 5, waterLevel: 0, river: false } },
-  hills: { name: '구릉', def: { seed: 11, amp: 24, waterLevel: 0, river: true } },
-  valley: { name: '강 계곡', def: { seed: 5, amp: 16, waterLevel: 0, river: true, scale: 340 } },
-  lakes: { name: '호수 지대', def: { seed: 7, amp: 10, waterLevel: 0, river: false, lakes: 4 } },
-  coast: { name: '해안', def: { seed: 2, amp: 22, waterLevel: 0, river: false, sea: 'e' as Sea } },
-  fjord: { name: '피오르', def: { seed: 4, amp: 60, waterLevel: 0, river: false, scale: 380, sea: 'e' as Sea, fjords: 2 } },
-  islands: { name: '섬 지대', def: { seed: 6, amp: 16, waterLevel: 0, river: false, scale: 300, islands: true } },
-  mountain: { name: '산악', def: { seed: 9, amp: 90, waterLevel: 0, river: true, scale: 420 } },
+  plain: { name: '평원', def: { seed: 3, amp: 3, waterLevel: 0, river: false } },
+  hills: { name: '구릉', def: { seed: 11, amp: 14, waterLevel: 0, river: true } },
+  valley: { name: '강 계곡', def: { seed: 5, amp: 9, waterLevel: 0, river: true, scale: 340 } },
+  lakes: { name: '호수 지대', def: { seed: 7, amp: 6, waterLevel: 0, river: false, lakes: 4 } },
+  coast: { name: '해안', def: { seed: 2, amp: 14, waterLevel: 0, river: false, sea: 'e' as Sea } },
+  fjord: { name: '피오르', def: { seed: 4, amp: 40, waterLevel: 0, river: false, scale: 380, sea: 'e' as Sea, fjords: 2 } },
+  islands: { name: '섬 지대', def: { seed: 6, amp: 12, waterLevel: 0, river: false, scale: 300, islands: true } },
+  mountain: { name: '산악', def: { seed: 9, amp: 55, waterLevel: 0, river: true, scale: 420 } },
 } satisfies Record<string, { name: string; def: TerrainDef }>;
 export type TerrainKind = keyof typeof TERRAIN_PRESETS;
 
