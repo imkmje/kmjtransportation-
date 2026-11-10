@@ -10,8 +10,8 @@ const open = (g: Game, a: string, b: string, weekly: number) => {
 };
 
 describe('시나리오·시작 도시·난이도', () => {
-  it('시나리오 6개: ID 중복 없고, 시작 도시·기종·목표가 유효하다', () => {
-    expect(SCENARIOS.length).toBe(6);
+  it('시나리오 7개: ID 중복 없고, 시작 도시·기종·목표가 유효하다', () => {
+    expect(SCENARIOS.length).toBe(7);
     expect(new Set(SCENARIOS.map((s) => s.id)).size).toBe(SCENARIOS.length);
     for (const s of SCENARIOS) { expect(s.goals.length).toBeGreaterThan(0); expect(s.timeLimit).toBeGreaterThan(0); if (s.base) expect(() => cityById(s.base!)).not.toThrow(); }
     expect(scenarioById('없는 것').id).toBe('free'); // 모르는 ID는 자유 경영

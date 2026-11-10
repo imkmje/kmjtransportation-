@@ -72,10 +72,14 @@ export class Game {
       if (!far || far === o || served.some((y) => (y.a === o && y.b === far) || (y.a === far && y.b === o))) continue;
       const O = cityById(o), H = cityById(h), X = cityById(far);
       if ((distanceKm(O, H) + distanceKm(H, X)) / Math.max(1, distanceKm(O, X)) > t.maxDetour) continue;
-      sum += rawMonthlyDemand(O, X, this.month, this.growthOf(o), this.growthOf(far)) * t.share;
+      sum += Math.min(rawMonthlyDemand(O, X, this.month, this.growthOf(o), this.growthOf(far)) * t.share, this.monthlySeats(x.id) * t.seatCap); // 이어지는 노선에 자리가 있어야 갈아탈 수 있다
     }
     return sum;
   }
+  /** 노선의 한 달 공급 좌석(사건·정비는 무시한 계획값) */
+  monthlySeats(routeId: number): number { return this.planesOn(routeId).reduce((a, p) => a + typeById(p.type).seats * ((p.weekly * 2) / 7) * config.daysPerMonth, 0); }
+  /** 이 노선에서 운임 전쟁 중인 경쟁사(없으면 undefined) */
+  warOn(r: Route): { comp: Competitor; route: Competitor['routes'][number] } | undefined { return this.competitorsOn(r.a, r.b).find((x) => (x.route.war ?? 0) > 0); }
   /** 난이도 보정 */
   get mods() { return config.difficulty[this.state.difficulty ?? 'normal']; }
   agingMult(p: Plane): number { return Math.min(config.aging.maxMult, 1 + config.aging.maintPerMonth * p.age); }
@@ -139,7 +143,7 @@ export class Game {
     const base = baseFare(km), baseBiz = base * config.cabin.bizFareMult, c = config;
     // 기본 수요(일반석 환산): 규모·거리·계절·성장 × 허브 × 평판
     const hub = 1 + (this.hubBonus(r.a) + this.hubBonus(r.b)) / 2;
-    const transfer = this.transferDemand(r); // shortcut: 환승 손님이 탈 다른 구간의 빈자리는 따지지 않는다, 허브 좌석이 부족해지는 균형 문제가 보이면 구간 좌석으로 제한
+    const transfer = this.transferDemand(r);
     let d0 = (rawMonthlyDemand(A, B, this.month, this.growthOf(r.a), this.growthOf(r.b)) * hub + transfer) * (1 + c.demand.repBoost * s.reputation);
     let cg0 = rawCargoDemand(A, B, this.growthOf(r.a), this.growthOf(r.b)) * hub * (1 + c.demand.repBoost * s.reputation);
     const eco = s.economy ?? 1;
@@ -232,6 +236,7 @@ export class Game {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     if (compId !== null && !this.state.competitors.some((k) => k.id === compId)) return fail('없는 항공사입니다');
     this.state.ally = compId;
+    for (const k of this.state.competitors) if (k.id === compId) for (const r of k.routes) delete r.war; // 제휴하면 운임 전쟁도 끝난다
     return { ok: true };
   }
   /** 항공기를 판다(노선에 배정돼 있으면 자동으로 뺀다). 매각가 = 장부가 × 0.9 */
@@ -274,6 +279,24 @@ export class Game {
     if (this.state.cash < cost) return fail('현금이 모자랍니다');
     this.state.cash -= cost; this.state.cur.cost += cost; p.cond = 1; p.shop = config.maint.shopDays;
     return { ok: true, cost };
+  }
+  /** 자리를 꽉 채우는 가장 높은 운임(수요 = 좌석이 되는 운임)으로 일반석 운임을 맞춘다 */
+  fillFare(routeId: number): void {
+    const r = this.route(routeId)!, base = this.routeBaseFare(r);
+    const saved = r.fare; r.fare = Math.round(base);
+    const d = this.routeDay(r);
+    if (d.seatsE <= 0 || d.demandE <= 0) { r.fare = saved; return; }
+    const ratio = 1 + Math.log(d.demandE / d.seatsE) / config.demand.elasticity; // 수요(운임) = 수요(기준)·priceFactor 이므로 해석적으로 구한다
+    this.setFare(routeId, base * Math.min(config.fare.maxRatio, Math.max(config.fare.minRatio, ratio)));
+  }
+  setAutoFare(on: boolean): void { this.state.autoFare = on; }
+  /** 노선 별명(빈 문자열이면 지움, 최대 16자) */
+  setRouteName(routeId: number, name: string): Result {
+    const r = this.route(routeId);
+    if (!r) return fail('없는 노선입니다');
+    const n = name.trim().slice(0, 16);
+    if (n) r.name = n; else delete r.name;
+    return { ok: true };
   }
   /** 자동 정비를 켜거나 끈다 */
   setAutoMaint(on: boolean): void { this.state.autoMaint = on; }
@@ -401,6 +424,7 @@ export class Game {
     const s = this.state;
     if (s.status !== 'playing') return;
     if (s.day > 0 && s.day % config.daysPerMonth === 0) this.startMonth();
+    if (s.autoFare && s.day % 7 === 0) for (const r of s.routes) if (r.open && this.planesOn(r.id).length) this.fillFare(r.id); // 자동 운임: 매주
     for (const r of s.routes) {
       if (!r.open) continue;
       const d = this.routeDay(r);
@@ -467,9 +491,18 @@ export class Game {
       for (const r of c.routes) {
         const mine = s.routes.find((x) => x.open && ((x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)));
         const pf = mine && this.planesOn(mine.id).length ? mine.fare / this.routeBaseFare(mine) : null;
+        if (r.war) { r.war--; if (r.war <= 0) { delete r.war; s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name} 운임 전쟁을 끝냈습니다.`); } continue; } // 전쟁 중에는 운임을 바닥에 둔다
         if (pf !== null && pf < r.fareRatio - 0.05 && c.id !== s.ally) r.fareRatio = Math.max(floor, r.fareRatio - rv.step);
         else if (r.fareRatio < target) r.fareRatio = Math.min(target, r.fareRatio + rv.upStep);
         else if (r.fareRatio > target) r.fareRatio = Math.max(target, r.fareRatio - rv.upStep);
+      }
+      // 운임 전쟁: 우리와 겹치는 노선 하나에서 운임을 크게 내린다(제휴사는 걸어오지 않는다)
+      if (c.id !== s.ally && !c.routes.some((r) => r.war)) {
+        const over = c.routes.filter((r) => s.routes.some((x) => x.open && this.planesOn(x.id).length && ((x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a))));
+        if (over.length && this.rng.next() < config.war.chance * this.mods.event) {
+          const r = over[this.rng.int(over.length)]; r.war = config.war.months; r.fareRatio = config.war.ratio;
+          s.log.push(`${this.monthsPassed + 1}개월차: 운임 전쟁 — ${c.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선 운임을 ${config.war.months}개월간 크게 내렸습니다. 운임을 따라 내리거나, 버티거나, 제휴를 맺으세요.`);
+        }
       }
       c.cash += profit - k.planeFixed * c.planes;
       if (c.cash >= B737.price && c.planes < maxPlanes) {
@@ -551,6 +584,7 @@ export class Game {
       if (g.type === 'profit') return { label: '누적 이익', value: s.cumProfit, target: g.value, done: s.cumProfit >= g.value, unit: 'M' };
       if (g.type === 'cities') { const n = served.size; return { label: '운항 중인 도시', value: n, target: Math.min(g.value, CITIES.length), done: n >= Math.min(g.value, CITIES.length), unit: '곳' }; }
       if (g.type === 'region') { const n = g.cities.filter((c) => served.has(c)).length; return { label: g.label ?? '지정 도시', value: n, target: g.value, done: n >= g.value, unit: '곳' }; }
+      if (g.type === 'cargo') { const n = last?.cargo ?? 0; return { label: '지난달 화물 수익', value: n, target: g.value, done: n >= g.value, unit: 'M' }; }
       if (g.type === 'pax') { const n = last?.pax ?? 0; return { label: '지난달 탑승객', value: n, target: g.value, done: n >= g.value, unit: '명' }; }
       const done = this.monthsPassed >= g.months && s.cumProfit >= g.minProfit;
       return { label: `${g.months}개월 생존 + 누적 이익`, value: s.cumProfit, target: g.minProfit, done, unit: 'M' };
