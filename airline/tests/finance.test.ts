@@ -25,6 +25,12 @@ describe('대출', () => {
     expect(g.repay(6)).toEqual({ ok: false, error: '현금이 모자랍니다' });
     expect(new Game(1).repay(5)).toEqual({ ok: false, error: '갚을 대출이 없습니다' });
   });
+  it('불황이면 이율이 오른다(신용 경색)', () => {
+    const g = new Game(1); g.borrow(10); const calm = g.loanRate;
+    g.state.economy = 0.8;
+    expect(g.loanRate).toBeCloseTo(calm + (0.95 - 0.8) * config.loan.crunch, 9);
+    g.state.economy = 1.2; expect(g.loanRate).toBeCloseTo(calm, 9);
+  });
   it('월 이자가 현금과 월 이익에서 빠지고, 보고서에 기록된다', () => {
     const { g } = withRoute();
     g.borrow(10);
@@ -97,7 +103,7 @@ describe('저장 형식 변환', () => {
     const g = new Game(4); const o = g.openRoute('ICN', 'CJU'); if (!o.ok) throw new Error(); g.assign(g.state.planes[0].id, o.routeId, 20); g.advanceDays(40);
     const v1 = JSON.parse(JSON.stringify(g.toJSON())); v1.formatVersion = 1; delete v1.loan; delete v1.sandbox; for (const p of v1.planes) delete p.age; for (const h of v1.history) delete h.interest;
     const back = Game.fromJSON(v1);
-    expect(back.state.formatVersion).toBe(3); expect(back.state.loan).toBe(0); expect(back.state.sandbox).toBe(false); expect(back.state.planes[0].age).toBe(0);
+    expect(back.state.formatVersion).toBe(4); expect(back.state.loan).toBe(0); expect(back.state.sandbox).toBe(false); expect(back.state.planes[0].age).toBe(0);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
 });

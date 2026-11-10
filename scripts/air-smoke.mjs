@@ -19,8 +19,11 @@ await shot('title');
 await page.click('#t-new');
 check('새 게임: 시작 화면이 닫히고 현금 $20.0M', !(await page.locator('#title').isVisible()) && (await page.locator('#cash').innerText()) === '$20.0M', await page.locator('#cash').innerText());
 
+check('첫 5분 안내: 새 게임에서 힌트 띠가 서울을 누르라고 안내함', (await page.locator('#hint').isVisible()) && (await page.locator('#hint-text').innerText()).includes('서울'), await page.locator('#hint-text').innerText());
+check('경기 칩이 위쪽 바에 보임', (await page.locator('#eco').innerText()).startsWith('경기'));
 const tapCity = async (id) => { const p = await page.evaluate((i) => window.__air.screenOf(i), id); await page.mouse.click(p.x, p.y); };
 await tapCity('ICN');
+check('힌트가 ②단계(제주 열기)로 바뀌고 버튼이 반짝임', (await page.locator('#hint-text').innerText()).includes('제주') && (await page.locator('#panel button[data-act="open"][data-b="CJU"].pulse').count()) === 1);
 check('도시 정보에 공항 슬롯 칸이 있음', (await page.locator('#panel').innerText()).includes('공항 슬롯'));
 check('도시를 누르면 도시 정보와 노선 열기 목록이 나옴', (await page.locator('#panel').innerText()).includes('서울에서 노선 열기') && (await page.locator('#panel button[data-act="open"]').count()) === 33); // 도시 34개 중 자기 자신 제외
 await shot('city');
@@ -33,6 +36,10 @@ check('노선 화면: 일일 그래프(이익·탑승률)가 있음', (await pag
 await page.locator('#panel button[data-act="cabin"][data-share="0.2"]').first().click();
 check('객실 설정: 비즈니스 20%로 바뀌고 비즈니스 운임 슬라이더가 나타남', (await page.evaluate(() => window.__air.game.state.planes[0].bizShare)) === 0.2 && (await page.locator('#fareBiz').count()) === 1);
 await shot('route');
+check('배정 후 힌트가 ④단계(시간 흘리기)로 바뀜', (await page.locator('#hint-text').innerText()).includes('1×'), await page.locator('#hint-text').innerText());
+await page.click('#hint-off');
+check('힌트 끄기: 띠가 사라짐', !(await page.locator('#hint').isVisible()));
+
 // 운임 슬라이더
 const before = await page.evaluate(() => window.__air.game.state.routes[0].fare);
 await page.locator('#fare').fill(String(before + 20));
