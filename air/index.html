@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231f7ae0'/%3E%3Cstop offset='1' stop-color='%231fb5a4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath transform='translate(8 8) scale(2) rotate(45 12 12)' fill='%23fff' d='M12 3c1.100 0 1.800 1.200 1.800 2.800V9l7.200 4.600v2.200l-7.200-2.300v4.300l2.400 1.900V21L12 20l-4.200 1v-1.300l2.400-1.900v-4.300L3 15.800v-2.200L10.200 9V5.800C10.200 4.200 10.900 3 12 3z'/%3E%3C/svg%3E" />
     <title>The Air</title>
     <style>
       :root { --ink: #16212c; --ink2: #5a6b7a; --bg: #f3f7fa; --card: #ffffff; --line: #dfe7ee; --accent: #1f7ae0; --accent2: #165fb3; --pos: #1f9d57; --neg: #d64545; --warn: #d9822b; }
@@ -42,6 +43,8 @@
       #stage.full { grid-template-columns: 1fr 0; } #stage.full #panel { display: none; }
       #report .rb { display: grid; grid-template-columns: 1fr 70px 58px; gap: 6px; align-items: center; font-size: 12px; } #report .rb i { height: 8px; border-radius: 4px; background: #2f9e5b; display: block; } #report .rb i.n { background: #d64545; } #report .rb b { text-align: right; } #report .rb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #report h5 { margin: 8px 0 4px; font-size: 12px; color: var(--ink2); }
       #info-body { font-size: 14px; line-height: 1.6; } #info-body h4 { margin: 14px 0 4px; font-size: 14px; color: var(--ink); } #info-body ul { margin: 0; padding-left: 18px; } #info-body table { width: 100%; border-collapse: collapse; font-size: 13px; } #info-body td { padding: 3px 4px; border-bottom: 1px solid var(--line); }
+      .ic { vertical-align: -3px; flex: none; } #tabs button .ic { display: block; margin: 0 auto 3px; } h4 .ic, h5 .ic, h1 .ic { margin-right: 4px; }
+      .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #2f7fd6; } .dot.bad { background: #d64545; } .dot.warn { background: #e8893a; }
       #hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: min(94%, 700px); display: flex; align-items: center; gap: 10px; background: #12202df2; color: #fff; padding: 8px 8px 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 20px #0004; z-index: 6; } #hint[hidden] { display: none; }
       #hint button { white-space: nowrap; flex: none; min-height: 30px; padding: 3px 12px; font-size: 12px; border-radius: 999px; }
       .pulse { animation: ring 1.3s ease-out infinite; position: relative; z-index: 2; } @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(232, 121, 58, 0.85); } 100% { box-shadow: 0 0 0 14px rgba(232, 121, 58, 0); } }
@@ -74,10 +77,10 @@
     <div id="app">
       <header id="top">
         <span class="brand">The Air</span><span id="date"></span><span id="cash"></span><span id="rep"></span><span id="eco"></span><span id="fuel"></span><span class="grow"></span>
-        <div id="speeds"><button data-speed="0" aria-label="일시정지">⏸</button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div>
+        <div id="speeds"><button data-speed="0" aria-label="일시정지" data-ic="pause"></button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div>
         <button id="menubtn">메뉴</button>
       </header>
-      <main id="stage"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기">⤢</button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><aside id="panel"></aside></main>
+      <main id="stage"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><aside id="panel"></aside></main>
       <nav id="tabs"><button data-tab="map">지도</button><button data-tab="routes">노선</button><button data-tab="fleet">기단</button><button data-tab="money">재무</button><button data-tab="news">알림</button></nav>
     </div>
     <div id="menu" hidden><button data-m="save">저장</button><button data-m="load">불러오기</button><button data-m="new">새 게임</button><button data-m="hints">힌트: 켜짐</button><button data-m="sound">소리: 켜짐</button><button data-m="music">배경 음악: 켜짐</button><button data-m="night">낮밤 표시: 켜짐</button><button data-m="help">도움말</button><button data-m="records">기록</button><button data-m="autopause">사건 시 자동 정지: 켜짐</button><button data-m="title">시작 화면</button></div>

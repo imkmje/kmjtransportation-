@@ -172,6 +172,8 @@ check('노선 탭: 자동 운임 켜기', (await page.evaluate(() => window.__ai
 const peaks = await page.evaluate(() => window.__air.soundPeaks());
 const bad = Object.entries(peaks).filter(([, v]) => !(v > 0.005 && v < 1));
 check('소리 13종(효과음 11·음악·전부 동시)이 무음도 깨짐도 아님', Object.keys(peaks).length === 13 && bad.length === 0, JSON.stringify(Object.fromEntries(Object.entries(peaks).map(([k, v]) => [k, +v.toFixed(3)]))));
+check('아이콘: 하단 탭 5개에 직접 그린 아이콘이 있고, 화면에 이모지가 없음', (await page.locator('#tabs button svg.ic').count()) === 5 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(await page.locator('#app').innerText()));
+await page.click('#tabs button[data-tab="news"]'); await shot('icons');
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
