@@ -85,3 +85,29 @@ describe('저장 형식 6', () => {
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
 });
+
+describe('자동 정비', () => {
+  const setup = (auto: boolean) => {
+    const g = new Game(5); g.state.cash = 100; g.state.autoMaint = auto;
+    const o = g.openRoute('ICN', 'NRT'); if (!o.ok) throw new Error(o.error);
+    const p = g.state.planes[0]; if (!g.assign(p.id, o.routeId, 5).ok) throw new Error('assign');
+    p.cond = 0.56; // 이번 달 닳은 뒤 기준선(55%) 아래로 내려간다
+    return { g, p };
+  };
+  it('켜 두면 월말에 낮은 정비 상태를 점검하고 비용을 낸다', () => {
+    const { g, p } = setup(true);
+    g.advanceDays(30);
+    expect(p.cond).toBe(1); expect(g.state.log.some((l) => l.includes('자동 정비'))).toBe(true);
+  });
+  it('꺼 두면 점검하지 않는다', () => {
+    const { g, p } = setup(false);
+    g.advanceDays(30);
+    expect(p.cond).toBeLessThan(0.56); expect(g.state.log.some((l) => l.includes('자동 정비'))).toBe(false);
+  });
+  it('현금이 모자라면 건너뛴다', () => {
+    const { g, p } = setup(true); g.state.cash = 0.1; g.state.loan = 0;
+    g.advanceDays(1); g.state.cash = 0.1;
+    g.advanceDays(29);
+    expect(g.state.log.some((l) => l.includes('자동 정비'))).toBe(false); expect(p.cond).toBeLessThan(0.56);
+  });
+});

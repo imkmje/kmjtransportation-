@@ -254,6 +254,8 @@ export class Game {
     this.state.cash -= cost; this.state.cur.cost += cost; p.cond = 1; p.shop = config.maint.shopDays;
     return { ok: true, cost };
   }
+  /** 자동 정비를 켜거나 끈다 */
+  setAutoMaint(on: boolean): void { this.state.autoMaint = on; }
   /** 연료 계약: 지금 가격으로 6개월간 고정한다(오르면 이득, 내리면 손해) */
   hedgeFuel(): Result<{ price: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
@@ -476,6 +478,9 @@ export class Game {
     const mt = config.maint; // 정비 상태: 많이 날수록 빨리 닳고, 낮으면 고장 나서 한 달 못 난다
     for (const p of [...s.planes].sort((a, b) => a.id - b.id)) {
       p.cond = Math.max(0, p.cond - mt.decayBase - (p.routeId !== null ? mt.decayPerWeekly * p.weekly : 0));
+      if (s.autoMaint && p.cond < mt.autoBelow && p.shop <= 0 && p.routeId !== null && s.cash >= this.serviceCost(p)) { // 자동 정비: 고장 나기 전에 점검(현금이 모자라면 건너뛴다)
+        const r = this.service(p.id); if (r.ok) s.log.push(`${this.monthsPassed + 1}개월차: ${typeById(p.type).name} 자동 정비 (${r.cost.toFixed(1)}M)`);
+      }
       if (p.cond < mt.lowCond && p.shop <= 0 && p.routeId !== null && this.rng.next() < mt.failChance * (1 + (mt.lowCond - p.cond) * 2)) { p.shop = mt.failDays; s.log.push(`${this.monthsPassed + 1}개월차: ${typeById(p.type).name} 고장 — 정비 상태가 나빠 ${mt.failDays}일간 운항하지 못합니다.`); }
     }
     const fixed = this.fixedMonthly;
