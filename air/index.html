@@ -27,6 +27,7 @@
       .row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; } .row .grow { flex: 1; min-width: 0; } .row b { display: block; font-size: 15px; } .row small { display: block; color: var(--ink2); font-size: 12px; margin-top: 2px; line-height: 1.4; } .row .right { text-align: right; font-size: 13px; font-weight: 700; }
       button.card { background: transparent; padding: 0; text-align: left; color: inherit; font-weight: 400; min-height: 0; width: 100%; }
       .pos { color: var(--pos); } .neg { color: var(--neg); } .warn { color: var(--warn); }
+      button.small { min-height: 30px; padding: 4px 10px; font-size: 12px; margin-top: 4px; }
       .stepper { display: flex; gap: 6px; } .stepper button { padding: 6px 12px; min-width: 44px; }
       .two { display: flex; justify-content: space-between; }
       input[type=range] { width: 100%; height: 44px; accent-color: var(--accent); }
@@ -56,7 +57,7 @@
     </div>
     <div id="menu" hidden><button data-m="save">저장</button><button data-m="load">불러오기</button><button data-m="new">새 게임</button><button data-m="title">시작 화면</button></div>
     <div id="toast"></div>
-    <div id="end" class="overlay" hidden><div class="card2"><h1 id="end-title" style="font-size:28px"></h1><p id="end-body"></p><div class="btns"><button id="end-new">새 게임</button></div></div></div>
+    <div id="end" class="overlay" hidden><div class="card2"><h1 id="end-title" style="font-size:28px"></h1><p id="end-body"></p><div class="btns"><button id="end-continue" hidden>계속하기 (자유 모드)</button><button id="end-new" class="ghost">새 게임</button></div></div></div>
     <div id="title" class="overlay"><div class="card2"><h1>The Air</h1><p>가상의 항공사 사장이 되어 지구 위 도시 사이에 노선을 열고, 항공기를 사서 배정하고, 운임을 정해 이익을 내세요. 현금이 바닥나면 파산입니다. <span id="t-version"></span></p>
       <p>목표(24개월 안에): 누적 이익 $100M 달성 또는 12개 도시 모두 운항.</p><div class="btns"><button id="t-new">새 게임</button><button id="t-continue" class="ghost" hidden>이어하기</button></div></div></div>
     <script type="module" src="/airline/src/main.ts"></script>

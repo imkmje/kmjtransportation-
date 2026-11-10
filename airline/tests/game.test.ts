@@ -57,7 +57,8 @@ describe('게임 규칙', () => {
     expect(h.revenue).toBeGreaterThan(0); expect(h.pax).toBeGreaterThan(0);
     expect(h.depreciation).toBeCloseTo(60 / config.cost.depreciationMonths, 9);
     // 현금 증감 = 수입 - 운영비 - 고정비 (감가상각은 현금 아님)
-    expect(g.state.cash - c0).toBeCloseTo(h.revenue - h.cost - config.cost.fixedMonthly, 6);
+    expect(g.state.cash - c0).toBeCloseTo(h.revenue - h.cost - h.fixed, 6);
+    expect(h.fixed).toBeCloseTo(config.cost.fixedMonthly + config.cost.perPlaneMonthly, 9);
     expect(h.profit).toBeCloseTo(h.revenue - h.cost - h.depreciation - h.fixed, 9);
   });
   it('탑승객은 수요와 좌석 중 작은 쪽, 운임을 올리면 수요가 줄어든다', () => {

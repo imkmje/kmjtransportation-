@@ -79,6 +79,39 @@ export const aggressive: Strategy = {
   },
 };
 
+/** 대출형: 한도까지 빌려 가장 큰 기종부터 사서 빠르게 키운다(이자와 노후화를 감수) */
+export const leveraged: Strategy = {
+  name: '대출형',
+  step(g) {
+    if (g.state.day % 30 !== 0) return;
+    deployIdle(g);
+    retune(g);
+    // 현금이 넉넉해지면 먼저 대출을 갚고, 부족하면 빌려서 산다
+    if (g.state.loan > 0 && g.state.cash > g.state.loan + 40) g.repay(g.state.loan);
+    for (const id of ['A350', 'B737']) {
+      const t = typeById(id);
+      if (g.state.cash < t.price + 3) { const need = t.price + 3 - g.state.cash, room = g.loanLimit - g.state.loan; if (need <= room) g.borrow(Math.ceil(need)); }
+      if (g.state.cash >= t.price + 3) { g.buyPlane(id); break; }
+    }
+  },
+};
+
+/** 무모형: 한도까지 빌려 현금 여유 없이 사고 또 산다(과한 확장이 파산으로 이어지는지 점검) */
+export const reckless: Strategy = {
+  name: '무모형',
+  step(g) {
+    if (g.state.day % 30 !== 0) return;
+    deployIdle(g);
+    retune(g);
+    for (let i = 0; i < 3; i++) {
+      const t = typeById(g.state.cash + (g.loanLimit - g.state.loan) >= typeById('A350').price ? 'A350' : 'B737');
+      const room = g.loanLimit - g.state.loan;
+      if (g.state.cash < t.price && room > 0) g.borrow(Math.min(room, Math.ceil(t.price - g.state.cash)));
+      if (g.state.cash >= t.price) g.buyPlane(t.id); else break;
+    }
+  },
+};
+
 /** 무작위: 임의의 기종과 노선을 고르고 운임도 무작위(기준선) */
 export const random: Strategy = {
   name: '무작위',
@@ -101,7 +134,7 @@ export const random: Strategy = {
   },
 };
 
-export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, random];
+export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, reckless, random];
 
 export interface RunResult { strategy: string; seed: number; status: string; months: number; cash: number; cumProfit: number; planes: number; routes: number }
 /** 한 전략을 한 시드로 끝날 때까지(또는 maxMonths까지) 돌린다 */
