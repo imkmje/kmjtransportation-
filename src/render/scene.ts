@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { toThree, fromThree } from './coords';
+import { toThree, fromThree, setHeightField, groundHeight } from './coords';
+import { terrainHeight, type TerrainDef } from '../sim/terrain';
 import type { Pt } from '../sim/network';
 
 const WORLD = 2000; // 지면 한 변(m)
@@ -20,6 +21,37 @@ export function createScene(canvasParent: HTMLElement) {
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+  const baseRotation = -Math.PI / 2;
+
+  // 지형: 평지면 위의 단순 평면, 지형이 있으면 높이에 맞춰 일그러뜨린 격자 면 + 강물 면
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshLambertMaterial({ color: 0x4a90c8, transparent: true, opacity: 0.8 }));
+  water.rotation.x = -Math.PI / 2; water.visible = false; scene.add(water);
+  let terrainKey = '';
+  const lowC = new THREE.Color(0xc9b98a), midC = new THREE.Color(0xb9dfa3), highC = new THREE.Color(0x9c8f6b), tmp = new THREE.Color();
+  function setTerrain(def: TerrainDef | null) {
+    const key = def ? `${def.seed}:${def.amp}:${def.waterLevel}:${def.river}` : '';
+    if (key === terrainKey) return;
+    terrainKey = key;
+    setHeightField((x, y) => terrainHeight(def, x, y));
+    ground.geometry.dispose();
+    if (!def) { ground.geometry = new THREE.PlaneGeometry(WORLD, WORLD); (ground.material as THREE.MeshLambertMaterial).vertexColors = false; (ground.material as THREE.MeshLambertMaterial).needsUpdate = true; water.visible = false; grid.visible = true; ground.rotation.x = baseRotation; return; }
+    const N = 200, g = new THREE.PlaneGeometry(WORLD, WORLD, N, N);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position, col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const h = terrainHeight(def, pos.getX(i), -pos.getZ(i));
+      pos.setY(i, h - 0.08); // 도로 바닥(0.2)·구역 표시보다 살짝 아래
+      if (h < def.waterLevel + 0.6) tmp.copy(lowC); else tmp.copy(midC).lerp(highC, Math.min(1, Math.max(0, (h - def.amp * 0.45) / (def.amp * 0.55))));
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    ground.geometry = g;
+    ground.rotation.x = 0; // 이미 눕힌 형태
+    (ground.material as THREE.MeshLambertMaterial).vertexColors = true; (ground.material as THREE.MeshLambertMaterial).needsUpdate = true;
+    water.position.y = def.waterLevel; water.visible = def.river;
+    grid.visible = false; // 울퉁불퉁한 지형에서는 평평한 격자를 숨긴다
+  }
 
   const grid = new THREE.GridHelper(WORLD, WORLD / 20, 0x5f8f4c, 0x86b572); // 20m 칸
   grid.position.y = 0.05;
@@ -125,11 +157,20 @@ export function createScene(canvasParent: HTMLElement) {
       const r = renderer.domElement.getBoundingClientRect();
       const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
-      if (!raycaster.ray.intersectPlane(groundPlane, hit)) return null;
+      if (terrainKey) { // 지형이 있으면 광선을 따라가며 지면과 만나는 곳을 찾는다
+        const o = raycaster.ray.origin, d = raycaster.ray.direction;
+        const f = (t: number) => o.y + d.y * t - groundHeight(o.x + d.x * t, -(o.z + d.z * t));
+        let lo = 0, hi = -1;
+        for (let t = 0; t < 8000; t += 6) { if (f(t) <= 0) { hi = t; break; } lo = t; }
+        if (hi < 0) return null;
+        for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (f(mid) <= 0) hi = mid; else lo = mid; }
+        hit.copy(o).addScaledVector(d, hi);
+      } else if (!raycaster.ray.intersectPlane(groundPlane, hit)) return null;
       const p = fromThree(hit.x, hit.y, hit.z);
       return Math.abs(p.x) > limit || Math.abs(p.y) > limit ? null : p;
     },
     /** 비 오는 날은 하늘·안개가 회색으로, 햇빛이 약해진다 */
+    setTerrain,
     setWeather(rain: boolean) {
       rainLines.visible = rain;
       const c = rain ? 0x8d99a6 : 0xcfe8f7;
@@ -151,8 +192,8 @@ export function createScene(canvasParent: HTMLElement) {
     /** 카메라를 시뮬 좌표 p 위쪽으로 옮긴다 */
     focus(p: Pt) {
       const t = toThree(p.x, p.y, 0);
-      controls.target.set(t.x, 0, t.z);
-      camera.position.set(t.x + 250, 250, t.z + 250);
+      controls.target.set(t.x, t.y, t.z);
+      camera.position.set(t.x + 250, t.y + 250, t.z + 250);
     },
     /** 시뮬 좌표 → 화면 좌표(client). 테스트·디버깅용 */
     project(p: Pt): { x: number; y: number } {

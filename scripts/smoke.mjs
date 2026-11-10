@@ -9,7 +9,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 // 새 화면 구성: 도구는 아래쪽 분류 상자 안에, 저장·불러오기 등은 오른쪽 위 메뉴 안에 있다. 클릭하기 전에 알맞은 상자·메뉴를 열어 주는 보조 장치
 const patch = (pg) => {
   const click = pg.click.bind(pg), sel = pg.selectOption.bind(pg);
-  const menuIds = /^#(save|load|export|import|sample|newcity|gridcity|slot|about)$/;
+  const menuIds = /^#(save|load|export|import|sample|newcity|gridcity|hillcity|slot|about)$/;
   const prep = async (s) => {
     if (menuIds.test(s)) { if (!(await pg.locator('#filebar').isVisible())) await click('#menubtn'); }
     else if (s.startsWith('button[data-tool=')) {
@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v1.8.0') && titleText.includes('업데이트 내역') && titleText.includes('혼합 용도'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.0.0') && titleText.includes('업데이트 내역') && titleText.includes('지형'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -702,6 +702,26 @@ await page.screenshot({ path: process.argv[2] ?? 'smoke.png' });
   const gi = await page.evaluate(() => { const n = window.__game.editor.network; return { sig: [...n.nodes.values()].filter((x) => n.hasSignal(x.id)).length, zones: n.zones.size, ring: [...n.segments.values()].filter((s) => s.oneWay).length }; });
   check('격자 도시: 신호등 3곳, 회전교차로, 구역 300칸 이상', gi.sig === 3 && gi.zones > 300 && gi.ring >= 3, JSON.stringify(gi));
   await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-grid.png') });
+  // 구릉 도시: 지형·강·다리, 입체교차(T), 업적 줄
+  await page.click('#hillcity');
+  await page.waitForTimeout(500);
+  const hi = await page.evaluate(() => { const n = window.__game.editor.network; return { terrain: !!n.terrain, bridge: [...n.segments.values()].filter((x) => x.structure === 'bridge').length, zs: new Set([...n.nodes.values()].map((x) => Math.round(x.z))).size }; });
+  check('구릉 도시: 지형이 있고 다리가 있으며 도로 높이가 다양함', hi.terrain && hi.bridge >= 1 && hi.zs > 1, JSON.stringify(hi));
+  await page.evaluate(() => window.__game.focus({ x: 200, y: 0 }));
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-hills.png') });
+  await page.click('button[data-catbtn="road"]');
+  await page.keyboard.press('2'); await page.keyboard.press('t');
+  check('T 키로 입체 모드 체크상자가 켜짐', await page.locator('#over').isChecked());
+  const ov = await page.evaluate(() => window.__game.editor.buildOver({ x: -100, y: -200 }, { x: -100, y: 200 }, 'road2'));
+  check('입체교차(고가)가 지형 위에서 건설됨', ov.ok === true, JSON.stringify(ov));
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  check('통계 패널에 점수·업적 줄이 있음', (await page.locator('#st-goal').innerText()).includes('/12'));
+  await page.click('#st-goal');
+  check('업적 줄을 누르면 목록이 열림', (await page.locator('#st-goals li').count()) === 12);
+  await page.click('#sample');
+  await page.waitForTimeout(400);
+  check('샘플 맵으로 돌아오면 지형이 사라짐', await page.evaluate(() => window.__game.editor.network.terrain === null));
 }
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

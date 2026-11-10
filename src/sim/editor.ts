@@ -1,5 +1,5 @@
 import type { OneWay } from './network';
-import { curvePoints } from './curve';
+import { curvePoints, CURVE_PIECE } from './curve';
 import type { Signals } from './signals';
 import { RestrictKind, SignalMode, BuildingKind, BuildingSize, Network, NetworkData, PlanError, Pt, RoadKind, SignKind } from './network';
 import type { Config } from '../config';
@@ -10,7 +10,7 @@ export class Editor {
   private history: string[] = [];
   private index = 0;
 
-  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout'>) {
+  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout' | 'terrain'>) {
     this.network = new Network(cfg);
     this.history.push(this.snapshot());
   }
@@ -69,7 +69,7 @@ export class Editor {
   }
 
   /**
-   * 곡선 도로: 시작·조절점·끝 세 점으로 베지어 곡선을 그려 짧은 직선 구간의 연결로 만든다(22m 안팎, 최소 길이 바로 위).
+   * 곡선 도로: 시작·조절점·끝 세 점으로 베지어 곡선을 그려 짧은 직선 구간의 연결로 만든다(12m 안팎).
    * 한 조각이라도 건설할 수 없으면(너무 급한 곡선, 건물 등) 아무것도 만들지 않는다. 취소 한 번으로 곡선 전체가 되돌아간다
    */
   buildCurve(p0: Pt, c: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError | 'tooSharp' } {
@@ -78,12 +78,19 @@ export class Editor {
     const before = this.snapshot(), ids: number[] = [];
     let length = 0;
     for (let i = 0; i + 1 < pts.length; i++) {
-      const r = this.network.buildRoad(pts[i], pts[i + 1], kind);
+      const r = this.network.buildRoad(pts[i], pts[i + 1], kind, CURVE_PIECE - 1);
       if (!r.ok) { this.network.load(JSON.parse(before) as NetworkData); return { ok: false, error: r.error === 'angle' || r.error === 'nodeTooClose' ? 'tooSharp' : r.error }; }
       ids.push(...r.ids); length += r.length;
     }
     this.commit();
     return { ok: true, ids, length };
+  }
+
+  /** 입체교차(고가): 다른 도로와 만나지 않고 위로 지나가는 도로. 조건은 planRoad(over)가 판정한다 */
+  buildOver(p1: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
+    const r = this.network.buildRoad(p1, p2, kind, undefined, true);
+    if (r.ok) this.commit();
+    return r;
   }
 
   setName(segId: number, name: string): number {

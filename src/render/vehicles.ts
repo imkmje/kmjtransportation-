@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import type { Traffic } from '../sim/traffic';
-import { toThree } from './coords';
+import { toThreeAbs } from './coords';
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -28,7 +28,7 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
       let i = 0;
       for (const v of traffic.vehicles.values()) {
         if (i >= cap) break;
-        const p = toThree(v.px + (v.x - v.px) * alpha, v.py + (v.y - v.py) * alpha, 0.2 + 0.75);
+        const p = toThreeAbs(v.px + (v.x - v.px) * alpha, v.py + (v.y - v.py) * alpha, traffic.vehicleZ(v) + 0.2 + 0.75);
         dummy.position.set(p.x, p.y, p.z);
         dummy.rotation.y = v.ph + wrap(v.h - v.ph) * alpha;
         const truck = v.meta?.mode === 'truck';
@@ -44,7 +44,7 @@ export function createVehicleLayer(scene: THREE.Scene, traffic: Traffic) {
       for (const id of traffic.crashed.keys()) {
         const v = traffic.vehicles.get(id);
         if (!v || mi >= 40) continue;
-        const p = toThree(v.x, v.y, 8 + Math.sin(pulse) * 1.2), k = 1 + 0.25 * Math.sin(pulse * 2);
+        const p = toThreeAbs(v.x, v.y, traffic.vehicleZ(v) + 8 + Math.sin(pulse) * 1.2), k = 1 + 0.25 * Math.sin(pulse * 2);
         dummy.position.set(p.x, p.y, p.z); dummy.rotation.set(Math.PI, 0, 0); dummy.scale.set(k, k, k); dummy.updateMatrix();
         mark.setMatrixAt(mi++, dummy.matrix);
       }
