@@ -8,7 +8,7 @@ export type Goal = { type: 'profit'; value: number } | { type: 'cities'; value: 
 export interface Scenario { id: string; name: string; desc: string; lockBase: boolean; base?: string; cash: number; plane: string; economy: number; events: { def: string; monthsLeft: number; city?: string }[]; loan: number; timeLimit: number; mode: 'any' | 'all'; goals: Goal[] }
 export interface GoalProgress { label: string; value: number; target: number; done: boolean; unit: string }
 
-export interface Plane { id: number; type: string; book: number; routeId: number | null; weekly: number; age: number; bizShare: number; cond: number; shop: number; leased?: boolean } // age: 보유 개월 수, bizShare: 비즈니스석 비율, cond: 정비 상태(0~1), shop: 정비·수리로 못 나는 남은 일수 // weekly: 주간 왕복 횟수
+export interface Plane { id: number; type: string; book: number; routeId: number | null; weekly: number; age: number; bizShare: number; cond: number; shop: number; leased?: boolean; deposit?: number } // age: 보유 개월 수, bizShare: 비즈니스석 비율, cond: 정비 상태(0~1), shop: 정비·수리로 못 나는 남은 일수 // weekly: 주간 왕복 횟수
 export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number } // 하루 기록(노선별 그래프용, 최근 60일)
 export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number } // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
 export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number }

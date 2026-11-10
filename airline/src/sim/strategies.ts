@@ -181,7 +181,31 @@ export const random: Strategy = {
   },
 };
 
-export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, smart, reckless, random];
+/** 임대형: 대출 없이 현금이 버티는 만큼 중형기를 계속 빌린다(임대가 너무 유리한지 점검) */
+export const leaser: Strategy = {
+  name: '임대형',
+  step(g) {
+    if (g.state.day % 30 !== 0) return;
+    deployIdle(g);
+    retune(g);
+    maintain(g);
+    if (g.state.cash > 8 && g.state.planes.every((p) => p.routeId !== null)) { const r = g.leasePlane('B737'); if (!r.ok) return; }
+  },
+};
+
+/** 임대 대형: 임대 가능하면 A350을, 아니면 중형기를 빌려 장거리에 투입(임대로 대형기를 굴리는 것이 너무 유리한지 점검) */
+export const leaserBig: Strategy = {
+  name: '임대대형',
+  step(g) {
+    if (g.state.day % 30 !== 0) return;
+    deployIdle(g);
+    retune(g);
+    maintain(g);
+    if (g.state.cash > 10 && g.state.planes.every((p) => p.routeId !== null)) { const r = g.leasePlane('A350'); if (!r.ok) g.leasePlane('B737'); }
+  },
+};
+
+export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, smart, reckless, random, leaser, leaserBig];
 
 export interface RunResult { strategy: string; seed: number; status: string; months: number; cash: number; cumProfit: number; planes: number; routes: number }
 /** 한 전략을 한 시드로 끝날 때까지(또는 maxMonths까지) 돌린다 */

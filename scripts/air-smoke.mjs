@@ -148,6 +148,10 @@ check('탭을 누르면 패널이 다시 펴짐', await page.locator('#panel').i
 const n0 = await page.evaluate(() => window.__air.game.state.planes.length);
 await page.locator('#panel button[data-act="lease"]').first().click();
 check('임대: 현금 없이 항공기가 1대 늘고 임대로 표시됨', (await page.evaluate(() => window.__air.game.state.planes.length)) === n0 + 1 && (await page.locator('#panel').innerText()).includes('임대'));
+check('임대기에 매입·반납 버튼이 있음', (await page.locator('#panel button[data-act="buyOut"]').count()) === 1);
+await page.evaluate(() => { window.__air.game.state.cash = 200; window.__air.render(); }); // 매입에는 현금이 필요하다
+await page.locator('#panel button[data-act="buyOut"]').click();
+check('임대기 매입: 내 항공기가 됨(임대 표시 사라짐)', (await page.evaluate(() => window.__air.game.state.planes.every((p) => !p.leased))) && (await page.locator('#panel button[data-act="buyOut"]').count()) === 0);
 await page.click('#tabs button[data-tab="map"]');
 await page.locator('#panel button[data-act="ally"]').first().click();
 check('제휴: 경쟁사와 제휴 중으로 표시됨', (await page.evaluate(() => window.__air.game.state.ally)) !== null && (await page.locator('#panel').innerText()).includes('제휴 중'));
