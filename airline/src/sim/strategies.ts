@@ -141,10 +141,10 @@ export const reckless: Strategy = {
     if (g.state.day % 30 !== 0) return;
     deployIdle(g);
     retune(g);
-    for (let i = 0; i < 3; i++) {
-      const t = typeById(g.state.cash + (g.loanLimit - g.state.loan) >= typeById('A350').price ? 'A350' : 'B737');
-      const room = g.loanLimit - g.state.loan;
-      if (g.state.cash < t.price && room > 0) g.borrow(Math.min(room, Math.ceil(t.price - g.state.cash)));
+    // 현금이 0이 될 때까지 계속 사고, 한도까지 빌려 또 산다(완충 현금 없음)
+    for (let i = 0; i < 6; i++) {
+      const t = typeById('B737'), room = g.loanLimit - g.state.loan;
+      if (g.state.cash < t.price && room > 1) g.borrow(Math.min(room, Math.ceil(t.price - g.state.cash)));
       if (g.state.cash >= t.price) g.buyPlane(t.id); else break;
     }
   },

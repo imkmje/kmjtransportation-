@@ -10,6 +10,7 @@ import { esc, fare, km, money, num, pct } from './fmt';
 type Tab = 'map' | 'routes' | 'fleet' | 'money' | 'news';
 const SAVE_KEY = 'the-air-save';
 const MONTH_NAMES = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+const HINT_KEY = 'the-air-hints';
 const SECONDS_PER_DAY = 3; // 1× 속도에서 하루가 흐르는 실제 시간
 
 /** 작은 선 그래프(값 배열 → SVG). zero가 true면 0선을 그린다 */
@@ -29,6 +30,7 @@ export function startApp(): void {
   let selCity: string | null = null, selRoute: number | null = null;
   let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
   let toastTimer = 0, seenLog = 0, seenEvents = new Set<string>();
+  let hintsOn = (() => { try { return localStorage.getItem(HINT_KEY) !== 'off'; } catch { return true; } })();
   let autoPause = (() => { try { return localStorage.getItem('the-air-autopause') !== '0'; } catch { return true; } })();
 
   const panel = $('#panel'), top = { date: $('#date'), cash: $('#cash'), rep: $('#rep') };
@@ -54,6 +56,7 @@ export function startApp(): void {
     top.cash.textContent = money(s.cash);
     top.cash.classList.toggle('neg', s.cash < 0);
     top.rep.textContent = `평판 ${pct(s.reputation)}`;
+    const eco = $('#eco'); eco.textContent = `경기 ${game.economyLabel}${s.economy > 1.02 ? ' ▲' : s.economy < 0.98 ? ' ▼' : ''}`; eco.className = game.economyLabel === '호황' ? 'good' : game.economyLabel === '불황' ? 'bad' : '';
     renderAlerts();
     document.querySelectorAll<HTMLElement>('#speeds button').forEach((b) => b.classList.toggle('on', Number(b.dataset.speed) === speed));
   }
@@ -134,7 +137,7 @@ export function startApp(): void {
       <div class="kv"><div>거리</div><div>${km(dist)}</div><div>월 수요</div><div>${num(d.demand * config.daysPerMonth)}명</div><div>월 좌석</div><div>${num(d.seats * config.daysPerMonth)}석</div>
         <div>탑승률</div><div>${planes.length ? pct(lf) : '-'}</div><div>예상 월 수익</div><div>${money(d.revenue * config.daysPerMonth)}</div><div>예상 월 비용</div><div>${money(d.cost * config.daysPerMonth)}</div>
         <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div>
-        ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
+        ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${game.competitorsOn(r.a, r.b).map(({ comp, route }) => `<div>${esc(comp.name)}</div><div>기준 운임의 ${pct(route.fareRatio)} · 하루 ${num(route.seatsDay)}석</div>`).join('')}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
       <h3>최근 ${r.daily.length}일</h3><div class="chartlabel"><small>일 이익(${money(r.daily.at(-1)?.profit ?? 0)})</small></div>${spark(r.daily.map((x) => x.profit), '#1f9d57', { zero: true })}
       <div class="chartlabel"><small>탑승률(${pct(r.daily.at(-1) && r.daily.at(-1)!.seats ? r.daily.at(-1)!.pax / r.daily.at(-1)!.seats : 0)})</small></div>${spark(r.daily.map((x) => (x.seats ? x.pax / x.seats : 0)), '#1f7ae0', { min: 0, max: 1 })}
       <h3>운임 <b>${fare(r.fare)}</b> <small>(기준 ${fare(base)})</small></h3>
@@ -188,8 +191,33 @@ export function startApp(): void {
     const html = tab === 'map' ? viewMap() : tab === 'routes' ? viewRoutes() : tab === 'fleet' ? viewFleet() : tab === 'money' ? viewMoney() : viewNews();
     if (html !== lastHtml) { const y = panel.scrollTop; panel.innerHTML = html; panel.scrollTop = y; lastHtml = html; }
     renderEnd();
+    renderHint();
   }
   let lastHtml = '';
+
+  // ---- 첫 5분 안내: 말풍선 없이, 지도 아래 한 줄 + 눌러야 할 곳이 반짝임 ----
+  function hintStep(): { text: string; city?: string; sel?: string } | null {
+    const s = game.state;
+    if (!hintsOn || s.status !== 'playing' || s.history.length >= 1 || s.sandbox) return null;
+    const openRoutes = s.routes.filter((r) => r.open), assigned = openRoutes.some((r) => game.planesOn(r.id).length > 0);
+    if (!openRoutes.length) {
+      if (selCity === 'ICN' && tab === 'map') return { text: '② 제주 옆의 ‘열기’ 버튼을 눌러 노선을 만드세요', sel: 'button[data-act="open"][data-b="CJU"]' };
+      return { text: '① 지도에서 서울을 눌러 보세요', city: 'ICN' };
+    }
+    if (!assigned) return tab === 'routes' && selRoute !== null ? { text: '③ ‘배정’ 버튼으로 항공기를 이 노선에 보내세요', sel: '#panel button[data-act="assign"]' } : { text: '③ 아래 ‘노선’ 탭에서 항공기를 배정하세요', sel: '#tabs button[data-tab="routes"]' };
+    if (speed === 0) return { text: '④ 위쪽 ‘1×’ 버튼을 눌러 시간을 흘려 보세요', sel: '#speeds button[data-speed="1"]' };
+    return { text: '⑤ 시간이 흐르는 동안 ‘노선’ 탭의 운임 슬라이더를 움직여 보세요. 탑승률이 꽉 차면 올리고, 비면 내리세요', sel: tab === 'routes' ? '#fare' : '#tabs button[data-tab="routes"]' };
+  }
+  function renderHint() {
+    const h = hintStep(), el = $('#hint');
+    document.querySelectorAll('.pulse').forEach((e) => e.classList.remove('pulse'));
+    map.setPulse(h?.city ?? null);
+    el.hidden = !h;
+    if (!h) return;
+    $('#hint-text').textContent = h.text;
+    if (h.sel) { const els = document.querySelectorAll<HTMLElement>(h.sel); els.forEach((e) => e.classList.add('pulse')); if (els[0] && panel.contains(els[0])) els[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); } // 패널 안에 있으면 보이는 곳으로 스크롤
+  }
+  $('#hint-off').addEventListener('click', () => { hintsOn = false; try { localStorage.setItem(HINT_KEY, 'off'); } catch { /* 저장 불가 */ } renderHint(); toast('힌트를 껐습니다. 메뉴에서 다시 켤 수 있어요'); });
 
   // ---- 끝난 게임 ----
   function renderEnd() {
@@ -234,7 +262,7 @@ export function startApp(): void {
 
   // ---- 탭·속도·메뉴 ----
   $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; lastHtml = ''; render(); });
-  $('#speeds').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-speed]'); if (!b) return; speed = Number(b.dataset.speed); renderTop(); });
+  $('#speeds').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-speed]'); if (!b) return; speed = Number(b.dataset.speed); renderTop(); renderHint(); });
   const menu = $('#menu');
   $('#menubtn').addEventListener('click', () => { menu.hidden = !menu.hidden; });
   menu.addEventListener('click', (e) => {
@@ -243,6 +271,7 @@ export function startApp(): void {
     if (m === 'save') { save(); toast('저장했습니다'); }
     else if (m === 'load') { if (load()) { selCity = selRoute = null; syncMap(); lastHtml = ''; toast('불러왔습니다'); } else toast('저장된 게임이 없습니다'); }
     else if (m === 'new') { newGame(); }
+    else if (m === 'hints') { hintsOn = !hintsOn; try { localStorage.setItem(HINT_KEY, hintsOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } b.textContent = `힌트: ${hintsOn ? '켜짐' : '꺼짐'}`; toast(hintsOn ? '힌트를 켰습니다' : '힌트를 껐습니다'); menu.hidden = false; render(); return; }
     else if (m === 'autopause') { autoPause = !autoPause; try { localStorage.setItem('the-air-autopause', autoPause ? '1' : '0'); } catch { /* 저장 불가 */ } b.textContent = `사건 시 자동 정지: ${autoPause ? '켜짐' : '꺼짐'}`; toast(autoPause ? '사건이 생기면 시간이 멈춥니다' : '사건이 생겨도 시간이 계속 흐릅니다'); menu.hidden = false; render(); return; }
     else if (m === 'title') { showTitle(); }
     menu.hidden = true; render();

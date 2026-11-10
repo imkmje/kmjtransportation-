@@ -150,7 +150,7 @@ describe('저장 형식 3', () => {
     const v2 = JSON.parse(JSON.stringify(g.toJSON())); v2.formatVersion = 2;
     delete v2.slots; delete v2.growth; delete v2.competitors; for (const p of v2.planes) delete p.bizShare; for (const r of v2.routes) { delete r.fareBiz; delete r.cargoRatio; delete r.daily; } for (const h of v2.history) delete h.cargo;
     const back = Game.fromJSON(v2);
-    expect(back.state.formatVersion).toBe(3); expect(back.state.competitors.length).toBe(2); expect(back.state.planes[0].bizShare).toBe(0);
+    expect(back.state.formatVersion).toBe(4); expect(back.state.competitors.length).toBe(2); expect(back.state.planes[0].bizShare).toBe(0);
     expect(back.state.routes[0].cargoRatio).toBe(1); expect(back.state.routes[0].fareBiz).toBeGreaterThan(0);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
@@ -159,5 +159,50 @@ describe('저장 형식 3', () => {
     const loaded = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
     g.advanceDays(300); loaded.advanceDays(300);
     expect(JSON.stringify(loaded.toJSON())).toBe(JSON.stringify(g.toJSON()));
+  });
+});
+
+describe('경기 변동·사건 강화·경쟁사 가격 반응', () => {
+  it('경기 지수는 범위 안에서 움직이고, 호황이면 수요가 늘고 비즈니스가 더 크게 반응한다(결정론)', () => {
+    const a = new Game(2), b = new Game(2); a.advanceDays(30 * 24); b.advanceDays(30 * 24);
+    expect(a.state.economy).toBe(b.state.economy);
+    expect(a.state.economy).toBeGreaterThanOrEqual(config.economy.min); expect(a.state.economy).toBeLessThanOrEqual(config.economy.max);
+    const g = new Game(1); const r = open(g, 'ICN', 'JFK', 1, (() => { g.state.cash = 400; const p = g.buyPlane('A350'); if (!p.ok) throw new Error(); g.setCabin(p.planeId, 0.2); return g.plane(p.planeId)!; })()); const rt = g.route(r)!;
+    const base = g.routeDay(rt); g.state.economy = 1.2; const boom = g.routeDay(rt);
+    expect(boom.demandE / base.demandE).toBeCloseTo(1.2, 6);
+    expect(boom.demandB / base.demandB).toBeCloseTo(1.2 ** config.economy.bizPow, 6);
+    g.state.economy = 0.8; expect(g.routeDay(rt).demandE).toBeLessThan(base.demandE);
+    expect(g.economyLabel).toBe('불황');
+  });
+  it('새 사건: 감염병은 수요를 크게 줄이고, 파업은 운영비·운항에 영향, 엔진 결함은 그 항공기만 멈춘다(대응하면 절반)', () => {
+    const g = new Game(1); const r = open(g, 'ICN', 'CJU', 20); const rt = g.route(r)!; const p = g.state.planes[0];
+    const base = g.routeDay(rt);
+    g.state.events.push({ def: 'pandemic', monthsLeft: 4 });
+    expect(g.routeDay(rt).demandE).toBeCloseTo(base.demandE * 0.65, 6);
+    g.state.events.length = 0;
+    g.state.events.push({ def: 'strike', monthsLeft: 2 });
+    const st = g.routeDay(rt); expect(st.seats).toBeCloseTo(base.seats * 0.8, 6); expect(st.cost).toBeGreaterThan(base.cost * 0.79);
+    g.state.events.length = 0;
+    g.state.events.push({ def: 'engine', monthsLeft: 2, planeId: p.id });
+    expect(g.routeDay(rt).seats).toBe(0);
+    expect(g.respondEvent(0).ok).toBe(true); expect(g.routeDay(rt).seats).toBeCloseTo(base.seats * 0.5, 6);
+    g.sellPlane(p.id); expect(g.state.events.length).toBe(0); // 팔면 그 사건은 사라진다
+  });
+  it('담보 가치가 떨어져 대출 한도를 넘으면 은행이 초과분을 회수한다(현금이 모자라면 파산 위험)', () => {
+    const g = new Game(1); g.borrow(g.loanLimit - 0.01);
+    g.state.planes[0].book = 0; // 담보 가치 급락
+    g.advanceDays(30);
+    expect(g.state.loan).toBeCloseTo(g.loanLimit, 6); // 한도(기본 20)까지 줄었다
+    expect(g.state.log.some((l) => l.includes('회수'))).toBe(true);
+  });
+  it('경쟁사 가격 반응: 우리가 더 싸게 팔면 경쟁사가 따라 내리고(바닥까지), 그렇지 않으면 목표 가격으로 돌아간다', () => {
+    const g = new Game(1); const r = open(g, 'ICN', 'PUS', 14);
+    g.state.competitors[0].routes.push({ a: 'ICN', b: 'PUS', seatsDay: 300, fareRatio: 1.0 });
+    g.setFare(r, g.routeBaseFare(g.route(r)!) * 0.6); // 크게 인하
+    for (let i = 0; i < 9; i++) { g.advanceDays(30); if (g.state.status !== 'playing') break; }
+    expect(g.state.competitors[0].routes[0].fareRatio).toBeCloseTo(config.rival.lowFloor, 6);
+    g.setFare(r, g.routeBaseFare(g.route(r)!) * 1.5);
+    for (let i = 0; i < 6; i++) g.advanceDays(30);
+    expect(g.state.competitors[0].routes[0].fareRatio).toBeCloseTo(config.rival.lowTarget, 6);
   });
 });

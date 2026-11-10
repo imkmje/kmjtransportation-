@@ -1,6 +1,8 @@
 import land from '../data/land.json';
 import { CITIES } from '../data';
 import type { Game } from '../sim/game';
+import { placeLabels, type LabelItem } from './labels';
+import { marketSize } from '../sim/model';
 
 /** 세계 지도(등장방형도법) 캔버스: 이동·확대(핀치·휠), 도시·노선 누르기, 노선 위를 나는 작은 비행기 표시 */
 export interface MapEvents { onCity(id: string | null): void; onRoute(id: number): void }
@@ -11,7 +13,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   const ctx = canvas.getContext('2d')!;
   let W = 0, H = 0, dpr = 1, resized = false;
   let scale = 3, cx = 100, cy = 25; // scale: 화면 px/도, (cx, cy): 화면 가운데의 경도·위도
-  let selCity: string | null = null, selRoute: number | null = null;
+  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null;
+  const widths = new Map<string, number>();
   const toX = (lon: number) => W / 2 + (lon - cx) * scale, toY = (lat: number) => H / 2 - (lat - cy) * scale;
   const fitScale = () => Math.min(W / 360, H / (LAT_MAX - LAT_MIN));
 
@@ -78,20 +81,27 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         }
       }
     }
-    // 도시: 운항 중이면 노란색, 선택하면 주황 테두리
+    // 도시: 운항 중이면 노란색, 선택하면 주황 테두리. 이름은 겹치지 않는 자리에 놓고, 자리가 없으면 중요하지 않은 도시의 이름은 숨긴다(확대하면 나타남)
     ctx.font = '600 12px system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'; ctx.textBaseline = 'middle';
-    for (const c of CITIES) {
-      const connected = g.state.routes.some((r) => r.open && (r.a === c.id || r.b === c.id) && g.planesOn(r.id).length > 0);
-      for (const shift of [-360, 0, 360]) {
-        const x = toX(c.lon + shift), y = toY(c.lat);
-        if (x < -40 || x > W + 40) continue;
-        const sel = c.id === selCity;
-        ctx.fillStyle = connected ? '#ffd86b' : '#ffffff'; ctx.strokeStyle = sel ? '#e8793a' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
-        ctx.beginPath(); ctx.arc(x, y, c.base ? 8 : 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 4;
-        const lb = c.label ?? { dx: 11, dy: -1 };
-        ctx.textAlign = lb.align === 'right' ? 'right' : 'left'; ctx.fillText(c.name, x + lb.dx, y + lb.dy); ctx.textAlign = 'left'; ctx.shadowBlur = 0;
-      }
+    const connectedOf = (id: string) => g.state.routes.some((r) => r.open && (r.a === id || r.b === id) && g.planesOn(r.id).length > 0);
+    const items: LabelItem[] = [];
+    for (const c of CITIES) for (const shift of [-360, 0, 360]) {
+      const x = toX(c.lon + shift), y = toY(c.lat);
+      if (x < -40 || x > W + 40 || y < -20 || y > H + 20) continue;
+      if (!widths.has(c.name)) widths.set(c.name, ctx.measureText(c.name).width + 4);
+      items.push({ id: `${c.id}@${shift}`, x, y, w: widths.get(c.name)!, h: 14, priority: marketSize(c) + (connectedOf(c.id) ? 100 : 0) + (c.base ? 200 : 0), force: c.id === selCity, pref: c.label });
+    }
+    const placed = placeLabels(items, { w: W, h: H });
+    const t = now / 1000;
+    for (const it of items) {
+      const id = it.id.split('@')[0], c = cityOf(id), sel = id === selCity, connected = connectedOf(id);
+      if (id === pulseCity) { const ph = (t % 1.4) / 1.4; ctx.strokeStyle = `rgba(232, 121, 58, ${1 - ph})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + ph * 22, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.fillStyle = connected ? '#ffd86b' : '#ffffff'; ctx.strokeStyle = sel ? '#e8793a' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
+      ctx.beginPath(); ctx.arc(it.x, it.y, c.base ? 8 : 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      const p = placed.get(it.id);
+      if (!p) continue;
+      ctx.fillStyle = '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
+      ctx.textAlign = p.align; ctx.fillText(c.name, p.x, p.y); ctx.textAlign = 'left'; ctx.shadowBlur = 0;
     }
   }
 
@@ -149,6 +159,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
 
   return {
     select(city: string | null, route: number | null) { selCity = city; selRoute = route; },
+    /** 안내용: 이 도시 둘레에 퍼지는 주황색 원을 그린다(null이면 끔) */
+    setPulse(city: string | null) { pulseCity = city; },
     focusCity(id: string) { const c = CITIES.find((x) => x.id === id); if (c) { cx = c.lon; cy = c.lat; clamp(); } },
     /** 도시의 화면 좌표(점검용) */
     screenOf(id: string): { x: number; y: number } | null { const c = CITIES.find((x) => x.id === id); if (!c) return null; const r = canvas.getBoundingClientRect(); return { x: r.left + toX(c.lon), y: r.top + toY(c.lat) }; },

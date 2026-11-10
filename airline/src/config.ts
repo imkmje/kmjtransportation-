@@ -6,9 +6,11 @@ export const config = {
   flight: { turnaroundH: 1.2, taxiH: 0.5, dailyHours: 14 },
   cost: { landingFeeK: 2.0, perPaxFee: 6, fixedMonthly: 1.0, perPlaneMonthly: 0.4, depreciationMonths: 120 }, // landingFeeK: 이착륙 1회(천 달러), perPaxFee: 승객당($), fixedMonthly: M
   start: { cash: 20, reputation: 0.3, plane: 'B737' },
-  rules: { bankruptCash: -5, bankruptMonths: 2, winProfit: 120, timeLimitMonths: 24, winCities: 12 },
-  events: { chancePerMonth: 0.35 },
-  loan: { baseRate: 0.01, spread: 0.03, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
+  rules: { bankruptCash: -5, bankruptMonths: 2, winProfit: 100, timeLimitMonths: 24, winCities: 12 },
+  events: { chancePerMonth: 0.42 },
+  economy: { reversion: 0.12, noise: 0.14, min: 0.75, max: 1.25, bizPow: 2, cargoPow: 1.5 }, // 경기 지수: 평균(1)으로 돌아가려는 힘 + 무작위 흔들림. 비즈니스는 경기에 더 민감
+  rival: { step: 0.05, upStep: 0.03, lowFloor: 0.7, premFloor: 0.9, lowTarget: 0.85, premTarget: 1.15 }, // 경쟁사 가격 반응
+  loan: { baseRate: 0.01, spread: 0.03, crunch: 0.2, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
   aging: { maintPerMonth: 0.004, maxMult: 1.6 }, // 노후 1개월당 운영비 +0.4%(최대 +60%)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9
   slot: { base: 6, perSize: 0.35, price: 2, priceStep: 0.2, lease: 0.12 }, // 공항 1일 이착륙 한도 = base + perSize × 시장 규모 + 구매분. 구매가(M)·월 임대료(M)
