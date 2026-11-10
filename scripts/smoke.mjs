@@ -9,7 +9,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 // 새 화면 구성: 도구는 아래쪽 분류 상자 안에, 저장·불러오기 등은 오른쪽 위 메뉴 안에 있다. 클릭하기 전에 알맞은 상자·메뉴를 열어 주는 보조 장치
 const patch = (pg) => {
   const click = pg.click.bind(pg), sel = pg.selectOption.bind(pg);
-  const menuIds = /^#(save|load|export|import|sample|newcity|gridcity|hillcity|slot|about)$/;
+  const menuIds = /^#(save|load|export|import|sample|newcity|gridcity|hillcity|terraincity|terrainType|slot|about)$/;
   const prep = async (s) => {
     if (menuIds.test(s)) { if (!(await pg.locator('#filebar').isVisible())) await click('#menubtn'); }
     else if (s.startsWith('button[data-tool=')) {
@@ -38,7 +38,7 @@ await page.waitForTimeout(1500);
 // ---- 시작 화면 ----
 await page.screenshot({ path: (process.argv[2] ?? 'smoke.png').replace('.png', '-title.png') });
 const titleText = await page.locator('#title').innerText();
-check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.0.0') && titleText.includes('업데이트 내역') && titleText.includes('지형'), titleText.slice(0, 120).replace(/\n/g, ' '));
+check('시작 화면: 제목·버전·업데이트 내역(최신 버전)이 보임', (await page.locator('#title').isVisible()) && titleText.includes('교통 시뮬레이션') && titleText.includes('v2.1.0') && titleText.includes('업데이트 내역') && titleText.includes('지형 유형'), titleText.slice(0, 120).replace(/\n/g, ' '));
 const tk0 = await page.evaluate(() => window.__game.sim.tickCount);
 await page.waitForTimeout(600);
 check('시작 화면이 떠 있는 동안 시간이 멈춰 있음', (await page.evaluate(() => window.__game.sim.tickCount)) === tk0);
@@ -721,6 +721,14 @@ await page.screenshot({ path: process.argv[2] ?? 'smoke.png' });
   check('업적 줄을 누르면 목록이 열림', (await page.locator('#st-goals li').count()) === 12);
   await page.click('#sample');
   await page.waitForTimeout(400);
+  // 지형 유형 고르기
+  await page.selectOption('#terrainType', 'coast');
+  await page.click('#terraincity');
+  await page.waitForTimeout(400);
+  const ti = await page.evaluate(() => { const n = window.__game.editor.network; return { sea: n.terrain?.sea, ext: n.externalId() !== null }; });
+  check('지형 도시(해안): 바다가 있는 지형에서 외부 연결 도로가 놓임', ti.sea === 'e' && ti.ext, JSON.stringify(ti));
+  await page.click('#sample');
+  await page.waitForTimeout(300);
   check('샘플 맵으로 돌아오면 지형이 사라짐', await page.evaluate(() => window.__game.editor.network.terrain === null));
 }
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));

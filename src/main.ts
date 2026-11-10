@@ -17,7 +17,7 @@ import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
 import { buildStartMap } from './maps/start';
 import { buildGridMap } from './maps/grid';
-import { buildHillMap } from './maps/hills';
+import { buildHillMap, buildTerrainStart } from './maps/hills';
 import { createZoneLayer } from './render/zones';
 import { createSignalLayer } from './render/signals';
 import { createTitle } from './ui/title';
@@ -100,6 +100,7 @@ const tools = createTools({
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },
   loadGrid: () => { buildGridMap(editor); sim.reset(); view.focus({ x: 0, y: -100 }); },
+  loadTerrain: (kind) => { buildTerrainStart(editor, kind); sim.reset(); view.setTerrain(editor.network.terrain); view.focus({ x: 0, y: -500 }); },
   loadHills: () => { buildHillMap(editor); sim.reset(); view.setTerrain(editor.network.terrain); view.focus({ x: 100, y: 0 }); },
   loadNew: () => { buildStartMap(editor); sim.reset(); view.focus({ x: 0, y: config.external.roadEndY - 100 }); },
   setHeat: (on) => heat.setVisible(on),

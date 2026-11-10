@@ -3,6 +3,7 @@ import type { Editor } from '../sim/editor';
 import type { BuildingError, BuildingSize, PlanError, Pt, RoadKind, SignKind, ZoneType } from '../sim/network';
 import type { RoadPos } from '../sim/route';
 import { curvePoints, CURVE_PIECE } from '../sim/curve';
+import { TERRAIN_PRESETS, type TerrainKind } from '../sim/terrain';
 import type { RoadLayer } from '../render/roads';
 import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
@@ -56,6 +57,7 @@ interface Deps {
   loadNew: () => void;
   loadGrid: () => void;
   loadHills: () => void;
+  loadTerrain: (kind: TerrainKind) => void;
   setHeat: (on: boolean) => void;
   setColorblind: (on: boolean) => void;
   pick: (clientX: number, clientY: number) => Pt | null;
@@ -191,6 +193,7 @@ export function createTools(d: Deps) {
     <div class="mrow"><button id="export">파일로 저장</button><button id="import">파일 열기</button></div>
     <div class="mrow"><button id="sample" title="큰길 하나와 작은 길, 주거·직장·상점이 있는 예제 도시">샘플 맵</button><button id="newcity" title="외부에서 들어오는 도로 하나만 있는 새 도시">새 도시</button></div>
     <div class="mrow"><button id="gridcity" title="큰길·세로 길·신호등·회전교차로·구역이 갖춰진 격자 도시. 신호와 병목 찾기를 시험해 보기 좋습니다">격자 도시</button><button id="hillcity" title="언덕과 강이 있는 지형. 도로가 지형을 따라 오르내리고 강 위는 다리가 됩니다. 입체교차(T)도 시험해 보세요">구릉 도시</button></div>
+    <div class="mrow"><select id="terrainType" title="지형 유형(CS2 맵 구성을 단순화)">${(Object.entries(TERRAIN_PRESETS) as [string, { name: string }][]).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('')}</select><button id="terraincity" title="고른 지형에서 외부 연결 도로만 있는 새 도시를 시작합니다. 경사·물·다리 규칙이 적용됩니다">지형 도시</button></div>
     <input type="file" id="file" accept="application/json,.json" hidden />
     <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />마우스: 가운데 드래그 = 이동, 오른쪽 드래그 = 회전·기울기, 휠 = 확대<br />터치: 한 손가락 = 이동, 두 손가락 벌리기 = 확대, 비틀기 = 회전, 같이 위아래 = 기울기, 좌우 = 이동<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다(주거·상업·직장)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   const $ = <T extends HTMLElement>(root: HTMLElement, sel: string) => root.querySelector<T>(sel)!;
@@ -423,7 +426,8 @@ export function createTools(d: Deps) {
     const plan = net.planRoad(start, p, roadKind(), undefined, overMode);
     d.roads.setGhost(start, p, roadKind(), plan.ok);
     const len = plan.ok ? plan.length : Math.hypot(p.x - start.x, p.y - start.y);
-    d.tip.textContent = `${Math.round(len)} m${plan.ok ? '' : ' — ' + ERR[plan.error]}`;
+    const slope = net.terrain ? ` · 경사 ${Math.round((Math.abs(net.heightAt(p.x, p.y) - net.heightAt(start.x, start.y)) / Math.max(1, len)) * 100)}%` : ''; // CS2처럼 놓는 동안 경사를 보여 준다
+    d.tip.textContent = `${Math.round(len)} m${slope}${plan.ok ? '' : ' — ' + ERR[plan.error]}`;
     d.tip.classList.toggle('bad', !plan.ok);
     d.tip.style.left = `${lastClient.x + 16}px`;
     d.tip.style.top = `${lastClient.y + 16}px`;
@@ -706,6 +710,7 @@ export function createTools(d: Deps) {
     say('파일을 불러왔습니다');
   });
   $(d.filebar, '#newcity').onclick = () => guard(() => { d.loadNew(); say('새 도시를 시작합니다. 외부에서 들어오는 도로 옆에 구역을 칠해 보세요'); });
+  $(d.filebar, '#terraincity').onclick = () => guard(() => { const k = $<HTMLSelectElement>(d.filebar, '#terrainType').value as TerrainKind; d.loadTerrain(k); say(`${TERRAIN_PRESETS[k].name} 지형의 새 도시를 열었습니다. 도로는 지형을 따라 오르내리고, 물 위는 다리가 됩니다`); });
   $(d.filebar, '#hillcity').onclick = () => guard(() => { d.loadHills(); say('구릉 도시를 열었습니다. 강 위는 다리가 되고, 도로는 지형을 따라 오르내립니다'); });
   $(d.filebar, '#gridcity').onclick = () => guard(() => { d.loadGrid(); say('격자 도시를 열었습니다. 구역에 건물이 자라고 신호등이 켜져 있습니다'); });
   $(d.filebar, '#sample').onclick = () => guard(() => { d.loadSample(); say('샘플 맵을 열었습니다. 평일 아침 6시부터 출근이 시작됩니다'); });

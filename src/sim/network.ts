@@ -81,7 +81,8 @@ function parseTerrain(v: unknown): TerrainDef | null {
   if (v === undefined || v === null) return null; // 형식 11 이하: 평지
   const t = v as Partial<TerrainDef>;
   if (typeof t.seed !== 'number' || typeof t.amp !== 'number' || typeof t.waterLevel !== 'number' || ![t.seed, t.amp, t.waterLevel].every(Number.isFinite)) throw new Error('도로망 파일이 손상되었습니다');
-  return { seed: t.seed, amp: t.amp, waterLevel: t.waterLevel, river: t.river === true };
+  const sea = t.sea === 'n' || t.sea === 's' || t.sea === 'e' || t.sea === 'w' ? t.sea : null;
+  return { seed: t.seed, amp: t.amp, waterLevel: t.waterLevel, river: t.river === true, ...(typeof t.scale === 'number' && Number.isFinite(t.scale) && t.scale > 50 ? { scale: t.scale } : {}), ...(Number.isInteger(t.lakes) && t.lakes! > 0 && t.lakes! <= 8 ? { lakes: t.lakes } : {}), ...(sea ? { sea } : {}) };
 }
 
 type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout' | 'terrain'>;

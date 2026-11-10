@@ -29,7 +29,7 @@ export function createScene(canvasParent: HTMLElement) {
   let terrainKey = '';
   const lowC = new THREE.Color(0xc9b98a), midC = new THREE.Color(0xb9dfa3), highC = new THREE.Color(0x9c8f6b), tmp = new THREE.Color();
   function setTerrain(def: TerrainDef | null) {
-    const key = def ? `${def.seed}:${def.amp}:${def.waterLevel}:${def.river}` : '';
+    const key = def ? JSON.stringify(def) : '';
     if (key === terrainKey) return;
     terrainKey = key;
     setHeightField((x, y) => terrainHeight(def, x, y));
@@ -49,7 +49,7 @@ export function createScene(canvasParent: HTMLElement) {
     ground.geometry = g;
     ground.rotation.x = 0; // 이미 눕힌 형태
     (ground.material as THREE.MeshLambertMaterial).vertexColors = true; (ground.material as THREE.MeshLambertMaterial).needsUpdate = true;
-    water.position.y = def.waterLevel; water.visible = def.river;
+    water.position.y = def.waterLevel; water.visible = true;
     grid.visible = false; // 울퉁불퉁한 지형에서는 평평한 격자를 숨긴다
   }
 

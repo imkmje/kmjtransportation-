@@ -23,3 +23,28 @@ describe('구릉 도시', () => {
     expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks + sim.traffic.stats.conflicts).toBe(0);
   }, 120_000);
 });
+
+import { TERRAIN_PRESETS, terrainHeight, isWater, type TerrainKind } from '../src/sim/terrain';
+import { buildTerrainStart } from '../src/maps/hills';
+
+describe('지형 유형', () => {
+  for (const kind of Object.keys(TERRAIN_PRESETS) as TerrainKind[]) {
+    it(`${TERRAIN_PRESETS[kind].name}: 시작 도시가 만들어지고 건물을 지을 땅이 충분하며 하루가 안전하게 돈다`, () => {
+      const e = new Editor(config);
+      const def = buildTerrainStart(e, kind);
+      const n = e.network;
+      expect(n.terrain).toEqual(def);
+      expect(n.externalId()).not.toBeNull();
+      // 도로 근처 구역 칸 중 칠할 수 있는 칸이 있다
+      let ok = 0, water = 0;
+      for (let i = -20; i <= 20; i++) for (let j = -50; j < -15; j++) if (n.cellStatus(i, j) === 'ok') ok++;
+      for (let x = -900; x <= 900; x += 60) for (let y = -900; y <= 900; y += 60) if (isWater(def, x, y)) water++;
+      expect(ok).toBeGreaterThan(20);
+      if (kind === 'plain') expect(Math.max(...[0, 1, 2, 3].map((k) => Math.abs(terrainHeight(def, k * 200, 0))))).toBeLessThan(4);
+      if (kind === 'coast' || kind === 'lakes') expect(water).toBeGreaterThan(30); // 바다·호수가 실제로 있다
+      const sim = new Sim(config, n);
+      for (let i = 0; i < 20 * 120; i++) sim.step();
+      expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks).toBe(0);
+    });
+  }
+});
