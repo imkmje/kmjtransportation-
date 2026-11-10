@@ -82,6 +82,17 @@ await page.evaluate(() => { window.__air.game.state.events.push({ def: 'fuel', m
 check('알림 띠: 알림 탭에 들어가지 않아도 지도 위에 진행 중 사건과 대응 버튼이 보임', (await page.locator('#alerts .chip').count()) >= 1 && (await page.locator('#alerts button[data-act="respond"]').count()) >= 1 && (await page.locator('#tabs button[data-tab="news"]').getAttribute('data-badge')) !== null);
 await page.locator('#alerts button[data-act="respond"]').last().click(); // 방금 넣은 연료비 사건은 마지막
 check('알림 탭: 사건 대응 버튼이 동작', await page.evaluate(() => window.__air.game.state.events.at(-1).handled === true));
+// 두 손가락: 같은 간격으로 함께 움직이면 이동, 벌리면 확대 — 확대한 채로도 이동되어야 한다(사용자 보고)
+const touch = (type, id, x, y) => page.evaluate(([t, i, px, py]) => { const c = document.querySelector('#map'); const r = c.getBoundingClientRect(); c.dispatchEvent(new PointerEvent(t, { pointerId: i, pointerType: 'touch', isPrimary: i === 1, clientX: r.left + px, clientY: r.top + py, bubbles: true })); }, [type, id, x, y]);
+const v0 = await page.evaluate(() => window.__air.mapView());
+await touch('pointerdown', 1, 300, 300); await touch('pointerdown', 2, 400, 300);
+for (let i = 1; i <= 10; i++) { await touch('pointermove', 1, 300 + 6 * i, 300 + 3 * i); await touch('pointermove', 2, 400 + 6 * i, 300 + 3 * i); } // 간격 그대로 오른쪽 아래로 이동(손가락은 번갈아 조금씩 움직인다)
+const v1 = await page.evaluate(() => window.__air.mapView());
+check('두 손가락 이동: 간격이 같으면 확대는 그대로고 지도만 움직임', Math.abs(v1.scale - v0.scale) < 1e-6 && (Math.abs(v1.cx - v0.cx) > 0.1 || Math.abs(v1.cy - v0.cy) > 0.1), JSON.stringify([v0, v1]));
+for (let i = 1; i <= 10; i++) { await touch('pointermove', 1, 360 - 3 * i, 330); await touch('pointermove', 2, 460 + 5 * i, 330); } // 벌리면서(확대) 가운데가 오른쪽으로 이동
+const v2 = await page.evaluate(() => window.__air.mapView());
+check('두 손가락 확대하면서 이동: 확대되고 가운데 좌표도 함께 움직임', v2.scale > v1.scale && Math.abs(v2.cx - v1.cx) > 0.01, JSON.stringify([v1, v2]));
+await touch('pointerup', 1, 330, 330); await touch('pointerup', 2, 510, 330);
 // 슬롯 구매(지도 탭의 도시 화면)
 await page.click('#tabs button[data-tab="map"]'); await tapCity('CJU');
 const cap0 = await page.evaluate(() => window.__air.game.slotCapacity('CJU'));
