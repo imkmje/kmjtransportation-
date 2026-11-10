@@ -12,6 +12,7 @@ const poleMat = new THREE.MeshLambertMaterial({ color: 0x8b8f96 });
 const redMat = new THREE.MeshLambertMaterial({ color: 0xd63a31 });
 const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf6f6f6 });
 const roadMat = new THREE.MeshLambertMaterial({ color: 0x585d66 });
+const portalMat = new THREE.MeshLambertMaterial({ color: 0x3a3d44 }); // 터널 입구
 const deckMat = new THREE.MeshLambertMaterial({ color: 0x9a9fa6 }); // 다리·고가 상판 아래 콘크리트와 교각
 const goodMat = new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true, opacity: 0.55, depthWrite: false });
 const markMat = new THREE.MeshBasicMaterial({ color: 0x2f6fe0, transparent: true, opacity: 0.8, depthWrite: false });
@@ -107,7 +108,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     group.clear();
     const radius = new Map<number, number>();
     for (const s of net.segments.values()) for (const id of [s.a, s.b]) radius.set(id, Math.max(radius.get(id) ?? 0, config.roads[s.kind].lanesPerDir * config.roads[s.kind].laneWidth + 2));
-    const decks: Inst[] = [], bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
+    const portals: Inst[] = [], decks: Inst[] = [], bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
       const len = Math.hypot(b.x - a.x, b.y - a.y), ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, ry = Math.atan2(b.y - a.y, b.x - a.x);
@@ -125,6 +126,9 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
           list.push({ x: p.x, y: p.y, z: p.z, sx: (c1 - c0) / Math.cos(pitch), sy: h, sz: wd, ry, rz: pitch });
         }
       };
+      if (s.structure === 'tunnel') { // 터널 입구: 양 끝에 어두운 문틀(언덕에 파묻힌 가운데는 지형에 가려진다)
+        for (const t of [2, len - 2]) { const p = toThreeAbs(a.x + ux * t, a.y + uy * t, zAt(t) + 2.6); portals.push({ x: p.x, y: p.y, z: p.z, sx: 1.6, sy: 5.2, sz: width + 3, ry }); }
+      }
       if (s.structure === 'bridge') { // 상판 아래 두꺼운 콘크리트와 교각(지면이 도로보다 한참 아래일 때만)
         strip(decks, 0, len, sp.shift, width + 1.2, 1.4, -1.4);
         for (let t = 25; t < len - 20; t += 30) {
@@ -150,6 +154,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       discs.push({ x: c.x, y: c.y, z: c.z, sx: rr, sy: 0.3, sz: rr, ry: 0 }); // 교차로·끝점은 둥근 판으로 덮어 이음새를 가린다(조금 더 높게: 겹침 깜빡임 방지)
     }
     flush(unitBox, deckMat, decks);
+    flush(unitBox, portalMat, portals);
     flush(unitBox, roadMat, bodies);
     flush(unitDisk, roadMat, discs);
     flush(unitBox, walkMat, walks);
