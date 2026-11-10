@@ -59,6 +59,8 @@ interface Deps {
   loadHills: () => void;
   loadTerrain: (kind: TerrainKind) => void;
   setHeat: (on: boolean) => void;
+  setShadows: (on: boolean) => void;
+  setTrees: (on: boolean) => void;
   setColorblind: (on: boolean) => void;
   pick: (clientX: number, clientY: number) => Pt | null;
   canvas: HTMLElement;
@@ -162,6 +164,8 @@ export function createTools(d: Deps) {
       </div>
       <div class="sub" id="sub-view" data-cat="view" hidden>
         <label><input type="checkbox" id="heat" /> 정체 히트맵 (M)</label>
+        <label title="끄면 느린 기기에서 더 부드럽게 움직입니다"><input type="checkbox" id="shadow" checked /> 그림자</label>
+        <label title="끄면 느린 기기에서 더 부드럽게 움직입니다"><input type="checkbox" id="trees" checked /> 나무</label>
         <label><input type="checkbox" id="cb" /> 색약 친화 색상</label>
         <label><input type="checkbox" id="debugToggle" /> 디버그 표시 (D)</label>
         <label title="적색일 때 우회전은 완전히 선 뒤 교차 차량이 없으면 갑니다"><input type="checkbox" id="rtor" checked /> 적색 우회전</label>
@@ -289,11 +293,13 @@ export function createTools(d: Deps) {
   }
 
   // 클릭 지점에서 20m 안의 가장 가까운 교차로(도로 3개 이상)
-  function signalNode(p: Pt) {
-    let best: { id: number; x: number; y: number } | null = null, bd = 20;
+  /** 가까운 교차로(도로 3개 이상). tight면 교차로 판 안쪽만, 아니면 판 가장자리 8m 밖까지(누르기 쉽게) */
+  function signalNode(p: Pt, tight = false) {
+    let best: { id: number; x: number; y: number } | null = null, bd = Infinity;
     for (const n of net.nodes.values()) {
-      const dd = Math.hypot(n.x - p.x, n.y - p.y);
-      if (dd < bd && net.segmentsAt(n.id).length >= 3) { bd = dd; best = n; }
+      if (net.segmentsAt(n.id).length < 3) continue;
+      const dd = Math.hypot(n.x - p.x, n.y - p.y), lim = net.plateRadius(n.id) + (tight ? 3 : 10);
+      if (dd < lim && dd < bd) { bd = dd; best = n; }
     }
     return best;
   }
@@ -326,6 +332,8 @@ export function createTools(d: Deps) {
     redoBtn.disabled = !d.editor.canRedo;
     toolButtons.forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
     d.roads.setMark(tool === 'trip' ? tripFrom : null);
+    d.roads.setNodeHover(null);
+    if (last && tool === null) { const n = signalNode(last); if (n) d.roads.setNodeHover({ x: n.x, y: n.y, r: net.plateRadius(n.id) }); return; } // 도구가 없을 때: 교차로 위에 올리면 눌러서 선택할 수 있다는 표시
     if (!last || tool === null) return;
     if (tool === 'trip') {
       const h = d.pickRoad(last);
@@ -450,6 +458,8 @@ export function createTools(d: Deps) {
   function click() {
     if (!last) return;
     if (tool === null) { // 차량(가장 가까운 것) → 차량 정보, 교차로(가까이 있을 때 우선) → 교차로 정보, 아니면 도로 정보
+      const inside = signalNode(last, true); // 교차로 판 안쪽이면 차가 있어도 교차로를 선택한다
+      if (inside) { d.selectNode(inside.id); return; }
       const vid = d.pickVehicle(last);
       if (vid !== null) { d.selectVehicle(vid); return; }
       const n = signalNode(last);
@@ -676,6 +686,8 @@ export function createTools(d: Deps) {
   $(d.toolbar, '#clearveh').onclick = () => { d.clearVehicles(); say('차량을 모두 제거했습니다'); };
   $<HTMLInputElement>(d.toolbar, '#ortho').onchange = (e) => (ortho = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#trees').onchange = (e) => d.setTrees((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#shadow').onchange = (e) => d.setShadows((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#over').onchange = (e) => { overMode = (e.target as HTMLInputElement).checked; refresh(); };
   $<HTMLInputElement>(d.toolbar, '#curve').onchange = (e) => { curveMode = (e.target as HTMLInputElement).checked; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); };

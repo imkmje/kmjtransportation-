@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { toThree, fromThree, setHeightField, groundHeight } from './coords';
 import { terrainHeight, type TerrainDef } from '../sim/terrain';
+import { createLook } from './look';
 import type { Pt } from '../sim/network';
 
 const WORLD = 2000; // 지면 한 변(m)
@@ -9,22 +10,39 @@ const WORLD = 2000; // 지면 한 변(m)
 export function createScene(canvasParent: HTMLElement) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.NeutralToneMapping; // 파스텔 색을 칙칙하게 만들지 않으면서 밝은 곳이 하얗게 날아가는 것을 막는다
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasParent.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xcfe8f7);
-  scene.fog = new THREE.Fog(0xcfe8f7, 1500, 3500);
+  const look = createLook(scene);
 
+  // 땅: 얇은 얼룩 무늬(잔디 느낌)를 반복해서 밋밋함을 줄인다
+  const grassTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, 256, 256);
+    let r = 7; const rnd = () => ((r = (Math.imul(r, 1664525) + 1013904223) >>> 0) / 4294967296);
+    for (let i = 0; i < 420; i++) { const x = rnd() * 256, y = rnd() * 256, rad = 10 + rnd() * 34, v = rnd() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${0.012 + rnd() * 0.022})`; for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) { g.beginPath(); g.arc(x + ox, y + oy, rad, 0, Math.PI * 2); g.fill(); } }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(WORLD / 160, WORLD / 160); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    return t;
+  })();
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(WORLD, WORLD),
-    new THREE.MeshLambertMaterial({ color: 0xb9dfa3 }),
+    new THREE.MeshLambertMaterial({ color: 0xb2d99b, map: grassTex }),
   );
+  ground.receiveShadow = true;
+  // 지도 밖: 같은 색의 넓은 땅이 안개 속으로 사라지게 해 "떠 있는 판"처럼 보이지 않게 한다
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshLambertMaterial({ color: 0xa6cf8f }));
+  apron.rotation.x = -Math.PI / 2; apron.position.y = -0.4; scene.add(apron);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
   const baseRotation = -Math.PI / 2;
 
   // 지형: 평지면 위의 단순 평면, 지형이 있으면 높이에 맞춰 일그러뜨린 격자 면 + 강물 면
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshLambertMaterial({ color: 0x4a90c8, transparent: true, opacity: 0.8 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshPhongMaterial({ color: 0x3f86c4, transparent: true, opacity: 0.82, shininess: 90, specular: 0x9fd0ff }));
   water.rotation.x = -Math.PI / 2; water.visible = false; scene.add(water);
   let terrainKey = '';
   const lowC = new THREE.Color(0xc9b98a), midC = new THREE.Color(0xb9dfa3), highC = new THREE.Color(0x9c8f6b), tmp = new THREE.Color();
@@ -53,15 +71,16 @@ export function createScene(canvasParent: HTMLElement) {
     grid.visible = false; // 울퉁불퉁한 지형에서는 평평한 격자를 숨긴다
   }
 
-  const grid = new THREE.GridHelper(WORLD, WORLD / 20, 0x5f8f4c, 0x86b572); // 20m 칸
+  const grid = new THREE.GridHelper(WORLD, WORLD / 20, 0x6f9f5c, 0x86b572); // 20m 칸(은은하게)
+  for (const m of [grid.material].flat()) { m.transparent = true; m.opacity = 0.22; m.depthWrite = false; }
   grid.position.y = 0.05;
   scene.add(grid);
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x9bb58a, 1.6);
-  scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-  sun.position.set(300, 500, 200);
-  scene.add(sun);
+  const { sun } = look;
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.5;
+  let shadowsOn = true;
 
   // 비: 카메라가 보는 지점 주변에서 떨어지는 빗줄기(보기 전용 효과)
   const RAIN = 700, rainPos = new Float32Array(RAIN * 6), rainSeed = new Float32Array(RAIN * 3);
@@ -72,7 +91,7 @@ export function createScene(canvasParent: HTMLElement) {
   const rainLines = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xcfe0f0, transparent: true, opacity: 0.55 }));
   rainLines.frustumCulled = false; rainLines.visible = false;
   scene.add(rainLines);
-  let rainT = 0;
+  let rainT = 0, hour = 12, raining = false;
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 6000);
   camera.position.set(250, 250, 250);
 
@@ -171,14 +190,12 @@ export function createScene(canvasParent: HTMLElement) {
     },
     /** 비 오는 날은 하늘·안개가 회색으로, 햇빛이 약해진다 */
     setTerrain,
-    setWeather(rain: boolean) {
-      rainLines.visible = rain;
-      const c = rain ? 0x8d99a6 : 0xcfe8f7;
-      (scene.background as THREE.Color).setHex(c);
-      (scene.fog as THREE.Fog).color.setHex(c);
-      hemi.intensity = rain ? 1.0 : 1.6;
-      sun.intensity = rain ? 0.5 : 1.2;
-    },
+    setWeather(rain: boolean) { rainLines.visible = rain; raining = rain; },
+    /** 시계 시각(0~24, 시간+분/60): 햇빛·하늘·밤 조명에 쓴다 */
+    setHour(h: number) { hour = h; },
+    /** 그림자를 켜고 끈다(느린 기기용) */
+    setShadows(on: boolean) { shadowsOn = on; renderer.shadowMap.enabled = on; sun.castShadow = on; scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; }); },
+    getShadows: () => shadowsOn,
     /** 카메라를 보는 방향·거리 그대로 시뮬 좌표 p 위로 옮긴다(차량 따라가기) */
     panTo(p: Pt) {
       const t = toThree(p.x, p.y, 0);
@@ -204,6 +221,16 @@ export function createScene(canvasParent: HTMLElement) {
     },
     render() {
       controls.update();
+      look.update(hour, raining, camera);
+      { // 그림자 범위는 카메라가 보는 곳 주변. 가까이 볼수록 촘촘하게, 가장자리 깜빡임을 막으려 격자에 맞춘다
+        const dist = camera.position.distanceTo(controls.target), half = THREE.MathUtils.clamp(dist * 0.6, 110, 700), q = (half * 2) / 2048;
+        const tx = Math.round(controls.target.x / q) * q, tz = Math.round(controls.target.z / q) * q;
+        const d = (sun.userData.dir as THREE.Vector3 | undefined) ?? new THREE.Vector3(0.5, 1, 0.5).normalize();
+        sun.target.position.set(tx, controls.target.y, tz);
+        sun.position.set(tx + d.x * 900, controls.target.y + d.y * 900, tz + d.z * 900);
+        const sc = sun.shadow.camera;
+        if (sc.right !== half) { sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 50; sc.far = 2200; sc.updateProjectionMatrix(); }
+      }
       if (rainLines.visible) { // 빗줄기를 아래로 흘리고, 바닥에 닿으면 위로 되돌린다
         rainT += 1;
         for (let i = 0; i < RAIN; i++) {

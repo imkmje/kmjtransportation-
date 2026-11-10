@@ -105,6 +105,42 @@
       #labels .lbl { position: fixed; transform: translate(-50%, -50%); padding: 0 4px; border-radius: 3px; font: 10px ui-monospace, monospace; color: #fff; pointer-events: none; white-space: nowrap; }
       #labels .lane { background: #1f6fc6cc; } #labels .veh { background: #c4601ccc; transform: translate(-50%, -170%); }
       #debug { top: 56px !important; }
+
+      /* ===== 디자인 정리(2.3.0): 글꼴·유리 질감 패널·부드러운 눌림 효과·시작 화면 ===== */
+      :root { --ink: #1c2b25; --ink2: #55655a; --accent: #f2a65a; --accent2: #e8893c; --glass: rgba(252, 254, 251, 0.84); --glass-dark: rgba(22, 32, 40, 0.72); --line: rgba(255, 255, 255, 0.55); --shadow: 0 10px 34px rgba(20, 35, 30, 0.22), 0 2px 6px rgba(20, 35, 30, 0.12); }
+      html, body { font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: var(--ink); }
+      #hud { background: var(--glass-dark) !important; backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); border-bottom: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 4px 18px rgba(10, 20, 25, 0.25); }
+      #clock { font-variant-numeric: tabular-nums; letter-spacing: 0.4px; text-shadow: 0 1px 2px #0006; }
+      #speeds { background: rgba(255, 255, 255, 0.12) !important; } #speeds button { transition: background 0.15s, transform 0.1s; } #speeds button:hover { background: rgba(255, 255, 255, 0.16); } #speeds button.on { background: linear-gradient(#f7b772, var(--accent2)) !important; box-shadow: 0 2px 6px #0004; }
+      #menubtn { transition: background 0.15s; } #menubtn:hover { background: rgba(255, 255, 255, 0.28) !important; }
+      #topci { box-shadow: 0 1px 4px #0004; }
+      #stats, #filebar, #info, #help .card, #legend { background: var(--glass) !important; backdrop-filter: blur(16px) saturate(1.35); -webkit-backdrop-filter: blur(16px) saturate(1.35); border: 1px solid var(--line); border-radius: 16px !important; box-shadow: var(--shadow) !important; }
+      #stats h4, #info h4 { letter-spacing: 0.2px; }
+      #stats .kv > div:nth-child(odd) { color: var(--ink2); }
+      #stats .ci b { font-variant-numeric: tabular-nums; }
+      #toolbar .sub { background: var(--glass) !important; backdrop-filter: blur(16px) saturate(1.35); -webkit-backdrop-filter: blur(16px) saturate(1.35); border: 1px solid var(--line); border-radius: 16px !important; box-shadow: var(--shadow) !important; }
+      #toolbar .sub button, #toolbar .sub label.chip { transition: background 0.15s, transform 0.08s, box-shadow 0.15s; }
+      #toolbar .sub button:hover { background: #d8e5d2; } #toolbar .sub button:active { transform: scale(0.97); }
+      #toolbar .sub button.on { background: linear-gradient(#f7b772, var(--accent2)); color: #2a1c0c; box-shadow: 0 2px 8px rgba(232, 137, 60, 0.45); }
+      #toolbar .cats { background: var(--glass-dark) !important; backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px !important; box-shadow: var(--shadow) !important; }
+      #note { box-shadow: 0 4px 14px #0003; border-radius: 10px !important; }
+      #msg { border-radius: 12px !important; box-shadow: 0 6px 20px #0004; }
+      /* 시작 화면 */
+      #title { background: radial-gradient(120% 90% at 50% 30%, rgba(214, 236, 252, 0.55), rgba(24, 46, 58, 0.62)) !important; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+      #title .card { background: var(--glass) !important; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--line); border-radius: 22px !important; box-shadow: 0 20px 60px rgba(10, 25, 30, 0.35) !important; padding: 30px 32px !important; }
+      #title h1 { font-size: 34px !important; letter-spacing: -0.5px; background: linear-gradient(90deg, #1f6f5a, #2f7fbf); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      #title .btns button { background: linear-gradient(#f7b772, var(--accent2)) !important; box-shadow: 0 4px 14px rgba(232, 137, 60, 0.45); border-radius: 12px !important; padding: 12px 26px !important; transition: transform 0.1s, box-shadow 0.15s; } #title .btns button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(232, 137, 60, 0.55); }
+      #title .btns button#t-auto { background: #e6ede2 !important; box-shadow: none; }
+      #title details.histwrap > summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--ink2); padding: 6px 0; list-style: none; } #title details.histwrap > summary::before { content: "▸ "; } #title details.histwrap[open] > summary::before { content: "▾ "; }
+      #title .hist { max-height: 46vh; overflow-y: auto; margin-top: 4px; }
+
+      #info { max-height: calc(100vh - 150px); overflow-y: auto; }
+      #info .appr { margin: 8px 0; padding: 8px; background: #eef3ea; border-radius: 12px; } #info .appr:hover { outline: 2px solid #4f86d6; }
+      #info .appr-h { font-weight: 700; font-size: 13px; margin-bottom: 6px; } #info .appr-h small { font-weight: 400; color: #55655a; margin-left: 4px; }
+      #info .lanes { display: flex; gap: 4px; justify-content: center; margin-bottom: 6px; }
+      #info .lcard { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; background: #fff; border-radius: 8px; box-shadow: inset 0 -3px 0 #c9d4c4; }
+      #info .lcard em { font-style: normal; font-size: 10.5px; color: #55655a; text-align: center; line-height: 1.2; }
+      #info .lbtns { display: flex; flex-direction: column; gap: 3px; } #info .lbtns button { width: 34px; height: 28px; border: 0; border-radius: 7px; background: #e1e8dd; color: #7c887f; cursor: pointer; font-size: 16px; font-weight: 700; transition: background 0.12s; } #info .lbtns button.on { background: linear-gradient(#f7b772, #e8893c); color: #2a1c0c; }
     </style>
   </head>
   <body>

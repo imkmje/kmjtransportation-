@@ -36,8 +36,7 @@ export function createTitle(root: HTMLElement, version: string, hasAutosave: () 
       <h1>교통 시뮬레이션</h1>
       <p class="sub">도로를 깔고, 구역을 칠하고, 막히는 곳을 찾아 고치는 3D 교통 게임 · <b>v${version}</b></p>
       <div class="btns"><button id="t-start">시작하기</button><button id="t-auto" hidden>자동 저장 불러오기</button></div>
-      <h4>업데이트 내역</h4>
-      <div class="hist">${history()}</div>
+      <details class="histwrap"><summary>업데이트 내역</summary><div class="hist">${history()}</div></details>
     </div>`;
   const q = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
   const close = (auto: boolean) => { root.hidden = true; onClose(auto); };

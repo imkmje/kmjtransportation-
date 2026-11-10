@@ -12,6 +12,7 @@ export interface InfoHooks {
   onRoute: (pts: { x: number; y: number }[] | null, origin: { x: number; y: number } | null, dest: { x: number; y: number } | null) => void;
   onFlows: (lines: [{ x: number; y: number }, { x: number; y: number }][] | null) => void;
   onFollow: (id: number | null) => void;
+  onHoverSeg: (segId: number | null) => void;
 }
 const BNAME: Record<string, string> = { home: '주거', office: '사무', factory: '공장', shop: '상점', school: '학교', mixed: '상가주택', external: '외부 연결점' };
 const TRIP: Record<string, string> = { commute: '출근·등교', return: '귀가·복귀', errand: '외출(점심·쇼핑·여가)', test: '테스트 차량' };
@@ -51,14 +52,29 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
   };
 
   const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  // 차선별 방향: 교차로로 들어오는 끝마다, 차선(오른쪽부터)에 좌회전(←)·직진(↑)·우회전(→) 허용 여부를 켜고 끈다
+  // 방향 이름: 좌표 대신 "북·동·남·서"로 말한다(기본 시점에서 화면 위쪽이 북쪽)
+  const COMPASS = ['동', '북동', '북', '북서', '서', '남서', '남', '남동'];
+  const compass = (from: { x: number; y: number }, to: { x: number; y: number }) => COMPASS[(Math.round((Math.atan2(to.y - from.y, to.x - from.x) / Math.PI) * 4) + 8) % 8] + '쪽';
+  /** 교차로 nodeId로 들어오는 도로 s가 "어느 쪽에서 오는 길"인지 */
+  const fromSide = (s: Segment, nodeId: number) => { const n = net.nodes.get(nodeId)!, o = net.nodes.get(s.a === nodeId ? s.b : s.a)!; return compass(n, o); };
+  // 한국 기준: 진행 방향에서 가장 왼쪽(중앙선 쪽)이 1차선. 내부 번호(i)는 오른쪽부터 1이므로 화면에서만 바꿔 부른다
+  const laneName = (i: number, lanes: number) => { const k = lanes - i + 1; return lanes === 1 ? '1차선' : `${k}차선${k === 1 ? ' · 맨 왼쪽' : k === lanes ? ' · 맨 오른쪽' : ''}`; };
+
+  // 차선별 방향: 교차로로 들어오는 도로마다, 운전자가 보는 모양 그대로(왼쪽 차선이 왼쪽) 차선 카드에 좌회전(←)·직진(↑)·우회전(→) 허용 여부를 켜고 끈다
+  function approachHtml(s: Segment, n: number): string {
+    const lanes = net.lanesIncoming(s.id, n), cur = net.laneDirsAt(s.id, n), r = cfg.roads[s.kind];
+    const cards = Array.from({ length: lanes }, (_, k) => lanes - k).map((i) => {
+      const m = cur[i - 1] || 7;
+      const btn = ([[1, '←', '좌회전'], [2, '↑', '직진'], [4, '→', '우회전']] as [number, string, string][]).map(([bit, ar, nm]) => `<button data-ld="${s.id}:${n}:${i - 1}:${bit}" class="${m & bit ? 'on' : ''}" title="${laneName(i, lanes)}: ${nm} ${m & bit ? '허용(누르면 막음)' : '막힘(누르면 허용)'}">${ar}</button>`).join('');
+      return `<div class="lcard"><div class="lbtns">${btn}</div><em>${laneName(i, lanes).replace(' · ', '<br>')}</em></div>`;
+    }).join('');
+    return `<div class="appr" data-appr="${s.id}"><div class="appr-h">${fromSide(s, n)}에서 들어오는 길 <small>${s.name ? `${escapeHtml(s.name)} · ` : ''}${r.name}</small></div>
+      <div class="lanes">${cards}</div>
+      <div class="two"><button class="wide" data-ld-auto="${s.id}:${n}">자동 배정</button><button class="wide" data-ld-reset="${s.id}:${n}">모두 허용</button></div></div>`;
+  }
   function laneHtml(s: Segment): string {
     const ends = [s.a, s.b].filter((n) => net.segmentsAt(n).length >= 3 && !(s.oneWay === 'ab' && n === s.a) && !(s.oneWay === 'ba' && n === s.b));
-    return ends.map((n) => {
-      const lanes = net.lanesIncoming(s.id, n), cur = net.laneDirsAt(s.id, n), node = net.nodes.get(n)!;
-      const rows = Array.from({ length: lanes }, (_, i) => { const m = cur[i] || 7; return `<div class="ln"><span>${i + 1}차선${i === 0 ? '(오른쪽)' : i === lanes - 1 && lanes > 1 ? '(왼쪽)' : ''}</span>${[[1, '←', '좌'], [2, '↑', '직'], [4, '→', '우']].map(([bit, ar, nm]) => `<button data-ld="${n}:${i}:${bit}" class="${m & (bit as number) ? 'on' : ''}" title="${nm}">${ar}</button>`).join('')}</div>`; }).join('');
-      return `<div class="sub-h">차선 방향 · 끝 (${Math.round(node.x)}, ${Math.round(node.y)})</div>${rows}<div class="two"><button class="wide" data-ld-auto="${n}">자동 배정</button><button class="wide" data-ld-reset="${n}">모두 허용</button></div>`;
-    }).join('');
+    return ends.map((n) => `<div class="sub-h">차선 방향 (교차로로 들어가는 쪽)</div>${approachHtml(s, n)}`).join('');
   }
 
   function segHtml(s: Segment): string {
@@ -71,18 +87,18 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
       <div class="kv">
         <div>종류</div><div>${r.name}${s.locked ? ' (철거 불가)' : ''}</div>
         <div>길이</div><div>${Math.round(net.segmentLength(s))} m</div>
-        <div>통행</div><div>${s.oneWay === null ? '양방향' : s.oneWay === 'ab' ? `일방통행 (${Math.round(a.x)}, ${Math.round(a.y)}) → (${Math.round(b.x)}, ${Math.round(b.y)})` : `일방통행 (${Math.round(b.x)}, ${Math.round(b.y)}) → (${Math.round(a.x)}, ${Math.round(a.y)})`}</div>
+        <div>통행</div><div>${s.oneWay === null ? '양방향' : s.oneWay === 'ab' ? `일방통행 (${compass(a, b).replace('쪽', '')}쪽 방향으로만)` : `일방통행 (${compass(b, a).replace('쪽', '')}쪽 방향으로만)`}</div>
         <div>제한속도</div><div>${s.playerSpeedKmh ?? r.defaultSpeedKmh} km/h${s.playerSpeedKmh === null ? ' (기본)' : ''}</div>
         <div>최근 통과 차량</div><div>${rep?.passes ?? 0}대 <small>(시뮬 ${cfg.metrics.windowSec / 60}분)</small></div>
         <div>정체 지수</div><div>${ci === null ? '판정 없음 (통과 적음)' : `${ci.toFixed(0)} · ${ciGrade(ci)}`}</div>
-        <div>한쪽 끝 (${Math.round(a.x)}, ${Math.round(a.y)})</div><div>${endText(s, s.a)}</div>
-        <div>반대쪽 끝 (${Math.round(b.x)}, ${Math.round(b.y)})</div><div>${endText(s, s.b)}</div>
+        <div>${compass(b, a)} 끝</div><div>${endText(s, s.a)}</div>
+        <div>${compass(a, b)} 끝</div><div>${endText(s, s.b)}</div>
       </div>
       <div class="namebox"><input id="in-name" maxlength="30" placeholder="도로 이름" value="${escapeHtml(s.name)}" /><button id="in-name-ok">이름 저장</button></div>
       <div class="two">${net.upgradeChain(s.id, 'up').length ? '<button class="wide" id="in-up">넓히기</button>' : ''}${net.upgradeChain(s.id, 'down').length ? '<button class="wide" id="in-down">좁히기</button>' : ''}</div>
       ${laneHtml(s)}
       <button class="wide" id="in-flow">${flowSeg === s.id ? '이동 흐름 끄기' : '이동 흐름 보기 (지나는 차의 출발지 → 목적지)'}</button>
-      ${wave ? `<div class="sub-h">녹색파 (고정식 신호끼리)</div><button class="wide" data-wave="${s.a}">(${Math.round(a.x)}, ${Math.round(a.y)}) → (${Math.round(b.x)}, ${Math.round(b.y)}) 방향으로 맞추기(이어지는 신호까지 연속)</button><button class="wide" data-wave="${s.b}">(${Math.round(b.x)}, ${Math.round(b.y)}) → (${Math.round(a.x)}, ${Math.round(a.y)}) 방향으로 맞추기</button>` : ''}`;
+      ${wave ? `<div class="sub-h">녹색파 (고정식 신호끼리)</div><button class="wide" data-wave="${s.a}">${compass(a, b)} 방향으로 맞추기(이어지는 신호까지 연속)</button><button class="wide" data-wave="${s.b}">${compass(b, a)} 방향으로 맞추기</button>` : ''}`;
   }
 
   function nodeHtml(id: number): string {
@@ -99,10 +115,13 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
     }
     return `
       <h4>교차로 정보 <button id="in-close" title="닫기">✕</button></h4>
-      <div class="kv"><div>위치</div><div>(${Math.round(n.x)}, ${Math.round(n.y)})</div><div>연결 도로</div><div>${net.segmentsAt(id).length}개</div></div>
+      <div class="kv"><div>연결 도로</div><div>${net.segmentsAt(id).length}개 (${net.segmentsAt(id).map((x) => fromSide(x, id)).join('·')})</div></div>
       <div class="sub-h">신호등</div><div class="seg3">${seg('off', '없음')}${seg('fix', '고정식')}${seg('act', '감응식')}</div>${prog}
       <div class="two">${on ? '<button class="wide" id="in-copy">신호 복사</button>' : ''}${clip ? '<button class="wide" id="in-paste">붙여넣기</button>' : ''}</div>
       ${clip ? `<div class="hint">복사됨: ${clip.mode === 'actuated' ? '감응식' : `고정식 ${clip.greens.join('·')}초`}</div>` : ''}
+      <div class="sub-h">차선별 진행 방향 <small>(운전자가 보는 모양 그대로 · 카드에 마우스를 올리면 그 길이 표시됨)</small></div>
+      ${net.segmentsAt(id).filter((x) => !(x.oneWay === 'ab' && x.a === id) && !(x.oneWay === 'ba' && x.b === id)).sort((p, q) => Math.atan2((net.nodes.get(p.a === id ? p.b : p.a)!).y - n.y, (net.nodes.get(p.a === id ? p.b : p.a)!).x - n.x) - Math.atan2((net.nodes.get(q.a === id ? q.b : q.a)!).y - n.y, (net.nodes.get(q.a === id ? q.b : q.a)!).x - n.x)).map((x) => approachHtml(x, id)).join('')}
+      <div class="hint">방향은 기본 시점 기준(화면 위쪽이 북쪽)입니다</div>
       <button class="wide" id="in-round">회전교차로로 바꾸기</button>`;
   }
 
@@ -150,22 +169,23 @@ export function createInfo(root: HTMLElement, cfg: Config, editor: Editor, metri
       const id = sel.id;
       const nameOk = root.querySelector<HTMLElement>('#in-name-ok'), nameIn = root.querySelector<HTMLInputElement>('#in-name');
       if (nameOk && nameIn) nameOk.onclick = () => { const n = editor.setName(id, nameIn.value); say(nameIn.value.trim() ? `이름을 붙였습니다 (${n}구간)` : `이름을 지웠습니다 (${n}구간)`); };
-      root.querySelectorAll<HTMLElement>('[data-ld]').forEach((b) => (b.onclick = () => {
-        const [n, i, bit] = b.dataset.ld!.split(':').map(Number);
-        const lanes = net.lanesIncoming(id, n), cur = net.laneDirsAt(id, n), m = Array.from({ length: lanes }, (_, k) => cur[k] || 7);
-        m[i] ^= bit;
-        if (m[i] === 0) { say('차선에는 방향이 하나 이상 있어야 합니다'); return; }
-        editor.setLaneDirs(id, n, m.every((x) => x === 7) ? [] : m);
-      }));
-      root.querySelectorAll<HTMLElement>('[data-ld-reset]').forEach((b) => (b.onclick = () => { editor.setLaneDirs(id, Number(b.dataset.ldReset), []); }));
-      root.querySelectorAll<HTMLElement>('[data-ld-auto]').forEach((b) => (b.onclick = () => {
-        const lanes = net.lanesIncoming(id, Number(b.dataset.ldAuto));
-        // 오른쪽 차선 = 직진+우회전, 가운데 = 직진, 왼쪽 차선 = 좌회전+직진
-        const auto = lanes === 1 ? [] : lanes === 2 ? [6, 3] : [6, ...Array(lanes - 2).fill(2), 3];
-        editor.setLaneDirs(id, Number(b.dataset.ldAuto), auto);
-        say('차선 방향을 자동으로 배정했습니다');
-      }));
     }
+    // 차선 방향(도로도 교차로도 같은 카드): data-ld="도로:교차로:차선(0=오른쪽):방향 비트"
+    root.querySelectorAll<HTMLElement>('[data-ld]').forEach((b) => (b.onclick = () => {
+      const [sid, n, i, bit] = b.dataset.ld!.split(':').map(Number);
+      const lanes = net.lanesIncoming(sid, n), cur = net.laneDirsAt(sid, n), m = Array.from({ length: lanes }, (_, k) => cur[k] || 7);
+      m[i] ^= bit;
+      if (m[i] === 0) { say('차선에는 방향이 하나 이상 있어야 합니다'); return; }
+      editor.setLaneDirs(sid, n, m.every((x) => x === 7) ? [] : m);
+    }));
+    root.querySelectorAll<HTMLElement>('[data-ld-reset]').forEach((b) => (b.onclick = () => { const [sid, n] = b.dataset.ldReset!.split(':').map(Number); editor.setLaneDirs(sid, n, []); }));
+    root.querySelectorAll<HTMLElement>('[data-ld-auto]').forEach((b) => (b.onclick = () => {
+      const [sid, n] = b.dataset.ldAuto!.split(':').map(Number), lanes = net.lanesIncoming(sid, n);
+      // 오른쪽 차선 = 직진+우회전, 가운데 = 직진, 왼쪽 차선 = 좌회전+직진
+      editor.setLaneDirs(sid, n, lanes === 1 ? [] : lanes === 2 ? [6, 3] : [6, ...Array(lanes - 2).fill(2), 3]);
+      say('차선 방향을 자동으로 배정했습니다');
+    }));
+    root.querySelectorAll<HTMLElement>('[data-appr]').forEach((el) => { const sid = Number(el.dataset.appr); el.onmouseenter = () => hooks.onHoverSeg(sid); el.onmouseleave = () => hooks.onHoverSeg(null); });
     root.querySelectorAll<HTMLElement>('[data-wave]').forEach((b) => (b.onclick = () => {
       if (sel?.kind !== 'seg') return;
       const r = editor.greenWave(sel.id, Number(b.dataset.wave), signals);

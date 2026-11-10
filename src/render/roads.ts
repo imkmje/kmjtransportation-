@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import { roadSpan, type Network, type Pt, type RoadKind } from '../sim/network';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toThree, toThreeAbs, groundHeight } from './coords';
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
@@ -27,6 +28,21 @@ function distToSeg(x: number, y: number, a: Pt, b: Pt): number {
   const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1, u = Math.min(1, Math.max(0, ((x - a.x) * dx + (y - a.y) * dy) / l2));
   return Math.hypot(x - (a.x + dx * u), y - (a.y + dy * u));
 }
+
+// 차선 방향 화살표(길 위에 눕는 흰 도형, 앞쪽 = +x, 왼쪽 = +y). 좌·직·우 중 허용된 것마다 하나씩 겹쳐 그린다
+function arrowGeo(kind: 'straight' | 'left' | 'right'): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const poly = (pts: [number, number][]) => parts.push(new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)))));
+  const bar = (x0: number, y0: number, x1: number, y1: number, w: number) => { const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = (-dy / l) * w, ny = (dx / l) * w; poly([[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]]); };
+  const head = (tx: number, ty: number, ang: number) => { const c = Math.cos(ang), s2 = Math.sin(ang), p = (a: number, b: number): [number, number] => [tx + a * c - b * s2, ty + a * s2 + b * c]; poly([p(0, 0), p(-1.3, 0.75), p(-1.3, -0.75)]); };
+  if (kind === 'straight') { bar(-2.4, 0, 1.2, 0, 0.2); head(2.6, 0, 0); }
+  else { const sg = kind === 'left' ? 1 : -1; bar(-2.4, 0, 0.5, 0, 0.2); bar(0.5, 0, 1.7, sg * 1.2, 0.2); head(2.2, sg * 1.7, sg * Math.PI / 4); }
+  const g = mergeGeometries(parts)!;
+  g.rotateX(-Math.PI / 2);
+  return g;
+}
+const ARROW_GEO = { straight: arrowGeo('straight'), left: arrowGeo('left'), right: arrowGeo('right') };
+const arrowMat = new THREE.MeshLambertMaterial({ color: 0xf2f2ee, side: THREE.DoubleSide });
 
 // 두 점 사이에 가로×세로×높이 상자를 놓는다(상자의 긴 쪽이 두 점 방향)
 function place(m: THREE.Mesh, a: Pt, b: Pt, width: number, height: number, bottom: number) {
@@ -88,8 +104,15 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
   const curveGhosts: THREE.Mesh[] = [];
   const cursor = new THREE.Mesh(unitDisk, goodMat);
   const mark = new THREE.Mesh(unitDisk, markMat);
-  for (const m of [ghost, hover, selected, cursor, mark]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
+  const nodeHover = new THREE.Mesh(unitDisk, new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true, opacity: 0.3, depthWrite: false })), nodeSel = new THREE.Mesh(unitDisk, new THREE.MeshBasicMaterial({ color: 0x2f6fe0, transparent: true, opacity: 0.32, depthWrite: false })); // 교차로 위에 올리면 초록 원, 선택하면 파란 원
+  for (const m of [ghost, hover, selected, cursor, mark, nodeHover, nodeSel]) { m.visible = false; m.renderOrder = 1; scene.add(m); }
   let shown = -1;
+  const ringAt = (m: THREE.Mesh, n: { x: number; y: number; r: number } | null, h: number) => {
+    m.visible = !!n;
+    if (!n) return;
+    const c = toThree(n.x, n.y, h / 2 + 0.2);
+    m.position.set(c.x, c.y, c.z); m.scale.set(n.r + 2.5, h, n.r + 2.5);
+  };
 
   // 도로 몸체·인도·차선 표시·교차로 판은 종류별로 InstancedMesh 하나로 모아 그린다(도로가 수백 개여도 그리기 호출이 몇 번뿐이다)
   type Inst = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; rz?: number };
@@ -97,6 +120,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     if (!list.length) return;
     const m = new THREE.InstancedMesh(geo, mat, list.length);
     m.frustumCulled = false;
+    m.receiveShadow = true;
     const d = new THREE.Object3D();
     d.rotation.order = 'YZX'; // 먼저 오르내림(기울기), 그다음 방향
     list.forEach((it, i) => { d.position.set(it.x, it.y, it.z); d.scale.set(it.sx, it.sy, it.sz); d.rotation.set(0, it.ry, it.rz ?? 0); d.updateMatrix(); m.setMatrixAt(i, d.matrix); });
@@ -108,7 +132,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     group.clear();
     const radius = new Map<number, number>();
     for (const s of net.segments.values()) for (const id of [s.a, s.b]) radius.set(id, Math.max(radius.get(id) ?? 0, config.roads[s.kind].lanesPerDir * config.roads[s.kind].laneWidth + 2));
-    const portals: Inst[] = [], decks: Inst[] = [], bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
+    const arrows = { straight: [] as Inst[], left: [] as Inst[], right: [] as Inst[] }, portals: Inst[] = [], decks: Inst[] = [], bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
       const len = Math.hypot(b.x - a.x, b.y - a.y), ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, ry = Math.atan2(b.y - a.y, b.x - a.x);
@@ -148,6 +172,25 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       const kd = Math.max(r.lanesFwd, r.lanesBack);
       const dividers = s.oneWay ? Array.from({ length: kd - 1 }, (_, j) => (j + 1 - kd / 2) * w) : [...Array.from({ length: r.lanesFwd - 1 }, (_, j) => -(j + 1) * w), ...Array.from({ length: r.lanesBack - 1 }, (_, j) => (j + 1) * w)];
       for (const off of dividers) for (let t = t0 + 1; t + 3 <= t1; t += 8) strip(whites, t, t + 3, off, 0.15, 0.02, 0.2);
+      // 차선별 방향 화살표: 교차로로 들어오는 끝마다, 방향을 지정한 차선(오른쪽부터)에 정지선 앞 8m 지점에 그린다
+      for (const [fwd, mask] of [[true, s.laneDirsB], [false, s.laneDirsA]] as const) {
+        const node = fwd ? s.b : s.a;
+        if (!mask.length || net.segmentsAt(node).length < 3) continue;
+        const k = s.oneWay ? Math.max(r.lanesFwd, r.lanesBack) : fwd ? r.lanesFwd : r.lanesBack;
+        if ((s.oneWay === 'ab' && !fwd) || (s.oneWay === 'ba' && fwd)) continue;
+        const inset = radius.get(node)! - 2; // 교차로 판 반지름(차선이 끝나는 곳)
+        const d = fwd ? len - inset - 8 : inset + 8; // 도로 시작점 a에서의 거리
+        if (d < 4 || d > len - 4) continue;
+        for (let i = 1; i <= k; i++) {
+          const m = mask[i - 1] ?? 0;
+          if (!m || m === 7) continue; // 지정이 없거나 모두 허용이면 그리지 않는다
+          const off = (k - i + 0.5 - (s.oneWay ? k / 2 : 0)) * w * (fwd ? -1 : 1);
+          const pitch = Math.atan2(zAt(Math.min(len, d + 1)) - zAt(Math.max(0, d - 1)), Math.min(len, d + 1) - Math.max(0, d - 1));
+          const p = toThreeAbs(a.x + ux * d - uy * off, a.y + uy * d + ux * off, zAt(d) + 0.27);
+          const yaw = fwd ? ry : ry + Math.PI;
+          for (const [bit, key] of [[1, 'left'], [2, 'straight'], [4, 'right']] as const) if (m & bit) arrows[key].push({ x: p.x, y: p.y, z: p.z, sx: 1.25, sy: 1, sz: 1.25, ry: yaw, rz: fwd ? pitch : -pitch });
+        }
+      }
     }
     for (const [id, rr] of radius) {
       const n = net.nodes.get(id)!, c = toThreeAbs(n.x, n.y, n.z + 0.15);
@@ -160,6 +203,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     flush(unitBox, walkMat, walks);
     flush(unitBox, whiteLine, whites);
     flush(unitBox, yellowLine, yellows);
+    for (const key of ['straight', 'left', 'right'] as const) flush(ARROW_GEO[key], arrowMat, arrows[key]);
     // 정지·양보 표지: 교차로로 들어오는 방향의 오른쪽 길가, 노드에서 조금 떨어진 곳에 세운다
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
@@ -270,6 +314,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     },
     /** 정보 창에서 보고 있는 도로를 파랗게 표시 */
     setSelect(segId: number | null) {
+      nodeSel.visible = false; // 도로(또는 닫기)를 고르면 교차로 선택 표시는 끈다
       const s = segId === null ? undefined : net.segments.get(segId);
       selected.visible = !!s;
       if (s) place(selected, net.nodes.get(s.a)!, net.nodes.get(s.b)!, roadWidth(s.kind) + 2.5, 0.7, 0);
@@ -279,6 +324,10 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       hover.visible = !!s;
       if (s) place(hover, net.nodes.get(s.a)!, net.nodes.get(s.b)!, roadWidth(s.kind) + 2, 0.6, 0);
     },
+    /** 교차로 위에 커서를 올렸을 때 판 크기만큼 초록 원(null이면 지움) */
+    setNodeHover(n: { x: number; y: number; r: number } | null) { ringAt(nodeHover, n, 0.32); },
+    /** 정보 창에서 보고 있는 교차로 표시(파랑 원) */
+    setNodeSel(n: { x: number; y: number; r: number } | null) { ringAt(nodeSel, n, 0.36); },
     /** 차량 투입 도구의 출발점 표시(파랑) */
     setMark(p: Pt | null) {
       mark.visible = !!p;

@@ -706,6 +706,13 @@ export class Network {
     return !s ? null : s.a === nodeId ? s.signA : s.b === nodeId ? s.signB : null;
   }
 
+  /** 교차로 판 반지름(m): 이 노드에 닿는 도로 중 가장 넓은 도로의 반폭 + 2 */
+  plateRadius(id: number): number {
+    let r = 6;
+    for (const s of this.segmentsAt(id)) { const k = this.rules.roads[s.kind]; r = Math.max(r, k.lanesPerDir * k.laneWidth + 2); }
+    return r;
+  }
+
   heightAt(x: number, y: number): number { return terrainHeight(this.terrain, x, y); }
 
   /** 도로 구간 segId 위, a에서 t(m) 떨어진 곳의 도로 높이: 양 끝 노드 높이의 직선(골짜기 위는 다리, 언덕 아래는 터널이 된다) */
