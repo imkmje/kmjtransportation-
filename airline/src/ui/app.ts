@@ -187,6 +187,8 @@ export function startApp(): void {
     return `<h2>재무</h2>
       <div class="kv"><div>현금</div><div><b class="${s.cash < 0 ? 'neg' : ''}">${money(s.cash)}</b></div><div>이번 달 수익</div><div>${money(cur.revenue)}</div><div>이번 달 비용</div><div>${money(cur.cost)}</div>
         <div>월 고정비</div><div>${money(game.fixedMonthly)}</div><div>누적 이익</div><div>${money(s.cumProfit)}</div></div>
+      <h3>정비</h3><button class="wide ${s.autoMaint ? '' : 'ghost'}" data-act="autoMaint">자동 정비: <b>${s.autoMaint ? '켜짐' : '꺼짐'}</b></button>
+      <p class="hint">켜면 노선에 배정된 항공기의 정비 상태가 ${Math.round(config.maint.autoBelow * 100)}% 아래로 떨어질 때 월말에 알아서 점검합니다(항공기 가격의 2%, 7일간 운항 불가). 현금이 모자라면 건너뜁니다.</p>
       <h3>연료</h3><div class="kv"><div>연료 가격</div><div><b>${game.fuelLabel}</b> (${(s.fuel * 100).toFixed(0)}%)</div><div>연료 계약</div><div>${s.hedge ? `${(s.hedge.price * 100).toFixed(0)}%로 고정 · ${s.hedge.monthsLeft}개월 남음` : '없음'}</div></div>
       <button class="wide" data-act="hedge" ${s.hedge || s.cash < config.fuel.hedgeCost ? 'disabled' : ''}>연료 계약 ${money(config.fuel.hedgeCost)} <small>(지금 가격으로 ${config.fuel.hedgeMonths}개월 고정)</small></button>
       <h3>대출</h3>${s.freeze > 0 ? `<p class="hint"><b class="neg">경기 악화로 은행이 새 대출을 중단했습니다 (${s.freeze}개월 남음)</b></p>` : ''}<div class="kv"><div>대출 잔액</div><div><b>${money(s.loan)}</b></div><div>한도</div><div>${money(game.loanLimit)}</div><div>월 이율</div><div>${(game.loanRate * 100).toFixed(1)}% <small>(한도를 많이 쓸수록 비쌈)</small></div><div>월 이자</div><div>${money(s.loan * game.loanRate)}</div></div>
@@ -310,6 +312,7 @@ export function startApp(): void {
     else if (act === 'weekly') { const p = game.plane(id)!; const r = game.assign(id, p.routeId!, p.weekly + Number(b.dataset.d)); if (!r.ok) toast(r.error); done(); }
     else if (act === 'assign' && selRoute !== null) { const r = game.route(selRoute)!, p = game.plane(id)!; const max = maxWeeklyRoundTrips(distanceKm(cityById(r.a), cityById(r.b)), typeById(p.type)); const res = game.assign(id, selRoute, max); if (!res.ok) return toast(res.error); fillFare(game, selRoute); done('배정했습니다 (운임도 자동으로 맞췄어요)'); }
     else if (act === 'priority' && selRoute !== null) { const r = game.setPriority(selRoute, Number(b.dataset.v)); if (!r.ok) return toast(r.error); done(`공항 우선순위를 ★${b.dataset.v}로 바꿨습니다`); }
+    else if (act === 'autoMaint') { game.setAutoMaint(!game.state.autoMaint); done(game.state.autoMaint ? '자동 정비를 켰습니다' : '자동 정비를 껐습니다'); }
     else if (act === 'service') { const r = game.service(id); if (!r.ok) return toast(r.error); done(`정비를 시작했습니다 (${money(r.cost)}, 7일간 운항 불가)`); }
     else if (act === 'hedge') { const r = game.hedgeFuel(); if (!r.ok) return toast(r.error); done('연료 계약을 맺었습니다'); }
     else if (act === 'buySlot') { const r = game.buySlot(b.dataset.city!); if (!r.ok) return toast(r.error); done(`슬롯을 샀습니다 (${money(r.price)})`); }

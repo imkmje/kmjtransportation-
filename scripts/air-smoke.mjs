@@ -10,7 +10,7 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 const fails = [];
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
-const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').replace('.png', `-${n}.png`) });
+const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').replace('.png', `-${n}.png`), timeout: 60000 }).catch((e) => console.log('WARN 스크린샷 실패(참고용이라 계속 진행):', n, String(e.message).split('\n')[0]));
 
 await page.goto('http://localhost:4190/air/');
 await page.waitForSelector('canvas');
@@ -152,6 +152,9 @@ await page.click('#tabs button[data-tab="map"]');
 await page.locator('#panel button[data-act="ally"]').first().click();
 check('제휴: 경쟁사와 제휴 중으로 표시됨', (await page.evaluate(() => window.__air.game.state.ally)) !== null && (await page.locator('#panel').innerText()).includes('제휴 중'));
 await shot('fold');
+await page.click('#tabs button[data-tab="money"]');
+await page.click('#panel button[data-act="autoMaint"]');
+check('재무 탭: 자동 정비 켜기', (await page.evaluate(() => window.__air.game.state.autoMaint)) === true && (await page.locator('#panel').innerText()).includes('자동 정비: 켜짐'));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
