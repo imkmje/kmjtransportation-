@@ -17,7 +17,7 @@ await page.waitForSelector('canvas');
 check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
 await shot('title');
 await page.click('#t-new');
-check('새 게임 설정 화면: 시나리오 4개·난이도 3개', (await page.locator('#setup-scen button').count()) === 4 && (await page.locator('#setup-diff button').count()) === 3);
+check('새 게임 설정 화면: 시나리오 6개·난이도 3개', (await page.locator('#setup-scen button').count()) === 6 && (await page.locator('#setup-diff button').count()) === 3);
 await page.click('#setup-scen button[data-sc="europe"]');
 check('유럽 시나리오는 시작 도시가 프랑크푸르트로 고정됨', (await page.locator('#setup-base').inputValue()) === 'FRA' && (await page.locator('#setup-base').isDisabled()));
 await page.click('#setup-diff button[data-d="hard"]'); await page.click('#setup-go');
