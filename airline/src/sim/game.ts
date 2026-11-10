@@ -374,6 +374,7 @@ export class Game {
       if (def.effect.ground) { const fleet = s.planes.filter((p) => p.routeId !== null); if (fleet.length) planeId = fleet[this.rng.int(fleet.length)].id; }
       if (!def.effect.ground || planeId !== undefined) {
         s.events.push({ def: def.id, monthsLeft: def.months, city, planeId });
+        if (def.effect.cash) s.cash += def.effect.cash;
         s.log.push(`${this.monthsPassed + 1}개월차: ${def.name}${city ? ` (${cityById(city).name})` : ''}${planeId !== undefined ? ` (${typeById(this.plane(planeId)!.type).name})` : ''} — ${def.text}`);
       }
     }
