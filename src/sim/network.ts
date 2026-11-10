@@ -173,7 +173,7 @@ export class Network {
   }
 
   /** 건설 가능 여부와 결과(교차점, 분할 위치)를 계산만 한다. 도로망은 바뀌지 않는다 */
-  planRoad(p1: Pt, p2: Pt, kind: RoadKind): Plan {
+  planRoad(p1: Pt, p2: Pt, kind: RoadKind, minLen = this.rules.geometry.minSegmentLength): Plan {
     const g = this.rules.geometry;
     const fail = (error: PlanError): Plan => ({ ok: false, error });
     const s1 = this.snapPoint(p1), s2 = this.snapPoint(p2);
@@ -206,7 +206,7 @@ export class Network {
     const stops: Stop[] = [s1, ...crossings.map(({ x, y, segId }) => ({ x, y, segId })), s2];
 
     // 최소 길이: 새 도로 조각과, 분할될 기존 도로의 두 조각 모두
-    for (let i = 0; i < stops.length - 1; i++) if (dist(stops[i], stops[i + 1]) < g.minSegmentLength - EPS) return fail('tooShort');
+    for (let i = 0; i < stops.length - 1; i++) if (dist(stops[i], stops[i + 1]) < minLen - EPS) return fail('tooShort'); // 곡선 조각은 minLen이 더 짧다(기존 도로를 가르는 조각의 최소 길이는 그대로)
     for (const st of stops) {
       if (st.segId === undefined) continue;
       const seg = this.segments.get(st.segId)!;
@@ -245,8 +245,8 @@ export class Network {
   }
 
   /** 건설. 성공하면 새로 생긴 도로 ID 목록 */
-  buildRoad(p1: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
-    const plan = this.planRoad(p1, p2, kind);
+  buildRoad(p1: Pt, p2: Pt, kind: RoadKind, minLen?: number): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
+    const plan = this.planRoad(p1, p2, kind, minLen);
     if (!plan.ok) return plan;
     const nodeIds = plan.stops.map((st) => {
       if (st.nodeId !== undefined) return st.nodeId;

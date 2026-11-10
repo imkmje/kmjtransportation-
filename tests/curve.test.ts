@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Editor } from '../src/sim/editor';
 import { Sim } from '../src/sim/sim';
 import { config } from '../src/config';
-import { curvePoints } from '../src/sim/curve';
+import { curvePoints, CURVE_PIECE } from '../src/sim/curve';
 import { findRoute } from '../src/sim/route';
 
 describe('곡선 도로', () => {
@@ -10,7 +10,7 @@ describe('곡선 도로', () => {
     const pts = curvePoints({ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 });
     expect(pts[0]).toEqual({ x: 0, y: 0 }); expect(pts[pts.length - 1]).toEqual({ x: 200, y: 200 });
     const L = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
-    expect(Math.min(...L)).toBeGreaterThanOrEqual(config.geometry.minSegmentLength);
+    expect(Math.min(...L)).toBeGreaterThanOrEqual(CURVE_PIECE - 1);
     expect(Math.max(...L) - Math.min(...L)).toBeLessThan(6);
     expect(curvePoints({ x: 0, y: 0 }, { x: 10, y: 5 }, { x: 40, y: 0 }).length).toBeGreaterThanOrEqual(2);
   });
@@ -48,6 +48,20 @@ describe('곡선 도로', () => {
     sim.traffic.requestTrip(from, to, 4);
     for (let i = 0; i < 20 * 200; i++) sim.step();
     expect(sim.traffic.stats.arrived).toBe(4);
+    expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks + sim.traffic.stats.conflicts).toBe(0);
+  }, 60_000);
+
+  it('짧은 조각(12m)의 곡선에서 양방향 40대가 안전망 개입·교착 없이 모두 도착한다', () => {
+    const e = new Editor(config);
+    e.build({ x: -200, y: 0 }, { x: 0, y: 0 }, 'road2');
+    expect(e.buildCurve({ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, 'road2').ok).toBe(true);
+    e.build({ x: 200, y: 200 }, { x: 200, y: 400 }, 'road2');
+    const sim = new Sim(config, e.network), n = e.network;
+    const first = [...n.segments.values()][0], last = [...n.segments.values()].pop()!;
+    const A = { segId: first.id, t: 20 }, B = { segId: last.id, t: n.segmentLength(last) - 15 };
+    sim.traffic.requestTrip(A, B, 20); sim.traffic.requestTrip(B, A, 20);
+    for (let i = 0; i < 20 * 400; i++) sim.step();
+    expect(sim.traffic.stats.arrived).toBe(40);
     expect(sim.traffic.stats.interventions + sim.traffic.stats.deadlocks + sim.traffic.stats.conflicts).toBe(0);
   }, 60_000);
 });

@@ -1,11 +1,12 @@
 import { CI_GRADES, ciGrade } from '../sim/metrics';
 import type { Sim } from '../sim/sim';
 import type { Network } from '../sim/network';
+import { GOALS, goalsDone, dayScore } from '../sim/goals';
 
 const GRADE_COLORS = ['#3a9d5a', '#7fae3a', '#d98a1f', '#d65a2a', '#b3302a'];
 
 // 오른쪽 통계 패널: 정체 지수(등급·게이지), 완료율, 평균 통행시간, 처리량, 차량 수, 안전·교착, 하루 그래프
-export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconnected: () => number, rciRoot: HTMLElement, topCi: HTMLElement, onPick: (segId: number) => void, onAccidentClick: () => void) {
+export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconnected: () => number, rciRoot: HTMLElement, topCi: HTMLElement, onPick: (segId: number) => void, onAccidentClick: () => void, onGoal: (msg: string) => void) {
   rciRoot.innerHTML = `
     <div class="rb" title="주거 저밀 수요"><span><i id="st-dh"></i></span><em>저밀</em></div>
     <div class="rb" title="주거 중밀 수요"><span><i id="st-dm"></i></span><em>중밀</em></div>
@@ -28,17 +29,20 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
       <div>교착 해소 · 안전망 개입</div><div id="st-safe">0 · 0</div>
       <div>일자리 부족 · 미연결 건물</div><div id="st-warn">0 · 0</div>
       <div>사고 · 날씨</div><div id="st-wx">0건 · 맑음</div>
+      <div>어제 점수 · 업적</div><div id="st-goal" style="cursor:pointer" title="눌러서 업적 목록 보기">- · 0/0</div>
     </div>
  <h4 class="top-h">막히는 곳 TOP 5 <span style="font-weight:400">(누르면 이동)</span></h4>
     <ol id="st-top"></ol>
     <svg id="st-chart" width="236" height="64" viewBox="0 0 236 64"></svg>
-    <div id="st-yesterday" class="yday"></div></div>`;
+    <div id="st-yesterday" class="yday"></div><ul id="st-goals" class="goals" hidden></ul></div>`;
   root.querySelector<HTMLElement>('#st-head')!.onclick = () => root.classList.toggle('closed'); // 머리글을 누르면 접고 편다
   const $ = (id: string) => document.getElementById(id)!;
-  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dmid: $('st-dm'), dhigh: $('st-dg'), dind: $('st-di'), dmix: $('st-dx'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), wx: $('st-wx'), chart: $('st-chart'), yday: $('st-yesterday') };
+  const el = { ci: $('st-ci'), grade: $('st-grade'), mark: $('st-mark'), dh: $('st-dh'), dof: $('st-do'), dsh: $('st-ds'), dmid: $('st-dm'), dhigh: $('st-dg'), dind: $('st-di'), dmix: $('st-dx'), comp: $('st-comp'), avg: $('st-avg'), thr: $('st-thr'), live: $('st-live'), pool: $('st-pool'), safe: $('st-safe'), warn: $('st-warn'), wx: $('st-wx'), goal: $('st-goal'), goals: $('st-goals'), chart: $('st-chart'), yday: $('st-yesterday') };
   el.wx.title = '진행 중인 사고가 있으면 눌러서 그곳으로 이동';
   el.wx.style.cursor = 'pointer';
   el.wx.onclick = onAccidentClick;
+  el.goal.onclick = () => { el.goals.hidden = !el.goals.hidden; };
+  let goalKey = '', done = new Set<string>(), firstGoals = true, lastLen = 0;
   const topEl = $('st-top');
   let lastTop = '';
   topEl.onclick = (e) => { const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-seg]'); if (li) onPick(Number(li.dataset.seg)); };
@@ -91,6 +95,17 @@ export function createStats(root: HTMLElement, sim: Sim, net: Network, getUnconn
         topEl.innerHTML = top.length ? top.map(([id, r]) => { const s = net.segments.get(id)!, a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!; return `<li data-seg="${id}"><b>${s.name ? s.name.replace(/</g, '&lt;') : `${Math.round((a.x + b.x) / 2)}, ${Math.round((a.y + b.y) / 2)}`}</b> 정체 ${Math.round(r.ci!)} <small>· ${r.passes}대</small></li>`; }).join('') : '<li class="none">막히는 곳이 없습니다</li>';
       }
       const y = m.history[m.history.length - 1];
+      const gk = `${m.history.length}:${net.revision}:${net.buildingsRevision}`;
+      if (gk !== goalKey) { // 하루가 바뀌거나 도로·건물이 바뀔 때만 다시 계산
+        goalKey = gk;
+        if (m.history.length < lastLen) firstGoals = true; // 새 게임·불러오기로 기록이 줄면 알림 없이 다시 센다
+        lastLen = m.history.length;
+        const now = new Set(goalsDone({ history: m.history, net, day: m.history.length + 1 }));
+        if (!firstGoals) for (const g of GOALS) if (now.has(g.id) && !done.has(g.id)) onGoal(`업적 달성: ${g.name}`);
+        firstGoals = false; done = now;
+        el.goals.innerHTML = GOALS.map((g) => `<li style="opacity:${now.has(g.id) ? 1 : 0.5}">${now.has(g.id) ? '✔' : '○'} <b>${g.name}</b> <span>${g.desc}</span></li>`).join('');
+        el.goal.textContent = `${y ? (dayScore(y) ?? '-') : '-'} · ${now.size}/${GOALS.length}`;
+      }
       el.yday.textContent = y ? `어제(${y.day}일차): 완료율 ${num(y.completion, 0, '%')} · CI ${num(y.ci, 0)} · 평균 ${num(y.avgTravelMin, 0, '분')}` : '';
     },
   };

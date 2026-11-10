@@ -56,7 +56,7 @@ const stats = createStats(document.getElementById('stats')!, sim, editor.network
   const id = sim.traffic.crashed.keys().next().value; // 진행 중인 사고 중 가장 오래된 것으로 이동하고 그 차량 정보를 연다
   const v = id === undefined ? undefined : sim.traffic.vehicles.get(id);
   if (v) { view.focus({ x: v.x, y: v.y }); roads.setSelect(null); info.showVehicle(v.id); } else tools.say('진행 중인 사고가 없습니다');
-});
+}, (msg) => tools.say(msg));
 // 도로 정보 창: 도로를 클릭하거나 병목 목록을 누르면 열린다
 const overlay = createOverlay(view.scene);
 let followId: number | null = null; // 카메라가 따라가는 차량

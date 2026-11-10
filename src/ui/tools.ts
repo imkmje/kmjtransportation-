@@ -2,7 +2,7 @@ import { config } from '../config';
 import type { Editor } from '../sim/editor';
 import type { BuildingError, BuildingSize, PlanError, Pt, RoadKind, SignKind, ZoneType } from '../sim/network';
 import type { RoadPos } from '../sim/route';
-import { curvePoints } from '../sim/curve';
+import { curvePoints, CURVE_PIECE } from '../sim/curve';
 import type { RoadLayer } from '../render/roads';
 import type { BuildingLayer } from '../render/buildings';
 import type { ZoneLayer } from '../render/zones';
@@ -404,7 +404,7 @@ export function createTools(d: Deps) {
       const kind = roadKind();
       if (curvePts.length === 0) { tipAt('곡선: 시작점을 클릭하세요', false); return; }
       const pts = curvePts.length === 1 ? [curvePts[0], p] : curvePoints(curvePts[0], curvePts[1], p);
-      const ok = pts.slice(1).every((q, i) => net.planRoad(pts[i], q, kind).ok);
+      const ok = pts.slice(1).every((q, i) => net.planRoad(pts[i], q, kind, CURVE_PIECE - 1).ok);
       d.roads.setCurve(pts, kind, ok);
       const len = pts.slice(1).reduce((n, q, i) => n + Math.hypot(q.x - pts[i].x, q.y - pts[i].y), 0);
       tipAt(`${Math.round(len)} m${ok ? '' : ' — 건설할 수 없는 구간이 있습니다'}`, !ok);
