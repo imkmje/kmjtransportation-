@@ -1,4 +1,5 @@
 import type { Config } from '../config';
+import { terrainHeight, isWater, type TerrainDef } from './terrain';
 
 export type RoadKind = keyof Config['roads'];
 export interface Pt { x: number; y: number }
@@ -47,16 +48,16 @@ export interface Building {
   density: 0 | 1 | 2; // 주거 건물의 밀도(저·중·고). 다른 건물은 0
   variant: number; // 건물 모양(높이·지붕·층 등)을 정하는 값. 자동으로 자란 건물은 난수로, 나머지는 0
 }
-export type BuildingError = 'onRoad' | 'overlap' | 'outOfBounds' | 'locked';
+export type BuildingError = 'onRoad' | 'overlap' | 'outOfBounds' | 'locked' | 'onWater' | 'tooSteep';
 export type CellStatus = 'ok' | 'out' | 'road' | 'far'; // 구역 칸 상태: 칠할 수 있음 / 지도 밖 / 도로와 겹침 / 도로에서 너무 멂
 export type ZoneCell = [number, number, number]; // 칸 번호 i, j와 종류(0 = 주거, 1 = 직장, 2 = 상업). 칸 (i,j)의 중심은 (20i, 20j)
 
-export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads' | 'onBuilding';
+export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads' | 'onBuilding' | 'inWater' | 'tooSteep' | 'bridgeTooLong';
 interface Stop { x: number; y: number; nodeId?: number; segId?: number }
 export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
-export const NETWORK_FORMAT_VERSION = 11; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 11: 신호 단계 순서(sigOrder) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
+export const NETWORK_FORMAT_VERSION = 12; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 11: 신호 단계 순서(sigOrder) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
 export interface NetworkData {
   formatVersion: number;
   nextNodeId: number;
@@ -66,9 +67,17 @@ export interface NetworkData {
   nextBuildingId: number;
   buildings: Building[];
   zones: ZoneCell[];
+  terrain?: TerrainDef | null; // 형식 12: 지형(없으면 평지)
 }
 
-type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout'>;
+function parseTerrain(v: unknown): TerrainDef | null {
+  if (v === undefined || v === null) return null; // 형식 11 이하: 평지
+  const t = v as Partial<TerrainDef>;
+  if (typeof t.seed !== 'number' || typeof t.amp !== 'number' || typeof t.waterLevel !== 'number' || ![t.seed, t.amp, t.waterLevel].every(Number.isFinite)) throw new Error('도로망 파일이 손상되었습니다');
+  return { seed: t.seed, amp: t.amp, waterLevel: t.waterLevel, river: t.river === true };
+}
+
+type Rules = Pick<Config, 'geometry' | 'roads' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout' | 'terrain'>;
 const EPS = 1e-9;
 /** 도로 단면: 중앙선(구분선)에서 오른쪽(a→b 방향 차선 쪽)·왼쪽으로 뻗은 폭, 전체 폭, 도로 몸체의 가운데가 중앙선에서 벗어난 정도(왼쪽 +). 일방통행은 한 방향 차선 폭만큼 가운데에 모은다 */
 export function roadSpan(r: { lanesFwd: number; lanesBack: number; laneWidth: number }, oneWay: boolean): { right: number; left: number; width: number; shift: number } {
@@ -114,6 +123,7 @@ export class Network {
   /** 구역 칸. 키 = 칸 번호(i, j)를 하나의 수로 만든 값 */
   readonly zones = new Map<number, ZoneType>();
   /** 구역이 바뀔 때마다 증가(화면이 구역 칸을 다시 그릴 때 확인) */
+  terrain: TerrainDef | null = null; // 지형(없으면 평지). 바꾸면 loadData/load로 도로망 전체를 새로 만들 때만
   zonesRevision = 0;
   /** 도로망(도로·표지·건물)이 바뀔 때마다 증가. 화면이 다시 그릴 때 확인 */
   revision = 0;
@@ -213,6 +223,17 @@ export class Network {
       if (dist(st, this.nodes.get(seg.a)!) < g.minSegmentLength - EPS || dist(st, this.nodes.get(seg.b)!) < g.minSegmentLength - EPS) return fail('tooShort');
     }
 
+    // 지형: 노드는 물 위에 둘 수 없고(다리 위에서 갈라지는 것도 불가), 조각마다 경사와 물 위 길이를 확인한다
+    if (this.terrain) {
+      const zOf = (st: Stop): number => {
+        if (st.nodeId !== undefined) return this.nodes.get(st.nodeId)!.z;
+        if (st.segId !== undefined) { const sg = this.segments.get(st.segId)!, a0 = this.nodes.get(sg.a)!; return this.segmentZ(sg, Math.hypot(st.x - a0.x, st.y - a0.y)); }
+        return this.heightAt(st.x, st.y);
+      };
+      for (const st of stops) if (isWater(this.terrain, st.x, st.y) || (st.segId !== undefined && this.segments.get(st.segId)!.structure !== 'ground')) return fail('inWater');
+      for (let i = 0; i < stops.length - 1; i++) { const c = this.spanCheck(stops[i], stops[i + 1], zOf(stops[i]), zOf(stops[i + 1])); if ('error' in c) return fail(c.error); }
+    }
+
     // 최소 각도
     const minA = (g.minAngleDeg * Math.PI) / 180 - 1e-9;
     for (let i = 0; i < stops.length; i++) {
@@ -250,7 +271,9 @@ export class Network {
     if (!plan.ok) return plan;
     const nodeIds = plan.stops.map((st) => {
       if (st.nodeId !== undefined) return st.nodeId;
-      const n = this.addNode(st.x, st.y);
+      let z = this.heightAt(st.x, st.y);
+      if (st.segId !== undefined) { const sg = this.segments.get(st.segId)!, a0 = this.nodes.get(sg.a)!; z = this.segmentZ(sg, Math.hypot(st.x - a0.x, st.y - a0.y)); } // 기존 도로를 가르는 노드는 그 도로의 높이를 따른다
+      const n = this.addNode(st.x, st.y, z);
       if (st.segId !== undefined) this.splitSegment(st.segId, n);
       return n;
     });
@@ -339,7 +362,7 @@ export class Network {
       const want = Math.min(extra, Math.max(0, Math.round((gap / (Math.PI * 2)) * 12) - 1)); // 한 바퀴 12조각 안팎
       for (let j = 1; j <= want; j++) ang.push({ a: x.ang + (gap * j) / (want + 1), arm: -1 });
     });
-    const ringNodes = ang.map((q) => this.addNode(n.x + R * Math.cos(q.a), n.y + R * Math.sin(q.a)));
+    const ringNodes = ang.map((q) => this.addNode(n.x + R * Math.cos(q.a), n.y + R * Math.sin(q.a), n.z));
     ang.forEach((q, i) => {
       if (q.arm < 0) return;
       const x = list[q.arm];
@@ -409,6 +432,11 @@ export class Network {
     const b = this.rules.buildings;
     const half = b.footprint[size];
     if (Math.abs(x) > b.worldHalf - half || Math.abs(y) > b.worldHalf - half) return { ok: false, error: 'outOfBounds' };
+    if (this.terrain) {
+      for (const [dx, dy] of [[0, 0], [half, 0], [-half, 0], [0, half], [0, -half]]) if (isWater(this.terrain, x + dx, y + dy)) return { ok: false, error: 'onWater' };
+      const h = (dx: number, dy: number) => this.heightAt(x + dx, y + dy);
+      if (Math.max(Math.abs(h(half, 0) - h(-half, 0)), Math.abs(h(0, half) - h(0, -half))) / (2 * half) > this.rules.terrain.buildGrade) return { ok: false, error: 'tooSteep' };
+    }
     for (const s of this.segments.values()) {
       const r = this.rules.roads[s.kind];
       if (distToSegment({ x, y }, this.nodes.get(s.a)!, this.nodes.get(s.b)!).d < r.lanesPerDir * r.laneWidth + half + 1) return { ok: false, error: 'onRoad' };
@@ -448,6 +476,7 @@ export class Network {
     const { cell, maxDist } = this.rules.zones;
     const x = i * cell, y = j * cell, lim = this.rules.buildings.worldHalf - cell / 2;
     if (Math.abs(x) > lim || Math.abs(y) > lim) return 'out';
+    if (this.terrain && (isWater(this.terrain, x, y) || Math.abs(this.heightAt(x + cell / 2, y) - this.heightAt(x - cell / 2, y)) / cell > this.rules.terrain.buildGrade || Math.abs(this.heightAt(x, y + cell / 2) - this.heightAt(x, y - cell / 2)) / cell > this.rules.terrain.buildGrade)) return 'out'; // 물·급경사 칸은 칠할 수 없다
     let near = false;
     for (const s of this.segments.values()) {
       const r = this.rules.roads[s.kind];
@@ -646,15 +675,42 @@ export class Network {
     return !s ? null : s.a === nodeId ? s.signA : s.b === nodeId ? s.signB : null;
   }
 
-  private addNode(x: number, y: number): number {
+  heightAt(x: number, y: number): number { return terrainHeight(this.terrain, x, y); }
+
+  /** 도로 구간 segId 위, a에서 t(m) 떨어진 곳의 도로 높이: 양 끝 노드 높이의 직선(골짜기 위는 다리, 언덕 아래는 터널이 된다) */
+  segmentZ(seg: Segment, t: number): number {
+    const a = this.nodes.get(seg.a)!, b = this.nodes.get(seg.b)!, len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return a.z + (b.z - a.z) * Math.min(1, Math.max(0, t / len));
+  }
+
+  /** 두 점 사이를 직선 도로로 놓을 때: 구조(지상·다리·터널)와, 건설할 수 없는 이유(물 위 길이, 경사)를 판정한다 */
+  private spanCheck(p: Pt, q: Pt, za: number, zb: number): { structure: Segment['structure'] } | { error: 'tooSteep' | 'bridgeTooLong' } {
+    const T = this.terrain;
+    if (!T) return { structure: 'ground' };
+    const len = Math.hypot(q.x - p.x, q.y - p.y), g = this.rules.terrain;
+    if (Math.abs(zb - za) / len > g.maxGrade + 1e-9) return { error: 'tooSteep' };
+    let water = 0, maxWater = 0, bridge = false, tunnel = false;
+    const step = 5, n = Math.max(1, Math.ceil(len / step));
+    for (let i = 0; i <= n; i++) {
+      const f = i / n, x = p.x + (q.x - p.x) * f, y = p.y + (q.y - p.y) * f, h = terrainHeight(T, x, y), line = za + (zb - za) * f;
+      if (h < T.waterLevel) { water += len / n; maxWater = Math.max(maxWater, water); bridge = true; } else water = 0;
+      if (line - h > g.bridgeClear) bridge = true;
+      if (h - line > g.tunnelCover) tunnel = true;
+    }
+    if (maxWater > g.maxBridge) return { error: 'bridgeTooLong' };
+    return { structure: bridge ? 'bridge' : tunnel ? 'tunnel' : 'ground' };
+  }
+
+  private addNode(x: number, y: number, z = this.heightAt(x, y)): number {
     const id = this.nextNodeId++;
-    this.nodes.set(id, { id, x, y, z: 0, signal: false, sigMode: 'fixed', sigGreen: 0, sigGreens: [], sigOffset: 0, sigOrder: [] });
+    this.nodes.set(id, { id, x, y, z, signal: false, sigMode: 'fixed', sigGreen: 0, sigGreens: [], sigOffset: 0, sigOrder: [] });
     return id;
   }
 
   private addSegment(a: number, b: number, kind: RoadKind): number {
     const id = this.nextSegmentId++;
-    this.segments.set(id, { id, a, b, kind, structure: 'ground', playerSpeedKmh: null, signA: null, signB: null, locked: false, name: '', laneDirsA: [], laneDirsB: [], oneWay: null, restrictA: null, restrictB: null });
+    const A = this.nodes.get(a)!, B = this.nodes.get(b)!, sc = this.spanCheck(A, B, A.z, B.z);
+    this.segments.set(id, { id, a, b, kind, structure: 'structure' in sc ? sc.structure : 'ground', playerSpeedKmh: null, signA: null, signB: null, locked: false, name: '', laneDirsA: [], laneDirsB: [], oneWay: null, restrictA: null, restrictB: null });
     return id;
   }
 
@@ -669,7 +725,10 @@ export class Network {
     s.signB = null; // 새로 생긴 이음 노드에는 표지가 없다
     s.restrictB = null;
     const id = this.nextSegmentId++;
-    this.segments.set(id, { ...s, id, a: node, b: oldB, signA: null, signB: oldSignB, restrictA: null, restrictB: oldRestrictB, laneDirsA: [], laneDirsB: oldDirsB });
+    const mid = this.nodes.get(node)!, o = this.nodes.get(oldB)!, A = this.nodes.get(s.a)!;
+    const c1 = this.spanCheck(A, mid, A.z, mid.z), c2 = this.spanCheck(mid, o, mid.z, o.z);
+    s.structure = 'structure' in c1 ? c1.structure : 'ground';
+    this.segments.set(id, { ...s, structure: 'structure' in c2 ? c2.structure : 'ground', id, a: node, b: oldB, signA: null, signB: oldSignB, restrictA: null, restrictB: oldRestrictB, laneDirsA: [], laneDirsB: oldDirsB });
   }
 
   toJSON(): NetworkData {
@@ -682,6 +741,7 @@ export class Network {
       nextBuildingId: this.nextBuildingId,
       buildings: [...this.buildings.values()].map((b) => ({ ...b })),
       zones: this.zoneList().map((z): ZoneCell => [z.i, z.j, ZONE_CODE[z.type]]),
+      terrain: this.terrain ? { ...this.terrain } : null,
     };
   }
 
@@ -730,6 +790,7 @@ export class Network {
       nextBuildingId: Math.max((d as Partial<NetworkData>).nextBuildingId ?? 0, maxBuilding + 1),
       buildings,
       zones: rawZ,
+      terrain: parseTerrain((d as Partial<NetworkData>).terrain),
     };
   }
 
@@ -745,6 +806,7 @@ export class Network {
     this.nextBuildingId = data.nextBuildingId;
     this.zones.clear();
     for (const [i, j, t] of [...data.zones].sort((a, b) => zkey(a[0], a[1]) - zkey(b[0], b[1]))) { if (CODE_ZONE[t]) this.zones.set(zkey(i, j), CODE_ZONE[t]); else if (t === 0) this.zones.set(zkey(i, j), 'home'); }
+    this.terrain = data.terrain ? { ...data.terrain } : null;
     this.zonesRevision++;
     this.revision++;
     this.buildingsRevision++;

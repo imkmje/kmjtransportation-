@@ -10,7 +10,7 @@ export class Editor {
   private history: string[] = [];
   private index = 0;
 
-  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout'>) {
+  constructor(private cfg: Pick<Config, 'geometry' | 'roads' | 'editor' | 'buildings' | 'speedChoicesKmh' | 'zones' | 'roundabout' | 'terrain'>) {
     this.network = new Network(cfg);
     this.history.push(this.snapshot());
   }

@@ -20,9 +20,14 @@ const ERR: Record<PlanError, string> = {
   angle: `다른 도로와 각도가 너무 작습니다 (최소 ${config.geometry.minAngleDeg}°)`,
   tooManyRoads: `한 교차로에 연결할 수 있는 도로는 최대 ${config.geometry.maxRoadsPerNode}개입니다`,
   onBuilding: '건물 위로는 도로를 놓을 수 없습니다',
+  inWater: '물 위(다리 위 포함)에는 끝점이나 교차로를 둘 수 없습니다',
+  tooSteep: `경사가 너무 급합니다 (최대 ${Math.round(config.terrain.maxGrade * 100)}%)`,
+  bridgeTooLong: `다리가 너무 깁니다 (물 위 최대 ${config.terrain.maxBridge}m)`,
 };
 
 const BERR: Record<BuildingError | 'noSuchBuilding', string> = {
+  onWater: '물 위에는 건물을 지을 수 없습니다',
+  tooSteep: '경사가 너무 급해 건물을 지을 수 없습니다',
   onRoad: '도로와 너무 가깝습니다',
   overlap: '다른 건물과 겹칩니다',
   outOfBounds: '지도 밖입니다',
