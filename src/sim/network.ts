@@ -13,7 +13,8 @@ export interface Segment {
   a: number; // 시작 노드 ID
   b: number; // 끝 노드 ID
   kind: RoadKind;
-  structure: 'ground' | 'bridge' | 'tunnel'; // 2.1.0 대비
+  structure: 'ground' | 'bridge' | 'tunnel'; // 지상·다리(고가 포함)·터널
+  over: boolean; // 입체교차(고가): 다른 도로와 만나지 않고 위로 지나간다
   playerSpeedKmh: number | null; // 플레이어가 바꾼 제한속도(기본값은 도로 종류에서)
   signA: SignKind | null; // a쪽 끝으로 들어오는 방향의 표지
   signB: SignKind | null; // b쪽 끝으로 들어오는 방향의 표지
@@ -52,9 +53,9 @@ export type BuildingError = 'onRoad' | 'overlap' | 'outOfBounds' | 'locked' | 'o
 export type CellStatus = 'ok' | 'out' | 'road' | 'far'; // 구역 칸 상태: 칠할 수 있음 / 지도 밖 / 도로와 겹침 / 도로에서 너무 멂
 export type ZoneCell = [number, number, number]; // 칸 번호 i, j와 종류(0 = 주거, 1 = 직장, 2 = 상업). 칸 (i,j)의 중심은 (20i, 20j)
 
-export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads' | 'onBuilding' | 'inWater' | 'tooSteep' | 'bridgeTooLong';
+export type PlanError = 'samePoint' | 'nodeTooClose' | 'tooShort' | 'angle' | 'tooManyRoads' | 'onBuilding' | 'inWater' | 'tooSteep' | 'bridgeTooLong' | 'overpass';
 interface Stop { x: number; y: number; nodeId?: number; segId?: number }
-export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number } | { ok: false; error: PlanError };
+export type Plan = { ok: true; stops: Stop[]; kind: RoadKind; length: number; over?: boolean } | { ok: false; error: PlanError };
 export interface Snap { x: number; y: number; nodeId?: number; segId?: number }
 
 export const NETWORK_FORMAT_VERSION = 12; // 2: 도로 구간에 정지·양보 표지(signA, signB) 추가 / 3: 건물(buildings) 추가 / 4: 구역(zones), 외부 연결점·건물 모양(variant), 철거 불가 도로(locked) 추가 / 5: 노드에 신호등(signal) 추가 / 6: 신호 방식(sigMode)·녹색 시간(sigGreen) 추가 / 7: 도로 끝의 통행 제한(restrictA, restrictB) 추가 / 8: 신호 단계별 녹색 시간(sigGreens)·시작 시차(sigOffset) 추가 / 9: 일방통행(oneWay) 추가 / 11: 신호 단계 순서(sigOrder) 추가 / 10: 주거 밀도(density)·구역 종류 확장(주거 중·고밀, 산업), 도로 이름(name)·차선별 방향(laneDirsA/B) 추가
@@ -68,6 +69,12 @@ export interface NetworkData {
   buildings: Building[];
   zones: ZoneCell[];
   terrain?: TerrainDef | null; // 형식 12: 지형(없으면 평지)
+}
+
+/** 고가 도로의 솟은 높이: 양 끝 overRamp(m)에 걸쳐 부드럽게 올라 가운데는 overHeight를 유지한다 */
+export function overHump(t: number, len: number, o: { overRamp: number; overHeight: number }): number {
+  const f = Math.min(1, Math.max(0, Math.min(t, len - t) / o.overRamp));
+  return o.overHeight * f * f * (3 - 2 * f);
 }
 
 function parseTerrain(v: unknown): TerrainDef | null {
@@ -183,7 +190,7 @@ export class Network {
   }
 
   /** 건설 가능 여부와 결과(교차점, 분할 위치)를 계산만 한다. 도로망은 바뀌지 않는다 */
-  planRoad(p1: Pt, p2: Pt, kind: RoadKind, minLen = this.rules.geometry.minSegmentLength): Plan {
+  planRoad(p1: Pt, p2: Pt, kind: RoadKind, minLen = this.rules.geometry.minSegmentLength, over = false): Plan {
     const g = this.rules.geometry;
     const fail = (error: PlanError): Plan => ({ ok: false, error });
     const s1 = this.snapPoint(p1), s2 = this.snapPoint(p2);
@@ -210,10 +217,27 @@ export class Network {
     for (const seg of this.segments.values()) {
       if (skip.has(seg.id)) continue;
       const hit = intersect(s1, s2, this.nodes.get(seg.a)!, this.nodes.get(seg.b)!);
-      if (hit) crossings.push({ x: hit.x, y: hit.y, segId: seg.id, t: hit.t });
+      if (!hit) continue;
+      if (seg.over && !over) { // 고가 아래로 지나가는 일반 도로: 가르지 않고, 위 도로와 높이 차가 충분해야 한다
+        const zA = s1.nodeId !== undefined ? this.nodes.get(s1.nodeId)!.z : this.heightAt(s1.x, s1.y), zB = s2.nodeId !== undefined ? this.nodes.get(s2.nodeId)!.z : this.heightAt(s2.x, s2.y);
+        const a0 = this.nodes.get(seg.a)!, below = zA + (zB - zA) * (Math.hypot(hit.x - s1.x, hit.y - s1.y) / dist(s1, s2));
+        if (this.segmentZ(seg, Math.hypot(hit.x - a0.x, hit.y - a0.y)) - below < this.rules.terrain.overClear) return fail('overpass');
+        continue;
+      }
+      crossings.push({ x: hit.x, y: hit.y, segId: seg.id, t: hit.t });
     }
     crossings.sort((a, b) => a.t - b.t);
-    const stops: Stop[] = [s1, ...crossings.map(({ x, y, segId }) => ({ x, y, segId })), s2];
+    if (over) { // 입체교차: 교차 지점에서 가르지 않고 위로 지나간다. 조건을 못 맞추면 건설하지 않는다
+      const len = dist(s1, s2), o = this.rules.terrain;
+      if (!crossings.length || len < 2 * o.overRamp || s1.segId !== undefined || s2.segId !== undefined) return fail('overpass');
+      const z1 = s1.nodeId !== undefined ? this.nodes.get(s1.nodeId)!.z : this.heightAt(s1.x, s1.y), z2 = s2.nodeId !== undefined ? this.nodes.get(s2.nodeId)!.z : this.heightAt(s2.x, s2.y);
+      for (const c of crossings) {
+        const sg = this.segments.get(c.segId!)!, a0 = this.nodes.get(sg.a)!, d = Math.hypot(c.x - s1.x, c.y - s1.y);
+        const deck = z1 + (z2 - z1) * (d / len) + overHump(d, len, o);
+        if (sg.over || deck - this.segmentZ(sg, Math.hypot(c.x - a0.x, c.y - a0.y)) < o.overClear) return fail('overpass'); // 이미 고가인 도로 위로는 겹치지 못하고, 아래 도로와 높이 차가 모자라면 안 된다
+      }
+    }
+    const stops: Stop[] = over ? [s1, s2] : [s1, ...crossings.map(({ x, y, segId }) => ({ x, y, segId })), s2];
 
     // 최소 길이: 새 도로 조각과, 분할될 기존 도로의 두 조각 모두
     for (let i = 0; i < stops.length - 1; i++) if (dist(stops[i], stops[i + 1]) < minLen - EPS) return fail('tooShort'); // 곡선 조각은 minLen이 더 짧다(기존 도로를 가르는 조각의 최소 길이는 그대로)
@@ -223,14 +247,20 @@ export class Network {
       if (dist(st, this.nodes.get(seg.a)!) < g.minSegmentLength - EPS || dist(st, this.nodes.get(seg.b)!) < g.minSegmentLength - EPS) return fail('tooShort');
     }
 
-    // 지형: 노드는 물 위에 둘 수 없고(다리 위에서 갈라지는 것도 불가), 조각마다 경사와 물 위 길이를 확인한다
+    for (const st of stops) { // 터널·고가 위에서는 갈라질 수 없고, 다리는 물 위·높은 곳이 아닌 땅 가까운 곳에서만 갈라진다
+      if (st.segId === undefined) continue;
+      const sg = this.segments.get(st.segId)!;
+      if (sg.over || sg.structure === 'tunnel') return fail('inWater');
+      if (sg.structure === 'bridge') { const a0 = this.nodes.get(sg.a)!; if (isWater(this.terrain, st.x, st.y) || this.segmentZ(sg, Math.hypot(st.x - a0.x, st.y - a0.y)) - this.heightAt(st.x, st.y) > this.rules.terrain.bridgeClear) return fail('inWater'); }
+    }
+    // 지형: 노드는 물 위에 둘 수 없고, 조각마다 경사와 물 위 길이를 확인한다
     if (this.terrain) {
       const zOf = (st: Stop): number => {
         if (st.nodeId !== undefined) return this.nodes.get(st.nodeId)!.z;
         if (st.segId !== undefined) { const sg = this.segments.get(st.segId)!, a0 = this.nodes.get(sg.a)!; return this.segmentZ(sg, Math.hypot(st.x - a0.x, st.y - a0.y)); }
         return this.heightAt(st.x, st.y);
       };
-      for (const st of stops) if (isWater(this.terrain, st.x, st.y) || (st.segId !== undefined && this.segments.get(st.segId)!.structure !== 'ground')) return fail('inWater');
+      for (const st of stops) if (isWater(this.terrain, st.x, st.y)) return fail('inWater');
       for (let i = 0; i < stops.length - 1; i++) { const c = this.spanCheck(stops[i], stops[i + 1], zOf(stops[i]), zOf(stops[i + 1])); if ('error' in c) return fail(c.error); }
     }
 
@@ -262,12 +292,12 @@ export class Network {
 
     let length = 0;
     for (let i = 0; i < stops.length - 1; i++) length += dist(stops[i], stops[i + 1]);
-    return { ok: true, stops, kind, length };
+    return { ok: true, stops, kind, length, over };
   }
 
   /** 건설. 성공하면 새로 생긴 도로 ID 목록 */
-  buildRoad(p1: Pt, p2: Pt, kind: RoadKind, minLen?: number): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
-    const plan = this.planRoad(p1, p2, kind, minLen);
+  buildRoad(p1: Pt, p2: Pt, kind: RoadKind, minLen?: number, over = false): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
+    const plan = this.planRoad(p1, p2, kind, minLen, over);
     if (!plan.ok) return plan;
     const nodeIds = plan.stops.map((st) => {
       if (st.nodeId !== undefined) return st.nodeId;
@@ -278,7 +308,7 @@ export class Network {
       return n;
     });
     const ids: number[] = [];
-    for (let i = 0; i < nodeIds.length - 1; i++) ids.push(this.addSegment(nodeIds[i], nodeIds[i + 1], kind));
+    for (let i = 0; i < nodeIds.length - 1; i++) { const id = this.addSegment(nodeIds[i], nodeIds[i + 1], kind); if (over) { const sg = this.segments.get(id)!; sg.over = true; sg.structure = 'bridge'; } ids.push(id); }
     this.pruneZones();
     this.revision++;
     return { ok: true, ids, length: plan.length };
@@ -680,7 +710,7 @@ export class Network {
   /** 도로 구간 segId 위, a에서 t(m) 떨어진 곳의 도로 높이: 양 끝 노드 높이의 직선(골짜기 위는 다리, 언덕 아래는 터널이 된다) */
   segmentZ(seg: Segment, t: number): number {
     const a = this.nodes.get(seg.a)!, b = this.nodes.get(seg.b)!, len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    return a.z + (b.z - a.z) * Math.min(1, Math.max(0, t / len));
+    return a.z + (b.z - a.z) * Math.min(1, Math.max(0, t / len)) + (seg.over ? overHump(t, len, this.rules.terrain) : 0);
   }
 
   /** 두 점 사이를 직선 도로로 놓을 때: 구조(지상·다리·터널)와, 건설할 수 없는 이유(물 위 길이, 경사)를 판정한다 */
@@ -710,7 +740,7 @@ export class Network {
   private addSegment(a: number, b: number, kind: RoadKind): number {
     const id = this.nextSegmentId++;
     const A = this.nodes.get(a)!, B = this.nodes.get(b)!, sc = this.spanCheck(A, B, A.z, B.z);
-    this.segments.set(id, { id, a, b, kind, structure: 'structure' in sc ? sc.structure : 'ground', playerSpeedKmh: null, signA: null, signB: null, locked: false, name: '', laneDirsA: [], laneDirsB: [], oneWay: null, restrictA: null, restrictB: null });
+    this.segments.set(id, { id, a, b, kind, structure: 'structure' in sc ? sc.structure : 'ground', over: false, playerSpeedKmh: null, signA: null, signB: null, locked: false, name: '', laneDirsA: [], laneDirsB: [], oneWay: null, restrictA: null, restrictB: null });
     return id;
   }
 
@@ -763,7 +793,7 @@ export class Network {
     const okDirs = (v: unknown): number[] => (Array.isArray(v) ? v.map((m) => (Number.isInteger(m) && m >= 0 && m <= 7 ? m : 0)).slice(0, 8) : []);
     const okSign = (v: unknown) => v === null || v === 'stop' || v === 'yield';
     // 형식 1 → 2: 표지 필드를 비워서 채운다
-    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null, locked: (sg as Partial<Segment>).locked === true, name: typeof (sg as Partial<Segment>).name === 'string' ? (sg as Segment).name.slice(0, 30) : '', laneDirsA: okDirs((sg as Partial<Segment>).laneDirsA), laneDirsB: okDirs((sg as Partial<Segment>).laneDirsB), oneWay: (sg as Partial<Segment>).oneWay ?? null, restrictA: (sg as Partial<Segment>).restrictA ?? null, restrictB: (sg as Partial<Segment>).restrictB ?? null }));
+    const segments = d.segments.map((sg) => ({ ...sg, signA: (sg as Partial<Segment>).signA ?? null, signB: (sg as Partial<Segment>).signB ?? null, locked: (sg as Partial<Segment>).locked === true, over: (sg as Partial<Segment>).over === true, name: typeof (sg as Partial<Segment>).name === 'string' ? (sg as Segment).name.slice(0, 30) : '', laneDirsA: okDirs((sg as Partial<Segment>).laneDirsA), laneDirsB: okDirs((sg as Partial<Segment>).laneDirsB), oneWay: (sg as Partial<Segment>).oneWay ?? null, restrictA: (sg as Partial<Segment>).restrictA ?? null, restrictB: (sg as Partial<Segment>).restrictB ?? null }));
     const okRes = (v: unknown) => v === null || v === 'noLeft' || v === 'noEntry';
     if (!segments.every((sg) => okSign(sg.signA) && okSign(sg.signB) && okRes(sg.restrictA) && okRes(sg.restrictB) && (sg.oneWay === null || sg.oneWay === 'ab' || sg.oneWay === 'ba'))) throw new Error('도로망 파일이 손상되었습니다');
     // 형식 1·2 → 3: 건물이 없는 것으로 채운다

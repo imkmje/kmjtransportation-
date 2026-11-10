@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import { roadSpan, type Network, type Pt, type RoadKind } from '../sim/network';
-import { toThree } from './coords';
+import { toThree, toThreeAbs, groundHeight } from './coords';
 
 const unitBox = new THREE.BoxGeometry(1, 1, 1);
 const unitDisk = new THREE.CylinderGeometry(1, 1, 1, 24);
@@ -12,6 +12,7 @@ const poleMat = new THREE.MeshLambertMaterial({ color: 0x8b8f96 });
 const redMat = new THREE.MeshLambertMaterial({ color: 0xd63a31 });
 const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf6f6f6 });
 const roadMat = new THREE.MeshLambertMaterial({ color: 0x585d66 });
+const deckMat = new THREE.MeshLambertMaterial({ color: 0x9a9fa6 }); // 다리·고가 상판 아래 콘크리트와 교각
 const goodMat = new THREE.MeshBasicMaterial({ color: 0x3fae5a, transparent: true, opacity: 0.55, depthWrite: false });
 const markMat = new THREE.MeshBasicMaterial({ color: 0x2f6fe0, transparent: true, opacity: 0.8, depthWrite: false });
 const badMat = new THREE.MeshBasicMaterial({ color: 0xe0443c, transparent: true, opacity: 0.6, depthWrite: false });
@@ -20,6 +21,11 @@ const roadWidth = (kind: RoadKind, oneWay = false) => roadSpan(config.roads[kind
 const walkMat = new THREE.MeshLambertMaterial({ color: 0xb9bdc4 });
 const whiteLine = new THREE.MeshBasicMaterial({ color: 0xf4f4f0 });
 const yellowLine = new THREE.MeshBasicMaterial({ color: 0xe8b93c });
+
+function distToSeg(x: number, y: number, a: Pt, b: Pt): number {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1, u = Math.min(1, Math.max(0, ((x - a.x) * dx + (y - a.y) * dy) / l2));
+  return Math.hypot(x - (a.x + dx * u), y - (a.y + dy * u));
+}
 
 // 두 점 사이에 가로×세로×높이 상자를 놓는다(상자의 긴 쪽이 두 점 방향)
 function place(m: THREE.Mesh, a: Pt, b: Pt, width: number, height: number, bottom: number) {
@@ -85,13 +91,14 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
   let shown = -1;
 
   // 도로 몸체·인도·차선 표시·교차로 판은 종류별로 InstancedMesh 하나로 모아 그린다(도로가 수백 개여도 그리기 호출이 몇 번뿐이다)
-  type Inst = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number };
+  type Inst = { x: number; y: number; z: number; sx: number; sy: number; sz: number; ry: number; rz?: number };
   function flush(geo: THREE.BufferGeometry, mat: THREE.Material, list: Inst[]) {
     if (!list.length) return;
     const m = new THREE.InstancedMesh(geo, mat, list.length);
     m.frustumCulled = false;
     const d = new THREE.Object3D();
-    list.forEach((it, i) => { d.position.set(it.x, it.y, it.z); d.scale.set(it.sx, it.sy, it.sz); d.rotation.set(0, it.ry, 0); d.updateMatrix(); m.setMatrixAt(i, d.matrix); });
+    d.rotation.order = 'YZX'; // 먼저 오르내림(기울기), 그다음 방향
+    list.forEach((it, i) => { d.position.set(it.x, it.y, it.z); d.scale.set(it.sx, it.sy, it.sz); d.rotation.set(0, it.ry, it.rz ?? 0); d.updateMatrix(); m.setMatrixAt(i, d.matrix); });
     group.add(m);
   }
 
@@ -100,17 +107,34 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
     group.clear();
     const radius = new Map<number, number>();
     for (const s of net.segments.values()) for (const id of [s.a, s.b]) radius.set(id, Math.max(radius.get(id) ?? 0, config.roads[s.kind].lanesPerDir * config.roads[s.kind].laneWidth + 2));
-    const bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
+    const decks: Inst[] = [], bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
       const len = Math.hypot(b.x - a.x, b.y - a.y), ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, ry = Math.atan2(b.y - a.y, b.x - a.x);
       const r = config.roads[s.kind], w = r.laneWidth, sp = roadSpan(r, !!s.oneWay), width = sp.width;
       // 한 줄(선·띠): 구간 안에서 거리 t0~t1, 옆으로 off만큼 떨어진 곳(왼쪽 +). z는 바닥 높이
+      const zAt = (t: number) => net.segmentZ(s, t);
+      const chunk = s.over ? 8 : Infinity; // 고가는 오르내림이 곡선이라 8m씩 끊어 각각 기울인다(보통 도로는 직선 기울기 하나)
       const strip = (list: Inst[], t0: number, t1: number, off: number, wd: number, h: number, z0: number) => {
         if (t1 - t0 < 0.5) return;
-        const t = (t0 + t1) / 2, p = toThree(a.x + ux * t - uy * off, a.y + uy * t + ux * off, z0 + h / 2);
-        list.push({ x: p.x, y: p.y, z: p.z, sx: t1 - t0, sy: h, sz: wd, ry });
+        const n = Math.max(1, Math.ceil((t1 - t0) / chunk));
+        for (let k = 0; k < n; k++) {
+          const c0 = t0 + ((t1 - t0) * k) / n, c1 = t0 + ((t1 - t0) * (k + 1)) / n, tc = (c0 + c1) / 2;
+          const pitch = Math.atan2(zAt(c1) - zAt(c0), c1 - c0);
+          const p = toThreeAbs(a.x + ux * tc - uy * off, a.y + uy * tc + ux * off, zAt(tc) + z0 + h / 2);
+          list.push({ x: p.x, y: p.y, z: p.z, sx: (c1 - c0) / Math.cos(pitch), sy: h, sz: wd, ry, rz: pitch });
+        }
       };
+      if (s.structure === 'bridge') { // 상판 아래 두꺼운 콘크리트와 교각(지면이 도로보다 한참 아래일 때만)
+        strip(decks, 0, len, sp.shift, width + 1.2, 1.4, -1.4);
+        for (let t = 25; t < len - 20; t += 30) {
+          const x = a.x + ux * t, y = a.y + uy * t, h = groundHeight(x, y), top = zAt(t) - 1.4;
+          if (top - h < 2.5) continue;
+          if (s.over && [...net.segments.values()].some((o) => o.id !== s.id && !o.over && distToSeg(x, y, net.nodes.get(o.a)!, net.nodes.get(o.b)!) < 14 + width / 2)) continue; // 아래를 지나는 도로 위에는 교각을 세우지 않는다
+          const p = toThreeAbs(x, y, (h + top) / 2);
+          decks.push({ x: p.x, y: p.y, z: p.z, sx: 2.2, sy: top - h, sz: Math.min(width * 0.5, 8), ry });
+        }
+      }
       strip(bodies, 0, len, sp.shift, width, 0.2, 0); // 아스팔트(비대칭 도로는 중앙선에서 한쪽으로 치우친다)
       const t0 = Math.min(radius.get(s.a)!, len / 2), t1 = Math.max(len - radius.get(s.b)!, len / 2); // 교차로 판 사이 구간
       strip(walks, t0, t1, sp.left + 1, 2, 0.32, 0); strip(walks, t0, t1, -(sp.right + 1), 2, 0.32, 0); // 인도(양쪽)
@@ -122,9 +146,10 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       for (const off of dividers) for (let t = t0 + 1; t + 3 <= t1; t += 8) strip(whites, t, t + 3, off, 0.15, 0.02, 0.2);
     }
     for (const [id, rr] of radius) {
-      const n = net.nodes.get(id)!, c = toThree(n.x, n.y, 0.15);
+      const n = net.nodes.get(id)!, c = toThreeAbs(n.x, n.y, n.z + 0.15);
       discs.push({ x: c.x, y: c.y, z: c.z, sx: rr, sy: 0.3, sz: rr, ry: 0 }); // 교차로·끝점은 둥근 판으로 덮어 이음새를 가린다(조금 더 높게: 겹침 깜빡임 방지)
     }
+    flush(unitBox, deckMat, decks);
     flush(unitBox, roadMat, bodies);
     flush(unitDisk, roadMat, discs);
     flush(unitBox, walkMat, walks);
@@ -179,7 +204,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       const n = Math.max(1, Math.floor(len / 28));
       for (let i = 0; i < n; i++) {
         const f = (i + 0.5) / n;
-        const p = toThree(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, 0.26);
+        const p = toThreeAbs(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, net.segmentZ(s, len * f) + 0.26);
         const m = new THREE.Mesh(triangle, whiteMat);
         m.position.set(p.x, p.y, p.z);
         m.scale.set(2.2, 1, 2.2);

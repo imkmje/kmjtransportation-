@@ -20,7 +20,8 @@ const ERR: Record<PlanError, string> = {
   angle: `다른 도로와 각도가 너무 작습니다 (최소 ${config.geometry.minAngleDeg}°)`,
   tooManyRoads: `한 교차로에 연결할 수 있는 도로는 최대 ${config.geometry.maxRoadsPerNode}개입니다`,
   onBuilding: '건물 위로는 도로를 놓을 수 없습니다',
-  inWater: '물 위(다리 위 포함)에는 끝점이나 교차로를 둘 수 없습니다',
+  inWater: '물 위나 다리·터널·고가 위에는 끝점이나 교차로를 둘 수 없습니다',
+  overpass: `입체교차 조건: 다른 도로와 교차해야 하고, 길이 ${2 * config.terrain.overRamp}m 이상, 양 끝은 빈 땅이나 기존 끝점이어야 하며, 교차 지점이 양 끝에서 충분히 떨어져(약 ${Math.round(config.terrain.overRamp * 0.75)}m 이상) 아래 도로와 높이 차 ${config.terrain.overClear}m를 확보해야 합니다`,
   tooSteep: `경사가 너무 급합니다 (최대 ${Math.round(config.terrain.maxGrade * 100)}%)`,
   bridgeTooLong: `다리가 너무 깁니다 (물 위 최대 ${config.terrain.maxBridge}m)`,
 };
@@ -54,6 +55,7 @@ interface Deps {
   loadSample: () => void;
   loadNew: () => void;
   loadGrid: () => void;
+  loadHills: () => void;
   setHeat: (on: boolean) => void;
   setColorblind: (on: boolean) => void;
   pick: (clientX: number, clientY: number) => Pt | null;
@@ -87,6 +89,7 @@ export function createTools(d: Deps) {
   let lastClient = { x: 0, y: 0 };
   let gridSnap = true;
   let angleSnap = false;
+  let overMode = false; // 입체 모드: 도로를 다른 도로 위로 지나가는 고가로 만든다(교차로를 만들지 않는다)
   let curveMode = false; // 곡선 모드: 도로 도구가 세 번 클릭(시작 → 휘는 점 → 끝)으로 곡선을 만든다
   let curvePts: Pt[] = [];
   let ortho = true; // 직각 맞추기: 도로에서 출발하거나 도로에 닿을 때 거의 직각이면 정확히 90°로
@@ -121,6 +124,7 @@ export function createTools(d: Deps) {
         <button data-tool="oneway2" title="단축키 Shift+4: 일방통행 2차로 도로">일방통행 2차로 [⇧4]</button>
         <button data-tool="oneway3" title="단축키 Shift+6: 일방통행 3차로 도로">일방통행 3차로 [⇧6]</button>
         <label class="chip" title="단축키 Q: 켜면 세 번 클릭해(시작 → 휘는 점 → 끝) 곡선 도로를 만듭니다"><input type="checkbox" id="curve" /> 곡선 [Q]</label>
+        <label class="chip" title="단축키 T: 켜면 그리는 도로가 다른 도로 위로 지나가는 고가(입체교차)가 됩니다. 도로와 교차하고 길이 140m 이상이어야 합니다"><input type="checkbox" id="over" /> 입체 [T]</label>
         <button data-tool="roundabout" title="단축키 R: 교차로를 클릭하면 회전교차로로 바꿉니다(도로가 환형 반지름 + 20m보다 길어야 함)">회전교차로 [R]</button>
         <button data-tool="oneway" title="단축키 W: 도로를 클릭할 때마다 양방향 → 한쪽 방향 → 반대 방향 → 양방향. 도로 위 화살표가 가는 방향입니다">일방통행 [W]</button>
         <button data-tool="upgrade" title="단축키 U: 도로를 한 단계 넓힙니다(2→4→6차로). 교차로 사이 한 구간씩">넓히기 [U]</button>
@@ -186,7 +190,7 @@ export function createTools(d: Deps) {
     <button id="save">저장</button><button id="load">불러오기</button></div>
     <div class="mrow"><button id="export">파일로 저장</button><button id="import">파일 열기</button></div>
     <div class="mrow"><button id="sample" title="큰길 하나와 작은 길, 주거·직장·상점이 있는 예제 도시">샘플 맵</button><button id="newcity" title="외부에서 들어오는 도로 하나만 있는 새 도시">새 도시</button></div>
-    <div class="mrow"><button id="gridcity" title="큰길·세로 길·신호등·회전교차로·구역이 갖춰진 격자 도시. 신호와 병목 찾기를 시험해 보기 좋습니다">격자 도시</button></div>
+    <div class="mrow"><button id="gridcity" title="큰길·세로 길·신호등·회전교차로·구역이 갖춰진 격자 도시. 신호와 병목 찾기를 시험해 보기 좋습니다">격자 도시</button><button id="hillcity" title="언덕과 강이 있는 지형. 도로가 지형을 따라 오르내리고 강 위는 다리가 됩니다. 입체교차(T)도 시험해 보세요">구릉 도시</button></div>
     <input type="file" id="file" accept="application/json,.json" hidden />
     <div class="help">도로 도구: 왼쪽 드래그로 그리기 (Esc·우클릭: 취소)<br />마우스: 가운데 드래그 = 이동, 오른쪽 드래그 = 회전·기울기, 휠 = 확대<br />터치: 한 손가락 = 이동, 두 손가락 벌리기 = 확대, 비틀기 = 회전, 같이 위아래 = 기울기, 좌우 = 이동<br />구역: 도로 옆 땅을 드래그해서 칠하면 수요에 따라 건물이 자랍니다(주거·상업·직장)<br />표지: 교차로 가까운 도로를 클릭 (다시 클릭하면 치움)<br />신호등: 교차로를 클릭할 때마다 고정식 → 감응식(차가 없으면 넘김) → 끔. 켜면 그 교차로의 표지는 무시<br />속도 제한: 도로를 클릭할 때마다 값이 바뀜<br />차량 투입: 출발 도로 클릭 → 도착 도로 클릭</div>`;
   const $ = <T extends HTMLElement>(root: HTMLElement, sel: string) => root.querySelector<T>(sel)!;
@@ -416,7 +420,7 @@ export function createTools(d: Deps) {
       return;
     }
     if (!start) { d.roads.setCursor(p, true); return; }
-    const plan = net.planRoad(start, p, roadKind());
+    const plan = net.planRoad(start, p, roadKind(), undefined, overMode);
     d.roads.setGhost(start, p, roadKind(), plan.ok);
     const len = plan.ok ? plan.length : Math.hypot(p.x - start.x, p.y - start.y);
     d.tip.textContent = `${Math.round(len)} m${plan.ok ? '' : ' — ' + ERR[plan.error]}`;
@@ -617,7 +621,7 @@ export function createTools(d: Deps) {
         start = from; // 각도·직각 맞추기는 시작점을 알아야 한다(미리보기와 같은 결과가 되도록)
         const to = cursorPoint({ ...last });
         start = null;
-        if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) { if (tool! in ONEWAY_KIND) d.editor.buildOneWay(from, to, roadKind()); else d.editor.build(from, to, roadKind()); }
+        if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-6) { if (overMode) { const r = d.editor.buildOver(from, to, roadKind()); if (!r.ok) say(ERR[r.error]); } else if (tool! in ONEWAY_KIND) d.editor.buildOneWay(from, to, roadKind()); else { const r = d.editor.build(from, to, roadKind()); if (!r.ok) say(ERR[r.error]); } }
       }
       down = null;
       refresh();
@@ -648,6 +652,7 @@ export function createTools(d: Deps) {
     else if (e.shiftKey && (e.code === 'Digit2' || e.code === 'Digit4' || e.code === 'Digit6')) setTool(e.code === 'Digit2' ? 'oneway1' : e.code === 'Digit4' ? 'oneway2' : 'oneway3');
     else if (k === 'u') setTool(e.shiftKey ? 'downgrade' : 'upgrade');
     else if (k === 'q') toggleBox('#curve', (on) => { curveMode = on; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); say(on ? '곡선 모드: 도로 도구를 고르고 세 번 클릭하세요 (시작 → 휘는 점 → 끝)' : '직선 모드'); });
+    else if (k === 't') toggleBox('#over', (on) => { overMode = on; refresh(); say(on ? '입체 모드: 다른 도로와 교차하는 길을 그리면 위로 지나가는 고가가 됩니다' : '입체 모드 끔'); });
     else if (k === 'm') toggleBox('#heat', (on) => d.setHeat(on));
     else if (k === 'd') toggleBox('#debugToggle', (on) => d.setDebug(on));
     else if (k === 'f') toggleBox('#events', (on) => { d.setEvents(on); say(on ? '사고·날씨 이벤트를 켰습니다' : '사고·날씨 이벤트를 껐습니다'); });
@@ -668,6 +673,7 @@ export function createTools(d: Deps) {
   $<HTMLInputElement>(d.toolbar, '#ortho').onchange = (e) => (ortho = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#angle').onchange = (e) => (angleSnap = (e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#heat').onchange = (e) => d.setHeat((e.target as HTMLInputElement).checked);
+  $<HTMLInputElement>(d.toolbar, '#over').onchange = (e) => { overMode = (e.target as HTMLInputElement).checked; refresh(); };
   $<HTMLInputElement>(d.toolbar, '#curve').onchange = (e) => { curveMode = (e.target as HTMLInputElement).checked; curvePts = []; start = null; dragging = false; syncDrawMode(); refresh(); };
   $<HTMLInputElement>(d.toolbar, '#rtor').onchange = (e) => d.setRtor((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>(d.toolbar, '#events').onchange = (e) => d.setEvents((e.target as HTMLInputElement).checked);
@@ -700,6 +706,7 @@ export function createTools(d: Deps) {
     say('파일을 불러왔습니다');
   });
   $(d.filebar, '#newcity').onclick = () => guard(() => { d.loadNew(); say('새 도시를 시작합니다. 외부에서 들어오는 도로 옆에 구역을 칠해 보세요'); });
+  $(d.filebar, '#hillcity').onclick = () => guard(() => { d.loadHills(); say('구릉 도시를 열었습니다. 강 위는 다리가 되고, 도로는 지형을 따라 오르내립니다'); });
   $(d.filebar, '#gridcity').onclick = () => guard(() => { d.loadGrid(); say('격자 도시를 열었습니다. 구역에 건물이 자라고 신호등이 켜져 있습니다'); });
   $(d.filebar, '#sample').onclick = () => guard(() => { d.loadSample(); say('샘플 맵을 열었습니다. 평일 아침 6시부터 출근이 시작됩니다'); });
 

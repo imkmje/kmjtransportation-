@@ -86,6 +86,13 @@ export class Editor {
     return { ok: true, ids, length };
   }
 
+  /** 입체교차(고가): 다른 도로와 만나지 않고 위로 지나가는 도로. 조건은 planRoad(over)가 판정한다 */
+  buildOver(p1: Pt, p2: Pt, kind: RoadKind): { ok: true; ids: number[]; length: number } | { ok: false; error: PlanError } {
+    const r = this.network.buildRoad(p1, p2, kind, undefined, true);
+    if (r.ok) this.commit();
+    return r;
+  }
+
   setName(segId: number, name: string): number {
     const n = this.network.setName(segId, name);
     if (n) this.commit();

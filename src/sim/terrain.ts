@@ -17,8 +17,8 @@ function noise(seed: number, x: number, y: number): number {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 
-/** 강 가운데 선의 x 좌표(y에 따라 굽이친다) */
-export const riverX = (t: TerrainDef, y: number): number => (hash(t.seed, 7, 7) - 0.5) * 200 + 70 * Math.sin(y / 170 + hash(t.seed, 3, 9) * 6);
+/** 강 가운데 선의 x 좌표(y에 따라 굽이친다). 지도 가운데(외부 연결 도로)에서 동쪽으로 떨어져 흐른다 */
+export const riverX = (t: TerrainDef, y: number): number => 260 + (hash(t.seed, 7, 7) - 0.5) * 120 + 70 * Math.sin(y / 170 + hash(t.seed, 3, 9) * 6);
 
 export function terrainHeight(t: TerrainDef | null, x: number, y: number): number {
   if (!t) return 0;

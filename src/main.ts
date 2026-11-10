@@ -17,6 +17,7 @@ import { loadSlot, saveSlot } from './io/storage';
 import { buildSampleMap } from './maps/sample';
 import { buildStartMap } from './maps/start';
 import { buildGridMap } from './maps/grid';
+import { buildHillMap } from './maps/hills';
 import { createZoneLayer } from './render/zones';
 import { createSignalLayer } from './render/signals';
 import { createTitle } from './ui/title';
@@ -99,6 +100,7 @@ const tools = createTools({
   load: (text) => { importGame(text, editor, sim); },
   loadSample: () => { buildSampleMap(editor); sim.reset(); view.focus({ x: 0, y: 0 }); },
   loadGrid: () => { buildGridMap(editor); sim.reset(); view.focus({ x: 0, y: -100 }); },
+  loadHills: () => { buildHillMap(editor); sim.reset(); view.setTerrain(editor.network.terrain); view.focus({ x: 100, y: 0 }); },
   loadNew: () => { buildStartMap(editor); sim.reset(); view.focus({ x: 0, y: config.external.roadEndY - 100 }); },
   setHeat: (on) => heat.setVisible(on),
   setColorblind: (on) => heat.setColorblind(on),
@@ -158,6 +160,7 @@ function frame(now: number) {
   last = now;
   loop.advance(dt, speed);
   sim.traffic.sync(); // 정지 중에도 도로가 바뀌면 그래프를 새로 만든다
+  view.setTerrain(editor.network.terrain); // 지형이 바뀐 경우(불러오기 등)에만 다시 만든다
   roads.sync();
   buildings.sync();
   zones.sync();

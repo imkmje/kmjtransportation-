@@ -126,6 +126,16 @@ export class Traffic {
   private nextId = 1;
   tick = 0; // 마지막으로 처리한 tick(화면·정보 창이 읽는다)
 
+  /** 표시용: 차량이 달리는 도로 면의 높이(다리·고가 위, 언덕 위). 시뮬레이션 결과에는 영향이 없다 */
+  vehicleZ(v: Vehicle): number {
+    const tr = this.graph.tracks[v.path[v.pi]];
+    if (!tr) return 0;
+    if (tr.kind === 'conn') return this.net.nodes.get(tr.node)?.z ?? 0;
+    const seg = this.net.segments.get(tr.segId);
+    if (!seg) return 0;
+    return this.net.segmentZ(seg, tr.fwd ? tr.t0 + v.s : tr.t0 - v.s);
+  }
+
   constructor(private cfg: Config, private net: Network, private rng: Rng) {
     this.graph = buildLaneGraph(net, cfg);
     this.signals = new Signals(cfg, net);
