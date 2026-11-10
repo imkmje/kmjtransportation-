@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { config } from '../config';
-import { roadSpan, type Network, type Pt, type RoadKind } from '../sim/network';
+import { roadSpan, type Network, type Pt, type RoadKind, type Segment } from '../sim/network';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toThree, toThreeAbs, groundHeight } from './coords';
 
@@ -130,8 +130,10 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
   function rebuild() {
     group.children.forEach((c) => (c as THREE.InstancedMesh).dispose?.());
     group.clear();
-    const radius = new Map<number, number>();
+    const radius = new Map<number, number>(), around = new Map<number, Segment[]>();
     for (const s of net.segments.values()) for (const id of [s.a, s.b]) radius.set(id, Math.max(radius.get(id) ?? 0, config.roads[s.kind].lanesPerDir * config.roads[s.kind].laneWidth + 2));
+    for (const s of net.segments.values()) for (const id of [s.a, s.b]) (around.get(id) ?? around.set(id, []).get(id)!).push(s);
+    const plate = (id: number) => ((around.get(id)?.length ?? 0) >= 3 ? radius.get(id)! : 0); // 교차로(3갈래 이상)만 판이 있고, 이음 노드·끝점은 도로가 그대로 이어진다
     const arrows = { straight: [] as Inst[], left: [] as Inst[], right: [] as Inst[] }, portals: Inst[] = [], decks: Inst[] = [], bodies: Inst[] = [], walks: Inst[] = [], whites: Inst[] = [], yellows: Inst[] = [], discs: Inst[] = [];
     for (const s of net.segments.values()) {
       const a = net.nodes.get(s.a)!, b = net.nodes.get(s.b)!;
@@ -164,7 +166,7 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
         }
       }
       strip(bodies, 0, len, sp.shift, width, 0.2, 0); // 아스팔트(비대칭 도로는 중앙선에서 한쪽으로 치우친다)
-      const t0 = Math.min(radius.get(s.a)!, len / 2), t1 = Math.max(len - radius.get(s.b)!, len / 2); // 교차로 판 사이 구간
+      const t0 = Math.min(plate(s.a), len / 2), t1 = Math.max(len - plate(s.b), len / 2); // 교차로 판 사이 구간
       strip(walks, t0, t1, sp.left + 1, 2, 0.32, 0); strip(walks, t0, t1, -(sp.right + 1), 2, 0.32, 0); // 인도(양쪽)
       strip(whites, t0, t1, sp.left - 0.25, 0.18, 0.02, 0.2); strip(whites, t0, t1, -(sp.right - 0.25), 0.18, 0.02, 0.2); // 가장자리 실선
       if (!s.oneWay) { strip(yellows, t0, t1, 0.18, 0.14, 0.02, 0.2); strip(yellows, t0, t1, -0.18, 0.14, 0.02, 0.2); } // 중앙 이중 황색선
@@ -193,8 +195,18 @@ export function createRoadLayer(scene: THREE.Scene, net: Network) {
       }
     }
     for (const [id, rr] of radius) {
-      const n = net.nodes.get(id)!, c = toThreeAbs(n.x, n.y, n.z + 0.15);
-      discs.push({ x: c.x, y: c.y, z: c.z, sx: rr, sy: 0.3, sz: rr, ry: 0 }); // 교차로·끝점은 둥근 판으로 덮어 이음새를 가린다(조금 더 높게: 겹침 깜빡임 방지)
+      const n = net.nodes.get(id)!, c = toThreeAbs(n.x, n.y, n.z + 0.15), segs = around.get(id)!;
+      let r = rr;
+      if (segs.length < 3) { // 이음 노드·끝점: 도로 폭 그대로의 원(끝은 둥근 마감, 휘는 이음은 틈 메우기). 곧게 이어지는 같은 폭의 이음은 원이 필요 없다
+        const half = (q: Segment) => { const sp = roadSpan(config.roads[q.kind], !!q.oneWay); return Math.max(sp.right, sp.left); };
+        r = Math.max(...segs.map(half));
+        if (segs.length === 2) {
+          const dir = (q: Segment) => { const o = net.nodes.get(q.a === id ? q.b : q.a)!, l = Math.hypot(o.x - n.x, o.y - n.y) || 1; return { x: (o.x - n.x) / l, y: (o.y - n.y) / l }; };
+          const u = dir(segs[0]), v = dir(segs[1]);
+          if (Math.abs(u.x * v.y - u.y * v.x) < 0.02 && u.x * v.x + u.y * v.y < 0 && Math.abs(half(segs[0]) - half(segs[1])) < 0.01) continue;
+        }
+      }
+      discs.push({ x: c.x, y: c.y, z: c.z, sx: r, sy: 0.3, sz: r, ry: 0 }); // 교차로 판(조금 더 높게: 겹침 깜빡임 방지)
     }
     flush(unitBox, deckMat, decks);
     flush(unitBox, portalMat, portals);
