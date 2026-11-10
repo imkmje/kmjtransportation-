@@ -8,8 +8,18 @@ export const config = {
   start: { cash: 20, reputation: 0.3, plane: 'B737' },
   rules: { bankruptCash: -5, bankruptMonths: 2, winProfit: 100, timeLimitMonths: 24, winCities: 12 },
   events: { chancePerMonth: 0.42 },
+  fuel: { reversion: 0.1, noise: 0.18, min: 0.6, max: 1.9, share: 0.4, hedgeCost: 1.2, hedgeMonths: 6 }, // 연료 가격 지수와 계약. share: 운영비 중 연료 비중
+  delay: { congestStart: 0.7, congestMax: 0.25, condStart: 0.6, condWeight: 0.3, snow: 0.15, strike: 0.1, min: 0.4, demandWeight: 0.15, compensation: 0.12, priorityFee: 0.1, priorityMult: [0, 1, 0.75, 0.5], repWeight: 0.3 }, // 정시율: 공항 혼잡·정비 상태·사건에 따라 떨어지고, 수요·평판·보상금에 영향
+  maint: { decayBase: 0.025, decayPerWeekly: 0.0014, lowCond: 0.45, failChance: 0.2, failDays: 30, shopDays: 7, costRatio: 0.02, minCost: 0.5 }, // 정비 상태는 매달 닳고, 낮으면 고장 위험
+  credit: { freezeEconomy: 0.86, freezeMonths: 3, stickyBelow: 0.9, stickyReversion: 0.05 }, // 심한 불황이면 은행이 대출을 중단하고, 불황은 쉽게 끝나지 않는다
   economy: { reversion: 0.12, noise: 0.14, min: 0.75, max: 1.25, bizPow: 2, cargoPow: 1.5 }, // 경기 지수: 평균(1)으로 돌아가려는 힘 + 무작위 흔들림. 비즈니스는 경기에 더 민감
   rival: { step: 0.05, upStep: 0.03, lowFloor: 0.7, premFloor: 0.9, lowTarget: 0.85, premTarget: 1.15 }, // 경쟁사 가격 반응
+  difficulty: { // 난이도: 시작 현금·사건 빈도·대출 이율·고정비·경쟁사 자금·점수 배수
+    easy: { cash: 1.5, event: 0.6, rate: 0.8, fixed: 0.9, rival: 0.7, score: 0.7 },
+    normal: { cash: 1, event: 1, rate: 1, fixed: 1, rival: 1, score: 1 },
+    hard: { cash: 0.7, event: 1.4, rate: 1.3, fixed: 1.1, rival: 1.3, score: 1.5 },
+  },
+  score: { profit: 10, cash: 2, city: 40, win: 600, month: 5, bankrupt: 300, loan: 1 },
   loan: { baseRate: 0.01, spread: 0.03, crunch: 0.2, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
   aging: { maintPerMonth: 0.004, maxMult: 1.6 }, // 노후 1개월당 운영비 +0.4%(최대 +60%)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9

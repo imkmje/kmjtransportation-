@@ -3,6 +3,7 @@ import { CITIES } from '../data';
 import type { Game } from '../sim/game';
 import { placeLabels, type LabelItem } from './labels';
 import { marketSize } from '../sim/model';
+import { subsolar, terminatorLat } from '../sim/report';
 
 /** 세계 지도(등장방형도법) 캔버스: 이동·확대(핀치·휠), 도시·노선 누르기, 노선 위를 나는 작은 비행기 표시 */
 export interface MapEvents { onCity(id: string | null): void; onRoute(id: number): void }
@@ -57,6 +58,14 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         ctx.closePath(); ctx.fill(); ctx.stroke();
       }
     }
+    // 세계 낮밤(장식): 해가 있는 곳의 반대편을 어둡게 칠한다. 게임 날짜에 따라 움직인다
+    { const sun = subsolar(g.state.day, (now / 3000) % 1), south = sun.lat >= 0; // south: 밤이 경계선 아래(남쪽)쪽인가
+      ctx.fillStyle = 'rgba(14, 24, 60, 0.2)';
+      for (const shift of [-360, 0, 360]) {
+        ctx.beginPath();
+        for (let lon = -180; lon <= 180; lon += 3) { const x = toX(lon + shift), y = toY(terminatorLat(lon, sun)); if (lon === -180) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+        ctx.lineTo(toX(180 + shift), toY(south ? -90 : 90)); ctx.lineTo(toX(-180 + shift), toY(south ? -90 : 90)); ctx.closePath(); ctx.fill();
+      } }
     // 경쟁사 노선(보라색 가는 선)
     ctx.strokeStyle = 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
     for (const k of g.state.competitors) for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
@@ -77,7 +86,9 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         const [mx, my] = ctrl(x1, y1, x2, y2);
         for (let k = 0; k < Math.min(3, planes); k++) { // 비행기 점(장식)
           const t = (now / 4000 + k / 3) % 1, u = 1 - t, px = u * u * x1 + 2 * u * t * mx + t * t * x2, py = u * u * y1 + 2 * u * t * my + t * t * y2;
-          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(px, py, 3.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          const tx = 2 * u * (mx - x1) + 2 * t * (x2 - mx), ty = 2 * u * (my - y1) + 2 * t * (y2 - my), ang = Math.atan2(ty, tx); // 진행 방향
+          ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, 3.6); ctx.lineTo(-2, 0); ctx.lineTo(-4, -3.6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
         }
       }
     }
@@ -89,7 +100,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       const x = toX(c.lon + shift), y = toY(c.lat);
       if (x < -40 || x > W + 40 || y < -20 || y > H + 20) continue;
       if (!widths.has(c.name)) widths.set(c.name, ctx.measureText(c.name).width + 4);
-      items.push({ id: `${c.id}@${shift}`, x, y, w: widths.get(c.name)!, h: 14, priority: marketSize(c) + (connectedOf(c.id) ? 100 : 0) + (c.base ? 200 : 0), force: c.id === selCity, pref: c.label });
+      items.push({ id: `${c.id}@${shift}`, x, y, w: widths.get(c.name)!, h: 14, priority: marketSize(c) + (connectedOf(c.id) ? 100 : 0) + (c.id === g.state.base ? 200 : 0), force: c.id === selCity || c.id === g.state.base, pref: c.label });
     }
     const placed = placeLabels(items, { w: W, h: H });
     const t = now / 1000;
@@ -97,7 +108,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       const id = it.id.split('@')[0], c = cityOf(id), sel = id === selCity, connected = connectedOf(id);
       if (id === pulseCity) { const ph = (t % 1.4) / 1.4; ctx.strokeStyle = `rgba(232, 121, 58, ${1 - ph})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + ph * 22, 0, Math.PI * 2); ctx.stroke(); }
       ctx.fillStyle = connected ? '#ffd86b' : '#ffffff'; ctx.strokeStyle = sel ? '#e8793a' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
-      ctx.beginPath(); ctx.arc(it.x, it.y, c.base ? 8 : 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(it.x, it.y, c.id === g.state.base ? 8 : 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       const p = placed.get(it.id);
       if (!p) continue;
       ctx.fillStyle = '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
