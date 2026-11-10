@@ -114,4 +114,49 @@ describe('임대·중고·제휴·환승', () => {
     const conv = Game.fromJSON(old);
     expect(conv.state.formatVersion).toBe(8); expect(conv.state.ally).toBeNull();
   });
+  it('운임 전쟁: 겹치는 노선에서 경쟁사가 운임을 크게 내리고, 기간이 끝나면 풀린다. 제휴하면 바로 끝난다', () => {
+    const chance = config.war.chance; config.war.chance = 1;
+    const g = new Game(3), r = fly(g, 'ICN', 'NRT', g.state.planes[0].id), k = g.state.competitors[1];
+    k.routes.push({ a: 'NRT', b: 'ICN', seatsDay: 300, fareRatio: 1.15 });
+    const before = g.routeDay(r).share;
+    g.advanceDays(31); // 월초에 경쟁사가 움직인다
+    const cr = k.routes.find((x) => x.a === 'NRT' && x.b === 'ICN')!;
+    expect(cr.war).toBe(config.war.months); expect(cr.fareRatio).toBe(config.war.ratio);
+    expect(g.warOn(r)?.comp.id).toBe(k.id);
+    expect(g.routeDay(r).share).toBeLessThan(before);
+    expect(g.state.log.some((l) => l.includes('운임 전쟁'))).toBe(true);
+    config.war.chance = 0;
+    g.advanceDays(30 * config.war.months);
+    expect(cr.war).toBeUndefined(); expect(g.warOn(r)).toBeUndefined();
+    cr.war = 2; g.setAlly(k.id);
+    expect(cr.war).toBeUndefined();
+    config.war.chance = chance;
+  });
+  it('환승은 이어지는 노선의 좌석 30%까지만 센다', () => {
+    const g = new Game(3); g.state.cash = 500;
+    const r1 = fly(g, 'NRT', 'ICN', g.state.planes[0].id);
+    const b = g.buyPlane('T72'); if (!b.ok) throw new Error(b.error);
+    const x = fly(g, 'ICN', 'PEK', b.planeId, 1); // 작은 비행기 주 1회: 자리가 거의 없다
+    expect(g.routeDay(r1).transfer).toBeCloseTo(g.monthlySeats(x.id) * config.transfer.seatCap, 6);
+  });
+  it('자동 운임: 켜면 매주 자리를 채우는 운임으로 맞추고, 끄면 그대로 둔다', () => {
+    const g = new Game(3), r = fly(g, 'ICN', 'NRT', g.state.planes[0].id);
+    g.setFare(r.id, g.routeBaseFare(r) * 0.5); const low = r.fare; // 너무 싸서 자리가 모자란 상태
+    g.advanceDays(8); expect(r.fare).toBe(low);
+    g.setAutoFare(true); g.advanceDays(8);
+    expect(r.fare).toBeGreaterThan(low);
+    const d = g.routeDay(r); expect(d.paxE / d.seatsE).toBeGreaterThan(0.9);
+  });
+  it('노선 별명: 16자까지, 빈 값이면 지운다', () => {
+    const g = new Game(3), r = fly(g, 'ICN', 'NRT', g.state.planes[0].id);
+    g.setRouteName(r.id, '  효자 노선  '); expect(r.name).toBe('효자 노선');
+    g.setRouteName(r.id, 'ㄱ'.repeat(30)); expect(r.name!.length).toBe(16);
+    g.setRouteName(r.id, ' '); expect(r.name).toBeUndefined();
+  });
+  it('화물 목표: 지난달 화물 수익이 목표를 넘으면 달성', () => {
+    const g = new Game(3, undefined, { scenario: 'cargo' });
+    expect(g.goalProgress()[0]).toMatchObject({ label: '지난달 화물 수익', done: false, unit: 'M' });
+    g.state.history.push({ month: 1, revenue: 0, cost: 0, depreciation: 0, fixed: 0, interest: 0, cargo: 99, profit: 0, pax: 0, seats: 0, loadFactor: 0, cash: 0 });
+    expect(g.goalProgress()[0].done).toBe(true);
+  });
 });

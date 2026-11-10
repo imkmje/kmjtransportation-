@@ -196,6 +196,7 @@ describe('경기 변동·사건 강화·경쟁사 가격 반응', () => {
     expect(g.state.log.some((l) => l.includes('회수'))).toBe(true);
   });
   it('경쟁사 가격 반응: 우리가 더 싸게 팔면 경쟁사가 따라 내리고(바닥까지), 그렇지 않으면 목표 가격으로 돌아간다', () => {
+    const chance = config.war.chance; config.war.chance = 0; // 운임 전쟁(무작위)은 이 검사에서 끈다
     const g = new Game(1); const r = open(g, 'ICN', 'PUS', 14);
     g.state.competitors[0].routes.push({ a: 'ICN', b: 'PUS', seatsDay: 300, fareRatio: 1.0 });
     g.setFare(r, g.routeBaseFare(g.route(r)!) * 0.6); // 크게 인하
@@ -204,5 +205,6 @@ describe('경기 변동·사건 강화·경쟁사 가격 반응', () => {
     g.setFare(r, g.routeBaseFare(g.route(r)!) * 1.5);
     for (let i = 0; i < 6; i++) g.advanceDays(30);
     expect(g.state.competitors[0].routes[0].fareRatio).toBeCloseTo(config.rival.lowTarget, 6);
+    config.war.chance = chance;
   });
 });

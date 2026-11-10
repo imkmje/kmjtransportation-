@@ -24,6 +24,7 @@ export function advise(g: Game): Advice[] {
     else if (lf < 0.6) out.push({ level: 'info', text: `${label} 탑승률이 ${Math.round(lf * 100)}%로 낮습니다. 운임을 내려 보세요.`, tab: 'routes', routeId: r.id });
     else if (lf > 0.97) { const d = g.routeDay(r); if (d.demand > d.seats * 1.15) out.push({ level: 'info', text: `${label}은(는) 자리가 꽉 차고 수요가 더 있습니다. 운임을 올리거나 증편하세요.`, tab: 'routes', routeId: r.id }); }
   }
+  for (const r of s.routes) { if (!r.open || !g.planesOn(r.id).length) continue; const w = g.warOn(r); if (w) out.push({ level: 'warn', text: `${w.comp.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name}에서 운임 전쟁 중입니다(${w.route.war}개월 남음). 운임을 따라 내리거나 버티거나 제휴하세요.`, tab: 'routes', routeId: r.id }); }
   const hasRoute = s.routes.some((r) => r.open && g.planesOn(r.id).length);
   if (hasRoute && s.cash > 90 && s.planes.length < 12) out.push({ level: 'info', text: `현금이 $${Math.round(s.cash)}M으로 넉넉합니다. 항공기를 사서 노선을 늘려 보세요.`, tab: 'fleet' });
   if (!s.hedge && hasRoute) {

@@ -21,16 +21,7 @@ export function assignWithSlots(g: Game, planeId: number, routeId: number, weekl
 }
 
 /** 용량을 다 채우는 가장 높은 운임(수요 = 좌석이 되는 운임)을 기준으로 운임을 조정 */
-export function fillFare(g: Game, routeId: number): void {
-  const r = g.route(routeId)!, base = g.routeBaseFare(r);
-  const saved = r.fare; r.fare = Math.round(base);
-  const d = g.routeDay(r);
-  if (d.seats <= 0) { r.fare = saved; return; }
-  // 수요(운임) = 수요(기준)·priceFactor 이므로, 좌석을 채우는 운임은 해석적으로 구한다
-  const k = config.demand.elasticity;
-  const ratio = 1 + Math.log(d.demand / d.seats) / k; // 기준 운임 대비 비율
-  g.setFare(routeId, base * Math.min(config.fare.maxRatio, Math.max(config.fare.minRatio, ratio)));
-}
+export function fillFare(g: Game, routeId: number): void { g.fillFare(routeId); }
 
 export interface Strategy { name: string; step(g: Game, rng: Rng): void }
 
@@ -193,19 +184,28 @@ export const leaser: Strategy = {
   },
 };
 
-/** 임대 대형: 임대 가능하면 A350을, 아니면 중형기를 빌려 장거리에 투입(임대로 대형기를 굴리는 것이 너무 유리한지 점검) */
-export const leaserBig: Strategy = {
-  name: '임대대형',
-  step(g) {
+/** 임대 활용형: 종합형처럼 하되, 미리 계산해 임대료를 내고도 월 $1M 넘게 남는 노선이 있을 때만 중형기를 빌린다(사람이 골라 빌리는 경우의 근사) */
+export const leaseSmart: Strategy = {
+  name: '임대활용형',
+  step(g, rng) {
+    smart.step(g, rng);
     if (g.state.day % 30 !== 0) return;
-    deployIdle(g);
-    retune(g);
-    maintain(g);
-    if (g.state.cash > 10 && g.state.planes.every((p) => p.routeId !== null)) { const r = g.leasePlane('A350'); if (!r.ok) g.leasePlane('B737'); }
+    const t = typeById('B737'), rent = t.price * config.lease.rate;
+    for (let i = 0; i < 2 && g.leasedCount < g.leaseCap && g.state.cash > rent * config.lease.deposit + 6; i++) {
+      const c = Game.fromJSON(g.toJSON()), l = c.leasePlane('B737'); // 복사본에서 먼저 해 본다
+      if (!l.ok) break;
+      deployIdle(c);
+      const p = c.plane(l.planeId)!, r = p.routeId !== null ? c.route(p.routeId) : null;
+      if (!r) break;
+      const d = c.routeDay(r), n = c.planesOn(r.id).length;
+      if (((d.revenue - d.cost) * config.daysPerMonth) / n - rent - config.cost.perPlaneMonthly < 1) break;
+      if (!g.leasePlane('B737').ok) break;
+      deployIdle(g);
+    }
   },
 };
 
-export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, smart, reckless, random, leaser, leaserBig];
+export const STRATEGIES: Strategy[] = [passive, conservative, aggressive, leveraged, smart, reckless, random, leaser, leaseSmart];
 
 export interface RunResult { strategy: string; seed: number; status: string; months: number; cash: number; cumProfit: number; planes: number; routes: number }
 /** 한 전략을 한 시드로 끝날 때까지(또는 maxMonths까지) 돌린다 */
