@@ -50,7 +50,7 @@
  {
   "id": "europe",
   "name": "유럽 허브",
-  "desc": "프랑크푸르트에서 시작해 30개월 안에 유럽·중동 도시 6곳에 취항하세요. 허브의 슬롯을 잘 관리해야 합니다.",
+  "desc": "프랑크푸르트에서 시작해 24개월 안에 유럽·중동 도시 6곳에 취항하세요. 허브의 슬롯을 잘 관리해야 합니다.",
   "lockBase": true,
   "base": "FRA",
   "cash": 40,
@@ -58,7 +58,7 @@
   "economy": 1,
   "events": [],
   "loan": 0,
-  "timeLimit": 30,
+  "timeLimit": 24,
   "mode": "any",
   "goals": [
    {
@@ -95,6 +95,62 @@
    {
     "type": "pax",
     "value": 40000
+   }
+  ]
+ },
+ {
+  "id": "fuelcrisis",
+  "name": "연료 위기",
+  "desc": "유가가 치솟은 시기에 시작합니다. 운영비가 크게 늘어난 상태에서 18개월 동안 버티며 누적 이익 $50M을 만드세요.",
+  "lockBase": false,
+  "cash": 30,
+  "plane": "B737",
+  "economy": 0.95,
+  "events": [
+   {
+    "def": "fuel",
+    "monthsLeft": 8
+   }
+  ],
+  "loan": 0,
+  "timeLimit": 18,
+  "mode": "all",
+  "goals": [
+   {
+    "type": "survive",
+    "months": 18,
+    "minProfit": 50
+   }
+  ]
+ },
+ {
+  "id": "south",
+  "name": "남미 개척",
+  "desc": "상파울루에서 시작해 24개월 안에 남미·대서양 도시 5곳에 취항하세요. 먼 도시는 큰 비행기가 필요합니다. 임대를 활용해 보세요.",
+  "lockBase": true,
+  "base": "GRU",
+  "cash": 40,
+  "plane": "B737",
+  "economy": 1,
+  "events": [],
+  "loan": 0,
+  "timeLimit": 24,
+  "mode": "any",
+  "goals": [
+   {
+    "type": "region",
+    "value": 5,
+    "cities": [
+     "GRU",
+     "EZE",
+     "SCL",
+     "BOG",
+     "MEX",
+     "MAD",
+     "LOS",
+     "JNB"
+    ],
+    "label": "남미·대서양 도시"
    }
   ]
  }

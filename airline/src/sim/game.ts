@@ -4,7 +4,7 @@ import { Rng } from './rng';
 import { baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
 import type { Competitor, DayStat, Difficulty, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
 
-export const FORMAT_VERSION = 7; // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
+export const FORMAT_VERSION = 8; // 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
 export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string }
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
@@ -15,6 +15,7 @@ export interface RouteDay {
   demand: number; seats: number; pax: number; revenue: number; cost: number; legs: number; // pax·seats는 일반석+비즈니스석 합계
   paxE: number; paxB: number; seatsE: number; seatsB: number; demandE: number; demandB: number;
   cargoT: number; cargoCap: number; cargoDemand: number; cargoRevenue: number; share: number; // share: 경쟁 점유율(1 = 독점)
+  transfer: number; // 환승 수요(월, 운임 반영 전)
   otp: number; compensation: number; // otp: 정시율(0~1), compensation: 지연 보상금(M)
 }
 
@@ -32,7 +33,7 @@ export class Game {
     this.state = {
       formatVersion: FORMAT_VERSION, seed, rng: this.rng.getState(), day: 0,
       cash: Math.round(sc.cash * dm.cash * 10) / 10, reputation: config.start.reputation, nextId: 1,
-      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, freeze: 0, sandbox: false, history: [],
+      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, freeze: 0, sandbox: false, history: [],
       base, difficulty: diff, scenario: sc.id,
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [],
     };
@@ -57,7 +58,23 @@ export class Game {
   get fixedMonthly(): number {
     const slots = Object.values(this.state.slots).reduce((a, n) => a + n, 0);
     const prio = this.state.routes.filter((r) => r.open && this.planesOn(r.id).length > 0).reduce((a, r) => a + Math.max(0, (r.priority ?? 1) - 1), 0) * config.delay.priorityFee; // 우선 배정 수수료(★1 기본은 무료)
-    return (config.cost.fixedMonthly + config.cost.perPlaneMonthly * this.state.planes.length + config.slot.lease * slots + prio) * this.mods.fixed;
+    return (config.cost.fixedMonthly + config.cost.perPlaneMonthly * this.state.planes.length + config.slot.lease * slots + prio + this.leaseMonthly + (this.state.ally != null ? config.ally.fee : 0)) * this.mods.fixed;
+  }
+  /** 임대기 월 임대료 합계 */
+  get leaseMonthly(): number { return this.state.planes.reduce((a, p) => a + (p.leased ? typeById(p.type).price * config.lease.rate : 0), 0); }
+  /** 환승 수요(월, 일반석 환산): 이 노선의 한쪽 끝을 허브 삼아 우리 다른 노선으로 갈아타는 손님. 우리 직항이 없고 너무 돌아가지 않는 도시 쌍만 센다 */
+  transferDemand(r: Route): number {
+    if (!this.planesOn(r.id).length) return 0;
+    const t = config.transfer, served = this.state.routes.filter((x) => x.open && x.id !== r.id && this.planesOn(x.id).length > 0);
+    let sum = 0;
+    for (const [h, o] of [[r.a, r.b], [r.b, r.a]]) for (const x of served) {
+      const far = x.a === h ? x.b : x.b === h ? x.a : null;
+      if (!far || far === o || served.some((y) => (y.a === o && y.b === far) || (y.a === far && y.b === o))) continue;
+      const O = cityById(o), H = cityById(h), X = cityById(far);
+      if ((distanceKm(O, H) + distanceKm(H, X)) / Math.max(1, distanceKm(O, X)) > t.maxDetour) continue;
+      sum += rawMonthlyDemand(O, X, this.month, this.growthOf(o), this.growthOf(far)) * t.share;
+    }
+    return sum;
   }
   /** 난이도 보정 */
   get mods() { return config.difficulty[this.state.difficulty ?? 'normal']; }
@@ -122,7 +139,8 @@ export class Game {
     const base = baseFare(km), baseBiz = base * config.cabin.bizFareMult, c = config;
     // 기본 수요(일반석 환산): 규모·거리·계절·성장 × 허브 × 평판
     const hub = 1 + (this.hubBonus(r.a) + this.hubBonus(r.b)) / 2;
-    let d0 = rawMonthlyDemand(A, B, this.month, this.growthOf(r.a), this.growthOf(r.b)) * hub * (1 + c.demand.repBoost * s.reputation);
+    const transfer = this.transferDemand(r); // shortcut: 환승 손님이 탈 다른 구간의 빈자리는 따지지 않는다, 허브 좌석이 부족해지는 균형 문제가 보이면 구간 좌석으로 제한
+    let d0 = (rawMonthlyDemand(A, B, this.month, this.growthOf(r.a), this.growthOf(r.b)) * hub + transfer) * (1 + c.demand.repBoost * s.reputation);
     let cg0 = rawCargoDemand(A, B, this.growthOf(r.a), this.growthOf(r.b)) * hub * (1 + c.demand.repBoost * s.reputation);
     const eco = s.economy ?? 1;
     const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice; // 계약 중이면 계약 가격
@@ -155,7 +173,7 @@ export class Game {
     if (comps.length && seatsE + seatsB > 0) {
       const wp = Math.max(1, seatsE + seatsB) * (base / Math.max(1, r.fare)) * (1 + c.demand.repBoost * s.reputation);
       let wc = 0;
-      for (const { comp, route } of comps) wc += route.seatsDay * (1 / Math.max(0.3, route.fareRatio)) * this.quality(comp.style);
+      for (const { comp, route } of comps) wc += route.seatsDay * (1 / Math.max(0.3, route.fareRatio)) * this.quality(comp.style) * (comp.id === s.ally ? c.ally.weight : 1);
       share = Math.min(1, Math.max(0.1, wp / (wp + wc)));
     }
     const demE = (d0 * (1 - sb) * priceFactor(r.fare, base) * share) / c.daysPerMonth;
@@ -166,28 +184,41 @@ export class Game {
     const revenue = (paxE * r.fare + paxB * r.fareBiz) / 1e6 + cargoRevenue;
     const compensation = revenue * (1 - otp) * c.delay.compensation; // 지연 보상금
     const cost = (hours + (legs * c.cost.landingFeeK) / 1000 + (pax * c.cost.perPaxFee) / 1e6) * costMult + compensation;
-    return { demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, otp, compensation };
+    return { demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
   }
 
   // ---------- 행동 ----------
-  private addPlane(type: string, price: number): Plane {
-    const p: Plane = { id: this.state.nextId++, type, book: price, routeId: null, weekly: 0, age: 0, bizShare: 0, cond: 1, shop: 0 };
+  private addPlane(type: string, price: number, extra: Partial<Plane> = {}): Plane {
+    const p: Plane = { id: this.state.nextId++, type, book: price, routeId: null, weekly: 0, age: 0, bizShare: 0, cond: 1, shop: 0, ...extra };
     this.state.planes.push(p);
     return p;
   }
-  buyPlane(typeId: string): Result<{ planeId: number }> {
+  /** 항공기를 산다. used면 중고기: 싸지만 낡아서 운영비가 더 들고 정비 상태가 낮다 */
+  buyPlane(typeId: string, used = false): Result<{ planeId: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
-    const t = typeById(typeId);
-    if (this.state.cash < t.price) return fail('현금이 모자랍니다');
-    this.state.cash -= t.price;
-    return { ok: true, planeId: this.addPlane(typeId, t.price).id };
+    const t = typeById(typeId), u = config.used, price = used ? Math.round(t.price * u.price * 10) / 10 : t.price;
+    if (this.state.cash < price) return fail('현금이 모자랍니다');
+    this.state.cash -= price;
+    return { ok: true, planeId: this.addPlane(typeId, price, used ? { age: u.age, cond: u.cond } : {}).id };
+  }
+  /** 항공기를 빌린다: 살 돈은 안 들지만 매달 임대료를 낸다. 내 자산이 아니라서 담보(대출 한도)가 되지 않는다 */
+  leasePlane(typeId: string): Result<{ planeId: number }> {
+    if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
+    return { ok: true, planeId: this.addPlane(typeId, 0, { leased: true }).id };
+  }
+  /** 제휴(공동 운항)할 경쟁사를 정한다(null이면 해지). 한 번에 한 곳만 */
+  setAlly(compId: number | null): Result {
+    if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
+    if (compId !== null && !this.state.competitors.some((k) => k.id === compId)) return fail('없는 항공사입니다');
+    this.state.ally = compId;
+    return { ok: true };
   }
   /** 항공기를 판다(노선에 배정돼 있으면 자동으로 뺀다). 매각가 = 장부가 × 0.9 */
   sellPlane(planeId: number): Result<{ price: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     const i = this.state.planes.findIndex((p) => p.id === planeId);
     if (i < 0) return fail('없는 항공기입니다');
-    const price = this.state.planes[i].book * config.sale.ratio;
+    const pl = this.state.planes[i], price = pl.leased ? -typeById(pl.type).price * config.lease.rate * config.lease.returnMonths : pl.book * config.sale.ratio; // 임대기는 반납: 위약금을 낸다
     this.state.events = this.state.events.filter((e) => e.planeId !== planeId);
     this.state.planes.splice(i, 1);
     this.state.cash += price;
@@ -413,7 +444,7 @@ export class Game {
       for (const r of c.routes) {
         const mine = s.routes.find((x) => x.open && ((x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)));
         const pf = mine && this.planesOn(mine.id).length ? mine.fare / this.routeBaseFare(mine) : null;
-        if (pf !== null && pf < r.fareRatio - 0.05) r.fareRatio = Math.max(floor, r.fareRatio - rv.step);
+        if (pf !== null && pf < r.fareRatio - 0.05 && c.id !== s.ally) r.fareRatio = Math.max(floor, r.fareRatio - rv.step);
         else if (r.fareRatio < target) r.fareRatio = Math.min(target, r.fareRatio + rv.upStep);
         else if (r.fareRatio > target) r.fareRatio = Math.max(target, r.fareRatio - rv.upStep);
       }
@@ -440,7 +471,7 @@ export class Game {
     const interest = s.loan * this.loanRate; // 이율은 감가상각 전(월초 기준) 한도로 정한다
     // 감가상각(장부 가치만 줄고 현금은 그대로), 고정비(현금)
     let dep = 0;
-    for (const p of s.planes) { const d = typeById(p.type).price / c.cost.depreciationMonths; dep += d; p.book = Math.max(0, p.book - d); }
+    for (const p of s.planes) { if (p.leased) continue; const d = Math.min(p.book, typeById(p.type).price / c.cost.depreciationMonths); dep += d; p.book -= d; } // 임대기는 내 자산이 아니라 감가상각이 없다
     for (const p of s.planes) p.age++;
     const mt = config.maint; // 정비 상태: 많이 날수록 빨리 닳고, 낮으면 고장 나서 한 달 못 난다
     for (const p of [...s.planes].sort((a, b) => a.id - b.id)) {
@@ -547,6 +578,7 @@ export class Game {
       for (const h of st.history) h.cargo = h.cargo ?? 0;
     }
     if (st.formatVersion < 4) st.economy = st.economy ?? 1; // 형식 3 → 4: 경기 보통
+    if (st.formatVersion < 8) st.ally = st.ally ?? null; // 형식 7 → 8
     if (st.formatVersion < 7) for (const r of st.routes) r.priority = r.priority ?? 1; // 형식 6 → 7
     if (st.formatVersion < 6) { st.fuel = st.fuel ?? 1; st.hedge = st.hedge ?? null; st.freeze = st.freeze ?? 0; for (const p of st.planes) { p.cond = p.cond ?? 1; p.shop = p.shop ?? 0; } } // 형식 5 → 6
     if (st.formatVersion < 5) { st.base = st.base ?? 'ICN'; st.difficulty = st.difficulty ?? 'normal'; st.scenario = st.scenario ?? 'free'; } // 형식 4 → 5

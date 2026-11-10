@@ -8,7 +8,7 @@ import { advise, type Advice } from '../sim/advice';
 import { ACHIEVEMENTS, achieved } from '../sim/achievements';
 import { AIR_VERSION } from '../version';
 import { createMapView } from './mapview';
-import { play, setSound, soundOn } from './sound';
+import { musicOn, play, setMusic, setSound, soundOn } from './sound';
 import { bestWorst, routeMonthStats } from '../sim/report';
 import { esc, eulReul, fare, km, money, num, pct } from './fmt';
 
@@ -99,7 +99,7 @@ export function startApp(): void {
     if (!selCity) {
       advList = advise(game);
       const todo = advList.length ? `<h3>지금 할 일 <small>(눌러서 이동)</small></h3><div class="list">${advList.map((a, i) => `<button class="card" data-act="advice" data-i="${i}"><div class="row"><div class="grow">${ADV_ICON[a.level]} ${esc(a.text)}</div></div></button>`).join('')}</div>` : '';
-      const comp = `<h3>경쟁사</h3><div class="list">${s.competitors.map((k) => `<div class="row"><div class="grow"><b>${esc(k.name)}</b><small>${k.style === 'low' ? '저가형' : '프리미엄형'} · 거점 ${esc(cityById(k.hub).name)} · 항공기 ${k.planes}대 · 노선 ${k.routes.length}개</small></div></div>`).join('')}${s.routes.some((r) => r.open) ? `<div class="row"><div class="grow"><b>우리 시장 점유율</b><small>경쟁사와 겹치는 노선에서의 좌석 점유</small></div><div class="right">${pct(game.marketShare)}</div></div>` : ''}</div>`;
+      const comp = `<h3>경쟁사</h3><div class="list">${s.competitors.map((k) => `<div class="row"><div class="grow"><b>${esc(k.name)}</b><small>${k.style === 'low' ? '저가형' : '프리미엄형'} · 거점 ${esc(cityById(k.hub).name)} · 항공기 ${k.planes}대 · 노선 ${k.routes.length}개${s.ally === k.id ? ' · <b class="pos">제휴 중</b>' : ''}</small></div><button class="ghost small" data-act="ally" data-id="${k.id}">${s.ally === k.id ? '제휴 해지' : `제휴 ${money(config.ally.fee)}/월`}</button></div>`).join('')}<p class="hint">제휴(공동 운항)하면 그 항공사가 같은 노선에서 우리 손님을 덜 빼앗고, 운임 경쟁도 걸어오지 않습니다. 한 번에 한 곳만.</p>${s.routes.some((r) => r.open) ? `<div class="row"><div class="grow"><b>우리 시장 점유율</b><small>경쟁사와 겹치는 노선에서의 좌석 점유</small></div><div class="right">${pct(game.marketShare)}</div></div>` : ''}</div>`;
       if (s.sandbox) return `<h2>지도</h2><p class="hint">자유 모드입니다. 목표와 기한 없이 계속 운영합니다. 파산만 조심하세요.</p>${todo}${comp}`;
       return `<h2>지도</h2>
         <p class="hint"><b>${esc(game.scenario.name)}</b> · ${esc(cityById(s.base).name)} 시작 · 난이도 ${DIFF_NAME[s.difficulty ?? 'normal']}<br>${esc(game.scenario.desc)}</p>
@@ -149,6 +149,7 @@ export function startApp(): void {
         <div>탑승률</div><div>${planes.length ? pct(lf) : '-'}</div><div>예상 월 수익</div><div>${money(d.revenue * config.daysPerMonth)}</div><div>예상 월 비용</div><div>${money(d.cost * config.daysPerMonth)}</div>
         <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div>
         <div>정시율</div><div class="${d.otp < 0.85 ? 'neg' : d.otp < 0.95 ? 'warn' : 'pos'}"><b>${pct(d.otp)}</b>${d.compensation > 0 ? ` <small>(보상금 월 ${money(d.compensation * config.daysPerMonth)})</small>` : ''}</div>
+        ${d.transfer > 0 ? `<div>환승 수요</div><div class="pos"><b>+${num(d.transfer)}명/월</b> <small>(우리 다른 노선에서 갈아타는 손님)</small></div>` : ''}
         ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${game.competitorsOn(r.a, r.b).map(({ comp, route }) => `<div>${esc(comp.name)}</div><div>기준 운임의 ${pct(route.fareRatio)} · 하루 ${num(route.seatsDay)}석</div>`).join('')}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
       <h3>공항 우선순위 <small>(혼잡할 때 덜 지연됨 · 월 수수료)</small></h3>
       <div class="seg">${[1, 2, 3].map((lv) => `<button data-act="priority" data-v="${lv}" class="${(r.priority ?? 1) === lv ? 'on' : ''}">${'★'.repeat(lv)}${lv > 1 ? ` ${money((lv - 1) * config.delay.priorityFee)}` : ' 무료'}</button>`).join('')}</div>
@@ -173,10 +174,10 @@ export function startApp(): void {
   function viewFleet(): string {
     const s = game.state;
     const owned = s.planes.map((p) => { const t = typeById(p.type), r = p.routeId ? game.route(p.routeId) : null;
-      return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats}석 · 장부가 ${money(p.book)} · ${p.age}개월 사용(정비비 +${Math.round((game.agingMult(p) - 1) * 100)}%)</small><div class="condbar" title="정비 상태 ${pct(p.cond)}"><i class="${p.cond < 0.45 ? 'low' : p.cond < 0.7 ? 'mid' : ''}" style="width:${Math.round(p.cond * 100)}%"></i></div><small>정비 상태 ${pct(p.cond)}${p.shop > 0 ? ` · <b class="warn">정비·수리 중 ${p.shop}일</b>` : p.cond < 0.45 ? ' · <b class="neg">고장 위험!</b>' : ''}</small></div><div class="right">${r ? routeLabel(r.a, r.b) : '<span class="warn">대기 중</span>'}<br><button class="ghost small" data-act="service" data-id="${p.id}" ${p.shop > 0 || s.cash < game.serviceCost(p) ? 'disabled' : ''}>정비 ${money(game.serviceCost(p))}</button><br><button class="ghost small" data-act="sell" data-id="${p.id}">매각 ${money(p.book * config.sale.ratio)}</button></div></div>`; }).join('');
+      return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats}석 · ${p.leased ? `<b>임대</b> 월 ${money(t.price * config.lease.rate)}` : `장부가 ${money(p.book)}`} · ${p.age}개월 사용(정비비 +${Math.round((game.agingMult(p) - 1) * 100)}%)</small><div class="condbar" title="정비 상태 ${pct(p.cond)}"><i class="${p.cond < 0.45 ? 'low' : p.cond < 0.7 ? 'mid' : ''}" style="width:${Math.round(p.cond * 100)}%"></i></div><small>정비 상태 ${pct(p.cond)}${p.shop > 0 ? ` · <b class="warn">정비·수리 중 ${p.shop}일</b>` : p.cond < 0.45 ? ' · <b class="neg">고장 위험!</b>' : ''}</small></div><div class="right">${r ? routeLabel(r.a, r.b) : '<span class="warn">대기 중</span>'}<br><button class="ghost small" data-act="service" data-id="${p.id}" ${p.shop > 0 || s.cash < game.serviceCost(p) ? 'disabled' : ''}>정비 ${money(game.serviceCost(p))}</button><br><button class="ghost small" data-act="sell" data-id="${p.id}">${p.leased ? '반납' : `매각 ${money(p.book * config.sale.ratio)}`}</button></div></div>`; }).join('');
     const shop = AIRCRAFT.map((t) => `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats ? `${t.seats}석` : '좌석 없음'} · 화물 ${t.cargo}t · 항속 ${km(t.range)} · 활주로 ${num(t.runway)}m 필요</small></div>
-      <button data-act="buy" data-id="${t.id}" ${s.cash < t.price ? 'disabled' : ''}>${money(t.price)} 구매</button></div>`).join('');
-    return `<h2>기단 <small>${s.planes.length}대</small></h2><div class="list">${owned}</div><h3>항공기 구매</h3><p class="hint">구매한 비행기는 노선 탭에서 배정해야 돈을 벌어요.</p><div class="list">${shop}</div>`;
+      <div class="right"><button data-act="buy" data-id="${t.id}" ${s.cash < t.price ? 'disabled' : ''}>새것 ${money(t.price)}</button><br><button class="ghost small" data-act="buyUsed" data-id="${t.id}" ${s.cash < t.price * config.used.price ? 'disabled' : ''}>중고 ${money(t.price * config.used.price)}</button><br><button class="ghost small" data-act="lease" data-id="${t.id}">임대 ${money(t.price * config.lease.rate)}/월</button></div></div>`).join('');
+    return `<h2>기단 <small>${s.planes.length}대</small></h2><div class="list">${owned}</div><h3>항공기 구매</h3><p class="hint">구매한 비행기는 노선 탭에서 배정해야 돈을 벌어요.<br><b>중고</b>: 싸지만 8년 된 기체라 운영비가 더 들고 정비 상태가 70%입니다. <b>임대</b>: 살 돈 없이 바로 쓰지만 매달 임대료가 나가고, 대출 담보가 되지 않습니다. 반납하면 임대료 1개월치 위약금.</p><div class="list">${shop}</div>`;
   }
 
   function viewMoney(): string {
@@ -304,7 +305,7 @@ export function startApp(): void {
     else if (act === 'goRoute') { selRoute = id; selCity = null; tab = 'routes'; syncMap(); done(); }
     else if (act === 'routesHome') { selRoute = null; syncMap(); done(); }
     else if (act === 'fillFare' && selRoute !== null) { fillFare(game, selRoute); done('운임을 맞췄습니다'); }
-    else if (act === 'close' && selRoute !== null) { game.closeRoute(selRoute); selRoute = null; syncMap(); done('노선을 닫았습니다'); }
+    else if (act === 'close' && selRoute !== null) { const cr = game.route(selRoute)!; if (!window.confirm(`${routeLabel(cr.a, cr.b)} 노선을 닫을까요? 배정된 항공기는 대기 상태가 됩니다.`)) return; game.closeRoute(selRoute); selRoute = null; syncMap(); done('노선을 닫았습니다'); }
     else if (act === 'unassign') { game.unassign(id); done(); }
     else if (act === 'weekly') { const p = game.plane(id)!; const r = game.assign(id, p.routeId!, p.weekly + Number(b.dataset.d)); if (!r.ok) toast(r.error); done(); }
     else if (act === 'assign' && selRoute !== null) { const r = game.route(selRoute)!, p = game.plane(id)!; const max = maxWeeklyRoundTrips(distanceKm(cityById(r.a), cityById(r.b)), typeById(p.type)); const res = game.assign(id, selRoute, max); if (!res.ok) return toast(res.error); fillFare(game, selRoute); done('배정했습니다 (운임도 자동으로 맞췄어요)'); }
@@ -315,7 +316,10 @@ export function startApp(): void {
     else if (act === 'cabin') { const r = game.setCabin(id, Number(b.dataset.share)); if (!r.ok) return toast(r.error); done(); }
     else if (act === 'borrow') { const r = game.borrow(config.loan.step); if (!r.ok) return toast(r.error); done(`${money(config.loan.step)}를 대출받았습니다`); }
     else if (act === 'repay') { const r = game.repay(config.loan.step); if (!r.ok) return toast(r.error); done('대출을 갚았습니다'); }
-    else if (act === 'sell') { const p = game.plane(id); if (!p) return; if (!window.confirm(`${typeById(p.type).name}을(를) ${money(p.book * config.sale.ratio)}에 팔까요?`)) return; const r = game.sellPlane(id); if (!r.ok) return toast(r.error); done(`항공기를 ${money(r.price)}에 팔았습니다`); }
+    else if (act === 'sell') { const p = game.plane(id); if (!p) return; if (!window.confirm(p.leased ? `${typeById(p.type).name}을(를) 반납할까요? 위약금 ${money(typeById(p.type).price * config.lease.rate * config.lease.returnMonths)}이 나갑니다.` : `${typeById(p.type).name}을(를) ${money(p.book * config.sale.ratio)}에 팔까요?`)) return; const r = game.sellPlane(id); if (!r.ok) return toast(r.error); done(p.leased ? '임대기를 반납했습니다' : `항공기를 ${money(r.price)}에 팔았습니다`); }
+    else if (act === 'buyUsed') { const r = game.buyPlane(b.dataset.id!, true); if (!r.ok) return toast(r.error); done('중고 항공기를 샀습니다. 노선에 배정하세요.'); }
+    else if (act === 'lease') { const r = game.leasePlane(b.dataset.id!); if (!r.ok) return toast(r.error); done('항공기를 임대했습니다. 노선에 배정하세요.'); }
+    else if (act === 'ally') { const on = game.state.ally === id, r = game.setAlly(on ? null : id); if (!r.ok) return toast(r.error); done(on ? '제휴를 해지했습니다' : '제휴를 맺었습니다'); }
     else if (act === 'respond') { const r = game.respondEvent(id); if (!r.ok) return toast(r.error); done('사건에 대응했습니다'); }
     else if (act === 'buy') { const r = game.buyPlane(b.dataset.id!); if (!r.ok) return toast(r.error); done('항공기를 샀습니다. 노선에 배정하세요.'); }
   });
@@ -328,13 +332,15 @@ export function startApp(): void {
   panel.addEventListener('change', (e) => { if (['fare', 'fareBiz', 'cargoRatio'].includes((e.target as HTMLElement).id)) { lastHtml = ''; render(); } });
 
   // ---- 탭·속도·메뉴 ----
-  $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; lastHtml = ''; render(); });
+  $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; $('#stage').classList.remove('full'); selCity = selRoute = null; syncMap(); panel.scrollTop = 0; lastHtml = ''; render(); }); // 탭을 누르면 항상 그 탭의 첫 화면
+  $('#fold').addEventListener('click', () => { $('#stage').classList.toggle('full'); });
   $('#speeds').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-speed]'); if (!b) return; speed = Number(b.dataset.speed); renderTop(); renderHint(); });
   const menu = $('#menu');
   let nightOn = (() => { try { return localStorage.getItem('the-air-night') !== 'off'; } catch { return true; } })();
   map.setNight(nightOn);
   /** 메뉴 글자를 저장된 설정과 맞춘다(새로 열 때 꺼 둔 설정이 '켜짐'으로 보이지 않게) */
-  const menuLabels = () => { const set = (m: string, t: string, v: boolean) => { menu.querySelector(`[data-m="${m}"]`)!.textContent = `${t}: ${v ? '켜짐' : '꺼짐'}`; }; set('hints', '힌트', hintsOn); set('autopause', '사건 시 자동 정지', autoPause); set('sound', '소리', soundOn()); set('night', '낮밤 표시', nightOn); };
+  const menuLabels = () => { const set = (m: string, t: string, v: boolean) => { menu.querySelector(`[data-m="${m}"]`)!.textContent = `${t}: ${v ? '켜짐' : '꺼짐'}`; }; set('hints', '힌트', hintsOn); set('autopause', '사건 시 자동 정지', autoPause); set('sound', '소리', soundOn()); set('night', '낮밤 표시', nightOn); set('music', '배경 음악', musicOn()); };
+  addEventListener('pointerdown', () => { if (musicOn()) setMusic(true); }, { once: true }); // 음악은 첫 터치 뒤에 시작(브라우저 규칙)
   $('#menubtn').addEventListener('click', () => { menuLabels(); menu.hidden = !menu.hidden; });
   menu.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-m]'); if (!b) return;
@@ -345,6 +351,7 @@ export function startApp(): void {
     else if (m === 'hints') { hintsOn = !hintsOn; try { localStorage.setItem(HINT_KEY, hintsOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } b.textContent = `힌트: ${hintsOn ? '켜짐' : '꺼짐'}`; toast(hintsOn ? '힌트를 켰습니다' : '힌트를 껐습니다'); menu.hidden = false; render(); return; }
     else if (m === 'autopause') { autoPause = !autoPause; try { localStorage.setItem('the-air-autopause', autoPause ? '1' : '0'); } catch { /* 저장 불가 */ } b.textContent = `사건 시 자동 정지: ${autoPause ? '켜짐' : '꺼짐'}`; toast(autoPause ? '사건이 생기면 시간이 멈춥니다' : '사건이 생겨도 시간이 계속 흐릅니다'); menu.hidden = false; render(); return; }
     else if (m === 'sound') { setSound(!soundOn()); b.textContent = `소리: ${soundOn() ? '켜짐' : '꺼짐'}`; play('ok'); menu.hidden = false; return; }
+    else if (m === 'music') { setMusic(!musicOn()); menuLabels(); menu.hidden = false; return; }
     else if (m === 'night') { nightOn = !nightOn; try { localStorage.setItem('the-air-night', nightOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } map.setNight(nightOn); menuLabels(); menu.hidden = false; return; }
     else if (m === 'help') { toast('스페이스: 정지/재생 · 1·2·3: 배속 · Esc: 선택 해제 · 지도: 두 손가락으로 확대·이동', 9000); }
     else if (m === 'title') { showTitle(); }

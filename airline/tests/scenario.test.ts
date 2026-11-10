@@ -10,8 +10,8 @@ const open = (g: Game, a: string, b: string, weekly: number) => {
 };
 
 describe('시나리오·시작 도시·난이도', () => {
-  it('시나리오 4개: ID 중복 없고, 시작 도시·기종·목표가 유효하다', () => {
-    expect(SCENARIOS.length).toBe(4);
+  it('시나리오 6개: ID 중복 없고, 시작 도시·기종·목표가 유효하다', () => {
+    expect(SCENARIOS.length).toBe(6);
     expect(new Set(SCENARIOS.map((s) => s.id)).size).toBe(SCENARIOS.length);
     for (const s of SCENARIOS) { expect(s.goals.length).toBeGreaterThan(0); expect(s.timeLimit).toBeGreaterThan(0); if (s.base) expect(() => cityById(s.base!)).not.toThrow(); }
     expect(scenarioById('없는 것').id).toBe('free'); // 모르는 ID는 자유 경영
@@ -96,7 +96,7 @@ describe('저장 형식 5', () => {
     const g = new Game(4); open(g, 'ICN', 'CJU', 20); g.advanceDays(40);
     const v4 = JSON.parse(JSON.stringify(g.toJSON())); v4.formatVersion = 4; delete v4.base; delete v4.difficulty; delete v4.scenario;
     const back = Game.fromJSON(v4);
-    expect(back.state.formatVersion).toBe(7); expect(back.state.base).toBe('ICN'); expect(back.state.difficulty).toBe('normal'); expect(back.state.scenario).toBe('free');
+    expect(back.state.formatVersion).toBe(8); expect(back.state.base).toBe('ICN'); expect(back.state.difficulty).toBe('normal'); expect(back.state.scenario).toBe('free');
     back.advanceDays(30); expect(back.state.status).toBe('playing');
   });
 });

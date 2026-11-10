@@ -17,7 +17,7 @@ await page.waitForSelector('canvas');
 check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
 await shot('title');
 await page.click('#t-new');
-check('새 게임 설정 화면: 시나리오 4개·난이도 3개', (await page.locator('#setup-scen button').count()) === 4 && (await page.locator('#setup-diff button').count()) === 3);
+check('새 게임 설정 화면: 시나리오 6개·난이도 3개', (await page.locator('#setup-scen button').count()) === 6 && (await page.locator('#setup-diff button').count()) === 3);
 await page.click('#setup-scen button[data-sc="europe"]');
 check('유럽 시나리오는 시작 도시가 프랑크푸르트로 고정됨', (await page.locator('#setup-base').inputValue()) === 'FRA' && (await page.locator('#setup-base').isDisabled()));
 await page.click('#setup-diff button[data-d="hard"]'); await page.click('#setup-go');
@@ -33,7 +33,7 @@ const tapCity = async (id) => { const p = await page.evaluate((i) => window.__ai
 await tapCity('ICN');
 check('힌트가 ②단계(열기)로 바뀌고 해당 버튼이 반짝임', (await page.locator('#hint-text').innerText()).includes('②') && (await page.locator('#panel button[data-act="open"].pulse').count()) === 1, await page.locator('#hint-text').innerText());
 check('도시 정보에 공항 슬롯 칸이 있음', (await page.locator('#panel').innerText()).includes('공항 슬롯'));
-check('도시를 누르면 도시 정보와 노선 열기 목록이 나옴', (await page.locator('#panel').innerText()).includes('서울에서 노선 열기') && (await page.locator('#panel button[data-act="open"]').count()) === 33); // 도시 34개 중 자기 자신 제외
+check('도시를 누르면 도시 정보와 노선 열기 목록이 나옴', (await page.locator('#panel').innerText()).includes('서울에서 노선 열기') && (await page.locator('#panel button[data-act="open"]').count()) === 40); // 도시 41개 중 자기 자신 제외
 await shot('city');
 await page.locator('#panel button[data-act="open"][data-b="CJU"]').click(); // 제주(서울에서 가장 가까운 국내 노선)
 check('노선 열기: 노선 탭으로 이동하고 서울 ⇄ 제주가 보임', (await page.locator('#panel').innerText()).includes('서울 ⇄ 제주'));
@@ -131,6 +131,27 @@ await page.click('#menubtn');
 await page.evaluate(() => window.__air.setSpeed(0)); await page.locator('#map').focus().catch(() => {}); await page.keyboard.press('2');
 check('단축키 2: 2배속', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
 await page.evaluate(() => window.__air.setSpeed(0));
+// 0.15.0: 탭 초기화·패널 접기·임대·제휴
+page.on('dialog', (d) => d.accept());
+await page.click('#tabs button[data-tab="routes"]');
+await page.locator('#panel button[data-act="goRoute"]').first().click();
+const inDetail = (await page.locator('#panel button[data-act="close"]').count()) === 1;
+await page.click('#tabs button[data-tab="routes"]');
+check('하단 탭을 다시 누르면 그 탭의 첫 화면(노선 목록)으로 돌아감', inDetail && (await page.locator('#panel button[data-act="close"]').count()) === 0 && (await page.locator('#panel h2').innerText()).startsWith('노선'));
+const w0 = (await page.locator('#map').boundingBox()).width + (await page.locator('#map').boundingBox()).height;
+await page.click('#fold');
+await page.waitForTimeout(200);
+const w1 = (await page.locator('#map').boundingBox()).width + (await page.locator('#map').boundingBox()).height;
+check('패널 접기: 패널이 숨고 지도가 커짐', !(await page.locator('#panel').isVisible()) && w1 > w0, `${w0} -> ${w1}`);
+await page.click('#tabs button[data-tab="fleet"]');
+check('탭을 누르면 패널이 다시 펴짐', await page.locator('#panel').isVisible());
+const n0 = await page.evaluate(() => window.__air.game.state.planes.length);
+await page.locator('#panel button[data-act="lease"]').first().click();
+check('임대: 현금 없이 항공기가 1대 늘고 임대로 표시됨', (await page.evaluate(() => window.__air.game.state.planes.length)) === n0 + 1 && (await page.locator('#panel').innerText()).includes('임대'));
+await page.click('#tabs button[data-tab="map"]');
+await page.locator('#panel button[data-act="ally"]').first().click();
+check('제휴: 경쟁사와 제휴 중으로 표시됨', (await page.evaluate(() => window.__air.game.state.ally)) !== null && (await page.locator('#panel').innerText()).includes('제휴 중'));
+await shot('fold');
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
