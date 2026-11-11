@@ -77,7 +77,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       if (!r.open) continue;
       const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, planes = g.planesOn(r.id).length, served = planes > 0;
       const color = !served ? '#8a96a3' : profit >= 0 ? '#2f9e5b' : '#d64545';
-      ctx.strokeStyle = color; ctx.lineWidth = r.id === selRoute ? 5 : served ? 2 + Math.min(3, d.pax / 800) : 1.5;
+      ctx.strokeStyle = color; ctx.lineWidth = r.id === selRoute ? 5 : served ? 2 + Math.min(5, Math.abs(profit) * config.daysPerMonth / 1.2) : 1.5; // 굵기 = 월 이익(손실)의 크기
       ctx.setLineDash(served ? [] : [6, 5]);
       for (const [x1, y1, x2, y2] of arcSegments(A, B)) {
         const [mx, my] = ctrl(x1, y1, x2, y2);

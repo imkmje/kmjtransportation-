@@ -67,11 +67,13 @@ export class Game {
   /** 임대기 월 임대료 합계 */
   get leaseMonthly(): number { return this.state.planes.reduce((a, p) => a + (p.leased ? typeById(p.type).price * config.lease.rate : 0), 0); }
   /** 환승 수요(월, 일반석 환산): 이 노선의 한쪽 끝을 허브 삼아 우리 다른 노선으로 갈아타는 손님. 우리 직항이 없고 너무 돌아가지 않는 도시 쌍만 센다 */
-  transferDemand(r: Route): number {
+  /** via를 주면 그 도시를 거치는 환승만 센다(허브 도시 화면용) */
+  transferDemand(r: Route, via?: string): number {
     if (!this.planesOn(r.id).length) return 0;
     const t = config.transfer, served = this.state.routes.filter((x) => x.open && x.id !== r.id && this.planesOn(x.id).length > 0);
     let sum = 0;
     for (const [h, o] of [[r.a, r.b], [r.b, r.a]]) for (const x of served) {
+      if (via && h !== via) continue;
       const far = x.a === h ? x.b : x.b === h ? x.a : null;
       if (!far || far === o || served.some((y) => (y.a === o && y.b === far) || (y.a === far && y.b === o))) continue;
       const O = cityById(o), H = cityById(h), X = cityById(far);
@@ -423,13 +425,14 @@ export class Game {
   /** 자동 정비를 켜거나 끈다 */
   setAutoMaint(on: boolean): void { this.state.autoMaint = on; }
   /** 연료 계약: 지금 가격으로 6개월간 고정한다(오르면 이득, 내리면 손해) */
-  hedgeFuel(): Result<{ price: number }> {
+  hedgeFuel(months: number = config.fuel.hedgeMonths): Result<{ price: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     if (this.state.hedge) return fail('이미 연료 계약 중입니다');
-    const c = config.fuel;
-    if (this.state.cash < c.hedgeCost) return fail('현금이 모자랍니다');
-    this.state.cash -= c.hedgeCost; this.state.cur.cost += c.hedgeCost;
-    this.state.hedge = { price: this.state.fuel, monthsLeft: c.hedgeMonths };
+    const tier = config.fuel.hedgeTiers.find((t) => t.months === months);
+    if (!tier) return fail('없는 계약 기간입니다');
+    if (this.state.cash < tier.cost) return fail('현금이 모자랍니다');
+    this.state.cash -= tier.cost; this.state.cur.cost += tier.cost;
+    this.state.hedge = { price: this.state.fuel, monthsLeft: tier.months };
     return { ok: true, price: this.state.fuel };
   }
   /** 공항 슬롯 1개를 산다(그 도시의 하루 이착륙 한도가 1 늘고, 월 임대료가 든다) */
@@ -516,6 +519,29 @@ export class Game {
     this.state.cash -= lot.price; this.state.auctions = this.state.auctions.filter((a) => a.id !== lotId);
     return { ok: true, planeId: this.addPlane(lot.type, lot.price, { age: lot.age, cond: lot.cond }).id };
   }
+  /** 경쟁사 인수 가격(자금난이면 싸다) */
+  acquirePrice(c: Competitor): number {
+    const k = config.acquire;
+    return Math.round(Math.max(k.min, (c.planes * typeById('B737').price * k.perPlane + c.routes.length * k.perRoute) * ((c.low ?? 0) > 0 ? k.distress : 1)) * 10) / 10;
+  }
+  /** 경쟁사를 인수한다: 그 회사는 사라지고, 항공기(중고)·거점 슬롯·평판을 받는다. 대형 항공사는 인수할 수 없다 */
+  acquireCompetitor(id: number): Result<{ price: number; planes: number }> {
+    const s = this.state;
+    if (s.status !== 'playing') return fail('게임이 끝났습니다');
+    const c = s.competitors.find((x) => x.id === id);
+    if (!c) return fail('없는 항공사입니다');
+    if (c.major) return fail('대형 항공사는 인수할 수 없습니다');
+    const price = this.acquirePrice(c);
+    if (s.cash < price) return fail('현금이 모자랍니다');
+    const k = config.acquire, n = Math.min(k.maxPlanes, c.planes), m = this.monthsPassed + 1;
+    s.cash -= price; s.competitors = s.competitors.filter((x) => x.id !== id); if (s.ally === id) s.ally = null;
+    s.rivalsGone = [...s.rivalsGone, { name: c.name, month: m, acq: true }].slice(-12);
+    for (let i = 0; i < n; i++) this.addPlane('B737', typeById('B737').price * 0.5, { age: 48, cond: 0.7 });
+    s.slots[c.hub] = (s.slots[c.hub] ?? 0) + k.slots; s.reputation = Math.min(1, s.reputation + k.rep);
+    this.note(m, 'rival', `${c.name} 인수($${price}M)`);
+    s.log.push(`${m}개월차: ${c.name}을(를) $${price}M에 인수했습니다. 항공기 ${n}대와 ${cityById(c.hub).name} 슬롯 ${k.slots}개를 받았습니다(항공기는 노선에 배정해야 합니다).`);
+    return { ok: true, price, planes: n };
+  }
   /** 최근 12개월 매출 순위(우리 + 경쟁사). 경쟁사 매출은 여객 매출만 추정한 값이다 */
   ranking(): { name: string; revenue: number; me: boolean }[] {
     const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
@@ -553,7 +579,13 @@ export class Game {
     for (const id of [aId, bId]) if (!this.cityOpen(id)) return fail(`${cityById(id).name}은(는) ${this.regionName(cityById(id).region)} 지역이라 운수권이 필요합니다. 지도 탭의 '지역 운수권'에서 살 수 있습니다.`);
     const A = cityById(aId), B = cityById(bId);
     const ex = this.state.routes.find((r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
-    if (ex) { ex.open = true; return { ok: true, routeId: ex.id }; }
+    if (ex) {
+      if (ex.open) return { ok: true, routeId: ex.id };
+      const k = config.reopen, fee = ex.closed !== undefined && this.monthsPassed - ex.closed < k.months ? k.fee : 0; // 닫은 지 얼마 안 된 노선을 다시 열면 비용이 든다
+      if (this.state.cash < fee) return fail(`노선을 닫은 지 ${k.months}개월이 안 돼 재개 비용 $${fee}M이 듭니다(현금 모자람)`);
+      this.state.cash -= fee; this.state.cur.cost += fee; ex.open = true; delete ex.closed;
+      return { ok: true, routeId: ex.id };
+    }
     const base = baseFare(distanceKm(A, B));
     const r: Route = { id: this.state.nextId++, a: aId, b: bId, fare: Math.round(base), fareBiz: Math.round(base * config.cabin.bizFareMult), cargoRatio: 1, open: true, daily: [], priority: 1 };
     this.state.routes.push(r);
@@ -562,7 +594,9 @@ export class Game {
   closeRoute(routeId: number): Result {
     const r = this.route(routeId);
     if (!r) return fail('없는 노선입니다');
+    const served = this.planesOn(routeId).length > 0;
     for (const p of this.planesOn(routeId)) { p.routeId = null; p.weekly = 0; }
+    if (r.open) { r.closed = this.monthsPassed; if (served) this.state.reputation = Math.max(0, this.state.reputation - config.reopen.rep); } // 운항하던 노선을 닫으면 평판이 조금 떨어진다
     r.open = false;
     return { ok: true };
   }

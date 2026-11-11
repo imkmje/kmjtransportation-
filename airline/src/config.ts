@@ -24,7 +24,7 @@ export const config = {
   ] } as { firstFree: number; lead: number; rest: number; list: { id: string; name: string; desc: string; months: [number, number]; fuel?: number; econ?: number; oldCost?: number; newCost?: number; oldSlots?: number; entry?: number; war?: number }[] },
   contract: { planeBook: 1, firstMonth: 3, gap: [2, 4], maxTotal: 4, maxActive: 2, offerMonths: 3, rewardMonths: 6, rewardMin: 15, rewardMax: 250, repLoss: 0.02, otpTarget: 0.95 }, // 계약 제안: 보상은 최근 월 이익의 6배(최소 $15M)로 크게 주고, 실패해도 평판만 조금 깎인다
   auction: { price: 0.4, age: 60, cond: 0.75, months: 3, maxLots: 4 }, // 파산한 경쟁사의 항공기 경매: 새 기체 값의 40%, 5년 된 정비 상태 75% 기체, 3개월간
-  fuel: { reversion: 0.1, noise: 0.18, min: 0.6, max: 1.9, share: 0.4, hedgeCost: 1.2, hedgeMonths: 6 }, // 연료 가격 지수와 계약. share: 운영비 중 연료 비중
+  fuel: { reversion: 0.1, noise: 0.18, min: 0.6, max: 1.9, share: 0.4, hedgeCost: 1.2, hedgeMonths: 6, hedgeTiers: [{ months: 3, cost: 0.7 }, { months: 6, cost: 1.2 }, { months: 12, cost: 2.2 }] }, // 연료 가격 지수와 계약. share: 운영비 중 연료 비중
   delay: { congestStart: 0.7, congestMax: 0.25, condStart: 0.6, condWeight: 0.3, snow: 0.15, strike: 0.1, min: 0.4, demandWeight: 0.15, compensation: 0.12, priorityFee: 0.1, priorityMult: [0, 1, 0.75, 0.5], repWeight: 0.3 }, // 정시율: 공항 혼잡·정비 상태·사건에 따라 떨어지고, 수요·평판·보상금에 영향
   maint: { autoBelow: 0.55, decayBase: 0.025, decayPerWeekly: 0.0014, lowCond: 0.45, failChance: 0.2, failDays: 30, shopDays: 7, costRatio: 0.02, minCost: 0.5 }, // 정비 상태는 매달 닳고, 낮으면 고장 위험
   credit: { freezeEconomy: 0.86, freezeMonths: 3, stickyBelow: 0.9, stickyReversion: 0.05 }, // 심한 불황이면 은행이 대출을 중단하고, 불황은 쉽게 끝나지 않는다
@@ -39,6 +39,8 @@ export const config = {
   score: { profit: 10, cash: 2, city: 40, win: 600, month: 5, bankrupt: 300, loan: 1 },
   loan: { baseRate: 0.01, spread: 0.03, crunch: 0.2, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
   aging: { maintPerMonth: 0.004, maxMult: 1.6, capStart: 84, capPerMonth: 0.004, capMin: 0.5, replaceBelow: 0.75 }, // capStart~: 7년이 넘으면 점검해도 정비 상태가 100%까지 안 돌아온다(상한 = 1 − 0.4%/월, 최소 50%). 상한이 75% 아래면 교체 권고. 점검 비용도 노후 배수만큼 든다. 아래는 원래 설명: // 노후 1개월당 운영비 +0.4%(최대 +60%)
+  acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
+  reopen: { months: 6, fee: 1.5, rep: 0.01 }, // 노선 폐지: 운항 중이던 노선을 닫으면 평판 −rep, 닫은 지 months개월 안에 다시 열면 fee($M)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9
   slot: { base: 6, perSize: 0.35, price: 2, priceStep: 0.2, lease: 0.12 }, // 공항 1일 이착륙 한도 = base + perSize × 시장 규모 + 구매분. 구매가(M)·월 임대료(M)
   rights: { // 지역 운수권(자유 모드): 처음에는 출발 도시가 속한 지역만 열려 있고, 돈과 누적 이익을 갖추면 다른 지역을 살 수 있다
