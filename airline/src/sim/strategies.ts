@@ -35,7 +35,7 @@ function bestRouteFor(g: Game, typeId: string, minLegsOk = 1): { a: string; b: s
   let best: { a: string; b: string; score: number } | null = null;
   for (const A of CITIES) for (const B of CITIES) {
     if (A.id >= B.id) continue;
-    if (!canFly(t, A, B).ok) continue;
+    if (!canFly(t, A, B).ok || !g.cityOpen(A.id) || !g.cityOpen(B.id)) continue; // 운수권 제한이 있는 게임에서는 열린 도시만
     if (region && !(region.includes(A.id) && region.includes(B.id))) continue; // 지역 목표가 있는 시나리오는 그 지역 안의 노선만
     const km = distanceKm(A, B);
     if (maxWeeklyRoundTrips(km, t) < minLegsOk) continue;
@@ -94,29 +94,29 @@ export const aggressive: Strategy = {
 };
 
 /** 대출형: 한도까지 빌려 가장 큰 기종부터 사서 빠르게 키운다(이자와 노후화를 감수) */
+function leveragedStep(g: Game, ids: string[]): void {
+  deployIdle(g);
+  retune(g);
+  maintain(g);
+  // 현금이 넉넉해지면 먼저 대출을 갚고, 부족하면 빌려서 산다
+  if (g.state.loan > 0 && g.state.cash > g.state.loan + 40) g.repay(g.state.loan);
+  for (const id of ids) {
+    if (!g.isAvailable(id)) continue;
+    const t = typeById(id);
+    if (g.state.cash < t.price + 3) { const need = t.price + 3 - g.state.cash, room = g.loanLimit - g.state.loan; if (need <= room) g.borrow(Math.ceil(need)); }
+    if (g.state.cash >= t.price + 3) { g.buyPlane(id); break; }
+  }
+}
 export const leveraged: Strategy = {
   name: '대출형',
   step(g) {
     if (g.state.day % 30 !== 0) return;
-    deployIdle(g);
-    retune(g);
-    maintain(g);
-    // 현금이 넉넉해지면 먼저 대출을 갚고, 부족하면 빌려서 산다
-    if (g.state.loan > 0 && g.state.cash > g.state.loan + 40) g.repay(g.state.loan);
-    for (const id of ['A350', 'B737']) {
-      const t = typeById(id);
-      if (g.state.cash < t.price + 3) { const need = t.price + 3 - g.state.cash, room = g.loanLimit - g.state.loan; if (need <= room) g.borrow(Math.ceil(need)); }
-      if (g.state.cash >= t.price + 3) { g.buyPlane(id); break; }
-    }
+    leveragedStep(g, ['A350', 'B737']);
   },
 };
 
 /** 종합형: 대출형에 새 기능을 더한다 — 장거리 노선은 비즈니스석 20%, 현금이 넉넉하면 화물기, 슬롯은 필요한 만큼 */
-export const smart: Strategy = {
-  name: '종합형',
-  step(g, rng) {
-    leveraged.step(g, rng);
-    if (g.state.day % 30 !== 0) return;
+function smartExtras(g: Game): void {
     for (const p of g.state.planes) {
       const r = p.routeId ? g.route(p.routeId) : null;
       if (!r || typeById(p.type).seats === 0) continue;
@@ -130,8 +130,44 @@ export const smart: Strategy = {
       const b = g.buyPlane('F77');
       if (b.ok) { const pick = bestRouteFor(g, 'F77'); if (pick) { const o = g.openRoute(pick.a, pick.b); if (o.ok) assignWithSlots(g, b.planeId, o.routeId, maxWeeklyRoundTrips(distanceKm(cityById(pick.a), cityById(pick.b)), typeById('F77'))); } }
     }
+}
+export const smart: Strategy = {
+  name: '종합형',
+  step(g, rng) {
+    leveraged.step(g, rng);
+    if (g.state.day % 30 !== 0) return;
+    smartExtras(g);
   },
 };
+
+/** 새 기능 활용 전략: 종합형에 기능을 하나씩(또는 전부) 더한 것. 어떤 기능이 너무 세거나 쓸모없는지 재기 위한 측정용 */
+export interface Feat { upgrades?: boolean; hubs?: boolean; contracts?: boolean; newgen?: boolean; auction?: boolean; rights?: boolean }
+export function featured(name: string, f: Feat): Strategy {
+  return {
+    name,
+    step(g) {
+      if (g.state.day % 30 !== 0) return;
+      const s = g.state;
+      leveragedStep(g, f.newgen ? ['B787', 'A350', 'B737NX', 'B737'] : ['A350', 'B737']);
+      smartExtras(g);
+      if (f.upgrades) for (const u of ['marketing', 'ops', 'service', 'ground', 'hangar']) { const price = g.upgradePrice(u); if (price !== null && s.cash > price + 25) { g.buyUpgrade(u); break; } }
+      if (f.hubs) { // 혼잡한 허브는 터미널, 여유 있으면 정비 기지·라운지
+        const cities = [...g.servedCities()].sort((a, b) => g.slotsUsed(b) / g.slotCapacity(b) - g.slotsUsed(a) / g.slotCapacity(a)).slice(0, 3);
+        outer: for (const c of cities) for (const kind of ['terminal', 'mro', 'lounge'] as const) {
+          const price = g.hubPrice(c, kind); if (price === null) continue;
+          if (kind === 'terminal' && g.slotsUsed(c) / g.slotCapacity(c) < 0.8) continue;
+          if (s.cash > price + (kind === 'terminal' ? 25 : 40)) { g.buyHub(c, kind); break outer; }
+        }
+      }
+      if (f.contracts) for (const c of s.contracts) if (c.status === 'offer') g.acceptContract(c.id);
+      if (f.auction) for (const a of [...s.auctions]) if (s.cash > a.price + 10) g.buyAuction(a.id);
+      if (f.rights && g.rightsOn) {
+        const r = Object.keys(config.rights.regions).map((x) => g.regionInfo(x)).filter((i) => !i.owned && i.profitOk && s.cash > i.price + 30).sort((a, b) => a.price - b.price)[0];
+        if (r) g.buyRights(r.id);
+      }
+    },
+  };
+}
 
 /** 무모형: 한도까지 빌려 현금 여유 없이 사고 또 산다(과한 확장이 파산으로 이어지는지 점검) */
 export const reckless: Strategy = {
