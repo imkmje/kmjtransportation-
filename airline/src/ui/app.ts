@@ -271,7 +271,7 @@ export function startApp(): void {
     document.querySelectorAll<HTMLElement>('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     if (tab === 'news') seenLog = game.state.log.length;
     const html = tab === 'map' ? viewMap() : tab === 'routes' ? viewRoutes() : tab === 'fleet' ? viewFleet() : tab === 'money' ? viewMoney() : viewNews();
-    if (html !== lastHtml) { const y = panel.scrollTop; panel.innerHTML = html; panel.scrollTop = y; lastHtml = html; }
+    if (html !== lastHtml) { const y = panel.scrollTop; panel.classList.toggle('hasLive', html.includes('id="live"')); panel.innerHTML = html; panel.scrollTop = y; lastHtml = html; }
     renderEnd();
     renderHint();
   }
