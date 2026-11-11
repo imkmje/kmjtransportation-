@@ -203,6 +203,7 @@ const rid = await page.evaluate(() => window.__air.game.state.routes.find((r) =>
 await page.evaluate(() => { for (const d of document.querySelectorAll('details.rbuy')) d.open = true; });
 const sum = await page.locator('details.rbuy > summary').innerText();
 check('노선 화면: 항공기 추가 목록과 추천 문구', (await page.locator('#panel button[data-act="rbuy"]').count()) >= 3 && (sum.includes('추천') || sum.includes('이익이 안 늘어납니다')), sum);
+await page.locator('details.rbuy').scrollIntoViewIfNeeded(); await shot('rbuy');
 const nBefore = await page.evaluate(() => window.__air.game.state.planes.length);
 await page.locator('#panel button[data-act="rbuy"][data-how="new"]:not([disabled])').first().click();
 check('노선 화면에서 바로 구매: 항공기가 늘고 이 노선에 배정됨', await page.evaluate(([n, id]) => { const g = window.__air.game; return g.state.planes.length === n + 1 && g.state.planes.at(-1).routeId === id; }, [nBefore, rid]));
