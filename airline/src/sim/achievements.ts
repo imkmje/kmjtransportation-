@@ -24,6 +24,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'rank1', name: '업계 1위', desc: '경쟁사가 2곳 이상일 때 최근 12개월 매출 1위', test: (g) => g.monthsPassed >= 12 && g.state.competitors.length >= 2 && g.rank() === 1 },
   { id: 'newgen', name: '신형기 도입', desc: '새로 출시된 기종을 보유', test: (g) => g.state.planes.some((p) => (typeById(p.type).from ?? 0) > 0) },
   { id: 'regions', name: '세계 운수권', desc: '모든 지역의 운수권을 가진다', test: (g) => !!g.state.rights && g.state.rights.length === Object.keys(config.rights.regions).length },
+  { id: 'contract1', name: '첫 계약', desc: '계약 제안을 달성한다', test: (g) => g.state.contractsDone >= 1 },
+  { id: 'contract5', name: '믿을 만한 파트너', desc: '계약 제안을 5건 달성한다', test: (g) => g.state.contractsDone >= 5 },
   { id: 'steady', name: '꾸준함', desc: '12개월을 파산 없이 운영', test: (g) => g.monthsPassed >= 12 && g.state.status !== 'bankrupt' },
 ];
 

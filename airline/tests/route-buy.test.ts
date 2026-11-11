@@ -142,7 +142,7 @@ describe('자유 모드·경쟁사', () => {
   it('시간이 지나면 신생 항공사가 생기고, 동시에 max곳을 넘지 않으며 ID·이름이 겹치지 않는다', () => {
     const { g, counts } = run(5, 60);
     expect(g.state.log.some((l) => l.includes('신생 항공사'))).toBe(true);
-    expect(Math.max(...counts)).toBeGreaterThan(config.competitors.start); expect(Math.max(...counts)).toBeLessThanOrEqual(config.competitors.max);
+    expect(Math.max(...counts)).toBeGreaterThan(config.competitors.start); expect(Math.max(...counts)).toBeLessThanOrEqual(config.competitors.max + 1); // 일반 6곳 + 대형 1곳
     const ids = g.state.competitors.map((c) => c.id); expect(new Set(ids).size).toBe(ids.length);
     const names = g.state.competitors.map((c) => c.name); expect(new Set(names).size).toBe(names.length);
     expect(g.state.nextRival).toBeGreaterThan(Math.max(...ids));
@@ -180,6 +180,6 @@ describe('자유 모드·경쟁사', () => {
     const old = g.toJSON() as unknown as Record<string, unknown>; old.formatVersion = 9; delete old.nextRival; delete old.rivalsGone;
     const back = Game.fromJSON(old);
     expect(back.state.competitors.length).toBe(6); expect(back.state.nextRival).toBe(7); expect(back.state.rivalsGone).toEqual([]);
-    expect(back.state.formatVersion).toBe(11);
+    expect(back.state.formatVersion).toBe(12);
   });
 });

@@ -150,7 +150,7 @@ describe('저장 형식 3', () => {
     const v2 = JSON.parse(JSON.stringify(g.toJSON())); v2.formatVersion = 2;
     delete v2.slots; delete v2.growth; delete v2.competitors; for (const p of v2.planes) delete p.bizShare; for (const r of v2.routes) { delete r.fareBiz; delete r.cargoRatio; delete r.daily; } for (const h of v2.history) delete h.cargo;
     const back = Game.fromJSON(v2);
-    expect(back.state.formatVersion).toBe(11); expect(back.state.competitors.length).toBe(config.competitors.start); expect(back.state.planes[0].bizShare).toBe(0);
+    expect(back.state.formatVersion).toBe(12); expect(back.state.competitors.length).toBe(config.competitors.start); expect(back.state.planes[0].bizShare).toBe(0);
     expect(back.state.routes[0].cargoRatio).toBe(1); expect(back.state.routes[0].fareBiz).toBeGreaterThan(0);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });

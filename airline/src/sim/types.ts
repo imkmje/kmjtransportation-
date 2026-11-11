@@ -12,9 +12,12 @@ export interface Plane { id: number; type: string; book: number; routeId: number
 export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number } // 하루 기록(노선별 그래프용, 최근 60일)
 export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number; name?: string } // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
 export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number; war?: number } // war: 운임 전쟁 남은 개월
-export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[] } // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
+export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; major?: boolean } // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
 export interface Auction { id: number; from: string; type: string; price: number; age: number; cond: number; expires: number } // 파산한 경쟁사가 내놓은 항공기 한 대(expires: 이 개월차가 되면 사라진다)
 export interface Upcoming { def: string; city: string; start: number } // 예고된 행사(start: 시작하는 개월차)
+export interface ActiveEra { id: string; start: number; end: number } // 시대(start·end: 개월차)
+export interface ContractReward { type: 'cash' | 'plane' | 'upgrade' | 'rights' | 'rep'; value: number; label: string; plane?: string; upgrade?: string; region?: string }
+export interface Contract { id: number; kind: 'pax' | 'otp' | 'cities' | 'profit'; title: string; goal: number; progress: number; limit: number; status: 'offer' | 'active'; expires: number; start?: number; a?: string; b?: string; startCities?: number; reward: ContractReward } // limit: 수락한 뒤 주어지는 개월, expires: 제안이 사라지는 개월차
 export interface RivalGone { name: string; month: number }
 export interface ActiveEvent { def: string; monthsLeft: number; city?: string; planeId?: number; handled?: boolean }
 export interface MonthReport { month: number; revenue: number; cost: number; depreciation: number; fixed: number; interest: number; cargo: number; profit: number; pax: number; seats: number; loadFactor: number; cash: number }
@@ -43,6 +46,13 @@ export interface GameState {
   autoFare?: boolean; // 자동 운임: 매주 자리를 꽉 채우는 운임으로 맞춘다(없으면 꺼짐)
   autoMaint?: boolean; // 자동 정비: 노선에 배정된 항공기의 정비 상태가 낮아지면 월말에 알아서 점검한다(없으면 꺼짐)
   nextRival: number; // 다음 경쟁사 ID(파산으로 빠져도 ID를 다시 쓰지 않는다)
+  era: ActiveEra | null; // 지금 시대(없으면 평시)
+  nextEra: ActiveEra | null; // 예고된 다음 시대
+  eraFree: number; // 이 개월차부터 다음 시대를 예고할 수 있다
+  lastEra?: string;
+  contracts: Contract[]; // 제안과 진행 중인 계약
+  contractsDone: number;
+  nextOffer: number; // 이 개월차부터 새 계약을 제안할 수 있다
   auctions: Auction[]; // 경매 중인 항공기
   upcoming: Upcoming[]; // 예고된 행사
   rivalsGone: RivalGone[]; // 파산한 경쟁사 기록(이름은 다시 쓰지 않는다)
