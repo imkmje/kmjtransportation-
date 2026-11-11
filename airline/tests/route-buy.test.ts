@@ -131,17 +131,55 @@ describe('자유 모드·경쟁사', () => {
     const goal = new Game(3); goal.state.cash = 9999; goal.advanceDays(30 * 25);
     expect(goal.state.status).toBe('timeup');
   });
-  it('경쟁사 6곳: 이름·거점이 서로 다르고 모두 실제 도시, 옛 저장 파일에는 새 경쟁사가 덧붙는다', () => {
+  it('처음에는 경쟁사 2곳뿐이고, 이름·거점이 서로 다르며 모두 실제 도시', () => {
     const g = new Game(3);
-    expect(g.state.competitors.length).toBe(config.competitors.count); expect(config.competitors.count).toBe(6);
-    expect(new Set(g.state.competitors.map((k) => k.name)).size).toBe(6); expect(new Set(g.state.competitors.map((k) => k.hub)).size).toBe(6);
+    expect(g.state.competitors.length).toBe(config.competitors.start); expect(config.competitors.start).toBe(2);
+    expect(new Set(g.state.competitors.map((k) => k.name)).size).toBe(2); expect(new Set(g.state.competitors.map((k) => k.hub)).size).toBe(2);
     for (const k of g.state.competitors) expect(CITIES.some((c) => c.id === k.hub)).toBe(true);
-    const old = g.toJSON() as unknown as { formatVersion: number; competitors: unknown[] }; old.formatVersion = 8; old.competitors = old.competitors.slice(0, 2);
-    const back = Game.fromJSON(old);
-    expect(back.state.competitors.map((k) => k.id)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(g.state.nextRival).toBe(3); expect(g.state.rivalsGone).toEqual([]);
   });
-  it('경쟁사가 늘어도 몇 해를 돌려도 오류 없이 모두 성장한다', () => {
-    const g = new Game(5); g.state.cash = 9999; g.advanceDays(30 * 24);
-    expect(g.state.competitors.every((k) => k.planes >= 1 && k.routes.length >= 1)).toBe(true);
+  const run = (seed: number, months: number) => { const g = new Game(seed, undefined, { sandbox: true }); g.state.cash = 99999; const counts: number[] = []; for (let m = 0; m < months; m++) { g.advanceDays(30); counts.push(g.state.competitors.length); } return { g, counts }; };
+  it('시간이 지나면 신생 항공사가 생기고, 동시에 max곳을 넘지 않으며 ID·이름이 겹치지 않는다', () => {
+    const { g, counts } = run(5, 60);
+    expect(g.state.log.some((l) => l.includes('신생 항공사'))).toBe(true);
+    expect(Math.max(...counts)).toBeGreaterThan(config.competitors.start); expect(Math.max(...counts)).toBeLessThanOrEqual(config.competitors.max);
+    const ids = g.state.competitors.map((c) => c.id); expect(new Set(ids).size).toBe(ids.length);
+    const names = g.state.competitors.map((c) => c.name); expect(new Set(names).size).toBe(names.length);
+    expect(g.state.nextRival).toBeGreaterThan(Math.max(...ids));
+    expect(g.state.competitors.filter((c) => (c.born ?? 0) > 0).every((c) => (c.born ?? 0) >= config.competitors.entryMinMonth - 1)).toBe(true); // 너무 이른 시기에는 생기지 않는다
+  });
+  it('현금이 마이너스인 채 석 달이 지나면 파산해 사라지고, 제휴·기록이 정리된다', () => {
+    const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 99999;
+    const k = g.state.competitors[1], id = k.id, name = k.name;
+    g.setAlly(id); expect(g.state.ally).toBe(id);
+    k.cash = -500; k.low = config.competitors.bankruptMonths - 1; // 곧 파산할 상태(이번 달에도 마이너스)
+    g.advanceDays(31);
+    expect(g.state.competitors.some((c) => c.id === id)).toBe(false);
+    expect(g.state.ally).toBeNull();
+    expect(g.state.rivalsGone.some((x) => x.name === name)).toBe(true);
+    expect(g.state.log.some((l) => l.includes(name) && l.includes('파산했습니다'))).toBe(true);
+  });
+  it('현금이 마이너스여도 석 달이 안 됐고 곧 회복하면 파산하지 않는다', () => {
+    const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 99999;
+    const k = g.state.competitors[0]; k.cash = -0.01; k.low = 0;
+    g.advanceDays(31); // 한 달 이익으로 현금이 다시 0 위로 오른다
+    expect(g.state.competitors.some((c) => c.id === k.id)).toBe(true);
+  });
+  it('몇 해를 돌리면 신생과 파산이 모두 일어나고, 경쟁사가 영영 0곳이 되지 않는다', () => {
+    let gone = 0, born = 0;
+    for (const seed of [1, 2, 3, 4]) { const { g, counts } = run(seed, 96); gone += g.state.log.filter((l) => l.includes('파산했습니다') && !l.startsWith('파산')).length; born += g.state.log.filter((l) => l.includes('신생 항공사')).length; expect(counts.slice(12).every((n) => n >= 1)).toBe(true); }
+    expect(born).toBeGreaterThan(4); expect(gone).toBeGreaterThan(0);
+  });
+  it('같은 시드면 경쟁사의 생성·파산 순서도 같다(결정론)', () => {
+    const a = run(7, 48), b = run(7, 48);
+    expect(a.counts).toEqual(b.counts); expect(a.g.state.competitors.map((c) => c.name)).toEqual(b.g.state.competitors.map((c) => c.name));
+  });
+  it('형식 9 저장 파일(경쟁사 6곳)은 그대로 읽고 ID 카운터·파산 기록을 채운다', () => {
+    const g = new Game(3, undefined, { sandbox: true });
+    for (let i = 3; i <= 6; i++) g.state.competitors.push({ id: i, name: `옛경쟁사${i}`, style: 'low', hub: 'KIX', cash: 50, planes: 1, routes: [] });
+    const old = g.toJSON() as unknown as Record<string, unknown>; old.formatVersion = 9; delete old.nextRival; delete old.rivalsGone;
+    const back = Game.fromJSON(old);
+    expect(back.state.competitors.length).toBe(6); expect(back.state.nextRival).toBe(7); expect(back.state.rivalsGone).toEqual([]);
+    expect(back.state.formatVersion).toBe(10);
   });
 });

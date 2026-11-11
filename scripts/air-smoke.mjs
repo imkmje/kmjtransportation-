@@ -205,7 +205,7 @@ const sum = await page.locator('details.rbuy > summary').innerText();
 check('노선 화면: 항공기 추가 목록과 추천 문구', (await page.locator('#panel button[data-act="rbuy"]').count()) >= 3 && (sum.includes('추천') || sum.includes('이익이 안 늘어납니다')), sum);
 await page.locator('details.rbuy').scrollIntoViewIfNeeded(); await shot('rbuy');
 const nBefore = await page.evaluate(() => window.__air.game.state.planes.length);
-await page.locator('#panel button[data-act="rbuy"][data-how="new"]:not([disabled])').first().click();
+await page.locator('#panel button[data-act="rbuy"][data-how="new"]:not([data-why])').first().click();
 check('노선 화면에서 바로 구매: 항공기가 늘고 이 노선에 배정됨', await page.evaluate(([n, id]) => { const g = window.__air.game; return g.state.planes.length === n + 1 && g.state.planes.at(-1).routeId === id; }, [nBefore, rid]));
 // 예상 이익 띠: 맨 아래에 틈 없이 붙고, 맨 아래까지 내려도 '노선 닫기'가 가려지지 않고, 뒤쪽은 흐리게
 await page.locator('#panel').evaluate((el) => { el.scrollTop = el.scrollHeight / 2; }); await shot('band-mid');
@@ -215,6 +215,15 @@ check('예상 이익 띠: 패널 맨 아래에 틈 없이 붙음', Math.abs(band
 check('맨 아래까지 내려도 노선 닫기 버튼이 띠에 가려지지 않음', bandOk.closeClear >= 0, JSON.stringify(bandOk));
 check('띠 뒤로 지나가는 내용은 흐림(blur) 처리', String(bandOk.blur).includes('blur'), JSON.stringify(bandOk));
 await shot('band-end');
+// 누를 수 없는 버튼은 꺼 두지 않고, 누르면 이유를 알려 준다
+await page.evaluate(() => { window.__air.game.state.cash = 1; window.__air.render(); });
+await page.evaluate(() => { for (const d of document.querySelectorAll('details.rbuy')) d.open = true; });
+const planesBefore = await page.evaluate(() => window.__air.game.state.planes.length);
+check('돈이 모자라면 구매 버튼이 꺼져 있지 않고 회색(이유 포함)으로 보임', (await page.locator('#panel button[data-act="rbuy"][disabled]').count()) === 0 && (await page.locator('#panel button[data-act="rbuy"][data-why]').count()) >= 3);
+await page.locator('#panel button[data-act="rbuy"][data-how="lease"]').first().click({ force: true });
+const why = await page.locator('#toast').innerText();
+check('임대 버튼을 누르면 이유가 나오고 항공기는 늘지 않음', (why.includes('현금이 모자랍니다') || why.includes('임대는')) && (await page.evaluate(() => window.__air.game.state.planes.length)) === planesBefore, why);
+await page.evaluate(() => { window.__air.game.state.cash = 500; window.__air.render(); });
 await page.click('#menubtn'); await page.click('#menu button[data-m="volume"]');
 check('소리 크기 화면: 슬라이더 2개', (await page.locator('#info input[type="range"]').count()) === 2);
 await page.locator('#v-music').evaluate((el) => { el.value = '40'; el.dispatchEvent(new Event('input', { bubbles: true })); });

@@ -109,7 +109,7 @@ describe('경쟁사', () => {
   it('경쟁사가 시간이 지나며 항공기와 노선을 늘리고, 같은 노선이면 우리 수요가 줄어든다', () => {
     const g = new Game(1); g.advanceDays(30 * 14);
     const comps = g.state.competitors;
-    expect(comps.length).toBe(config.competitors.count); expect(comps.every((c) => c.planes > 0 && c.routes.length > 0)).toBe(true);
+    expect(comps.length).toBeGreaterThanOrEqual(1); expect(comps.length).toBeLessThanOrEqual(config.competitors.max); expect(comps.every((c) => c.planes > 0 && c.routes.length > 0)).toBe(true);
     // 경쟁사 노선을 우리도 연다 → 점유율 < 1
     const c = comps[0], cr = c.routes[0]; const g2 = new Game(1); g2.state.competitors = JSON.parse(JSON.stringify(comps));
     const rid = open(g2, cr.a, cr.b); // 같은 도시 쌍
@@ -150,7 +150,7 @@ describe('저장 형식 3', () => {
     const v2 = JSON.parse(JSON.stringify(g.toJSON())); v2.formatVersion = 2;
     delete v2.slots; delete v2.growth; delete v2.competitors; for (const p of v2.planes) delete p.bizShare; for (const r of v2.routes) { delete r.fareBiz; delete r.cargoRatio; delete r.daily; } for (const h of v2.history) delete h.cargo;
     const back = Game.fromJSON(v2);
-    expect(back.state.formatVersion).toBe(9); expect(back.state.competitors.length).toBe(config.competitors.count); expect(back.state.planes[0].bizShare).toBe(0);
+    expect(back.state.formatVersion).toBe(10); expect(back.state.competitors.length).toBe(config.competitors.start); expect(back.state.planes[0].bizShare).toBe(0);
     expect(back.state.routes[0].cargoRatio).toBe(1); expect(back.state.routes[0].fareBiz).toBeGreaterThan(0);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
