@@ -132,5 +132,62 @@
    "DXB",
    "JFK"
   ]
+ },
+ {
+  "id": "olympic",
+  "name": "올림픽",
+  "months": 2,
+  "scheduled": true,
+  "hosts": [
+   "LHR",
+   "CDG",
+   "LAX",
+   "SYD",
+   "NRT",
+   "ICN",
+   "PEK"
+  ],
+  "effect": {
+   "routeDemand": 0.4
+  },
+  "text": "올림픽이 열려 개최 도시를 오가는 노선의 수요가 2개월간 40% 늘어납니다."
+ },
+ {
+  "id": "worldcup",
+  "name": "월드컵",
+  "months": 2,
+  "scheduled": true,
+  "hosts": [
+   "JFK",
+   "LAX",
+   "MEX",
+   "GRU",
+   "FRA",
+   "SVO",
+   "DXB"
+  ],
+  "effect": {
+   "routeDemand": 0.35
+  },
+  "text": "월드컵이 열려 개최 도시를 오가는 노선의 수요가 2개월간 35% 늘어납니다."
+ },
+ {
+  "id": "festival",
+  "name": "대형 축제",
+  "months": 1,
+  "scheduled": true,
+  "hosts": [
+   "BKK",
+   "CJU",
+   "KIX",
+   "MNL",
+   "SGN",
+   "IST",
+   "CAI"
+  ],
+  "effect": {
+   "routeDemand": 0.3
+  },
+  "text": "대형 축제가 열려 개최 도시를 오가는 노선의 수요가 한 달간 30% 늘어납니다."
  }
 ]

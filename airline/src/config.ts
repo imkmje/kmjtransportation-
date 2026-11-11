@@ -7,7 +7,8 @@ export const config = {
   cost: { landingFeeK: 2.0, perPaxFee: 6, fixedMonthly: 1.0, perPlaneMonthly: 0.4, depreciationMonths: 120 }, // landingFeeK: 이착륙 1회(천 달러), perPaxFee: 승객당($), fixedMonthly: M
   start: { cash: 20, reputation: 0.3, plane: 'B737' },
   rules: { bankruptCash: -5, bankruptMonths: 2, winProfit: 100, timeLimitMonths: 24, winCities: 12 },
-  events: { chancePerMonth: 0.42 },
+  events: { chancePerMonth: 0.42, costGrowth: 0.025, costMaxMult: 3, costPerPlane: 0.05, costFreePlanes: 2, festivalChance: 0.06, festivalLead: 6 }, // 사건 대응 비용 = 기본 × min(3, 1 + 2.5% × 지난 개월) × (1 + 5% × (항공기 수 − 2)). festival: 예고된 행사(올림픽·월드컵·축제)가 한 달에 잡힐 확률과 예고 기간(개월)
+  auction: { price: 0.4, age: 60, cond: 0.75, months: 3, maxLots: 4 }, // 파산한 경쟁사의 항공기 경매: 새 기체 값의 40%, 5년 된 정비 상태 75% 기체, 3개월간
   fuel: { reversion: 0.1, noise: 0.18, min: 0.6, max: 1.9, share: 0.4, hedgeCost: 1.2, hedgeMonths: 6 }, // 연료 가격 지수와 계약. share: 운영비 중 연료 비중
   delay: { congestStart: 0.7, congestMax: 0.25, condStart: 0.6, condWeight: 0.3, snow: 0.15, strike: 0.1, min: 0.4, demandWeight: 0.15, compensation: 0.12, priorityFee: 0.1, priorityMult: [0, 1, 0.75, 0.5], repWeight: 0.3 }, // 정시율: 공항 혼잡·정비 상태·사건에 따라 떨어지고, 수요·평판·보상금에 영향
   maint: { autoBelow: 0.55, decayBase: 0.025, decayPerWeekly: 0.0014, lowCond: 0.45, failChance: 0.2, failDays: 30, shopDays: 7, costRatio: 0.02, minCost: 0.5 }, // 정비 상태는 매달 닳고, 낮으면 고장 위험

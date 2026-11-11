@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { cityById, typeById } from '../data';
 import type { Game } from './game';
 
@@ -12,6 +13,7 @@ export function advise(g: Game): Advice[] {
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length === 0) out.push({ level: 'warn', text: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 배정된 항공기가 없습니다.`, tab: 'routes', routeId: r.id });
   for (const p of s.planes) if (p.cond < 0.5 && p.shop <= 0) out.push({ level: p.cond < 0.3 ? 'bad' : 'warn', text: `${typeById(p.type).name}의 정비 상태가 ${Math.round(p.cond * 100)}%입니다. 고장 나기 전에 점검하세요.`, tab: 'fleet' });
   for (const p of s.planes) if (g.needsReplacement(p)) out.push({ level: 'info', text: `${typeById(p.type).name}이(가) ${Math.floor(p.age / 12)}년 넘게 낡아 정비해도 ${Math.round(g.maxCond(p) * 100)}%까지만 회복됩니다. 팔고 새로 사는 편이 나을 수 있어요.`, tab: 'fleet' });
+  if (s.auctions.length) out.push({ level: 'info', text: `파산한 ${s.auctions[0].from}의 항공기 ${s.auctions.length}대가 새 값의 ${Math.round(config.auction.price * 100)}%에 경매 중입니다(${s.auctions[0].expires - g.monthsPassed}개월 남음).`, tab: 'map' });
   const seen = new Set<string>();
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length) for (const c of [r.a, r.b]) {
     if (seen.has(c)) continue; seen.add(c);
