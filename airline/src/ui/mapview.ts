@@ -115,11 +115,12 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     for (const it of items) {
       const id = it.id.split('@')[0], c = cityOf(id), sel = id === selCity, connected = connectedOf(id);
       if (id === pulseCity) { const ph = (t % 1.4) / 1.4; ctx.strokeStyle = `rgba(232, 121, 58, ${1 - ph})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + ph * 22, 0, Math.PI * 2); ctx.stroke(); }
-      ctx.fillStyle = connected ? '#ffd86b' : '#ffffff'; ctx.strokeStyle = sel ? '#e8793a' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
+      const locked = !g.cityOpen(id); // 운수권이 없는 지역
+      ctx.fillStyle = connected ? '#ffd86b' : locked ? '#cfd8e2' : '#ffffff'; ctx.strokeStyle = sel ? '#e8793a' : locked ? '#8b99a8' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
       ctx.beginPath(); ctx.arc(it.x, it.y, c.id === g.state.base ? 8 : 4 + Math.min(3.5, Math.sqrt(marketSize(c)) * 0.55), 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 시장이 큰 도시일수록 점이 크다
       const p = placed.get(it.id);
       if (!p) continue;
-      ctx.fillStyle = '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
+      ctx.fillStyle = locked && !sel ? '#6b7a89' : '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
       ctx.textAlign = p.align; ctx.fillText(c.name, p.x, p.y); ctx.textAlign = 'left'; ctx.shadowBlur = 0;
     }
   }

@@ -18,7 +18,8 @@
   "label": {
    "dx": 11,
    "dy": -10
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "CJU",
@@ -39,7 +40,8 @@
   "label": {
    "dx": 11,
    "dy": 11
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "NRT",
@@ -60,7 +62,8 @@
   "label": {
    "dx": 11,
    "dy": 0
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "PVG",
@@ -80,7 +83,8 @@
    "dx": -11,
    "dy": 8,
    "align": "right"
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "HKG",
@@ -101,7 +105,8 @@
   "label": {
    "dx": 11,
    "dy": 4
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "BKK",
@@ -119,7 +124,8 @@
     2
    ],
    "factor": 1.25
-  }
+  },
+  "region": "SEA"
  },
  {
   "id": "SIN",
@@ -140,7 +146,8 @@
   "label": {
    "dx": 11,
    "dy": 4
-  }
+  },
+  "region": "SEA"
  },
  {
   "id": "DXB",
@@ -159,7 +166,8 @@
     3
    ],
    "factor": 1.2
-  }
+  },
+  "region": "SAME"
  },
  {
   "id": "LHR",
@@ -181,7 +189,8 @@
    "dx": -11,
    "dy": -2,
    "align": "right"
-  }
+  },
+  "region": "EU"
  },
  {
   "id": "JFK",
@@ -203,7 +212,8 @@
   "label": {
    "dx": 11,
    "dy": 8
-  }
+  },
+  "region": "NA"
  },
  {
   "id": "LAX",
@@ -225,7 +235,8 @@
    "dx": -11,
    "dy": 8,
    "align": "right"
-  }
+  },
+  "region": "NA"
  },
  {
   "id": "SYD",
@@ -245,7 +256,8 @@
   "label": {
    "dx": 11,
    "dy": -6
-  }
+  },
+  "region": "OC"
  },
  {
   "id": "PUS",
@@ -265,7 +277,8 @@
   "label": {
    "dx": 11,
    "dy": 6
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "KIX",
@@ -287,7 +300,8 @@
    "dx": -11,
    "dy": 10,
    "align": "right"
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "PEK",
@@ -307,7 +321,8 @@
    "dx": -11,
    "dy": -6,
    "align": "right"
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "TPE",
@@ -328,7 +343,8 @@
   "label": {
    "dx": 11,
    "dy": 2
-  }
+  },
+  "region": "EA"
  },
  {
   "id": "MNL",
@@ -349,7 +365,8 @@
   "label": {
    "dx": 11,
    "dy": 2
-  }
+  },
+  "region": "SEA"
  },
  {
   "id": "SGN",
@@ -370,7 +387,8 @@
   "label": {
    "dx": 11,
    "dy": -4
-  }
+  },
+  "region": "SEA"
  },
  {
   "id": "CGK",
@@ -392,7 +410,8 @@
    "dx": -11,
    "dy": 4,
    "align": "right"
-  }
+  },
+  "region": "SEA"
  },
  {
   "id": "DEL",
@@ -414,7 +433,8 @@
    "dx": -11,
    "dy": -6,
    "align": "right"
-  }
+  },
+  "region": "SAME"
  },
  {
   "id": "BOM",
@@ -436,7 +456,8 @@
    "dx": -11,
    "dy": 6,
    "align": "right"
-  }
+  },
+  "region": "SAME"
  },
  {
   "id": "IST",
@@ -453,7 +474,8 @@
     8
    ],
    "factor": 1.2
-  }
+  },
+  "region": "SAME"
  },
  {
   "id": "CDG",
@@ -476,7 +498,8 @@
    "dx": -11,
    "dy": 9,
    "align": "right"
-  }
+  },
+  "region": "EU"
  },
  {
   "id": "FRA",
@@ -497,7 +520,8 @@
   "label": {
    "dx": 11,
    "dy": -6
-  }
+  },
+  "region": "EU"
  },
  {
   "id": "SVO",
@@ -514,7 +538,8 @@
     8
    ],
    "factor": 1.1
-  }
+  },
+  "region": "EU"
  },
  {
   "id": "CAI",
@@ -533,7 +558,8 @@
     2
    ],
    "factor": 1.15
-  }
+  },
+  "region": "SAME"
  },
  {
   "id": "JNB",
@@ -549,7 +575,8 @@
     1
    ],
    "factor": 1.15
-  }
+  },
+  "region": "AF"
  },
  {
   "id": "GRU",
@@ -566,7 +593,8 @@
     7
    ],
    "factor": 1.15
-  }
+  },
+  "region": "LA"
  },
  {
   "id": "MEX",
@@ -583,7 +611,8 @@
     4
    ],
    "factor": 1.1
-  }
+  },
+  "region": "LA"
  },
  {
   "id": "ORD",
@@ -605,7 +634,8 @@
    "dx": -11,
    "dy": -4,
    "align": "right"
-  }
+  },
+  "region": "NA"
  },
  {
   "id": "YYZ",
@@ -626,7 +656,8 @@
   "label": {
    "dx": 11,
    "dy": -6
-  }
+  },
+  "region": "NA"
  },
  {
   "id": "SFO",
@@ -649,7 +680,8 @@
    "dx": -11,
    "dy": -4,
    "align": "right"
-  }
+  },
+  "region": "NA"
  },
  {
   "id": "MEL",
@@ -670,7 +702,8 @@
    "dx": -11,
    "dy": 6,
    "align": "right"
-  }
+  },
+  "region": "OC"
  },
  {
   "id": "AKL",
@@ -692,7 +725,8 @@
    "dx": -11,
    "dy": 2,
    "align": "right"
-  }
+  },
+  "region": "OC"
  },
  {
   "id": "MAD",
@@ -708,7 +742,8 @@
     8
    ],
    "factor": 1.15
-  }
+  },
+  "region": "EU"
  },
  {
   "id": "EZE",
@@ -725,7 +760,8 @@
     2
    ],
    "factor": 1.15
-  }
+  },
+  "region": "LA"
  },
  {
   "id": "SCL",
@@ -741,7 +777,8 @@
     2
    ],
    "factor": 1.15
-  }
+  },
+  "region": "LA"
  },
  {
   "id": "BOG",
@@ -757,7 +794,8 @@
     1
    ],
    "factor": 1.1
-  }
+  },
+  "region": "LA"
  },
  {
   "id": "LOS",
@@ -772,7 +810,8 @@
     12
    ],
    "factor": 1.15
-  }
+  },
+  "region": "AF"
  },
  {
   "id": "NBO",
@@ -788,7 +827,8 @@
     8
    ],
    "factor": 1.2
-  }
+  },
+  "region": "AF"
  },
  {
   "id": "ADD",
@@ -803,6 +843,7 @@
     1
    ],
    "factor": 1.1
-  }
+  },
+  "region": "AF"
  }
 ]

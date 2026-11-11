@@ -1,4 +1,4 @@
-export interface City { id: string; name: string; lat: number; lon: number; pop: number; income: number; runway: number; peak: { months: number[]; factor: number }; base?: boolean; label?: { dx: number; dy: number; align?: 'right' } }
+export interface City { region: string; id: string; name: string; lat: number; lon: number; pop: number; income: number; runway: number; peak: { months: number[]; factor: number }; base?: boolean; label?: { dx: number; dy: number; align?: 'right' } }
 export interface AircraftType { id: string; name: string; cls: string; seats: number; speed: number; range: number; runway: number; price: number; hourly: number; cargo: number; from?: number } // cargo: 화물 적재량(톤)
 export interface EventOption { label: string; cost: number; scale: number; text: string } // cost: 대응 비용(M), scale: 대응하면 효과가 이 배수로 줄어듦
 export interface EventDef { id: string; name: string; months: number; option?: EventOption; scheduled?: boolean; hosts?: string[]; effect: { cash?: number; cost?: number; demand?: number; cityCap?: number; routeDemand?: number; cap?: number; ground?: number }; text: string; snowCities?: string[]; boomCities?: string[] } // effect.cap: 전체 운항 증감, effect.ground: 항공기 한 대 운항 불가
@@ -39,6 +39,7 @@ export interface GameState {
   fuel: number; // 연료 가격 지수(1 = 기준)
   hedge: { price: number; monthsLeft: number } | null; // 연료 계약(가격 고정)
   upgrades?: Record<string, number>; // 회사 업그레이드 단계(없으면 0)
+  rights?: string[]; // 지역 운수권: 이 지역들 사이에서만 노선을 열 수 있다(없으면 제한 없음)
   autoFare?: boolean; // 자동 운임: 매주 자리를 꽉 채우는 운임으로 맞춘다(없으면 꺼짐)
   autoMaint?: boolean; // 자동 정비: 노선에 배정된 항공기의 정비 상태가 낮아지면 월말에 알아서 점검한다(없으면 꺼짐)
   nextRival: number; // 다음 경쟁사 ID(파산으로 빠져도 ID를 다시 쓰지 않는다)
