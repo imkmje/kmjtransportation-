@@ -80,3 +80,13 @@ export function newspaper(g: Game, year: number): Paper | null {
     quote: pool[(year * 7 + Math.floor(Math.abs(d.profit))) % pool.length],
   };
 }
+
+/** 알림 한 줄의 종류(알림 탭 필터용): 경쟁 / 시대·신기종 / 계약·업적 / 그 밖의 경영 */
+export type LogKind = 'rival' | 'era' | 'goal' | 'biz';
+export function logKind(text: string): LogKind {
+  const t = text.replace(/^\d+개월차: /, '');
+  if (/^(신생 항공사|대형 항공사|.*파산했습니다|.*운임 전쟁|.*경매|.*노선에 진출)/.test(t) || /(제휴|경쟁사)/.test(t)) return 'rival';
+  if (/(시대|신기종|예고 —|개막|호황기)/.test(t)) return 'era';
+  if (/(계약|업적|이정표)/.test(t)) return 'goal';
+  return 'biz';
+}

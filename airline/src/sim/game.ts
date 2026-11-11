@@ -19,6 +19,7 @@ export interface RouteDay {
   cargoT: number; cargoCap: number; cargoDemand: number; cargoRevenue: number; share: number; // share: 경쟁 점유율(1 = 독점)
   transfer: number; // 환승 수요(월, 운임 반영 전)
   otp: number; compensation: number; // otp: 정시율(0~1), compensation: 지연 보상금(M)
+  revenuePax: number; costOps: number; costLanding: number; costPax: number; // 손익 분해(M, 하루): 여객 수익, 운영·연료비, 착륙료, 승객당 수수료
 }
 
 /** 항공사 이름 풀: 앞의 둘은 처음부터 있고, 나머지는 시간이 지나며 신생 항공사로 등장한다(파산한 이름은 다시 쓰지 않는다) */
@@ -136,7 +137,9 @@ export class Game {
     return { ok: true, level };
   }
   /** 운항 노선 양끝 도시 중 정비 기지 단계가 높은 쪽(정비 상태가 덜 닳는 정도) */
-  private mroFactor(p: Plane): number { const r = p.routeId !== null ? this.route(p.routeId) : undefined; return r ? Math.max(this.hubLevel(r.a, 'mro'), this.hubLevel(r.b, 'mro')) * config.invest.mro.decay : 0; }
+  /** 이 항공기가 오가는 노선 양끝 중 정비 기지 단계가 높은 쪽 */
+  private mroLevel(p: Plane): number { const r = p.routeId !== null ? this.route(p.routeId) : undefined; return r ? Math.max(this.hubLevel(r.a, 'mro'), this.hubLevel(r.b, 'mro')) : 0; }
+  private mroFactor(p: Plane): number { return this.mroLevel(p) * config.invest.mro.decay; }
   // ---- 연대기 ----
   /** 연대기에 한 줄 남긴다(m: 개월차). key가 있으면 같은 key는 한 번만 */
   private note(m: number, kind: string, text: string, extra: Partial<ChronEntry> = {}): void {
@@ -257,7 +260,8 @@ export class Game {
     const revenue = (paxE * r.fare + paxB * r.fareBiz) / 1e6 + cargoRevenue;
     const compensation = revenue * (1 - otp) * c.delay.compensation; // 지연 보상금
     const cost = (hours + (legs * c.cost.landingFeeK) / 1000 + (pax * c.cost.perPaxFee) / 1e6) * costMult + compensation;
-    return { demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
+    const revenuePax = (paxE * r.fare + paxB * r.fareBiz) / 1e6, costOps = hours * costMult, costLanding = ((legs * c.cost.landingFeeK) / 1000) * costMult, costPax = ((pax * c.cost.perPaxFee) / 1e6) * costMult;
+    return { revenuePax, costOps, costLanding, costPax, demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
   }
 
   // ---------- 행동 ----------
@@ -373,7 +377,7 @@ export class Game {
     return { ok: true };
   }
   /** 정비 점검 비용(M): 기종 가격의 2%(최소 $0.5M) */
-  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * this.agingMult(p) * (1 - this.up('hangar', true)); } // 낡을수록 점검도 비싸다
+  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * this.agingMult(p) * (1 - this.up('hangar', true)) * (1 - this.mroLevel(p) * config.invest.mro.serviceCut); } // 낡을수록 점검도 비싸다, 정비 기지가 있으면 싸다
   /** 이 기체가 점검으로 회복할 수 있는 정비 상태의 상한(7년이 넘으면 낮아진다) */
   maxCond(p: Plane): number { const a = config.aging; return Math.max(a.capMin, 1 - Math.max(0, p.age - a.capStart) * a.capPerMonth); }
   /** 교체 권고: 점검해도 회복이 75% 아래까지만 되는 기체 */
@@ -399,6 +403,13 @@ export class Game {
     if (d.seatsE <= 0 || d.demandE <= 0) { r.fare = saved; return; }
     const ratio = 1 + Math.log(d.demandE / d.seatsE) / config.demand.elasticity; // 수요(운임) = 수요(기준)·priceFactor 이므로 해석적으로 구한다
     this.setFare(routeId, base * Math.min(config.fare.maxRatio, Math.max(config.fare.minRatio, ratio)));
+    // 비즈니스석도 같은 방식으로: 수요가 좌석보다 많으면 운임을 올리고 모자라면 내린다(기내 서비스·라운지 같은 수요 효과가 운임으로 돌아온다)
+    if (d.seatsB > 0) {
+      const baseB = this.routeBaseFareBiz(r), savedB = r.fareBiz; r.fareBiz = Math.round(baseB);
+      const db = this.routeDay(r);
+      if (db.demandB > 0) this.setFareBiz(routeId, baseB * Math.min(config.fare.maxRatio, Math.max(config.fare.minRatio, 1 + Math.log(db.demandB / db.seatsB) / config.cabin.bizElasticity)));
+      else r.fareBiz = savedB;
+    }
   }
   setAutoFare(on: boolean): void { this.state.autoFare = on; }
   /** 노선 별명(빈 문자열이면 지움, 최대 16자) */
@@ -845,7 +856,7 @@ export class Game {
     const s = this.state;
     if (r.type === 'cash' || r.type === 'rep') s.cash += r.value;
     if (r.type === 'rep') s.reputation = Math.min(1, s.reputation + 0.05);
-    if (r.type === 'plane') this.addPlane(r.plane!, typeById(r.plane!).price);
+    if (r.type === 'plane') this.addPlane(r.plane!, typeById(r.plane!).price * config.contract.planeBook); // 보상 기체의 장부가(대출 담보) 비율
     if (r.type === 'upgrade') s.upgrades = { ...s.upgrades, [r.upgrade!]: this.upgradeLevel(r.upgrade!) + 1 };
     if (r.type === 'rights' && s.rights && !s.rights.includes(r.region!)) s.rights = [...s.rights, r.region!];
   }

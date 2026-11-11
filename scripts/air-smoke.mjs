@@ -1,6 +1,7 @@
 // The Air 브라우저 점검: 시작 → 도시 누르기 → 노선 열기 → 항공기 배정 → 시간 진행 → 저장·불러오기. 사용: npm run build && node scripts/air-smoke.mjs [스크린샷 경로]
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
+import { readFileSync } from 'node:fs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const server = await preview({ preview: { port: 4190, strictPort: true } });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -15,6 +16,7 @@ const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').repla
 await page.goto('http://localhost:4190/air/');
 await page.waitForSelector('canvas');
 check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
+check('제목 화면: 버전 1.0.0', (await page.locator('#t-version').innerText()) === 'v1.0.0', await page.locator('#t-version').innerText());
 await shot('title');
 await page.click('#t-new');
 check('새 게임 설정 화면: 자유 모드가 기본 선택, 시나리오 8개·난이도 3개', (await page.locator('#setup-scen button.on').getAttribute('data-sc')) === 'sandbox' && (await page.locator('#setup-scen button').count()) === 8 && (await page.locator('#setup-diff button').count()) === 3);
@@ -301,6 +303,45 @@ await page.click('#setup-scen button[data-sc="free"]'); await page.click('#setup
 check('업적 6개를 달성하면 도전 출발지가 열리고 시작 자금 보너스 +$2M이 표시됨', !(await page.locator('#setup-base option[value="JNB"]').isDisabled()) && (await page.locator('#setup-meta').innerText()).includes('+$2M'));
 await page.selectOption('#setup-base', 'ICN'); await page.click('#setup-diff button[data-d="normal"]'); await page.click('#setup-go');
 check('자유 모드 새 게임: 업적 보너스가 시작 자금에 더해짐($22.0M)', (await page.locator('#cash').innerText()) === '$22.0M', await page.locator('#cash').innerText());
+// 0.25.0: 저장 보호, 홈 화면 설정, 알림 필터, 시대 표시, 통계, 손익 분해
+const mf = await page.evaluate(async () => { const l = document.querySelector('link[rel="manifest"]'); const m = await (await fetch(l.href)).json(); const ic = await fetch(new URL(m.icons[0].src, l.href).href); return { name: m.name, n: m.icons.length, display: m.display, icon: ic.status }; });
+check('홈 화면 추가 설정: 매니페스트·아이콘·애플 터치 아이콘', mf.name === 'The Air' && mf.n >= 2 && mf.display === 'standalone' && mf.icon === 200 && (await page.locator('link[rel="apple-touch-icon"]').count()) === 1, JSON.stringify(mf));
+await page.evaluate(() => { window.__air.game.state.cash = 700; window.__air.render(); });
+const dayBefore = await page.evaluate(() => window.__air.game.state.day);
+await page.click('#menubtn'); await page.click('#menu button[data-m="saves"]');
+check('저장 관리 화면: 저장 칸 3개와 파일 내보내기·가져오기', (await page.locator('#info-body .slot').count()) === 3 && (await page.locator('#info-body button[data-act="exportFile"]').count()) === 1 && (await page.locator('#info-body').innerText()).includes('홈 화면에 추가'));
+await page.locator('#info-body button[data-act="slotSave"][data-i="2"]').click();
+check('저장 칸 2에 저장하면 요약이 보이고 불러오기·삭제 버튼이 생김', (await page.locator('#info-body .slot').nth(1).innerText()).includes('년차') && (await page.locator('#info-body button[data-act="slotLoad"][data-i="2"]').count()) === 1);
+await page.evaluate(() => window.__air.game.advanceDays(45));
+await page.locator('#info-body button[data-act="slotLoad"][data-i="2"]').click();
+check('저장 칸 불러오기: 저장했던 날짜로 돌아감', (await page.evaluate(() => window.__air.game.state.day)) === dayBefore, `${dayBefore}`);
+await page.click('#menubtn'); await page.click('#menu button[data-m="saves"]');
+const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#info-body button[data-act="exportFile"]').click()]);
+const exported = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+check('파일 내보내기: 게임 저장과 평생 업적이 들어 있음', exported['the-air-export'] === 1 && exported.game.day === dayBefore && Array.isArray(exported.profile.ach), String(dl.suggestedFilename()));
+await page.evaluate(() => window.__air.game.advanceDays(60));
+await page.setInputFiles('#import-file', await dl.path());
+await page.waitForFunction((d) => window.__air.game.state.day === d, dayBefore, { timeout: 5000 });
+check('파일 가져오기: 내보낸 날짜의 게임으로 돌아옴', (await page.evaluate(() => window.__air.game.state.day)) === dayBefore);
+await page.click('#tabs button[data-tab="news"]');
+check('알림 탭: 분류 버튼 5개와 알림 수', (await page.locator('#panel .chips button').count()) === 5 && /알림 \d+개/.test(await page.locator('#panel h2').innerText()));
+const rowsAll = await page.locator('#panel .list .row').count();
+await page.click('#panel .chips button[data-v="rival"]');
+check('알림 필터: 경쟁만 보면 줄이 줄어들고 선택 표시가 바뀜', (await page.locator('#panel .chips button.on').getAttribute('data-v')) === 'rival' && (await page.locator('#panel .list .row').count()) <= rowsAll);
+await page.click('#panel .chips button[data-v="all"]');
+await page.evaluate(() => { const g = window.__air.game; g.state.era = { id: 'carbon', start: g.monthsPassed, end: g.monthsPassed + 12 }; window.__air.render(); });
+check('지도 위 시대 표시(탄소세)', (await page.locator('#era').isVisible()) && (await page.locator('#era').innerText()).includes('탄소세 시대'));
+await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 424242, kind: 'profit', title: '시험', goal: 9, progress: 0, limit: 3, status: 'offer', expires: g.monthsPassed + 3, reward: { type: 'cash', value: 30, label: '현금 $30M' } }); window.__air.render(); });
+check('지도 탭에 새 계약·경매 개수 배지', (await page.locator('#tabs button[data-tab="map"]').getAttribute('data-badge')) !== null);
+await page.click('#tabs button[data-tab="map"]');
+await page.click('#menubtn'); await page.click('#menu button[data-m="stats"]');
+const stText = await page.locator('#info-body').innerText();
+check('통계 화면: 손익표·노선별 성적·기종별 현황·이번 판 기록', ['손익표', '노선별 성적', '기종별 현황', '이번 판 기록'].every((k) => stText.includes(k)), stText.slice(0, 80));
+await page.click('#info-close');
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 800; const o = g.openRoute('ICN', 'NRT'); g.assign(g.state.planes[0].id, o.routeId, 7); window.__air.render(); }); // 새 게임에는 노선이 없으므로 하나 열어 둔다
+await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="goRoute"]').first().click();
+await page.evaluate(() => { for (const d of document.querySelectorAll('#panel details.rbuymore')) d.open = true; });
+check('노선 화면: 월 손익 분해(여객 수익·운영비·착륙료·지연 보상금)', (await page.locator('#panel table.brk').innerText()).includes('착륙료') && (await page.locator('#panel table.brk').innerText()).includes('지연 보상금'));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

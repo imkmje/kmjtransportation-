@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231f7ae0'/%3E%3Cstop offset='1' stop-color='%231fb5a4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath transform='translate(8 8) scale(2) rotate(45 12 12)' fill='%23fff' d='M12 3c1.100 0 1.800 1.200 1.800 2.800V9l7.200 4.600v2.200l-7.200-2.300v4.300l2.400 1.900V21L12 20l-4.200 1v-1.300l2.400-1.900v-4.300L3 15.800v-2.200L10.200 9V5.800C10.200 4.200 10.900 3 12 3z'/%3E%3C/svg%3E" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="The Air" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#12202d" />
     <title>The Air</title>
     <style>
       :root { --ink: #16212c; --ink2: #5a6b7a; --bg: #f3f7fa; --card: #ffffff; --line: #dfe7ee; --accent: #1f7ae0; --accent2: #165fb3; --pos: #1f9d57; --neg: #d64545; --warn: #d9822b; }
@@ -55,6 +62,10 @@
       .rowc { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; } .rowc .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; } .rowc .top .grow { flex: 1; min-width: 0; } .rowc .top .right { text-align: right; font-size: 13px; }
       .rowc .btnrow { display: flex; gap: 8px; margin-top: 10px; } .rowc .btnrow button { flex: 1; min-height: 42px; padding: 8px 4px; font-size: 13px; }
       .rowc .bar { margin-top: 8px; }
+      #era { position: absolute; right: 10px; top: 10px; z-index: 5; max-width: min(300px, 60%); background: #12202dcc; color: #fff; border-radius: 12px; padding: 7px 12px; font-size: 12px; line-height: 1.4; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); } #era[hidden] { display: none; } #era small { color: #c6d3df; display: block; }
+      .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; } .chips button { padding: 6px 12px; min-height: 36px; font-size: 13px; background: #eef3f8; color: var(--ink); } .chips button.on { background: var(--accent); color: #fff; }
+      .slot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); } .slot .btns2 { display: flex; gap: 6px; } .slot button { padding: 8px 10px; min-height: 38px; font-size: 13px; }
+      #info-body .brk td:last-child { text-align: right; font-weight: 700; }
       .paper { font-family: 'Noto Serif KR', 'Nanum Myeongjo', 'Batang', Georgia, serif; border: 3px double #3a3a3a; padding: 14px 16px; background: #fbf7ee; color: #222; border-radius: 6px; } .paper .mast { text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 2px; border-bottom: 2px solid #222; padding-bottom: 6px; } .paper .dateline { text-align: center; font-size: 12px; color: #555; margin: 6px 0 10px; border-bottom: 1px solid #999; padding-bottom: 6px; }
       .paper .hl { font-size: 24px; line-height: 1.3; margin: 8px 0 10px; font-weight: 800; } .paper ul { margin: 0 0 12px; padding-left: 18px; font-size: 14px; line-height: 1.6; } .paper .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; border-top: 1px solid #999; border-bottom: 1px solid #999; padding: 8px 0; font-size: 13px; } .paper .nums b { float: right; } .paper .quote { font-style: italic; font-size: 13px; color: #444; margin: 10px 0 0; text-align: center; }
       .chron h4 { display: flex; justify-content: space-between; align-items: center; } .chron .ln { padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px; } .chron .ln small { color: var(--ink2); margin-right: 6px; }
@@ -97,10 +108,11 @@
         <div id="speeds"><button data-speed="0" aria-label="일시정지" data-ic="pause"></button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div>
         <button id="menubtn">메뉴</button>
       </header>
-      <main id="stage"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><aside id="panel"></aside></main>
+      <main id="stage"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><div id="era" hidden></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><aside id="panel"></aside></main>
       <nav id="tabs"><button data-tab="map">지도</button><button data-tab="routes">노선</button><button data-tab="fleet">기단</button><button data-tab="money">재무</button><button data-tab="news">알림</button></nav>
     </div>
-    <div id="menu" hidden><button data-m="save">저장</button><button data-m="load">불러오기</button><button data-m="new">새 게임</button><button data-m="hints">힌트: 켜짐</button><button data-m="sound">소리: 켜짐</button><button data-m="volume">소리 크기</button><button data-m="music">배경 음악: 켜짐</button><button data-m="night">낮밤 표시: 켜짐</button><button data-m="help">도움말</button><button data-m="chronicle">연대기</button><button data-m="records">기록</button><button data-m="autopause">사건 시 자동 정지: 켜짐</button><button data-m="title">시작 화면</button></div>
+    <input type="file" id="import-file" accept=".json,application/json" hidden />
+    <div id="menu" hidden><button data-m="save">빠른 저장</button><button data-m="load">빠른 불러오기</button><button data-m="saves">저장 관리</button><button data-m="stats">통계</button><button data-m="new">새 게임</button><button data-m="hints">힌트: 켜짐</button><button data-m="sound">소리: 켜짐</button><button data-m="volume">소리 크기</button><button data-m="music">배경 음악: 켜짐</button><button data-m="night">낮밤 표시: 켜짐</button><button data-m="help">도움말</button><button data-m="chronicle">연대기</button><button data-m="records">기록</button><button data-m="autopause">사건 시 자동 정지: 켜짐</button><button data-m="title">시작 화면</button></div>
     <div id="toast"></div>
     <div id="end" class="overlay" hidden><div class="card2"><h1 id="end-title" style="font-size:28px"></h1><p id="end-body"></p><div class="btns"><button id="end-continue" hidden>계속하기 (자유 모드)</button><button id="end-new" class="ghost">새 게임</button></div></div></div>
     <div id="info" class="overlay" hidden style="z-index:46"><div class="card2 wide"><h1 id="info-title" style="font-size:24px"></h1><div id="info-body"></div><div class="btns"><button id="info-close">닫기</button></div></div></div>
@@ -111,7 +123,7 @@
       <div id="setup-rightsrow"><h4>지역 운수권</h4><div id="setup-rights" class="seg"><button data-r="on">켜기 (권장)</button><button data-r="off">끄기</button></div><small id="setup-rightsnote" class="hintline"></small></div><small id="setup-meta" class="hintline" style="display:block;margin-top:10px"></small>
       <div class="btns row2"><button id="setup-go">시작</button><button id="setup-cancel" class="ghost">취소</button></div></div></div>
     <div id="title" class="overlay"><div class="card2"><h1>The Air</h1><p id="t-title" class="hint" style="margin:0 0 8px"></p><p>가상의 항공사 사장이 되어 지구 위 도시 사이에 노선을 열고, 항공기를 사서 배정하고, 운임을 정해 이익을 내세요. 현금이 바닥나면 파산입니다. <span id="t-version"></span></p>
-      <p>시나리오(자유 경영·감염병 위기·유럽 허브·저가 항공 도전)와 시작 도시, 난이도를 골라 시작하세요.</p><div class="btns"><button id="t-new">새 게임</button><button id="t-continue" class="ghost" hidden>이어하기</button></div><div id="records"></div></div></div>
+      <p>목표 없이 키우는 <b>자유 모드</b>나 7가지 <b>시나리오</b>를 고르고, 시작 도시와 난이도를 정해 시작하세요.</p><div class="btns"><button id="t-new">새 게임</button><button id="t-continue" class="ghost" hidden>이어하기</button></div><div id="records"></div></div></div>
     <script type="module" src="/airline/src/main.ts"></script>
   </body>
 </html>

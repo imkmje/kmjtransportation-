@@ -59,7 +59,7 @@ describe('허브 투자', () => {
   it('터미널: 슬롯이 늘고 지연이 줄며, 단계마다 비싸지고 3단계까지', () => {
     const { g, rid } = setup(); const cap = g.slotCapacity('ICN'), pen0 = g.routeOtp(g.route(rid)!);
     expect(g.hubPrice('ICN', 'terminal')).toBe(config.invest.terminal.prices[0]);
-    const cash = g.state.cash; expect(g.buyHub('ICN', 'terminal').ok).toBe(true); expect(cash - g.state.cash).toBe(10);
+    const cash = g.state.cash; expect(g.buyHub('ICN', 'terminal').ok).toBe(true); expect(cash - g.state.cash).toBe(config.invest.terminal.prices[0]);
     expect(g.slotCapacity('ICN')).toBe(cap + config.invest.terminal.slots); expect(g.hubPrice('ICN', 'terminal')).toBe(config.invest.terminal.prices[1]);
     g.state.planes[0].weekly = 7; expect(g.routeOtp(g.route(rid)!)).toBeGreaterThanOrEqual(pen0);
     expect(g.buyHub('ICN', 'terminal').ok).toBe(true); expect(g.buyHub('ICN', 'terminal').ok).toBe(true);
