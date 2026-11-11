@@ -133,7 +133,7 @@ describe('계약 제안', () => {
   it('조언에 새 제안이 뜨고, 형식 11 저장 파일은 시대·계약 없음으로 읽는다', () => {
     const g = sandbox(); g.state.contracts = [mk({ status: 'offer', expires: 99 })]; expect(advise(g).some((a) => a.text.includes('새 계약 제안'))).toBe(true);
     const old = sandbox().toJSON() as unknown as Record<string, unknown>; old.formatVersion = 11; for (const k of ['era', 'nextEra', 'eraFree', 'contracts', 'contractsDone', 'nextOffer']) delete old[k];
-    const back = Game.fromJSON(old); expect(back.state.era).toBeNull(); expect(back.state.contracts).toEqual([]); expect(back.state.formatVersion).toBe(12); expect(back.state.eraFree).toBeGreaterThanOrEqual(config.eras.firstFree);
+    const back = Game.fromJSON(old); expect(back.state.era).toBeNull(); expect(back.state.contracts).toEqual([]); expect(back.state.formatVersion).toBe(13); expect(back.state.eraFree).toBeGreaterThanOrEqual(config.eras.firstFree);
     expect(typeById('T72').price).toBe(22);
   });
 });

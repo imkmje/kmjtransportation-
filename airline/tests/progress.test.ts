@@ -109,7 +109,7 @@ describe('파산한 경쟁사의 경매', () => {
   });
   it('형식 10 저장 파일은 경매·예고 행사 없음으로 읽는다', () => {
     const g = sandbox(); const old = g.toJSON() as unknown as Record<string, unknown>; old.formatVersion = 10; delete old.auctions; delete old.upcoming;
-    const back = Game.fromJSON(old); expect(back.state.auctions).toEqual([]); expect(back.state.upcoming).toEqual([]); expect(back.state.formatVersion).toBe(12);
+    const back = Game.fromJSON(old); expect(back.state.auctions).toEqual([]); expect(back.state.upcoming).toEqual([]); expect(back.state.formatVersion).toBe(13);
   });
 });
 

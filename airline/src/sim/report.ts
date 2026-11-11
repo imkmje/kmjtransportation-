@@ -44,3 +44,39 @@ export function terminatorLat(lon: number, sun: { lat: number; lon: number }): n
   const rad = Math.PI / 180, d = Math.abs(sun.lat) < 0.5 ? (sun.lat < 0 ? -0.5 : 0.5) : sun.lat;
   return Math.atan(-Math.cos((lon - sun.lon) * rad) / Math.tan(d * rad)) / rad;
 }
+
+/** 연말 신문: 연대기에서 그해의 소식을 골라 1면을 만든다(연말 결산 기록이 있는 해만) */
+export interface Paper { year: number; headline: string; subs: { m: number; text: string }[]; numbers: [string, string][]; quote: string }
+const PRIORITY: Record<string, number> = { rival: 75, major: 70, era: 65, record: 60, milestone: 55, contract: 50, rights: 45, release: 40, achievement: 35, event: 30, invest: 28 };
+const HEAD = (kind: string, text: string): string => {
+  if (kind === 'rival' && text.endsWith('파산')) return `${text.slice(0, -3)}, 끝내 파산… 항공 시장 요동`;
+  if (kind === 'rival') return `${text}… 시장에 새 도전자`;
+  if (kind === 'major') return `${text}… 업계 긴장`;
+  if (kind === 'record') return `${text}, 사상 최고 경신`;
+  if (kind === 'era') return `${text}… 업계는 비상`;
+  if (kind === 'contract') return text.startsWith('계약 성사') ? `${text.replace(/ \(보상.*\)$/, '')}, 큰 보상 챙겼다` : text;
+  return text;
+};
+const GOOD = ['“기내식이 맛있었어요. 다음에도 이 항공사를 탈게요.” — 서울발 승객', '“정시에 도착해서 회의에 늦지 않았습니다.” — 출장 중인 회사원', '“창밖으로 보이는 노을이 정말 근사했어요.” — 첫 해외여행 승객', '“승무원이 아이에게 비행기 모형을 줬어요.” — 가족 여행객', '“이 노선이 생겨서 고향에 자주 갑니다.” — 유학생', '“좌석이 편해서 푹 잤습니다.” — 장거리 승객'];
+const BAD = ['“요즘 지연이 잦아서 걱정이에요.” — 단골 승객', '“가격이 조금만 내려가면 더 자주 탈 텐데요.” — 출장 중인 회사원', '“환승이 너무 빡빡했습니다.” — 여행객', '“경쟁 항공사가 더 싸더라고요.” — 학생 승객', '“그래도 이 항공사를 응원합니다.” — 오랜 단골', '“내년에는 더 나아지겠죠.” — 공항 직원'];
+export function newspaper(g: Game, year: number): Paper | null {
+  const c = g.state.chronicle, ye = c.find((e) => e.kind === 'year' && e.m === year * 12);
+  if (!ye?.d) return null;
+  const prev = c.find((e) => e.kind === 'year' && e.m === (year - 1) * 12)?.d;
+  const items: { m: number; text: string; p: number }[] = c.filter((e) => e.m > (year - 1) * 12 && e.m <= year * 12 && PRIORITY[e.kind] !== undefined).map((e) => ({ m: e.m, text: HEAD(e.kind, e.text), p: PRIORITY[e.kind] }));
+  const { rank, total } = ye.d;
+  if (total >= 3) { // 매출 순위 소식
+    if (rank === 1 && prev?.rank !== 1) items.push({ m: year * 12, text: prev ? '우리 항공사, 업계 매출 1위로 올라서다' : '창업 첫해부터 업계 매출 1위', p: 100 });
+    else if (prev && rank < prev.rank) items.push({ m: year * 12, text: `우리 항공사, 매출 순위 ${prev.rank}위에서 ${rank}위로 도약`, p: 85 });
+    else if (prev && rank > prev.rank) items.push({ m: year * 12, text: `매출 순위 ${rank}위로 밀려난 우리 항공사… 반격이 필요하다`, p: 80 });
+    else items.push({ m: year * 12, text: `업계 ${rank}위를 지킨 우리 항공사`, p: 30 });
+  }
+  if (!items.length) items.push({ m: year * 12, text: ye.d.profit >= 0 ? '조용하지만 알찬 한 해, 우리 항공사 흑자 유지' : '어려운 한 해를 보낸 우리 항공사', p: 1 });
+  items.sort((a, b) => b.p - a.p || a.m - b.m);
+  const d = ye.d, fm = (v: number) => `${v < 0 ? '−' : ''}$${Math.abs(v).toFixed(0)}M`, pool = d.profit >= 0 ? GOOD : BAD;
+  return {
+    year, headline: items[0].text, subs: items.slice(1, 5).map((x) => ({ m: x.m, text: x.text })),
+    numbers: [['한 해 이익', fm(d.profit)], ['한 해 매출', fm(d.revenue)], ['수송 승객', `${Math.round(d.pax).toLocaleString('en-US')}명`], ['항공기', `${d.planes}대`], ['취항 도시', `${d.cities}곳`], ['매출 순위', `${d.rank}위 / ${d.total}곳`]],
+    quote: pool[(year * 7 + Math.floor(Math.abs(d.profit))) % pool.length],
+  };
+}
