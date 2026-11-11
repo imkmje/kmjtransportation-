@@ -266,6 +266,17 @@ check('누적 이익이 모자라면 이유가 나오고 운수권은 그대로'
 await page.evaluate(() => { const g = window.__air.game; g.state.cumProfit = 30; g.state.cash = 100; window.__air.render(); });
 await page.locator('#panel button[data-act="buyRights"]:not([data-why])').first().click();
 check('조건을 갖추고 사면 운수권이 늘고 그 지역 노선을 열 수 있음', await page.evaluate(() => { const g = window.__air.game; return g.state.rights.length === 2 && g.openRoute('ICN', 'BKK').ok; }));
+// 0.23.0: 계약 제안, 시대, 대형 항공사
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 800; for (let i = 0; i < 14 && !g.state.contracts.some((c) => c.status === 'offer'); i++) g.advanceDays(30); window.__air.render(); });
+await page.click('#tabs button[data-tab="routes"]'); await page.click('#tabs button[data-tab="map"]');
+const conText = await page.locator('#panel').innerText();
+check('지도 탭: 계약 제안과 수락·거절 버튼', conText.includes('계약 제안') && (await page.locator('#panel button[data-act="acceptContract"]').count()) >= 1 && (await page.locator('#panel button[data-act="declineContract"]').count()) >= 1, conText.slice(0, 120));
+await page.locator('#panel button[data-act="acceptContract"]').first().click();
+check('계약 수락: 진행 중 계약이 생김', (await page.evaluate(() => window.__air.game.state.contracts.filter((c) => c.status === 'active').length)) === 1 && (await page.locator('#panel .rowc .bar').count()) >= 1);
+await page.evaluate(() => { const g = window.__air.game; g.state.era = { id: 'carbon', start: g.monthsPassed, end: g.monthsPassed + 10 }; g.state.nextEra = null; for (let i = 0; i < 8; i++) g.advanceDays(30); g.state.era = { id: 'carbon', start: g.monthsPassed, end: g.monthsPassed + 10 }; window.__air.render(); });
+await page.click('#tabs button[data-tab="routes"]'); await page.click('#tabs button[data-tab="map"]');
+const eraText = await page.locator('#panel').innerText();
+check('지도 탭: 지금 시대(탄소세)와 대형 항공사', eraText.includes('탄소세 시대') && eraText.includes('글로벌 스카이') && eraText.includes('대형'), eraText.slice(0, 80));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

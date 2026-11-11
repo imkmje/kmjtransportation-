@@ -60,7 +60,7 @@ describe('저장 형식 7', () => {
     const { g } = withRoute(4); g.advanceDays(40);
     const v6 = JSON.parse(JSON.stringify(g.toJSON())); v6.formatVersion = 6; for (const r of v6.routes) delete r.priority;
     const back = Game.fromJSON(v6);
-    expect(back.state.formatVersion).toBe(11); expect(back.state.routes[0].priority).toBe(1);
+    expect(back.state.formatVersion).toBe(12); expect(back.state.routes[0].priority).toBe(1);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
 });
