@@ -337,6 +337,7 @@ await page.click('#menubtn'); await page.click('#menu button[data-m="stats"]');
 const stText = await page.locator('#info-body').innerText();
 check('통계 화면: 손익표·노선별 성적·기종별 현황·이번 판 기록', ['손익표', '노선별 성적', '기종별 현황', '이번 판 기록'].every((k) => stText.includes(k)), stText.slice(0, 80));
 await page.click('#info-close');
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 800; const o = g.openRoute('ICN', 'NRT'); g.assign(g.state.planes[0].id, o.routeId, 7); window.__air.render(); }); // 새 게임에는 노선이 없으므로 하나 열어 둔다
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="goRoute"]').first().click();
 await page.evaluate(() => { for (const d of document.querySelectorAll('#panel details.rbuymore')) d.open = true; });
 check('노선 화면: 월 손익 분해(여객 수익·운영비·착륙료·지연 보상금)', (await page.locator('#panel table.brk').innerText()).includes('착륙료') && (await page.locator('#panel table.brk').innerText()).includes('지연 보상금'));
