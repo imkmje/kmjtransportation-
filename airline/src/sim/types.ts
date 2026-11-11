@@ -18,6 +18,7 @@ export interface Upcoming { def: string; city: string; start: number } // 예고
 export interface ActiveEra { id: string; start: number; end: number } // 시대(start·end: 개월차)
 export interface ContractReward { type: 'cash' | 'plane' | 'upgrade' | 'rights' | 'rep'; value: number; label: string; plane?: string; upgrade?: string; region?: string }
 export interface Contract { id: number; kind: 'pax' | 'otp' | 'cities' | 'profit'; title: string; goal: number; progress: number; limit: number; status: 'offer' | 'active'; expires: number; start?: number; a?: string; b?: string; startCities?: number; reward: ContractReward } // limit: 수락한 뒤 주어지는 개월, expires: 제안이 사라지는 개월차
+export interface ChronEntry { m: number; kind: string; text: string; key?: string; d?: Record<string, number> } // 연대기 한 줄(m: 개월차, kind: 종류, d: 연말 결산 숫자)
 export interface RivalGone { name: string; month: number }
 export interface ActiveEvent { def: string; monthsLeft: number; city?: string; planeId?: number; handled?: boolean }
 export interface MonthReport { month: number; revenue: number; cost: number; depreciation: number; fixed: number; interest: number; cargo: number; profit: number; pax: number; seats: number; loadFactor: number; cash: number }
@@ -46,6 +47,8 @@ export interface GameState {
   autoFare?: boolean; // 자동 운임: 매주 자리를 꽉 채우는 운임으로 맞춘다(없으면 꺼짐)
   autoMaint?: boolean; // 자동 정비: 노선에 배정된 항공기의 정비 상태가 낮아지면 월말에 알아서 점검한다(없으면 꺼짐)
   nextRival: number; // 다음 경쟁사 ID(파산으로 빠져도 ID를 다시 쓰지 않는다)
+  chronicle: ChronEntry[]; // 연대기(회사의 주요 사건, 최대 400줄)
+  hubs: Record<string, Partial<Record<'terminal' | 'mro' | 'lounge', number>>>; // 허브 투자 단계(도시별)
   era: ActiveEra | null; // 지금 시대(없으면 평시)
   nextEra: ActiveEra | null; // 예고된 다음 시대
   eraFree: number; // 이 개월차부터 다음 시대를 예고할 수 있다

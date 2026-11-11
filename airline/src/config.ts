@@ -8,6 +8,12 @@ export const config = {
   start: { cash: 20, reputation: 0.3, plane: 'B737' },
   rules: { bankruptCash: -5, bankruptMonths: 2, winProfit: 100, timeLimitMonths: 24, winCities: 12 },
   events: { chancePerMonth: 0.42, costGrowth: 0.025, costMaxMult: 3, costPerPlane: 0.05, costFreePlanes: 2, festivalChance: 0.06, festivalLead: 6 }, // 사건 대응 비용 = 기본 × min(3, 1 + 2.5% × 지난 개월) × (1 + 5% × (항공기 수 − 2)). festival: 예고된 행사(올림픽·월드컵·축제)가 한 달에 잡힐 확률과 예고 기간(개월)
+  invest: { // 허브 투자(도시별, 각 3단계): 취항 중인 도시나 출발 도시에만. 단계 총합 × upkeep($M)이 매달 고정비로 든다
+    terminal: { name: '터미널 확장', prices: [10, 22, 40], slots: 4, delay: 0.15, desc: '공항 슬롯 +4, 이 공항의 혼잡 지연 −15%(단계마다)' },
+    mro: { name: '정비 기지', prices: [8, 18, 32], decay: 0.12, desc: '이 도시를 오가는 항공기의 정비 상태가 12% 덜 닳음(단계마다)' },
+    lounge: { name: '프리미엄 라운지', prices: [6, 14, 26], biz: 0.08, desc: '이 도시를 오가는 노선의 비즈니스 수요 +8%(단계마다, 양끝 평균)' },
+  },
+  investUpkeep: 0.1, // 허브 투자 단계 총합 1당 매달 드는 운영비($M)
   eras: { firstFree: 18, lead: 6, rest: 6, list: [ // 시대: 몇 해마다 규칙이 바뀐다. 6개월 전에 예고하고, 끝나면 6개월 쉬었다가 다음 시대를 예고한다(첫 시대는 24개월차 이후)
     { id: 'oil', name: '유가 위기 시대', desc: '연료 가격이 높은 수준에서 유지됩니다. 연료 계약과 효율 좋은 신형기가 중요해집니다.', months: [30, 48], fuel: 1.35 },
     { id: 'carbon', name: '탄소세 시대', desc: '낡은 기체(7년 초과)의 운영비가 25% 늘고, 새로 출시된 기종은 8% 줄어듭니다. 기단을 새로 바꿀 때입니다.', months: [36, 60], oldCost: 0.25, newCost: -0.08 },

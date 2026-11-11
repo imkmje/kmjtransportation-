@@ -81,7 +81,7 @@ describe('저장 형식 6', () => {
     const { g } = withRoute(4); g.advanceDays(40);
     const v5 = JSON.parse(JSON.stringify(g.toJSON())); v5.formatVersion = 5; delete v5.fuel; delete v5.hedge; delete v5.freeze; for (const p of v5.planes) { delete p.cond; delete p.shop; }
     const back = Game.fromJSON(v5);
-    expect(back.state.formatVersion).toBe(12); expect(back.state.fuel).toBe(1); expect(back.state.hedge).toBeNull(); expect(back.state.freeze).toBe(0); expect(back.state.planes[0].cond).toBe(1);
+    expect(back.state.formatVersion).toBe(13); expect(back.state.fuel).toBe(1); expect(back.state.hedge).toBeNull(); expect(back.state.freeze).toBe(0); expect(back.state.planes[0].cond).toBe(1);
     back.advanceDays(60); expect(back.state.status).toBe('playing');
   });
 });
