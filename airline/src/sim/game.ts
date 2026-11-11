@@ -486,6 +486,23 @@ export class Game {
     if (best) best.recommended = true;
     return out;
   }
+  /** 놀고 있는 항공기를 어느 열린 노선에 넣으면 좋은지(월 이익 증가 추정 순). 최대 횟수로 배정한다고 가정하고, 슬롯이 모자라면 슬롯 값도 뺀다 */
+  assignAdvice(planeId: number, limit = 3): { routeId: number; weekly: number; profit: number; slotCost: number }[] {
+    const p = this.plane(planeId); if (!p || p.routeId !== null) return [];
+    const t = typeById(p.type), dpm = config.daysPerMonth, out: { routeId: number; weekly: number; profit: number; slotCost: number }[] = [];
+    for (const r of this.state.routes) {
+      if (!r.open) continue;
+      const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B);
+      if (!canFly(t, A, B).ok) continue;
+      const weekly = maxWeeklyRoundTrips(km, t); if (weekly < 1) continue;
+      const b = this.routeDay(r), before = b.revenue - b.cost;
+      p.routeId = r.id; p.weekly = weekly; // 잠깐 넣어 보고 바로 되돌린다
+      let a; try { a = this.routeDay(r); } finally { p.routeId = null; p.weekly = 0; }
+      const sf = this.slotShortfall(planeId, r.id, weekly), slots = sf.needs.reduce((x, n) => x + n.n, 0);
+      out.push({ routeId: r.id, weekly, profit: (a.revenue - a.cost - before) * dpm - config.slot.lease * slots * this.mods.fixed, slotCost: sf.cost });
+    }
+    return out.sort((x, y) => y.profit - x.profit || x.routeId - y.routeId).slice(0, limit);
+  }
   /** 노선 화면에서 바로 사기: how = 새것·중고·임대. 슬롯이 모자라면 필요한 만큼 함께 사서 최대 횟수로 배정한다. total은 한 번에 드는 돈(기체 값 또는 보증금 + 슬롯) */
   purchasePlan(routeId: number, typeId: string, how: 'new' | 'used' | 'lease'): Result<{ weekly: number; price: number; slotCost: number; slotNeeds: { city: string; n: number }[]; total: number }> {
     const r = this.route(routeId);
@@ -774,7 +791,8 @@ export class Game {
         }
       }
       c.revHist = [...(c.revHist ?? []), revenue].slice(-12);
-      c.cash += profit - k.planeFixed * c.planes;
+      c.pHist = [...(c.pHist ?? [c.planes]), c.planes].slice(-13); // 항공기 수 기록(화면의 증감 표시용)
+      c.cash += profit * (s.sandbox ? k.profitScale : 1) - k.planeFixed * c.planes; // profitScale: 모형에 없는 노선·부대 수입까지 포함한 몫(1이면 노선 하나 분만 계산)
       if (!c.major && c.planes > 0 && this.rng.next() < k.shockChance) { // 경영 충격: 사고·파업·리콜·소송으로 큰돈이 나간다(현금이 얇은 항공사는 이것 하나로 무너질 수 있다)
         const loss = Math.round(k.shockMin + this.rng.next() * (k.shockMax - k.shockMin)), why = ['대형 사고 보상금', '장기 파업', '엔진 리콜', '소송 패소'][this.rng.int(4)];
         c.cash -= loss; s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${why}으로 $${loss}M 손실을 입었습니다.`);
@@ -784,15 +802,16 @@ export class Game {
         c.cash = Math.max(c.cash, 50); c.low = 0;
         const M = k.major, target = Math.min(M.cap, Math.floor(M.base + M.perMonth * this.monthsPassed + M.perPlayerPlane * s.planes.length));
         for (let i = 0; i < M.addPerMonth && c.planes < target; i++) this.compBuy(c, month, true);
-      } else if (c.cash >= B737.price && c.planes < maxPlanes) this.compBuy(c, month);
+      } else if (c.cash >= B737.price * (s.sandbox ? k.buyRatio : 1) && c.planes < maxPlanes) this.compBuy(c, month);
     }
   }
 
   /** 경쟁사가 B737 한 대를 늘린다(free면 돈을 내지 않는다). 새 노선(허브에서 출발) 또는 증편. 대형 항공사는 가끔 내 노선으로 진출한다 */
   private compBuy(c: Competitor, month: number, free = false): void {
     const s = this.state, B737 = typeById('B737');
-    if (!free) c.cash -= B737.price;
+    if (!free) c.cash -= B737.price * (s.sandbox ? config.competitors.buyRatio : 1); // 나머지는 할부·리스로 처리했다고 본다
     c.planes++;
+    if (!free && !c.major && (c.planes === 5 || c.planes === 10)) s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) 항공기 ${c.planes}대를 돌파했습니다(노선 확장 중).`);
     const legsDay = (km: number) => (2 * Math.max(1, maxWeeklyRoundTrips(km, B737))) / 7 * 0.8 * (c.major ? config.competitors.major.seatMult : 1), style = c.style === 'low' ? 0.85 : 1.15; // 대형 항공사는 대형기를 섞어 쓴다(좌석 2배)
     if (c.major && this.rng.next() < config.competitors.major.invadeChance) { // 내 노선 중 이익이 큰 곳으로 들어온다
       const mine = s.routes.filter((r) => r.open && this.planesOn(r.id).length > 0).map((r) => { const d = this.routeDay(r); return { r, p: d.revenue - d.cost }; }).sort((x, y) => y.p - x.p || x.r.id - y.r.id);
@@ -845,7 +864,7 @@ export class Game {
     else if (kind === 'otp') c = { kind, goal: months, limit: months + 2, title: `정시율 ${Math.round(k.otpTarget * 100)}% 이상을 ${months}개월 연속 유지(${months + 2}개월 안에)` };
     else if (kind === 'cities') { const n = 2 + this.rng.int(2); c = { kind, goal: n, limit: months + 3, startCities: served0, title: `${months + 3}개월 안에 새 도시 ${n}곳에 취항` }; }
     else { const goal = Math.max(8, Math.round(Math.max(3, avg) * months * 1.25)); c = { kind: 'profit', goal, limit: months, title: `${months}개월 동안 누적 이익 ${m$(goal)} 달성` }; }
-    const reward = this.makeReward(base);
+    const reward = this.makeReward(Math.max(k.rewardMin, Math.round(base * k.kindMult[kind])));
     s.contracts.push({ ...c, id: s.nextId++, status: 'offer', expires: mp + k.offerMonths, progress: 0, reward });
     s.log.push(`${mp + 1}개월차: 새 계약 제안 — ${c.title}. 보상: ${reward.label} (지도 탭, ${k.offerMonths}개월 안에 수락)`);
   }
@@ -853,7 +872,7 @@ export class Game {
     const s = this.state, roll = this.rng.next(), cash = (v = base): ContractReward => ({ type: 'cash', value: v, label: `현금 $${v}M` });
     if (roll < 0.45) return cash();
     if (roll < 0.7) { // 새 항공기 한 대(보상 가치 안에서 가장 비싼 출시 기종)
-      const t = AIRCRAFT.filter((x) => this.isAvailable(x.id) && x.price <= base * 1.6).sort((a, b) => b.price - a.price)[0];
+      const t = AIRCRAFT.filter((x) => this.isAvailable(x.id) && x.price <= base * 1.2).sort((a, b) => b.price - a.price)[0];
       return t ? { type: 'plane', value: t.price, plane: t.id, label: `새 항공기 ${t.name}(가치 $${t.price}M)` } : cash();
     }
     if (roll < 0.85) { const ups = config.upgrades.list.filter((u) => this.upgradeLevel(u.id) < config.upgrades.prices.length); if (!ups.length) return cash(); const u = ups[this.rng.int(ups.length)]; return { type: 'upgrade', value: this.upgradePrice(u.id)!, upgrade: u.id, label: `업그레이드 '${u.name}' 1단계 무료(가치 $${this.upgradePrice(u.id)}M)` }; }

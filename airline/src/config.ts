@@ -1,7 +1,7 @@
 /** 모든 튜닝 수치(초기 예시값, 균형 점검 도구로 조정). 코드에 흩어 두지 않는다 */
 export const config = {
   daysPerMonth: 30,
-  demand: { K: 220, distExp: 0.8, distOffset: 0.5, elasticity: 2.5, repBoost: 0.3 },
+  demand: { K: 220, distExp: 0.8, distOffset: 0.5, elasticity: 2.5, repBoost: 0.3, offSeason: 0.06, holiday: [1.05, 0.95, 0.98, 1.0, 1.0, 1.02, 1.07, 1.06, 0.97, 1.0, 0.96, 1.06] }, // offSeason: 성수기에서 먼 달의 수요 감소, holiday: 월별 공통 계절 계수(1~12월, 평균 약 1)
   fare: { base: 40, perKm: 0.085, minRatio: 0.5, maxRatio: 2.0 }, // 운임($) = 기준 × 비율
   flight: { turnaroundH: 1.2, taxiH: 0.5, dailyHours: 14 },
   cost: { landingFeeK: 2.0, perPaxFee: 6, fixedMonthly: 1.0, perPlaneMonthly: 0.4, depreciationMonths: 120 }, // landingFeeK: 이착륙 1회(천 달러), perPaxFee: 승객당($), fixedMonthly: M
@@ -22,7 +22,7 @@ export const config = {
     { id: 'dereg', name: '항공 자유화 시대', desc: '신생 항공사가 두 배로 많이 생기고, 운임 전쟁도 두 배로 잦아집니다.', months: [30, 48], entry: 2, war: 2 },
     { id: 'slump', name: '장기 침체기', desc: '경기가 오래 나쁩니다. 은행이 대출을 자주 멈추니 현금을 아끼세요.', months: [24, 36], econ: 0.92 },
   ] } as { firstFree: number; lead: number; rest: number; list: { id: string; name: string; desc: string; months: [number, number]; fuel?: number; econ?: number; oldCost?: number; newCost?: number; oldSlots?: number; entry?: number; war?: number }[] },
-  contract: { planeBook: 1, firstMonth: 3, gap: [2, 4], maxTotal: 4, maxActive: 2, offerMonths: 3, rewardMonths: 6, rewardMin: 15, rewardMax: 250, repLoss: 0.02, otpTarget: 0.95 }, // 계약 제안: 보상은 최근 월 이익의 6배(최소 $15M)로 크게 주고, 실패해도 평판만 조금 깎인다
+  contract: { planeBook: 1, firstMonth: 3, gap: [2, 4], maxTotal: 4, maxActive: 2, offerMonths: 3, rewardMonths: 3.5, rewardMin: 8, rewardMax: 120, kindMult: { cities: 1, pax: 0.85, otp: 0.6, profit: 0.8 }, repLoss: 0.02, otpTarget: 0.95 }, // 계약 제안: 보상은 최근 월 이익의 6배(최소 $15M)로 크게 주고, 실패해도 평판만 조금 깎인다
   auction: { price: 0.4, age: 60, cond: 0.75, months: 3, maxLots: 4 }, // 파산한 경쟁사의 항공기 경매: 새 기체 값의 40%, 5년 된 정비 상태 75% 기체, 3개월간
   fuel: { reversion: 0.1, noise: 0.18, min: 0.6, max: 1.9, share: 0.4, hedgeCost: 1.2, hedgeMonths: 6, hedgeTiers: [{ months: 3, cost: 0.7 }, { months: 6, cost: 1.2 }, { months: 12, cost: 2.2 }] }, // 연료 가격 지수와 계약. share: 운영비 중 연료 비중
   delay: { congestStart: 0.7, congestMax: 0.25, condStart: 0.6, condWeight: 0.3, snow: 0.15, strike: 0.1, min: 0.4, demandWeight: 0.15, compensation: 0.12, priorityFee: 0.1, priorityMult: [0, 1, 0.75, 0.5], repWeight: 0.3 }, // 정시율: 공항 혼잡·정비 상태·사건에 따라 떨어지고, 수요·평판·보상금에 영향
@@ -68,6 +68,6 @@ export const config = {
   growth: { perMonth: 0.003, decay: 0.02, max: 1.8 }, // 운항 중인 도시는 매달 시장이 자란다
   competitors: { major: { name: '글로벌 스카이', hubs: ['DXB', 'FRA', 'JFK', 'SIN'], startMonth: 9, base: 3, perMonth: 0.12, perPlayerPlane: 0.8, cap: 45, eff: 0.97, addPerMonth: 1, bidChance: 0.3, invadeChance: 0.15, warMult: 2, seatMult: 2 }, // 대형 항공사: 파산하지 않고, 시장(내 항공기 수·시간)에 맞춰 커지며, 내 노선에 들어오고, 경매에도 입찰한다
     start: 2, max: 6, entryChance: 0.1, entryMinMonth: 4, entryCash: 0.6, bankruptMonths: 3, effSpread: 0.12, shockChance: 0.012, shockMin: 10, shockMax: 40, // start: 처음에 있는 경쟁사 수, max: 동시에 있을 수 있는 최대 수, entryChance: 한 달에 신생 항공사가 생길 확률, bankruptMonths: 현금이 마이너스인 채 이만큼 지나면 파산, effSpread: 항공사마다 운영 효율이 ±12% 다르다
-    startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, costRatio: 0.62, planeFixed: 0.4 },
+    startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, costRatio: 0.62, planeFixed: 0.4, profitScale: 1.8, buyRatio: 0.5 }, // 자유 모드에서만: profitScale: 경쟁사 이익 배수(시나리오는 목표 균형 때문에 1배), buyRatio: 항공기 한 대를 살 때 실제로 현금에서 나가는 비율(나머지는 할부)
 };
 export type Config = typeof config;
