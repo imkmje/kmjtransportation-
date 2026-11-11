@@ -33,7 +33,7 @@ describe('시나리오·시작 도시·난이도', () => {
     expect(h.loanRate).toBeGreaterThan(n.loanRate); expect(e.loanRate).toBeLessThan(n.loanRate);
     expect(h.state.competitors[0].cash).toBeGreaterThan(n.state.competitors[0].cash);
     // 어려운 쪽이 사건이 더 자주 일어난다(같은 시드로 5년)
-    let ev = (g: Game) => { g.advanceDays(30 * 60); return g.state.log.filter((l) => /개월차/.test(l)).length; };
+    let ev = (g: Game) => { g.advanceDays(30 * 60); return g.state.log.filter((l) => /개월차: (연료비 급등|불황|폭설|관광 붐|감염병|파업|노조|엔진|정부 지원|국제 박람회)/.test(l)).length; }; // 무작위 사건만 센다(신기종·행사·경쟁사 소식은 제외)
     const he = ev(new Game(3, undefined, { difficulty: 'hard' })), ee = ev(new Game(3, undefined, { difficulty: 'easy' }));
     expect(he).toBeGreaterThanOrEqual(ee);
   });
@@ -96,7 +96,7 @@ describe('저장 형식 5', () => {
     const g = new Game(4); open(g, 'ICN', 'CJU', 20); g.advanceDays(40);
     const v4 = JSON.parse(JSON.stringify(g.toJSON())); v4.formatVersion = 4; delete v4.base; delete v4.difficulty; delete v4.scenario;
     const back = Game.fromJSON(v4);
-    expect(back.state.formatVersion).toBe(10); expect(back.state.base).toBe('ICN'); expect(back.state.difficulty).toBe('normal'); expect(back.state.scenario).toBe('free');
+    expect(back.state.formatVersion).toBe(11); expect(back.state.base).toBe('ICN'); expect(back.state.difficulty).toBe('normal'); expect(back.state.scenario).toBe('free');
     back.advanceDays(30); expect(back.state.status).toBe('playing');
   });
 });

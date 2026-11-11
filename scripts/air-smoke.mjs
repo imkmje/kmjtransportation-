@@ -70,7 +70,7 @@ check('재무 탭: 월별 정산이 보임', (await page.locator('#panel').inner
 await shot('money');
 await page.click('#tabs button[data-tab="fleet"]');
 check('기단 탭: 정비 상태 막대와 정비 점검 버튼', (await page.locator('#panel .condbar').count()) >= 1 && (await page.locator('#panel button[data-act="service"]').count()) >= 1);
-check('기단 탭: 항공기 구매 목록(6종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 6 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
+check('기단 탭: 출시된 항공기 구매 목록(8종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 8 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
 await page.click('#tabs button[data-tab="money"]');
 await page.locator('#panel button[data-act="hedge"]').click();
 check('재무 탭: 연료 계약을 맺을 수 있음(상단 칩에 계약 표시)', (await page.evaluate(() => window.__air.game.state.hedge !== null)) && (await page.locator('#fuel').innerText()).includes('계약'));
@@ -230,6 +230,24 @@ await page.locator('#v-music').evaluate((el) => { el.value = '40'; el.dispatchEv
 check('소리 크기 저장', (await page.evaluate(() => JSON.parse(localStorage.getItem('the-air-volume')).music)) === 0.4);
 await page.click('#info-close');
 check('더블 탭 확대 차단: 화면은 이동만 허용, 지도는 제스처를 직접 처리', (await page.evaluate(() => getComputedStyle(document.body).touchAction)) === 'pan-x pan-y' && (await page.evaluate(() => getComputedStyle(document.getElementById('map')).touchAction)) === 'none');
+// 0.21.0: 신기종 안내, 매출 순위, 경매, 예고된 행사
+await page.click('#tabs button[data-tab="fleet"]');
+await page.evaluate(() => { const d = document.getElementById('shop'); if (d) d.open = true; });
+const fleetText = await page.locator('#panel').innerText();
+check('기단 탭: 아직 출시되지 않은 기종이 "곧 출시"로 보임', fleetText.includes('곧 출시') && fleetText.includes('개월 뒤') && fleetText.includes('보임 B7-57'), fleetText.slice(0, 120));
+await page.click('#tabs button[data-tab="map"]');
+const mapText = await page.locator('#panel').innerText();
+check('지도 탭: 매출 순위와 내 순위가 보임', mapText.includes('매출 순위') && /내 순위 \d+위/.test(mapText), mapText.slice(0, 160));
+await page.evaluate(() => { const g = window.__air.game; const k = g.state.competitors[1]; k.planes = 3; k.cash = -500; k.low = 2; g.state.cash = 500; g.advanceDays(31); window.__air.render(); });
+await page.click('#tabs button[data-tab="map"]');
+check('경쟁사가 파산하면 지도 탭에 항공기 경매가 뜸', (await page.locator('#panel').innerText()).includes('항공기 경매') && (await page.locator('#panel button[data-act="auction"]').count()) >= 1);
+const nPl = await page.evaluate(() => window.__air.game.state.planes.length);
+await page.locator('#panel button[data-act="auction"]').first().click();
+check('경매 낙찰: 항공기가 1대 늘어남', (await page.evaluate(() => window.__air.game.state.planes.length)) === nPl + 1);
+await page.evaluate(() => { const g = window.__air.game; g.state.upcoming.push({ def: 'olympic', city: 'LHR', start: g.monthsPassed + 4 }); window.__air.render(); });
+await page.click('#tabs button[data-tab="routes"]'); await page.click('#tabs button[data-tab="map"]');
+const fest = await page.locator('#panel').innerText();
+check('지도 탭: 예고된 행사(올림픽·런던)가 보임', fest.includes('예고된 행사') && fest.includes('올림픽') && fest.includes('런던'));
 check('아이콘: 하단 탭 5개에 직접 그린 아이콘이 있고, 화면에 이모지가 없음', (await page.locator('#tabs button svg.ic').count()) === 5 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(await page.locator('#app').innerText()));
 await page.click('#tabs button[data-tab="news"]'); await shot('icons');
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));

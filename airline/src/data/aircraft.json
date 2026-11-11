@@ -12,6 +12,18 @@
   "cargo": 1.0
  },
  {
+  "id": "E175",
+  "name": "엠브리지 E-75",
+  "cls": "지역 제트",
+  "seats": 88,
+  "speed": 820,
+  "range": 3700,
+  "runway": 1500,
+  "price": 32,
+  "hourly": 3.0,
+  "cargo": 1.5
+ },
+ {
   "id": "A220",
   "name": "에어바츠 A220",
   "cls": "소형 근거리",
@@ -24,6 +36,18 @@
   "cargo": 2.5
  },
  {
+  "id": "F737",
+  "name": "보임 B7-37F 화물기",
+  "cls": "소형 화물기",
+  "seats": 0,
+  "speed": 840,
+  "range": 4500,
+  "runway": 2000,
+  "price": 45,
+  "hourly": 4.2,
+  "cargo": 22.0
+ },
+ {
   "id": "B737",
   "name": "보임 B7-37",
   "cls": "중형 협동체",
@@ -34,6 +58,83 @@
   "price": 60,
   "hourly": 4.6,
   "cargo": 4.0
+ },
+ {
+  "id": "B737NX",
+  "name": "보임 B7-37 NX",
+  "cls": "신형 중형 협동체",
+  "seats": 190,
+  "speed": 840,
+  "range": 6500,
+  "runway": 2100,
+  "price": 66,
+  "hourly": 3.9,
+  "cargo": 4.2,
+  "from": 30
+ },
+ {
+  "id": "A321XLR",
+  "name": "에어바츠 A3-21 XLR",
+  "cls": "장거리 협동체",
+  "seats": 200,
+  "speed": 840,
+  "range": 8700,
+  "runway": 2300,
+  "price": 76,
+  "hourly": 5.0,
+  "cargo": 4.5,
+  "from": 36
+ },
+ {
+  "id": "B757",
+  "name": "보임 B7-57",
+  "cls": "중형 장거리 협동체",
+  "seats": 220,
+  "speed": 850,
+  "range": 7500,
+  "runway": 2000,
+  "price": 82,
+  "hourly": 6.0,
+  "cargo": 6.0,
+  "from": 12
+ },
+ {
+  "id": "F330",
+  "name": "에어바츠 A3-30F 화물기",
+  "cls": "중형 화물기",
+  "seats": 0,
+  "speed": 870,
+  "range": 7400,
+  "runway": 2600,
+  "price": 95,
+  "hourly": 6.8,
+  "cargo": 65.0,
+  "from": 18
+ },
+ {
+  "id": "B787",
+  "name": "보임 B7-87 드림",
+  "cls": "중대형 광동체(고효율)",
+  "seats": 250,
+  "speed": 900,
+  "range": 13500,
+  "runway": 2600,
+  "price": 125,
+  "hourly": 7.0,
+  "cargo": 12.0,
+  "from": 24
+ },
+ {
+  "id": "F77",
+  "name": "보임 F7-77 화물기",
+  "cls": "대형 화물기",
+  "seats": 0,
+  "speed": 850,
+  "range": 9000,
+  "runway": 2800,
+  "price": 140,
+  "hourly": 9.0,
+  "cargo": 100.0
  },
  {
   "id": "A350",
@@ -58,17 +159,5 @@
   "price": 230,
   "hourly": 14.0,
   "cargo": 22.0
- },
- {
-  "id": "F77",
-  "name": "보임 F7-77 화물기",
-  "cls": "대형 화물기",
-  "seats": 0,
-  "speed": 850,
-  "range": 9000,
-  "runway": 2800,
-  "price": 140,
-  "hourly": 9.0,
-  "cargo": 100.0
  }
 ]

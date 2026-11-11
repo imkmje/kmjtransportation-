@@ -180,6 +180,6 @@ describe('자유 모드·경쟁사', () => {
     const old = g.toJSON() as unknown as Record<string, unknown>; old.formatVersion = 9; delete old.nextRival; delete old.rivalsGone;
     const back = Game.fromJSON(old);
     expect(back.state.competitors.length).toBe(6); expect(back.state.nextRival).toBe(7); expect(back.state.rivalsGone).toEqual([]);
-    expect(back.state.formatVersion).toBe(10);
+    expect(back.state.formatVersion).toBe(11);
   });
 });
