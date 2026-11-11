@@ -1,10 +1,10 @@
 import { config } from '../config';
 import { AIRCRAFT, EVENTS, CITIES, typeById, cityById, scenarioById } from '../data';
 import { Rng } from './rng';
-import { baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
+import { marketSize, baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
 import type { Competitor, DayStat, Difficulty, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
 
-export const FORMAT_VERSION = 9; // 8 → 9: 경쟁사 6곳으로 늘림(옛 저장 파일에는 새 경쟁사를 덧붙임) / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
+export const FORMAT_VERSION = 10; // 9 → 10: 경쟁사가 생기고 파산한다(경쟁사 ID 카운터·파산 기록) / 8 → 9: 경쟁사 수 증가 / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
 export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean } // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
 export interface RouteOption { type: string; weekly: number; price: number; profit: number; payback: number | null; slotCost: number; slotNeeds: { city: string; n: number }[]; recommended: boolean } // profit: 이 기종 한 대를 더 넣었을 때 늘어나는 월 이익(고정비·슬롯 임대료 반영), payback: 새 기체 값 ÷ profit(개월)
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -20,7 +20,8 @@ export interface RouteDay {
   otp: number; compensation: number; // otp: 정시율(0~1), compensation: 지연 보상금(M)
 }
 
-const COMP_NAMES: [string, 'low' | 'premium', string][] = [['한바다항공', 'low', 'PUS'], ['그랜드 에어', 'premium', 'NRT'], ['유로윙즈', 'low', 'LHR'], ['아메리고 항공', 'premium', 'JFK'], ['사막의 별 항공', 'premium', 'DXB'], ['남십자성 항공', 'low', 'SYD']];
+/** 항공사 이름 풀: 앞의 둘은 처음부터 있고, 나머지는 시간이 지나며 신생 항공사로 등장한다(파산한 이름은 다시 쓰지 않는다) */
+export const COMP_NAMES: [string, 'low' | 'premium', string][] = [['한바다항공', 'low', 'PUS'], ['그랜드 에어', 'premium', 'NRT'], ['유로윙즈', 'low', 'LHR'], ['아메리고 항공', 'premium', 'JFK'], ['사막의 별 항공', 'premium', 'DXB'], ['남십자성 항공', 'low', 'SYD'], ['실크로드 항공', 'premium', 'PEK'], ['블루 라군 에어', 'low', 'SIN'], ['하이랜드 항공', 'premium', 'DEL'], ['새벽 에어', 'low', 'ICN'], ['대서양 익스프레스', 'low', 'CDG'], ['안데스 항공', 'premium', 'GRU']];
 
 export class Game {
   state: GameState;
@@ -34,15 +35,15 @@ export class Game {
     this.state = {
       formatVersion: FORMAT_VERSION, seed, rng: this.rng.getState(), day: 0,
       cash: Math.round(sc.cash * dm.cash * 10) / 10, reputation: config.start.reputation, nextId: 1,
-      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, freeze: 0, sandbox: !!opts.sandbox, history: [],
+      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, nextRival: config.competitors.start + 1, rivalsGone: [], freeze: 0, sandbox: !!opts.sandbox, history: [],
       base, difficulty: diff, scenario: sc.id,
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [],
     };
     this.addPlane(sc.plane, typeById(sc.plane).price); // 시작 항공기는 무료로 받지만 장부가·감가상각은 같다
   }
 
-  static initCompetitors(rival = 1, from = 0): Competitor[] {
-    return COMP_NAMES.slice(from, config.competitors.count).map(([name, style, hub], i) => ({ id: from + i + 1, name, style, hub, cash: Math.round(config.competitors.startCash * rival), planes: 0, routes: [] }));
+  static initCompetitors(rival = 1): Competitor[] {
+    return COMP_NAMES.slice(0, config.competitors.start).map(([name, style, hub], i) => ({ id: i + 1, name, style, hub, cash: Math.round(config.competitors.startCash * rival), planes: 0, routes: [] }));
   }
 
   // ---------- 조회 ----------
@@ -557,23 +558,24 @@ export class Game {
     if (s.freeze > 0) s.freeze--;
     else if (s.economy < config.credit.freezeEconomy) { s.freeze = config.credit.freezeMonths; s.log.push(`${this.monthsPassed + 1}개월차: 경기가 크게 나빠져 은행이 ${config.credit.freezeMonths}개월간 새 대출을 중단했습니다.`); }
     this.competitorStep();
+    this.rivalLifecycle();
   }
 
   /** 경쟁사 한 달: 추정 이익을 현금에 더하고, 현금이 되면 항공기를 늘린다(노선 신설 또는 증편). 난수 없이 점수로만 고른다 */
   private competitorStep(): void {
     const s = this.state, k = config.competitors, month = this.month;
-    const maxPlanes = Math.min(k.maxPlanesCap, Math.floor(k.maxPlanesBase + k.maxPlanesPerMonth * this.monthsPassed));
-    const B737 = typeById('B737');
+    const B737 = typeById('B737'), eco = s.economy ?? 1, fuelMult = 1 - config.fuel.share + config.fuel.share * (s.fuel ?? 1); // 경쟁사는 불황과 연료비에 그대로 흔들린다(우리의 연료 계약은 적용되지 않는다)
     for (const c of s.competitors) {
+      const maxPlanes = Math.min(k.maxPlanesCap, Math.floor(k.maxPlanesBase + k.maxPlanesPerMonth * (this.monthsPassed - (c.born ?? 0)))); // 늦게 생긴 항공사는 처음부터 다시 키운다
       let profit = 0;
       for (const r of c.routes) {
         const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), base = baseFare(km), fare = base * r.fareRatio;
         const mine = s.routes.find((x) => x.open && ((x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)));
         const myW = mine && this.planesOn(mine.id).length ? this.routeDay(mine).seats * (base / Math.max(1, mine.fare)) : 0;
         const wc = r.seatsDay / Math.max(0.3, r.fareRatio) * this.quality(c.style), share = wc / (wc + myW || 1);
-        const dem = (rawMonthlyDemand(A, B, month, this.growthOf(r.a), this.growthOf(r.b)) * priceFactor(fare, base) * share) / config.daysPerMonth;
+        const dem = (rawMonthlyDemand(A, B, month, this.growthOf(r.a), this.growthOf(r.b)) * eco * priceFactor(fare, base) * share) / config.daysPerMonth;
         const pax = Math.min(dem, r.seatsDay * 0.9);
-        profit += (pax * fare * (1 - k.costRatio) * config.daysPerMonth) / 1e6;
+        profit += (pax * fare * (1 - Math.min(1.2, (k.costRatio * fuelMult) / (c.eff ?? 1))) * config.daysPerMonth) / 1e6; // 비용 비율은 연료비가 오르면 커지고 효율이 낮으면 더 커진다(적자 가능)
       }
       // 가격 반응: 우리가 같은 노선에서 더 싸게 팔면 따라 내리고(바닥까지), 아니면 천천히 목표 가격으로 돌아간다
       const rv = config.rival, floor = c.style === 'low' ? rv.lowFloor : rv.premFloor, target = c.style === 'low' ? rv.lowTarget : rv.premTarget;
@@ -594,6 +596,11 @@ export class Game {
         }
       }
       c.cash += profit - k.planeFixed * c.planes;
+      if (c.planes > 0 && this.rng.next() < k.shockChance) { // 경영 충격: 사고·파업·리콜·소송으로 큰돈이 나간다(현금이 얇은 항공사는 이것 하나로 무너질 수 있다)
+        const loss = Math.round(k.shockMin + this.rng.next() * (k.shockMax - k.shockMin)), why = ['대형 사고 보상금', '장기 파업', '엔진 리콜', '소송 패소'][this.rng.int(4)];
+        c.cash -= loss; s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${why}으로 $${loss}M 손실을 입었습니다.`);
+      }
+      c.low = c.cash < 0 ? (c.low ?? 0) + 1 : 0;
       if (c.cash >= B737.price && c.planes < maxPlanes) {
         c.cash -= B737.price; c.planes++;
         const legsDay = (km: number) => (2 * Math.max(1, maxWeeklyRoundTrips(km, B737))) / 7 * 0.8;
@@ -609,6 +616,29 @@ export class Game {
         else if (c.routes.length) { const r = c.routes[(c.planes - 1) % c.routes.length]; r.seatsDay += B737.seats * legsDay(distanceKm(cityById(r.a), cityById(r.b))); }
       }
     }
+  }
+
+  /** 경쟁사의 파산과 신생: 현금이 마이너스인 채 석 달이 지나면 파산(노선·항공기가 시장에서 사라진다), 빈자리가 있으면 가끔 신생 항공사가 거점을 정해 등장한다 */
+  private rivalLifecycle(): void {
+    const s = this.state, k = config.competitors, m = this.monthsPassed + 1;
+    for (const c of [...s.competitors]) {
+      if ((c.low ?? 0) < k.bankruptMonths) continue;
+      s.competitors = s.competitors.filter((x) => x.id !== c.id);
+      s.rivalsGone = [...s.rivalsGone, { name: c.name, month: m }].slice(-12);
+      if (s.ally === c.id) s.ally = null;
+      s.log.push(`${m}개월차: ${c.name}이(가) 파산했습니다. 노선 ${c.routes.length}개와 항공기 ${c.planes}대가 시장에서 사라졌습니다.`);
+    }
+    if (m < k.entryMinMonth || s.competitors.length >= k.max) return;
+    const eco = s.economy ?? 1, open = k.max - s.competitors.length;
+    const chance = k.entryChance * this.mods.rival * (eco >= 1 ? 1.2 : 0.5) * (1 + 0.2 * (open - 1)); // 호황이면 더 잘 생기고, 빈자리가 많을수록 더 잘 생긴다
+    if (this.rng.next() >= chance) return;
+    const used = new Set([...s.competitors.map((c) => c.name), ...s.rivalsGone.filter((g) => m - g.month < 36).map((g) => g.name)]), hubs = new Set(s.competitors.map((c) => c.hub));
+    const pool = COMP_NAMES.filter(([name, , hub]) => !used.has(name) && !hubs.has(hub));
+    if (!pool.length) return;
+    const w = pool.map(([, , hub]) => Math.sqrt(marketSize(cityById(hub)))), pick = (() => { let x = this.rng.next() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < pool.length; i++) { x -= w[i]; if (x <= 0) return pool[i]; } return pool[pool.length - 1]; })();
+    const eff = 1 + (this.rng.next() * 2 - 1) * k.effSpread;
+    s.competitors.push({ id: s.nextRival++, name: pick[0], style: pick[1], hub: pick[2], cash: Math.round(k.startCash * this.mods.rival * k.entryCash), planes: 0, routes: [], born: this.monthsPassed, eff, low: 0 });
+    s.log.push(`${m}개월차: 신생 항공사 ${pick[0]}이(가) ${cityById(pick[2]).name}을(를) 거점으로 취항을 시작했습니다(${pick[1] === 'low' ? '저가형' : '프리미엄형'}).`);
   }
 
   private endMonth(): void {
@@ -728,7 +758,7 @@ export class Game {
     }
     if (st.formatVersion < 4) st.economy = st.economy ?? 1; // 형식 3 → 4: 경기 보통
     if (st.formatVersion < 8) st.ally = st.ally ?? null; // 형식 7 → 8
-    if (st.formatVersion < 9 && st.competitors.length < config.competitors.count) st.competitors.push(...Game.initCompetitors(config.difficulty[st.difficulty ?? 'normal'].rival, st.competitors.length)); // 형식 8 → 9: 새 경쟁사를 덧붙인다
+    if (st.formatVersion < 10) { st.nextRival = Math.max(0, ...st.competitors.map((c) => c.id)) + 1; st.rivalsGone = []; } // 형식 9 → 10: 경쟁사는 있는 그대로 두고, 이후 파산·신생이 일어난다
     if (st.formatVersion < 7) for (const r of st.routes) r.priority = r.priority ?? 1; // 형식 6 → 7
     if (st.formatVersion < 6) { st.fuel = st.fuel ?? 1; st.hedge = st.hedge ?? null; st.freeze = st.freeze ?? 0; for (const p of st.planes) { p.cond = p.cond ?? 1; p.shop = p.shop ?? 0; } } // 형식 5 → 6
     if (st.formatVersion < 5) { st.base = st.base ?? 'ICN'; st.difficulty = st.difficulty ?? 'normal'; st.scenario = st.scenario ?? 'free'; } // 형식 4 → 5
