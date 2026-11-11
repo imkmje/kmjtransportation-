@@ -200,7 +200,7 @@ check('펼침 상태 기억', await page.locator('#shop').evaluate((el) => el.op
 // 0.19.0: 노선 화면 구매·추천, 노선 정렬, 소리 크기, 더블 탭 확대 차단
 await page.evaluate(() => { window.__air.game.state.cash = 500; window.__air.render(); });
 await page.click('#tabs button[data-tab="routes"]');
-check('노선 목록: 정렬 버튼 3개와 월 합계', (await page.locator('#panel button[data-act="routeSort"]').count()) === 3 && (await page.locator('#panel h2').innerText()).includes('월 합계'));
+check('노선 목록: 정렬 버튼 4개와 월 합계', (await page.locator('#panel button[data-act="routeSort"]').count()) === 4 && (await page.locator('#panel h2').innerText()).includes('월 합계'));
 await page.click('#panel button[data-act="routeSort"][data-v="loss"]');
 check('정렬 바꾸기: 적자 먼저가 선택됨', await page.locator('#panel button[data-act="routeSort"][data-v="loss"]').evaluate((el) => el.classList.contains('on')));
 await page.locator('#panel button[data-act="goRoute"]').first().click();
@@ -363,6 +363,21 @@ await page.click('#ask button[data-v="1"]');
 check('경쟁사 인수: 눌러서 인수하면 경쟁사가 하나 줄고 로그가 남음', (await page.evaluate(() => window.__air.game.state.competitors.length)) === nComp - 1 && (await page.evaluate(() => window.__air.game.state.log.at(-1))).includes('인수'));
 await page.evaluate(() => { window.__air.game.state.planes[0].cond = 0.02; window.__air.game.advanceDays(31); window.__air.report(); });
 check('월간 보고: "이번 달 결정할 것" 버튼과 자세히 보기', (await page.locator('#report button.todo').count()) > 0 && (await page.locator('#report summary').count()) === 1, await page.evaluate(() => `${window.__air.game.state.status} ${window.__air.game.state.cash} ${document.querySelector('#report')?.hidden} ${document.querySelectorAll('#report button.todo').length} ${document.querySelectorAll('#report summary').length}`));
+// 1.1.2: 대기 항공기 추천·접이식 상태 유지·점유율
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 900; g.buyPlane('A220'); window.__air.render(); });
+await page.click('#tabs button[data-tab="fleet"]');
+const idleSum = page.locator('#panel .rowc details.more > summary').first(); await idleSum.click();
+check('기단: 대기 중 항공기를 누르면 배정 추천 노선이 뜸', (await page.locator('#panel .rowc details.more[open] button[data-act="assignTo"]').count()) > 0);
+await page.locator('#panel .rowc details.more[open] button[data-act="assignTo"]').first().click();
+check('추천 노선에 바로 배정됨', await page.evaluate(() => window.__air.game.state.planes.some((p) => p.routeId !== null && p.id === window.__air.game.state.planes.at(-1).id)));
+await page.click('#tabs button[data-tab="map"]'); await openAll();
+const sc2 = await page.evaluate(() => window.__air.screenOf('ICN')); await page.mouse.click(sc2.x, sc2.y); await page.waitForTimeout(150);
+await page.locator('#panel details.more > summary', { hasText: '나머지 도시' }).click();
+await page.evaluate(() => { window.__air.game.state.cash = 3; window.__air.render(); });
+check('나머지 도시 보기: 화면이 다시 그려져도 펼친 상태가 유지됨', await page.locator('#panel details.more[open] > summary', { hasText: '나머지 도시' }).count() === 1);
+check('도시 화면: 도착지에 계절 막대가 있음', (await page.locator('#panel .season').count()) > 0);
+await page.click('#tabs button[data-tab="routes"]');
+check('노선 목록: 점유율(또는 독점) 표시와 점유율 정렬 버튼', (await page.locator('#panel').innerText()).includes('독점') || (await page.locator('#panel').innerText()).includes('점유'));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

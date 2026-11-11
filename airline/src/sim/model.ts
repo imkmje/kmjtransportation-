@@ -8,8 +8,12 @@ export const distanceKm = (a: City, b: City): number => haversineKm(a.lat, a.lon
 export const baseFare = (km: number): number => config.fare.base + config.fare.perKm * km;
 /** 시장 규모: 인구 × 소득 계수 × 성장 배수 */
 export const marketSize = (c: City, growth = 1): number => c.pop * c.income * growth;
-/** 계절 계수: 성수기 달이면 peak.factor, 아니면 1 (월은 1~12) */
-export const seasonOf = (c: City, month: number): number => (c.peak.months.includes(month) ? c.peak.factor : 1);
+/** 계절 계수(월은 1~12): 성수기 달은 peak.factor, 앞뒤 한 달은 절반, 그보다 먼 달은 조금 낮다. 모든 도시에 공통 월별 계수(방학·휴가철)도 곱한다 */
+export const seasonOf = (c: City, month: number): number => {
+  let w = 0;
+  for (const m of c.peak.months) { const gap = Math.abs(month - m), dist = Math.min(gap, 12 - gap); w = Math.max(w, dist === 0 ? 1 : dist === 1 ? 0.5 : 0); }
+  return (1 + (c.peak.factor - 1) * w - (w === 0 ? config.demand.offSeason : 0)) * config.demand.holiday[(month - 1 + 12) % 12];
+};
 
 /** 운임 비율에 따른 수요 계수(기준 운임이면 1, 비싸면 지수적으로 감소) */
 export const priceFactor = (fare: number, base: number, elasticity = config.demand.elasticity): number => Math.exp(-(fare / base - 1) * elasticity);
