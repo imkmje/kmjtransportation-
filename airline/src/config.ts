@@ -9,11 +9,11 @@ export const config = {
   rules: { bankruptCash: -5, bankruptMonths: 2, winProfit: 100, timeLimitMonths: 24, winCities: 12 },
   events: { chancePerMonth: 0.42, costGrowth: 0.025, costMaxMult: 3, costPerPlane: 0.05, costFreePlanes: 2, festivalChance: 0.06, festivalLead: 6 }, // 사건 대응 비용 = 기본 × min(3, 1 + 2.5% × 지난 개월) × (1 + 5% × (항공기 수 − 2)). festival: 예고된 행사(올림픽·월드컵·축제)가 한 달에 잡힐 확률과 예고 기간(개월)
   invest: { // 허브 투자(도시별, 각 3단계): 취항 중인 도시나 출발 도시에만. 단계 총합 × upkeep($M)이 매달 고정비로 든다
-    terminal: { name: '터미널 확장', prices: [10, 22, 40], slots: 4, delay: 0.15, desc: '공항 슬롯 +4, 이 공항의 혼잡 지연 −15%(단계마다)' },
-    mro: { name: '정비 기지', prices: [8, 18, 32], decay: 0.12, desc: '이 도시를 오가는 항공기의 정비 상태가 12% 덜 닳음(단계마다)' },
-    lounge: { name: '프리미엄 라운지', prices: [6, 14, 26], biz: 0.08, desc: '이 도시를 오가는 노선의 비즈니스 수요 +8%(단계마다, 양끝 평균)' },
+    terminal: { name: '터미널 확장', prices: [8, 15, 26], slots: 4, delay: 0.15, desc: '공항 슬롯 +4, 이 공항의 혼잡 지연 −15%(단계마다)' },
+    mro: { name: '정비 기지', prices: [7, 13, 22], decay: 0.15, serviceCut: 0.2, desc: '이 도시를 오가는 항공기의 정비 상태가 15% 덜 닳고 점검 비용이 20% 쌈(단계마다)' },
+    lounge: { name: '프리미엄 라운지', prices: [6, 12, 20], biz: 0.18, desc: '이 도시를 오가는 노선의 비즈니스 수요 +18%(단계마다, 양끝 평균)' },
   },
-  investUpkeep: 0.1, // 허브 투자 단계 총합 1당 매달 드는 운영비($M)
+  investUpkeep: 0.05, // 허브 투자 단계 총합 1당 매달 드는 운영비($M)
   eras: { firstFree: 18, lead: 6, rest: 6, list: [ // 시대: 몇 해마다 규칙이 바뀐다. 6개월 전에 예고하고, 끝나면 6개월 쉬었다가 다음 시대를 예고한다(첫 시대는 24개월차 이후)
     { id: 'oil', name: '유가 위기 시대', desc: '연료 가격이 높은 수준에서 유지됩니다. 연료 계약과 효율 좋은 신형기가 중요해집니다.', months: [30, 48], fuel: 1.35 },
     { id: 'carbon', name: '탄소세 시대', desc: '낡은 기체(7년 초과)의 운영비가 25% 늘고, 새로 출시된 기종은 8% 줄어듭니다. 기단을 새로 바꿀 때입니다.', months: [36, 60], oldCost: 0.25, newCost: -0.08 },
@@ -22,7 +22,7 @@ export const config = {
     { id: 'dereg', name: '항공 자유화 시대', desc: '신생 항공사가 두 배로 많이 생기고, 운임 전쟁도 두 배로 잦아집니다.', months: [30, 48], entry: 2, war: 2 },
     { id: 'slump', name: '장기 침체기', desc: '경기가 오래 나쁩니다. 은행이 대출을 자주 멈추니 현금을 아끼세요.', months: [24, 36], econ: 0.92 },
   ] } as { firstFree: number; lead: number; rest: number; list: { id: string; name: string; desc: string; months: [number, number]; fuel?: number; econ?: number; oldCost?: number; newCost?: number; oldSlots?: number; entry?: number; war?: number }[] },
-  contract: { firstMonth: 3, gap: [2, 4], maxTotal: 4, maxActive: 2, offerMonths: 3, rewardMonths: 6, rewardMin: 15, rewardMax: 250, repLoss: 0.02, otpTarget: 0.95 }, // 계약 제안: 보상은 최근 월 이익의 6배(최소 $15M)로 크게 주고, 실패해도 평판만 조금 깎인다
+  contract: { planeBook: 1, firstMonth: 3, gap: [2, 4], maxTotal: 4, maxActive: 2, offerMonths: 3, rewardMonths: 6, rewardMin: 15, rewardMax: 250, repLoss: 0.02, otpTarget: 0.95 }, // 계약 제안: 보상은 최근 월 이익의 6배(최소 $15M)로 크게 주고, 실패해도 평판만 조금 깎인다
   auction: { price: 0.4, age: 60, cond: 0.75, months: 3, maxLots: 4 }, // 파산한 경쟁사의 항공기 경매: 새 기체 값의 40%, 5년 된 정비 상태 75% 기체, 3개월간
   fuel: { reversion: 0.1, noise: 0.18, min: 0.6, max: 1.9, share: 0.4, hedgeCost: 1.2, hedgeMonths: 6 }, // 연료 가격 지수와 계약. share: 운영비 중 연료 비중
   delay: { congestStart: 0.7, congestMax: 0.25, condStart: 0.6, condWeight: 0.3, snow: 0.15, strike: 0.1, min: 0.4, demandWeight: 0.15, compensation: 0.12, priorityFee: 0.1, priorityMult: [0, 1, 0.75, 0.5], repWeight: 0.3 }, // 정시율: 공항 혼잡·정비 상태·사건에 따라 떨어지고, 수요·평판·보상금에 영향
@@ -51,13 +51,13 @@ export const config = {
   ally: { fee: 0.4, weight: 0.5 }, // 제휴(공동 운항): 월 수수료(M). 제휴사가 같은 노선에서 우리 손님을 빼앗는 힘이 절반이 된다
   transfer: { share: 0.1, maxDetour: 1.4, seatCap: 0.3 }, // seatCap: 이어지는 노선 좌석의 30%까지만 환승 손님으로 센다 // 환승: 직항이 없는 도시 쌍 수요의 10%가 우리 허브를 거쳐 간다(돌아가는 거리가 직선의 1.4배 이내일 때)
   upgrades: { // 회사 업그레이드: 돈을 내고 영구히 올린다(각 3단계, 단계가 오를수록 비싸다). effect는 1단계당 효과
-    prices: [8, 18, 35],
+    prices: [8, 13, 20], // 같은 단계는 같은 값. 측정 도구(payback 테스트)로 "중반 항공사에서 본전을 뽑는 기간"이 비슷해지도록 맞췄다
     list: [
-      { id: 'marketing', name: '브랜드 마케팅', desc: '모든 노선의 손님 수요 +4%', effect: 0.04 },
-      { id: 'ops', name: '운항 최적화', desc: '노선 운영비 −3%', effect: 0.03 },
-      { id: 'hangar', name: '정비 격납고', desc: '정비 상태가 닳는 속도 −25%, 점검 비용 −15%', effect: 0.25, effect2: 0.15 },
-      { id: 'ground', name: '지상 조업 강화', desc: '지연(정시율 하락) −20%', effect: 0.2 },
-      { id: 'service', name: '기내 서비스', desc: '비즈니스석 수요 +10%', effect: 0.1 },
+      { id: 'marketing', name: '브랜드 마케팅', desc: '모든 노선의 손님 수요 +6%', effect: 0.06 },
+      { id: 'ops', name: '운항 최적화', desc: '노선 운영비 −5%', effect: 0.05 },
+      { id: 'hangar', name: '정비 격납고', desc: '정비 상태가 닳는 속도 −15%, 점검 비용 −10%', effect: 0.15, effect2: 0.1 },
+      { id: 'ground', name: '지상 조업 강화', desc: '지연(정시율 하락) −35%', effect: 0.35 },
+      { id: 'service', name: '기내 서비스', desc: '비즈니스석 수요 +20%', effect: 0.2 },
     ],
   },
   hub: { perLink: 0.04, max: 0.16 }, // 한 도시에 노선이 여러 개면 그 도시 수요 +4%씩(최대 +16%)

@@ -236,7 +236,7 @@ export function startApp(): void {
       <button class="wide ${s.autoFare ? '' : 'ghost'}" data-act="autoFare">자동 운임: <b>${s.autoFare ? '켜짐' : '꺼짐'}</b></button>
       <div class="seg">${([['profit', '이익 높은 순'], ['loss', '적자 먼저'], ['made', '만든 순']] as const).map(([v, t]) => `<button data-act="routeSort" data-v="${v}" class="${routeSort === v ? 'on' : ''}">${t}</button>`).join('')}</div>
       <div class="list">${rows.map((x) => `<button class="card" data-act="goRoute" data-id="${x.r.id}">${routeSummary(x.r.id)}</button>`).join('')}</div>
-      <p class="hint">켜면 매주 모든 노선의 일반석 운임을 ‘자리를 꽉 채우는 가장 높은 운임’으로 맞춥니다. 비즈니스·화물 운임은 직접 정합니다.</p>`;
+      <p class="hint">켜면 매주 모든 노선의 일반석 운임을 ‘자리를 꽉 채우는 가장 높은 운임’으로 맞춥니다(비즈니스석 포함). 화물 운임은 직접 정합니다.</p>`;
   }
 
   /** 노선 화면의 '항공기 추가': 이 노선을 날 수 있는 기종과 예상(추정), 바로 사기 */

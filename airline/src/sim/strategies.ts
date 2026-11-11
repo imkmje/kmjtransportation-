@@ -141,7 +141,7 @@ export const smart: Strategy = {
 };
 
 /** 새 기능 활용 전략: 종합형에 기능을 하나씩(또는 전부) 더한 것. 어떤 기능이 너무 세거나 쓸모없는지 재기 위한 측정용 */
-export interface Feat { upgrades?: boolean; hubs?: boolean; contracts?: boolean; newgen?: boolean; auction?: boolean; rights?: boolean }
+export interface Feat { upgrades?: boolean | string[]; hubs?: boolean | ('terminal' | 'mro' | 'lounge')[]; contracts?: boolean; newgen?: boolean; auction?: boolean; rights?: boolean }
 export function featured(name: string, f: Feat): Strategy {
   return {
     name,
@@ -150,10 +150,10 @@ export function featured(name: string, f: Feat): Strategy {
       const s = g.state;
       leveragedStep(g, f.newgen ? ['B787', 'A350', 'B737NX', 'B737'] : ['A350', 'B737']);
       smartExtras(g);
-      if (f.upgrades) for (const u of ['marketing', 'ops', 'service', 'ground', 'hangar']) { const price = g.upgradePrice(u); if (price !== null && s.cash > price + 25) { g.buyUpgrade(u); break; } }
+      if (f.upgrades) for (const u of Array.isArray(f.upgrades) ? f.upgrades : ['marketing', 'ops', 'service', 'ground', 'hangar']) { const price = g.upgradePrice(u); if (price !== null && s.cash > price + 25) { g.buyUpgrade(u); break; } }
       if (f.hubs) { // 혼잡한 허브는 터미널, 여유 있으면 정비 기지·라운지
         const cities = [...g.servedCities()].sort((a, b) => g.slotsUsed(b) / g.slotCapacity(b) - g.slotsUsed(a) / g.slotCapacity(a)).slice(0, 3);
-        outer: for (const c of cities) for (const kind of ['terminal', 'mro', 'lounge'] as const) {
+        outer: for (const c of cities) for (const kind of Array.isArray(f.hubs) ? f.hubs : (['terminal', 'mro', 'lounge'] as const)) {
           const price = g.hubPrice(c, kind); if (price === null) continue;
           if (kind === 'terminal' && g.slotsUsed(c) / g.slotCapacity(c) < 0.8) continue;
           if (s.cash > price + (kind === 'terminal' ? 25 : 40)) { g.buyHub(c, kind); break outer; }

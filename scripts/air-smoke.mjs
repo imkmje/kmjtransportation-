@@ -16,6 +16,7 @@ const shot = (n) => page.screenshot({ path: (process.argv[2] ?? 'air.png').repla
 await page.goto('http://localhost:4190/air/');
 await page.waitForSelector('canvas');
 check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
+check('제목 화면: 버전 1.0.0', (await page.locator('#t-version').innerText()) === 'v1.0.0', await page.locator('#t-version').innerText());
 await shot('title');
 await page.click('#t-new');
 check('새 게임 설정 화면: 자유 모드가 기본 선택, 시나리오 8개·난이도 3개', (await page.locator('#setup-scen button.on').getAttribute('data-sc')) === 'sandbox' && (await page.locator('#setup-scen button').count()) === 8 && (await page.locator('#setup-diff button').count()) === 3);
