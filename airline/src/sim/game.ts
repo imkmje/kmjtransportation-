@@ -5,7 +5,7 @@ import { marketSize, baseFare, baseSlots, bizDemandShare, blockHours, canFly, ca
 import type { Competitor, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
 
 export const FORMAT_VERSION = 11; // 10 → 11: 경매·예고된 행사 / 9 → 10: 경쟁사가 생기고 파산한다(경쟁사 ID 카운터·파산 기록) / 8 → 9: 경쟁사 수 증가 / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
-export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean } // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
+export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean; rights?: boolean } // rights: 자유 모드에서 지역 운수권 제한을 켠다 // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
 export interface RouteOption { type: string; weekly: number; price: number; profit: number; payback: number | null; slotCost: number; slotNeeds: { city: string; n: number }[]; recommended: boolean } // profit: 이 기종 한 대를 더 넣었을 때 늘어나는 월 이익(고정비·슬롯 임대료 반영), payback: 새 기체 값 ÷ profit(개월)
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
@@ -35,7 +35,7 @@ export class Game {
     this.state = {
       formatVersion: FORMAT_VERSION, seed, rng: this.rng.getState(), day: 0,
       cash: Math.round(sc.cash * dm.cash * 10) / 10, reputation: config.start.reputation, nextId: 1,
-      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, nextRival: config.competitors.start + 1, rivalsGone: [], auctions: [], upcoming: [], freeze: 0, sandbox: !!opts.sandbox, history: [],
+      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, nextRival: config.competitors.start + 1, rivalsGone: [], auctions: [], upcoming: [], rights: opts.sandbox && opts.rights ? [cityById(base).region] : undefined, freeze: 0, sandbox: !!opts.sandbox, history: [],
       base, difficulty: diff, scenario: sc.id,
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [],
     };
@@ -215,6 +215,34 @@ export class Game {
     const p: Plane = { id: this.state.nextId++, type, book: price, routeId: null, weekly: 0, age: 0, bizShare: 0, cond: 1, shop: 0, ...extra };
     this.state.planes.push(p);
     return p;
+  }
+  // ---- 지역 운수권 ----
+  get rightsOn(): boolean { return !!this.state.rights; }
+  regionName(region: string): string { return config.rights.regions[region] ?? region; }
+  /** 이 도시로 노선을 열 수 있는가(운수권 제한이 없으면 항상 참) */
+  cityOpen(cityId: string): boolean { return !this.state.rights || this.state.rights.includes(cityById(cityId).region); }
+  /** 지역 운수권 값($M): 이미 가진 지역과 가까울수록 싸다 */
+  rightsPrice(region: string): number {
+    const owned = CITIES.filter((c) => this.state.rights?.includes(c.region)); let d = Infinity;
+    for (const a of CITIES.filter((c) => c.region === region)) for (const o of owned) d = Math.min(d, distanceKm(a, o));
+    return (config.rights.price.find(([lim]) => d < lim) ?? config.rights.price[config.rights.price.length - 1])[1];
+  }
+  /** 다음 지역을 사려면 필요한 누적 이익($M) */
+  get rightsNeed(): number { const n = this.state.rights?.length ?? 1, k = config.rights.need; return k[Math.min(n - 1, k.length - 1)]; }
+  regionInfo(region: string) {
+    const owned = !!this.state.rights?.includes(region), price = this.rightsPrice(region), need = this.rightsNeed;
+    return { id: region, name: this.regionName(region), owned, price, need, profitOk: this.state.cumProfit >= need, cashOk: this.state.cash >= price, cities: CITIES.filter((c) => c.region === region).map((c) => c.id) };
+  }
+  buyRights(region: string): Result {
+    if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
+    if (!this.state.rights) return fail('이 게임에는 운수권 제한이 없습니다');
+    if (!(region in config.rights.regions)) return fail('없는 지역입니다');
+    const i = this.regionInfo(region);
+    if (i.owned) return fail('이미 운수권이 있는 지역입니다');
+    if (!i.profitOk) return fail(`누적 이익 $${i.need}M 이상이 필요합니다 (지금 $${this.state.cumProfit.toFixed(1)}M)`);
+    if (!i.cashOk) return fail(`현금이 모자랍니다 (필요 $${i.price}M, 지금 $${this.state.cash.toFixed(1)}M)`);
+    this.state.cash -= i.price; this.state.rights = [...this.state.rights, region];
+    return { ok: true };
   }
   /** 출시된 기종인가(처음부터 있는 기종이거나, 출시 개월이 지났거나, 이미 갖고 있으면 참) */
   isAvailable(typeId: string): boolean { const t = typeById(typeId); return this.monthsPassed >= (t.from ?? 0) || this.state.planes.some((p) => p.type === typeId); }
@@ -460,6 +488,7 @@ export class Game {
   openRoute(aId: string, bId: string): Result<{ routeId: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     if (aId === bId) return fail('같은 도시입니다');
+    for (const id of [aId, bId]) if (!this.cityOpen(id)) return fail(`${cityById(id).name}은(는) ${this.regionName(cityById(id).region)} 지역이라 운수권이 필요합니다. 지도 탭의 '지역 운수권'에서 살 수 있습니다.`);
     const A = cityById(aId), B = cityById(bId);
     const ex = this.state.routes.find((r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
     if (ex) { ex.open = true; return { ok: true, routeId: ex.id }; }
