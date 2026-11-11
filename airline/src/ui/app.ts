@@ -5,11 +5,11 @@ import type { Difficulty } from '../sim/types';
 import { baseFare, canFly, distanceKm, maxWeeklyRoundTrips, rawMonthlyDemand } from '../sim/model';
 import { fillFare } from '../sim/strategies';
 import { advise, type Advice } from '../sim/advice';
-import { ACHIEVEMENTS, achieved } from '../sim/achievements';
+import { ACHIEVEMENTS, LADDERS, achieved, nextSteps, reachedSteps } from '../sim/achievements';
 import { AIR_VERSION } from '../version';
 import { createMapView } from './mapview';
 import { icon } from './icons';
-import { musicOn, play, renderPeaks, setMusic, setSound, soundOn, type Sfx } from './sound';
+import { musicOn, play, renderPeaks, setMusic, setSound, setVolumes, soundOn, volumes, type Sfx } from './sound';
 import { bestWorst, routeMonthStats } from '../sim/report';
 import { esc, eulReul, fare, km, money, num, pct } from './fmt';
 
@@ -49,7 +49,7 @@ export function startApp(): void {
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(game.toJSON())); } catch { /* 저장 불가 환경 */ } };
   const hasSave = (): boolean => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
   const load = (): boolean => {
-    try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false; game = Game.fromJSON(JSON.parse(raw)); lastMonth = game.monthsPassed; seenLog = game.state.log.length; seenEvents = new Set(); achSeen = new Set(achieved(game)); recorded = game.state.status !== 'playing'; return true; } catch { toast('저장 파일을 불러오지 못했습니다'); return false; }
+    try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false; game = Game.fromJSON(JSON.parse(raw)); lastMonth = game.monthsPassed; seenLog = game.state.log.length; seenEvents = new Set(); achSeen = new Set(achieved(game)); msSeen = new Set(reachedSteps(game)); recorded = game.state.status !== 'playing'; return true; } catch { toast('저장 파일을 불러오지 못했습니다'); return false; }
   };
 
   const map = createMapView($<HTMLCanvasElement>('#map'), () => game, {
@@ -91,6 +91,17 @@ export function startApp(): void {
   });
 
   // ---- 패널 내용 ----
+  /** 배정을 시도하고, 슬롯이 모자라면 창을 옮기지 않고 그 자리에서 합계 금액을 보여 주고 확인받아 사서 배정한다 */
+  function assignOffer(planeId: number, routeId: number, weekly: number): boolean {
+    const r = game.assign(planeId, routeId, weekly);
+    if (r.ok) return true;
+    if (!r.error.includes('슬롯')) { err(r.error); return false; }
+    const sf = game.slotShortfall(planeId, routeId, weekly);
+    if (!window.confirm(`슬롯이 모자랍니다. ${sf.needs.map((x) => `${cityById(x.city).name} ${x.n}개`).join(', ')}를 ${money(sf.cost)}에 사고 배정할까요?\n(슬롯마다 월 임대료 ${money(config.slot.lease)})`)) return false;
+    const r2 = game.assignBuyingSlots(planeId, routeId, weekly);
+    if (!r2.ok) { err(r2.error); return false; }
+    play('buy'); return true;
+  }
   const err = (m: string) => { play('error'); toast(m); };
   const HELP_HTML = `<h4>기본 흐름</h4><ul><li>지도에서 도시를 눌러 <b>노선을 열고</b>, 노선 탭에서 <b>항공기를 배정</b>한 뒤 시간을 흘립니다.</li><li><b>운임</b>이 높으면 손님이 줄고, 낮으면 자리가 모자랍니다. 탑승률 85~95%가 대체로 좋습니다. 노선 탭의 <b>자동 운임</b>을 켜면 매주 알아서 맞춥니다.</li></ul>
 <h4>공항과 허브</h4><ul><li><b>슬롯</b>: 공항마다 하루 이착륙 한도가 있습니다. 꽉 차면 지연이 늘고, 도시 화면에서 살 수 있습니다.</li><li><b>허브·환승</b>: 한 도시에 노선이 모이면 수요가 늘고, 직항이 없는 도시 사이 손님이 우리 허브에서 갈아탑니다.</li><li><b>정시율</b>이 낮으면 손님이 줄고 보상금이 나갑니다. 원인은 슬롯 혼잡·정비 상태·폭설·파업입니다.</li></ul>
@@ -101,14 +112,18 @@ export function startApp(): void {
   function showInfo(title: string, html: string) { $('#info-title').textContent = title; $('#info-body').innerHTML = html; $('#info').hidden = false; }
   function routeLabel(a: string, b: string) { return `${cityById(a).name} ⇄ ${cityById(b).name}`; }
 
-  let advList: Advice[] = [], achSeen = new Set<string>();
+  let advList: Advice[] = [], achSeen = new Set<string>(), msSeen = new Set<string>(), routeSort: 'profit' | 'loss' | 'made' = 'profit';
+  const rbuyOpen = new Map<number, boolean>(); // 노선별 '항공기 추가' 펼침 상태(누른 것만 기억)
   function viewMap(): string {
     const s = game.state;
     if (!selCity) {
       advList = advise(game);
       const todo = advList.length ? `<h3>지금 할 일 <small>(눌러서 이동)</small></h3><div class="list">${advList.map((a, i) => `<button class="card" data-act="advice" data-i="${i}"><div class="row"><div class="grow"><span class="dot ${a.level}"></span>${esc(a.text)}</div></div></button>`).join('')}</div>` : '';
       const comp = `<h3>경쟁사</h3><div class="list">${s.competitors.map((k) => `<div class="row"><div class="grow"><b>${esc(k.name)}</b><small>${k.style === 'low' ? '저가형' : '프리미엄형'} · 거점 ${esc(cityById(k.hub).name)} · 항공기 ${k.planes}대 · 노선 ${k.routes.length}개${s.ally === k.id ? ' · <b class="pos">제휴 중</b>' : ''}</small></div><button class="ghost small" data-act="ally" data-id="${k.id}">${s.ally === k.id ? '제휴 해지' : `제휴 ${money(config.ally.fee)}/월`}</button></div>`).join('')}<p class="hint">제휴(공동 운항)하면 그 항공사가 같은 노선에서 우리 손님을 덜 빼앗고, 운임 경쟁도 걸어오지 않습니다. 한 번에 한 곳만.</p>${s.routes.some((r) => r.open) ? `<div class="row"><div class="grow"><b>우리 시장 점유율</b><small>경쟁사와 겹치는 노선에서의 좌석 점유</small></div><div class="right">${pct(game.marketShare)}</div></div>` : ''}</div>`;
-      if (s.sandbox) return `<h2>지도</h2><p class="hint">자유 모드입니다. 목표와 기한 없이 계속 운영합니다. 파산만 조심하세요.</p>${todo}${comp}`;
+      if (s.sandbox) {
+        const ms = nextSteps(game).map(({ ladder: l, value, next, prev }) => { const fmt = (n: number) => (l.unit === 'M' ? money(n) : `${num(n)}${l.unit}`); return `<div class="ms"><small>${esc(l.name)} ${fmt(value)}${next === null ? ' · 최고 단계 달성' : ` → 다음 이정표 ${fmt(next)}`}</small><div class="bar"><i style="width:${next === null ? 100 : Math.min(100, Math.max(0, ((value - prev) / (next - prev)) * 100))}%"></i></div></div>`; }).join('');
+        return `<h2>지도</h2><p class="hint"><b>자유 모드</b> · ${esc(cityById(s.base).name)} 시작 · 난이도 ${DIFF_NAME[s.difficulty ?? 'normal']}<br>목표와 기한 없이 마음껏 키워 보세요. 파산만 조심하세요.</p>${todo}<h3>이정표</h3>${ms}${comp}`;
+      }
       return `<h2>지도</h2>
         <p class="hint"><b>${esc(game.scenario.name)}</b> · ${esc(cityById(s.base).name)} 시작 · 난이도 ${DIFF_NAME[s.difficulty ?? 'normal']}<br>${esc(game.scenario.desc)}</p>
         <div class="goal"><div><b>목표</b> (${game.scenario.mode === 'all' ? '모두 달성하면 승리' : game.scenario.goals.length > 1 ? '하나만 달성해도 승리' : '달성하면 승리'})</div>
@@ -136,16 +151,39 @@ export function startApp(): void {
     const r = game.route(rId)!, d = game.routeDay(r), planes = game.planesOn(rId), profit = (d.revenue - d.cost) * config.daysPerMonth;
     const lf = d.seats > 0 ? d.pax / d.seats : 0;
     return `<div class="row"><div class="grow"><b>${r.name ? `${esc(r.name)} · ` : ''}${routeLabel(r.a, r.b)}${game.warOn(r) ? ` <span class="neg">${icon('war', 14)}</span>` : ''}</b><small>${km(distanceKm(cityById(r.a), cityById(r.b)))} · 항공기 ${planes.length}대 · 탑승률 ${planes.length ? pct(lf) : '-'}</small></div>
-      <div class="right ${profit >= 0 ? 'pos' : 'neg'}">${planes.length ? money(profit) + '/월' : '배정 필요'}</div></div>`;
+      <div class="right ${profit >= 0 ? 'pos' : 'neg'}">${planes.length ? `${profit < 0 ? '<span class="badge">적자</span> ' : ''}${money(profit)}/월` : '<span class="badge need">배정 필요</span>'}</div></div>`;
   }
 
   function viewRoutes(): string {
     const s = game.state, open = s.routes.filter((r) => r.open);
     if (selRoute !== null && game.route(selRoute)?.open) return viewRouteDetail(selRoute);
     if (!open.length) return `<h2>노선</h2><p class="hint">아직 열린 노선이 없습니다. <b>지도 탭</b>에서 도시를 눌러 노선을 열어 보세요.</p>`;
-    return `<h2>노선</h2><button class="wide ${s.autoFare ? '' : 'ghost'}" data-act="autoFare">자동 운임: <b>${s.autoFare ? '켜짐' : '꺼짐'}</b></button><p class="hint">켜면 매주 모든 노선의 일반석 운임을 ‘자리를 꽉 채우는 가장 높은 운임’으로 맞춥니다. 비즈니스·화물 운임은 직접 정합니다.</p><div class="list">${open.map((r) => `<button class="card" data-act="goRoute" data-id="${r.id}">${routeSummary(r.id)}</button>`).join('')}</div>`;
+    const rows = open.map((r) => { const d = game.routeDay(r), n = game.planesOn(r.id).length; return { r, n, profit: n ? (d.revenue - d.cost) * config.daysPerMonth : 0 }; });
+    // 항공기가 없는 노선(할 일)은 늘 맨 위, 나머지는 선택한 순서
+    rows.sort((a, b) => (a.n === 0 ? 0 : 1) - (b.n === 0 ? 0 : 1) || (routeSort === 'profit' ? b.profit - a.profit : routeSort === 'loss' ? a.profit - b.profit : a.r.id - b.r.id));
+    const losing = rows.filter((x) => x.n && x.profit < 0).length, total = rows.reduce((a, x) => a + x.profit, 0);
+    return `<h2>노선 <small>${open.length}개${losing ? ` · 적자 ${losing}개` : ''} · 월 합계 ${money(total)}</small></h2>
+      <button class="wide ${s.autoFare ? '' : 'ghost'}" data-act="autoFare">자동 운임: <b>${s.autoFare ? '켜짐' : '꺼짐'}</b></button>
+      <div class="seg">${([['profit', '이익 높은 순'], ['loss', '적자 먼저'], ['made', '만든 순']] as const).map(([v, t]) => `<button data-act="routeSort" data-v="${v}" class="${routeSort === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div class="list">${rows.map((x) => `<button class="card" data-act="goRoute" data-id="${x.r.id}">${routeSummary(x.r.id)}</button>`).join('')}</div>
+      <p class="hint">켜면 매주 모든 노선의 일반석 운임을 ‘자리를 꽉 채우는 가장 높은 운임’으로 맞춥니다. 비즈니스·화물 운임은 직접 정합니다.</p>`;
   }
 
+  /** 노선 화면의 '항공기 추가': 이 노선을 날 수 있는 기종과 예상(추정), 바로 사기 */
+  function buyOptionsHtml(rId: number): string {
+    const opts = game.routeOptions(rId), rec = opts.find((o) => o.recommended), s = game.state, n = game.planesOn(rId).length;
+    if (!opts.length) return '<p class="hint">이 노선을 날 수 있는 기종이 없습니다.</p>';
+    const open = rbuyOpen.get(rId) ?? n === 0; // 비행기가 하나도 없는 노선은 펼쳐서 보여 준다
+    const slotsNote = (o: typeof opts[number]) => (o.slotCost > 0 ? `<small class="warn">슬롯 ${o.slotNeeds.map((x) => `${esc(cityById(x.city).name)} ${x.n}개`).join('·')} 추가 필요 (${money(o.slotCost)})</small><br>` : '');
+    const leaseOk = game.leasedCount < game.leaseCap;
+    return `<details class="rbuy" data-rid="${rId}" ${open ? 'open' : ''}><summary><span>항공기 추가</span><small>${rec ? `추천 ${esc(typeById(rec.type).name)} · 회수 ${Math.round(rec.payback!)}개월` : '지금은 늘려도 이익이 안 늘어납니다'}</small></summary>
+      <p class="hint">한 대를 더 넣었을 때의 <b>추정</b>입니다(지금 수요 기준, 경기·성수기·사건에 따라 달라짐). 사면 이 노선에 최대 횟수로 바로 배정됩니다. 회수 기간 = 새 기체 값 ÷ 늘어나는 월 이익.</p>
+      ${opts.map((o) => { const t = typeById(o.type), used = Math.round(t.price * config.used.price * 10) / 10, rent = t.price * config.lease.rate, dep = rent * config.lease.deposit;
+        return `<div class="opt"><div class="top"><span><b>${esc(t.name)}</b>${o.recommended ? '<span class="badge rec">추천</span>' : ''}<br><small>${t.cls} · ${t.seats ? `${t.seats}석` : '화물기'} · 주 ${o.weekly}회</small></span>
+          <span class="right">${o.profit > 0.05 ? `<b class="pos">+${money(o.profit)}/월</b><br><small>회수 ${Math.round(o.payback!)}개월</small>` : `<b class="neg">${money(o.profit)}/월</b><br><small>손해 예상</small>`}</span></div>
+          ${slotsNote(o)}<div class="btnrow"><button data-act="rbuy" data-t="${t.id}" data-how="new" ${s.cash < t.price + o.slotCost ? 'disabled' : ''}>새것 ${money(t.price)}</button><button class="ghost" data-act="rbuy" data-t="${t.id}" data-how="used" ${s.cash < used + o.slotCost ? 'disabled' : ''}>중고 ${money(used)}</button><button class="ghost" data-act="rbuy" data-t="${t.id}" data-how="lease" ${!leaseOk || s.cash < dep + o.slotCost ? 'disabled' : ''}>임대 ${money(rent)}/월</button></div></div>`; }).join('')}
+      <small class="hint">임대 보증금은 임대료 ${config.lease.deposit}개월치, 임대 가능 ${game.leasedCount}/${game.leaseCap}대.</small></details>`;
+  }
   /** 노선 화면 아래에 늘 보이는 예상치: 운임을 움직이는 동안에도 바로 바뀐다 */
   function liveHtml(rId: number): string {
     const r = game.route(rId)!, d = game.routeDay(r), n = game.planesOn(rId).length, profit = (d.revenue - d.cost) * config.daysPerMonth;
@@ -182,13 +220,14 @@ export function startApp(): void {
       ${planes.length ? planes.map((p) => { const t = typeById(p.type), max = maxWeeklyRoundTrips(dist, t); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석${t.seats ? ` (비즈니스 ${Math.round(p.bizShare * 100)}%)` : ' · 화물기'} · 주 ${p.weekly}회 왕복 (최대 ${max})</small></div>
         <div class="stepper"><button data-act="weekly" data-id="${p.id}" data-d="-1" aria-label="횟수 줄이기">−</button><button data-act="weekly" data-id="${p.id}" data-d="1" aria-label="횟수 늘리기">+</button><button class="ghost" data-act="unassign" data-id="${p.id}">빼기</button></div></div>${t.seats ? `<div class="cabin"><small>객실:</small>${config.cabin.shares.map((sh) => `<button class="ghost small ${p.bizShare === sh ? 'on' : ''}" data-act="cabin" data-id="${p.id}" data-share="${sh}">${sh === 0 ? '일반석만' : `비즈 ${sh * 100}%`}</button>`).join('')}</div>` : ''}`; }).join('') : '<p class="hint">배정된 항공기가 없습니다.</p>'}
       ${idle.length ? `<h3>대기 중인 항공기 배정</h3>${idle.map((p) => { const t = typeById(p.type); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석 · 최대 주 ${maxWeeklyRoundTrips(dist, t)}회</small></div><button data-act="assign" data-id="${p.id}">배정</button></div>`; }).join('')}` : ''}
+      ${buyOptionsHtml(rId)}
       <button class="wide danger" data-act="close">노선 닫기</button>
       <div class="live" id="live">${liveHtml(rId)}</div>`;
   }
   const s_idlePlanes = () => game.state.planes.filter((p) => p.routeId === null);
 
   let shopOpen: boolean | null = null;
-  panel.addEventListener('click', (e) => { const sm = (e.target as HTMLElement).closest('#shop > summary'); if (sm) shopOpen = !(sm.parentElement as HTMLDetailsElement).open; }); // 사용자가 누른 것만 기억(화면을 다시 그릴 때 생기는 toggle 신호는 무시)
+  panel.addEventListener('click', (e) => { const rs = (e.target as HTMLElement).closest('details.rbuy > summary'); if (rs) { const d = rs.parentElement as HTMLDetailsElement; rbuyOpen.set(Number(d.dataset.rid), !d.open); } const sm = (e.target as HTMLElement).closest('#shop > summary'); if (sm) shopOpen = !(sm.parentElement as HTMLDetailsElement).open; }); // 사용자가 누른 것만 기억(화면을 다시 그릴 때 생기는 toggle 신호는 무시)
   function viewFleet(): string {
     const s = game.state;
     const owned = s.planes.map((p) => { const t = typeById(p.type), r = p.routeId ? game.route(p.routeId) : null;
@@ -248,7 +287,7 @@ export function startApp(): void {
   }
   function hintStep(): { text: string; city?: string; sel?: string } | null {
     const s = game.state;
-    if (!hintsOn || s.status !== 'playing' || s.history.length >= 1 || s.sandbox) return null;
+    if (!hintsOn || s.status !== 'playing' || s.history.length >= 1) return null;
     const openRoutes = s.routes.filter((r) => r.open), assigned = openRoutes.some((r) => game.planesOn(r.id).length > 0);
     if (!openRoutes.length) {
       const base = s.base, dest = hintDest(base);
@@ -317,9 +356,9 @@ export function startApp(): void {
     if (!recorded) play(s.status === 'bankrupt' ? 'lose' : 'win');
     const title = s.status === 'won' ? '목표를 달성했습니다!' : s.status === 'bankrupt' ? '파산했습니다' : '제한 기간이 끝났습니다';
     $('#end-title').innerHTML = `<span style="-webkit-text-fill-color:${s.status === 'won' ? '#e8a13a' : '#8a96a3'};color:${s.status === 'won' ? '#e8a13a' : '#8a96a3'}">${icon(s.status === 'won' ? 'trophy' : s.status === 'bankrupt' ? 'alert' : 'calendar', 30)}</span>${title}`; // 제목 문자열은 고정 문구라 안전
-    if (!recorded) { recorded = true; saveRecord(); }
-    const best = records()[s.scenario ?? 'free']?.[0];
-    $('#end-body').textContent = `${game.scenario.name} · ${DIFF_NAME[s.difficulty ?? 'normal']} · ${game.monthsPassed}개월 · 누적 이익 ${money(s.cumProfit)} · 현금 ${money(s.cash)} · 항공기 ${s.planes.length}대 · 점수 ${num(game.score)}${best ? ` (이 시나리오 최고 ${num(best.score)})` : ''}`;
+    if (!recorded) { recorded = true; if (!s.sandbox) saveRecord(); }
+    const best = s.sandbox ? undefined : records()[s.scenario ?? 'free']?.[0];
+    $('#end-body').textContent = `${s.sandbox ? '자유 모드' : game.scenario.name} · ${DIFF_NAME[s.difficulty ?? 'normal']} · ${game.monthsPassed}개월 · 누적 이익 ${money(s.cumProfit)} · 현금 ${money(s.cash)} · 항공기 ${s.planes.length}대 · 점수 ${num(game.score)}${best ? ` (이 시나리오 최고 ${num(best.score)})` : ''}`;
   }
 
   // ---- 행동(패널 안의 버튼) ----
@@ -327,7 +366,7 @@ export function startApp(): void {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
     if (!b) return;
     const act = b.dataset.act!, id = Number(b.dataset.id);
-    const SND: Record<string, Sfx> = { open: 'takeoff', assign: 'takeoff', buy: 'buy', buyUsed: 'buy', lease: 'buy', buyOut: 'buy', buySlot: 'buy', hedge: 'buy', upgrade: 'achieve', borrow: 'buy', ally: 'ok', sell: 'sell', close: 'sell', repay: 'sell', service: 'ok', respond: 'ok' };
+    const SND: Record<string, Sfx> = { open: 'takeoff', assign: 'takeoff', buy: 'buy', buyUsed: 'buy', lease: 'buy', buyOut: 'buy', buySlot: 'buy', rbuy: 'buy', hedge: 'buy', upgrade: 'achieve', borrow: 'buy', ally: 'ok', sell: 'sell', close: 'sell', repay: 'sell', service: 'ok', respond: 'ok' };
     const done = (m?: string) => { if (m) toast(m); play(SND[act] ?? 'tap'); lastHtml = ''; render(); };
     if (act === 'open') { const r = game.openRoute(b.dataset.a!, b.dataset.b!); if (!r.ok) return err(r.error); selRoute = r.routeId; selCity = null; tab = 'routes'; syncMap(); done('노선을 열었습니다. 항공기를 배정하세요.'); }
     else if (act === 'advice') { const a = advList[Number(b.dataset.i)]; if (!a) return; selRoute = a.routeId ?? null; selCity = a.routeId === undefined ? a.cityId ?? null : null; tab = a.tab ?? 'map'; syncMap(); if (a.cityId) map.focusCity(a.cityId); done(); }
@@ -336,8 +375,19 @@ export function startApp(): void {
     else if (act === 'fillFare' && selRoute !== null) { fillFare(game, selRoute); done('운임을 맞췄습니다'); }
     else if (act === 'close' && selRoute !== null) { const cr = game.route(selRoute)!; if (!window.confirm(`${routeLabel(cr.a, cr.b)} 노선을 닫을까요? 배정된 항공기는 대기 상태가 됩니다.`)) return; game.closeRoute(selRoute); selRoute = null; syncMap(); done('노선을 닫았습니다'); }
     else if (act === 'unassign') { game.unassign(id); done(); }
-    else if (act === 'weekly') { const p = game.plane(id)!; const r = game.assign(id, p.routeId!, p.weekly + Number(b.dataset.d)); if (!r.ok) toast(r.error); done(); }
-    else if (act === 'assign' && selRoute !== null) { const r = game.route(selRoute)!, p = game.plane(id)!; const max = maxWeeklyRoundTrips(distanceKm(cityById(r.a), cityById(r.b)), typeById(p.type)); const res = game.assign(id, selRoute, max); if (!res.ok) return toast(res.error); fillFare(game, selRoute); done('배정했습니다 (운임도 자동으로 맞췄어요)'); }
+    else if (act === 'weekly') { const p = game.plane(id)!; assignOffer(id, p.routeId!, p.weekly + Number(b.dataset.d)); done(); }
+    else if (act === 'assign' && selRoute !== null) { const r = game.route(selRoute)!, p = game.plane(id)!; const max = maxWeeklyRoundTrips(distanceKm(cityById(r.a), cityById(r.b)), typeById(p.type)); if (!assignOffer(id, selRoute, max)) return; fillFare(game, selRoute); done('배정했습니다 (운임도 자동으로 맞췄어요)'); }
+    else if (act === 'routeSort') { routeSort = b.dataset.v as typeof routeSort; done(); }
+    else if (act === 'rbuy' && selRoute !== null) {
+      const how = b.dataset.how as 'new' | 'used' | 'lease', tid = b.dataset.t!, plan = game.purchasePlan(selRoute, tid, how);
+      if (!plan.ok) return err(plan.error);
+      const t = typeById(tid), what = how === 'lease' ? `보증금 ${money(plan.price)}` : money(plan.price);
+      if (plan.slotCost > 0 && !window.confirm(`${t.name}(${how === 'new' ? '새것' : how === 'used' ? '중고' : '임대'}) ${what} + 슬롯 ${plan.slotNeeds.map((x) => `${cityById(x.city).name} ${x.n}개`).join(', ')} ${money(plan.slotCost)} = 합계 ${money(plan.total)}을 낼까요?`)) return;
+      const had = game.planesOn(selRoute).length, res = game.buyForRoute(selRoute, tid, how);
+      if (!res.ok) return err(res.error);
+      if (!had) fillFare(game, selRoute);
+      done(`${t.name}을(를) ${how === 'lease' ? '임대해' : '사서'} 이 노선에 배정했습니다 (주 ${res.weekly}회)`);
+    }
     else if (act === 'priority' && selRoute !== null) { const r = game.setPriority(selRoute, Number(b.dataset.v)); if (!r.ok) return err(r.error); done(`공항 우선순위를 ${b.dataset.v}단계로 바꿨습니다`); }
     else if (act === 'upgrade') { const u = config.upgrades.list.find((x) => x.id === b.dataset.u)!, r = game.buyUpgrade(u.id); if (!r.ok) return err(r.error); done(`${u.name} ${r.level}단계로 올렸습니다`); }
     else if (act === 'autoFare') { game.setAutoFare(!game.state.autoFare); done(game.state.autoFare ? '자동 운임을 켰습니다' : '자동 운임을 껐습니다'); }
@@ -389,6 +439,10 @@ export function startApp(): void {
     else if (m === 'hints') { hintsOn = !hintsOn; try { localStorage.setItem(HINT_KEY, hintsOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } b.textContent = `힌트: ${hintsOn ? '켜짐' : '꺼짐'}`; toast(hintsOn ? '힌트를 켰습니다' : '힌트를 껐습니다'); menu.hidden = false; render(); return; }
     else if (m === 'autopause') { autoPause = !autoPause; try { localStorage.setItem('the-air-autopause', autoPause ? '1' : '0'); } catch { /* 저장 불가 */ } b.textContent = `사건 시 자동 정지: ${autoPause ? '켜짐' : '꺼짐'}`; toast(autoPause ? '사건이 생기면 시간이 멈춥니다' : '사건이 생겨도 시간이 계속 흐릅니다'); menu.hidden = false; render(); return; }
     else if (m === 'sound') { setSound(!soundOn()); b.textContent = `소리: ${soundOn() ? '켜짐' : '꺼짐'}`; play('ok'); menu.hidden = false; return; }
+    else if (m === 'volume') {
+      const v = volumes();
+      showInfo('소리 크기', `<h4>효과음 <small id="v-sfx-n">${Math.round(v.sfx * 100)}%</small></h4><input type="range" id="v-sfx" min="0" max="150" step="5" value="${Math.round(v.sfx * 100)}" style="width:100%"><h4>배경 음악 <small id="v-music-n">${Math.round(v.music * 100)}%</small></h4><input type="range" id="v-music" min="0" max="150" step="5" value="${Math.round(v.music * 100)}" style="width:100%"><p class="hint">왼쪽 끝이 무음, 100%가 기본입니다. 효과음·음악을 끄고 켜는 것은 메뉴의 스위치로 합니다.</p>`);
+    }
     else if (m === 'music') { setMusic(!musicOn()); menuLabels(); menu.hidden = false; return; }
     else if (m === 'night') { nightOn = !nightOn; try { localStorage.setItem('the-air-night', nightOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } map.setNight(nightOn); menuLabels(); menu.hidden = false; return; }
     else if (m === 'help') { showInfo('도움말', HELP_HTML); }
@@ -402,17 +456,21 @@ export function startApp(): void {
     else if (e.key === '1' || e.key === '2' || e.key === '3') { speed = e.key === '3' ? 4 : Number(e.key); renderTop(); renderHint(); }
     else if (e.key === 'Escape') { selCity = selRoute = null; menu.hidden = true; syncMap(); lastHtml = ''; render(); }
   });
+  $('#info-body').addEventListener('input', (e) => { const t = e.target as HTMLInputElement; if (t.id === 'v-sfx') { setVolumes({ sfx: Number(t.value) / 100 }); $('#v-sfx-n').textContent = `${t.value}%`; } else if (t.id === 'v-music') { setVolumes({ music: Number(t.value) / 100 }); $('#v-music-n').textContent = `${t.value}%`; } });
+  $('#info-body').addEventListener('change', (e) => { if ((e.target as HTMLElement).id === 'v-sfx') play('ok'); }); // 효과음 크기는 손을 뗄 때 들려 준다
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false })); // 사파리의 두 손가락 화면 확대를 막는다(지도는 직접 처리)
   $('#info-close').addEventListener('click', () => { $('#info').hidden = true; play('tap'); });
   $('#end-new').addEventListener('click', () => openSetup());
   $('#end-continue').addEventListener('click', () => { const r = game.continuePlay(); if (r.ok) { lastHtml = ''; render(); toast('자유 모드로 계속합니다'); } });
 
-  function newGame(opts: GameOptions = {}) { recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); seenLog = 0; seenEvents = new Set(); achSeen = new Set(); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
+  function newGame(opts: GameOptions = {}) { recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); seenLog = 0; seenEvents = new Set(); achSeen = new Set(); msSeen = new Set(reachedSteps(game)); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.state.sandbox ? '자유 모드' : game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
 
   // ---- 새 게임 설정(시나리오·시작 도시·난이도) ----
-  let setupScen = 'free', setupDiff: Difficulty = 'normal', setupBase = 'ICN';
+  let setupScen = 'sandbox', setupDiff: Difficulty = 'normal', setupBase = 'ICN'; // 기본은 목표 없는 자유 모드
+  const SANDBOX = { id: 'sandbox', name: '자유 모드', desc: '목표와 기한 없이 마음껏 키우세요. 처음이라면 이 모드를 권합니다. (점수 기록 없음)' };
   function renderSetup() {
-    const sc = scenarioById(setupScen);
-    $('#setup-scen').innerHTML = SCENARIOS.map((x) => `<button data-sc="${x.id}" class="${x.id === setupScen ? 'on' : ''}">${esc(x.name)}<small>${esc(x.desc)}</small></button>`).join('');
+    const sc = scenarioById(setupScen === 'sandbox' ? 'free' : setupScen);
+    $('#setup-scen').innerHTML = [SANDBOX, ...SCENARIOS].map((x) => `<button data-sc="${x.id}" class="${x.id === setupScen ? 'on' : ''}">${esc(x.name)}<small>${esc(x.desc)}</small></button>`).join('');
     const sel = $<HTMLSelectElement>('#setup-base'); sel.innerHTML = CITIES.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
     sel.value = sc.lockBase && sc.base ? sc.base : setupBase; sel.disabled = sc.lockBase; $('#setup-baselock').textContent = sc.lockBase ? '이 시나리오는 시작 도시가 정해져 있습니다.' : '어느 도시에서 시작해도 됩니다. 시장이 큰 도시일수록 슬롯과 수요가 유리합니다.';
     document.querySelectorAll<HTMLElement>('#setup-diff button').forEach((b) => b.classList.toggle('on', b.dataset.d === setupDiff));
@@ -422,7 +480,7 @@ export function startApp(): void {
   $('#setup-scen').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-sc]'); if (!b) return; setupScen = b.dataset.sc!; renderSetup(); });
   $('#setup-diff').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-d]'); if (!b) return; setupDiff = b.dataset.d as Difficulty; renderSetup(); });
   $('#setup-base').addEventListener('change', (e) => { setupBase = (e.target as HTMLSelectElement).value; });
-  $('#setup-go').addEventListener('click', () => newGame({ scenario: setupScen, difficulty: setupDiff, base: $<HTMLSelectElement>('#setup-base').value }));
+  $('#setup-go').addEventListener('click', () => newGame({ scenario: setupScen === 'sandbox' ? 'free' : setupScen, sandbox: setupScen === 'sandbox', difficulty: setupDiff, base: $<HTMLSelectElement>('#setup-base').value }));
   $('#setup-cancel').addEventListener('click', () => { $('#setup').hidden = true; render(); });
 
   // ---- 시작 화면 ----
@@ -443,7 +501,8 @@ export function startApp(): void {
       let n = 0;
       while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; }
       if (n) {
-        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; save(); showReport(); play('coin'); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); } const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}`); }
+        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; save(); showReport(); play('coin'); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
+          if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}`); }
         const lg = game.state.log;
         if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다
           const msg = lg[lg.length - 1]; toast(msg, 6000); play('alert');

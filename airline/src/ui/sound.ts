@@ -22,7 +22,7 @@ function makeBus(ctx: Ctx): Bus {
   const dry = ctx.createGain(); dry.gain.value = 0.9; dry.connect(comp);
   const conv = ctx.createConvolver(); conv.buffer = impulse(ctx, 2.4);
   const wet = ctx.createGain(); wet.gain.value = 0.5; wet.connect(conv); conv.connect(comp);
-  const music = ctx.createGain(); music.gain.value = 1; music.connect(dry); music.connect(wet);
+  const music = ctx.createGain(); music.gain.value = vol.music; music.connect(dry); music.connect(wet);
   return { ctx, dry, wet, music };
 }
 
@@ -30,7 +30,7 @@ function makeBus(ctx: Ctx): Bus {
 interface ToneOpt { type?: OscillatorType; gain?: number; attack?: number; to?: number; wet?: number; cutoff?: number; detune?: number; out?: AudioNode }
 /** 한 음: 주파수 f에서 시작(to가 있으면 미끄러짐), dur 동안 사라진다 */
 function tone(b: Bus, f: number, t: number, dur: number, o: ToneOpt = {}) {
-  const { ctx } = b, osc = ctx.createOscillator(), g = ctx.createGain(), peak = o.gain ?? 0.1, at = o.attack ?? 0.005;
+  const { ctx } = b, osc = ctx.createOscillator(), g = ctx.createGain(), peak = (o.gain ?? 0.1) * (o.out ? 1 : vol.sfx), at = o.attack ?? 0.005; // 음악(out 지정)은 효과음 크기의 영향을 받지 않는다
   osc.type = o.type ?? 'sine'; osc.frequency.setValueAtTime(f, t); if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + dur);
   if (o.detune) osc.detune.value = o.detune;
   g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + at); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -49,6 +49,7 @@ function bell(b: Bus, f: number, t: number, dur: number, gain = 0.1, out?: Audio
 }
 /** 잡음 쓸기(바람·엔진): 대역 필터가 from → to로 움직인다 */
 function whoosh(b: Bus, t: number, dur: number, from: number, to: number, gain = 0.1) {
+  gain *= vol.sfx;
   const { ctx } = b, n = Math.floor(ctx.sampleRate * dur), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
   const src = ctx.createBufferSource(); src.buffer = buf;
@@ -89,7 +90,9 @@ function musicBar(b: Bus, bar: number, t: number) {
 }
 
 // ---- 재생 ----
-const KEY = 'the-air-sound', MKEY = 'the-air-music';
+const KEY = 'the-air-sound', MKEY = 'the-air-music', VKEY = 'the-air-volume';
+const vol = { sfx: 1, music: 1 }; // 0~1.5 (기본 1)
+try { const v = JSON.parse(localStorage.getItem(VKEY) ?? '{}'); if (typeof v.sfx === 'number') vol.sfx = v.sfx; if (typeof v.music === 'number') vol.music = v.music; } catch { /* 저장 불가 */ }
 let bus: Bus | null = null, on = true, musicWanted = true, timer = 0, bar = 0, nextBar = 0;
 try { on = localStorage.getItem(KEY) !== 'off'; musicWanted = localStorage.getItem(MKEY) !== 'off'; } catch { /* 저장 불가 */ }
 function live(): Bus | null {
@@ -100,6 +103,14 @@ export function setSound(v: boolean) { on = v; try { localStorage.setItem(KEY, v
 export function play(name: Sfx) { if (!on) return; const b = live(); if (b) trigger(b, name, b.ctx.currentTime + 0.01); }
 
 export const musicOn = () => musicWanted;
+export const volumes = () => ({ ...vol });
+/** 효과음·음악 크기(0~1.5). 음악은 바로 반영된다 */
+export function setVolumes(v: { sfx?: number; music?: number }) {
+  if (v.sfx !== undefined) vol.sfx = Math.min(1.5, Math.max(0, v.sfx));
+  if (v.music !== undefined) vol.music = Math.min(1.5, Math.max(0, v.music));
+  try { localStorage.setItem(VKEY, JSON.stringify(vol)); } catch { /* 저장 불가 */ }
+  if (bus && musicWanted) bus.music.gain.linearRampToValueAtTime(vol.music, bus.ctx.currentTime + 0.1);
+}
 function tick() {
   if (!bus || document.hidden) return;
   const now = bus.ctx.currentTime;
@@ -111,7 +122,7 @@ export function setMusic(v: boolean) {
   musicWanted = v; try { localStorage.setItem(MKEY, v ? 'on' : 'off'); } catch { /* 저장 불가 */ }
   clearInterval(timer); timer = 0;
   const b = live(); if (!b) return;
-  b.music.gain.cancelScheduledValues(b.ctx.currentTime); b.music.gain.linearRampToValueAtTime(v ? 1 : 0, b.ctx.currentTime + (v ? 0.3 : 0.8)); // 끌 때는 서서히
+  b.music.gain.cancelScheduledValues(b.ctx.currentTime); b.music.gain.linearRampToValueAtTime(v ? vol.music : 0, b.ctx.currentTime + (v ? 0.3 : 0.8)); // 끌 때는 서서히
   if (v) { tick(); timer = window.setInterval(tick, 500); }
 }
 

@@ -96,7 +96,7 @@ describe('저장 형식 5', () => {
     const g = new Game(4); open(g, 'ICN', 'CJU', 20); g.advanceDays(40);
     const v4 = JSON.parse(JSON.stringify(g.toJSON())); v4.formatVersion = 4; delete v4.base; delete v4.difficulty; delete v4.scenario;
     const back = Game.fromJSON(v4);
-    expect(back.state.formatVersion).toBe(8); expect(back.state.base).toBe('ICN'); expect(back.state.difficulty).toBe('normal'); expect(back.state.scenario).toBe('free');
+    expect(back.state.formatVersion).toBe(9); expect(back.state.base).toBe('ICN'); expect(back.state.difficulty).toBe('normal'); expect(back.state.scenario).toBe('free');
     back.advanceDays(30); expect(back.state.status).toBe('playing');
   });
 });

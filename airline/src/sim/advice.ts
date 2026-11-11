@@ -11,6 +11,7 @@ export function advise(g: Game): Advice[] {
   if (idle.length) out.push({ level: 'bad', text: `노는 항공기가 ${idle.length}대 있습니다. 노선에 배정해야 돈을 벌어요.`, tab: s.routes.some((r) => r.open) ? 'routes' : 'map' });
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length === 0) out.push({ level: 'warn', text: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 배정된 항공기가 없습니다.`, tab: 'routes', routeId: r.id });
   for (const p of s.planes) if (p.cond < 0.5 && p.shop <= 0) out.push({ level: p.cond < 0.3 ? 'bad' : 'warn', text: `${typeById(p.type).name}의 정비 상태가 ${Math.round(p.cond * 100)}%입니다. 고장 나기 전에 점검하세요.`, tab: 'fleet' });
+  for (const p of s.planes) if (g.needsReplacement(p)) out.push({ level: 'info', text: `${typeById(p.type).name}이(가) ${Math.floor(p.age / 12)}년 넘게 낡아 정비해도 ${Math.round(g.maxCond(p) * 100)}%까지만 회복됩니다. 팔고 새로 사는 편이 나을 수 있어요.`, tab: 'fleet' });
   const seen = new Set<string>();
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length) for (const c of [r.a, r.b]) {
     if (seen.has(c)) continue; seen.add(c);

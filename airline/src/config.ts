@@ -22,7 +22,7 @@ export const config = {
   },
   score: { profit: 10, cash: 2, city: 40, win: 600, month: 5, bankrupt: 300, loan: 1 },
   loan: { baseRate: 0.01, spread: 0.03, crunch: 0.2, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
-  aging: { maintPerMonth: 0.004, maxMult: 1.6 }, // 노후 1개월당 운영비 +0.4%(최대 +60%)
+  aging: { maintPerMonth: 0.004, maxMult: 1.6, capStart: 84, capPerMonth: 0.004, capMin: 0.5, replaceBelow: 0.75 }, // capStart~: 7년이 넘으면 점검해도 정비 상태가 100%까지 안 돌아온다(상한 = 1 − 0.4%/월, 최소 50%). 상한이 75% 아래면 교체 권고. 점검 비용도 노후 배수만큼 든다. 아래는 원래 설명: // 노후 1개월당 운영비 +0.4%(최대 +60%)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9
   slot: { base: 6, perSize: 0.35, price: 2, priceStep: 0.2, lease: 0.12 }, // 공항 1일 이착륙 한도 = base + perSize × 시장 규모 + 구매분. 구매가(M)·월 임대료(M)
   lease: { rate: 0.03, deposit: 2, minMonths: 12, extra: 2, buyoutDrop: 0.005, buyoutMin: 0.5 }, // 임대: 월 임대료 = 새 기체 값 × 3%, 보증금 2개월치(반납 때 돌려받음), 최소 12개월(그 전에 반납하면 남은 개월 임대료를 위약금으로, 최소 1개월). 임대기 수는 보유기 + 2대까지. 매입가 = 새 기체 값 × (1 − 0.5% × 사용 개월), 최소 50%
@@ -43,6 +43,6 @@ export const config = {
   cabin: { bizSeatArea: 2.5, bizFareMult: 2.8, bizElasticity: 1.2, shares: [0, 0.1, 0.2, 0.3] }, // 비즈니스 좌석 1개 = 일반석 2.5개 면적
   cargo: { K: 240, distExp: 0.6, base: 300, perKm: 0.45, elasticity: 1.5 }, // 화물 수요(톤/월), 운임($/톤) = base + perKm × km
   growth: { perMonth: 0.003, decay: 0.02, max: 1.8 }, // 운항 중인 도시는 매달 시장이 자란다
-  competitors: { count: 2, startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, costRatio: 0.62, planeFixed: 0.4 },
+  competitors: { count: 6, startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, costRatio: 0.62, planeFixed: 0.4 },
 };
 export type Config = typeof config;

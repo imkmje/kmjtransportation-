@@ -112,7 +112,7 @@ describe('임대·중고·제휴·환승', () => {
     expect(back.state.ally).toBe(1); expect(back.state.planes[1].leased).toBe(true);
     const old = g.toJSON() as unknown as Record<string, unknown>; old.formatVersion = 7; delete old.ally;
     const conv = Game.fromJSON(old);
-    expect(conv.state.formatVersion).toBe(8); expect(conv.state.ally).toBeNull();
+    expect(conv.state.formatVersion).toBe(9); expect(conv.state.ally).toBeNull();
   });
   it('운임 전쟁: 겹치는 노선에서 경쟁사가 운임을 크게 내리고, 기간이 끝나면 풀린다. 제휴하면 바로 끝난다', () => {
     const chance = config.war.chance; config.war.chance = 1;

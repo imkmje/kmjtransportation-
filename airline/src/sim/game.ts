@@ -1,11 +1,12 @@
 import { config } from '../config';
-import { EVENTS, CITIES, typeById, cityById, scenarioById } from '../data';
+import { AIRCRAFT, EVENTS, CITIES, typeById, cityById, scenarioById } from '../data';
 import { Rng } from './rng';
 import { baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
 import type { Competitor, DayStat, Difficulty, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
 
-export const FORMAT_VERSION = 8; // 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
-export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string }
+export const FORMAT_VERSION = 9; // 8 → 9: 경쟁사 6곳으로 늘림(옛 저장 파일에는 새 경쟁사를 덧붙임) / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
+export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean } // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
+export interface RouteOption { type: string; weekly: number; price: number; profit: number; payback: number | null; slotCost: number; slotNeeds: { city: string; n: number }[]; recommended: boolean } // profit: 이 기종 한 대를 더 넣었을 때 늘어나는 월 이익(고정비·슬롯 임대료 반영), payback: 새 기체 값 ÷ profit(개월)
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const month1 = (day: number) => (Math.floor(day / config.daysPerMonth) % 12) + 1; // 1일차는 1월
@@ -19,7 +20,7 @@ export interface RouteDay {
   otp: number; compensation: number; // otp: 정시율(0~1), compensation: 지연 보상금(M)
 }
 
-const COMP_NAMES: [string, 'low' | 'premium', string][] = [['한바다항공', 'low', 'PUS'], ['그랜드 에어', 'premium', 'NRT']];
+const COMP_NAMES: [string, 'low' | 'premium', string][] = [['한바다항공', 'low', 'PUS'], ['그랜드 에어', 'premium', 'NRT'], ['유로윙즈', 'low', 'LHR'], ['아메리고 항공', 'premium', 'JFK'], ['사막의 별 항공', 'premium', 'DXB'], ['남십자성 항공', 'low', 'SYD']];
 
 export class Game {
   state: GameState;
@@ -28,20 +29,20 @@ export class Game {
   constructor(seed = 1, state?: GameState, opts: GameOptions = {}) {
     if (state) { this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); return; }
     this.rng = new Rng(seed);
-    const sc = scenarioById(opts.scenario ?? 'free'), diff = opts.difficulty ?? 'normal', dm = config.difficulty[diff];
+    const sc = scenarioById(opts.sandbox ? 'free' : opts.scenario ?? 'free'), diff = opts.difficulty ?? 'normal', dm = config.difficulty[diff];
     const base = sc.lockBase && sc.base ? sc.base : (opts.base && CITIES.some((c) => c.id === opts.base) ? opts.base : (sc.base ?? 'ICN'));
     this.state = {
       formatVersion: FORMAT_VERSION, seed, rng: this.rng.getState(), day: 0,
       cash: Math.round(sc.cash * dm.cash * 10) / 10, reputation: config.start.reputation, nextId: 1,
-      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, freeze: 0, sandbox: false, history: [],
+      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, freeze: 0, sandbox: !!opts.sandbox, history: [],
       base, difficulty: diff, scenario: sc.id,
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [],
     };
     this.addPlane(sc.plane, typeById(sc.plane).price); // 시작 항공기는 무료로 받지만 장부가·감가상각은 같다
   }
 
-  static initCompetitors(rival = 1): Competitor[] {
-    return COMP_NAMES.slice(0, config.competitors.count).map(([name, style, hub], i) => ({ id: i + 1, name, style, hub, cash: Math.round(config.competitors.startCash * rival), planes: 0, routes: [] }));
+  static initCompetitors(rival = 1, from = 0): Competitor[] {
+    return COMP_NAMES.slice(from, config.competitors.count).map(([name, style, hub], i) => ({ id: from + i + 1, name, style, hub, cash: Math.round(config.competitors.startCash * rival), planes: 0, routes: [] }));
   }
 
   // ---------- 조회 ----------
@@ -285,16 +286,22 @@ export class Game {
     return { ok: true };
   }
   /** 정비 점검 비용(M): 기종 가격의 2%(최소 $0.5M) */
-  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * (1 - this.up('hangar', true)); }
+  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * this.agingMult(p) * (1 - this.up('hangar', true)); } // 낡을수록 점검도 비싸다
+  /** 이 기체가 점검으로 회복할 수 있는 정비 상태의 상한(7년이 넘으면 낮아진다) */
+  maxCond(p: Plane): number { const a = config.aging; return Math.max(a.capMin, 1 - Math.max(0, p.age - a.capStart) * a.capPerMonth); }
+  /** 교체 권고: 점검해도 회복이 75% 아래까지만 되는 기체 */
+  needsReplacement(p: Plane): boolean { return this.maxCond(p) < config.aging.replaceBelow; }
   /** 항공기를 정비 점검한다: 7일간 운항하지 못하고, 정비 상태가 100%로 돌아온다 */
   service(planeId: number): Result<{ cost: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     const p = this.plane(planeId);
     if (!p) return fail('없는 항공기입니다');
     if (p.shop > 0) return fail('이미 정비 중입니다');
+    const cap = this.maxCond(p);
+    if (p.cond >= cap - 0.005) return fail(cap < 1 ? `이 기체는 낡아서 정비 상태를 ${Math.round(cap * 100)}% 넘게 회복할 수 없습니다` : '이미 정비 상태가 최고입니다');
     const cost = this.serviceCost(p);
     if (this.state.cash < cost) return fail('현금이 모자랍니다');
-    this.state.cash -= cost; this.state.cur.cost += cost; p.cond = 1; p.shop = config.maint.shopDays;
+    this.state.cash -= cost; this.state.cur.cost += cost; p.cond = cap; p.shop = config.maint.shopDays;
     return { ok: true, cost };
   }
   /** 자리를 꽉 채우는 가장 높은 운임(수요 = 좌석이 되는 운임)으로 일반석 운임을 맞춘다 */
@@ -335,6 +342,71 @@ export class Game {
     if (this.state.cash < price) return fail('현금이 모자랍니다');
     this.state.cash -= price; this.state.slots[cityId] = (this.state.slots[cityId] ?? 0) + 1;
     return { ok: true, price };
+  }
+  /** 항공기(planeId, 새 항공기면 null)를 노선에 주 weekly회로 배정할 때 모자라는 슬롯과 사는 데 드는 돈 */
+  slotShortfall(planeId: number | null, routeId: number, weekly: number): { needs: { city: string; n: number }[]; cost: number } {
+    const r = this.route(routeId), p = planeId === null ? undefined : this.plane(planeId), needs: { city: string; n: number }[] = []; let cost = 0;
+    if (!r) return { needs, cost };
+    const old = p && p.routeId !== null ? this.route(p.routeId) : undefined;
+    for (const c of [r.a, r.b]) {
+      const mine = old && p && (old.a === c || old.b === c) ? (p.weekly * 2) / 7 : 0;
+      const short = this.slotsUsed(c) - mine + (Math.floor(weekly) * 2) / 7 - this.slotCapacity(c), n = short > 1e-9 ? Math.ceil(short - 1e-9) : 0;
+      if (n > 0) { needs.push({ city: c, n }); cost += n * this.slotPrice(c) + (config.slot.priceStep * n * (n - 1)) / 2; }
+    }
+    return { needs, cost };
+  }
+  /** 슬롯이 모자라면 필요한 만큼 사고 배정한다(현금이 모자라면 아무것도 사지 않는다) */
+  assignBuyingSlots(planeId: number, routeId: number, weekly: number): Result<{ slotCost: number }> {
+    const sf = this.slotShortfall(planeId, routeId, weekly);
+    if (this.state.cash < sf.cost) return fail(`슬롯을 살 현금이 모자랍니다 (필요 $${sf.cost.toFixed(1)}M)`);
+    const first = this.assign(planeId, routeId, weekly);
+    if (first.ok) return { ok: true, slotCost: 0 };
+    if (!first.error.includes('슬롯')) return first;
+    for (const { city, n } of sf.needs) for (let i = 0; i < n; i++) this.buySlot(city);
+    const r = this.assign(planeId, routeId, weekly);
+    return r.ok ? { ok: true, slotCost: sf.cost } : r;
+  }
+  /** 이 노선에 항공기 한 대를 더 넣는다면: 기종별 예상(현재 수요 기준의 추정). 추천 = 월 이익이 나면서 회수 기간이 가장 짧은 기종 */
+  routeOptions(routeId: number): RouteOption[] {
+    const r = this.route(routeId); if (!r || !r.open) return [];
+    const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), s = this.state, dpm = config.daysPerMonth;
+    const b = this.routeDay(r), before = b.revenue - b.cost, out: RouteOption[] = [];
+    for (const t of AIRCRAFT) {
+      if (!canFly(t, A, B).ok) continue;
+      const weekly = maxWeeklyRoundTrips(km, t); if (weekly < 1) continue;
+      s.planes.push({ id: -1, type: t.id, book: t.price, routeId, weekly, age: 0, bizShare: 0, cond: 1, shop: 0 }); // 잠깐 끼워 넣고 계산한 뒤 바로 뺀다
+      let a; try { a = this.routeDay(r); } finally { s.planes.pop(); }
+      const sf = this.slotShortfall(null, routeId, weekly), slots = sf.needs.reduce((x, n) => x + n.n, 0);
+      const profit = (a.revenue - a.cost - before) * dpm - (config.cost.perPlaneMonthly + config.slot.lease * slots) * this.mods.fixed;
+      out.push({ type: t.id, weekly, price: t.price, profit, payback: profit > 0.05 ? t.price / profit : null, slotCost: sf.cost, slotNeeds: sf.needs, recommended: false });
+    }
+    let best: RouteOption | null = null;
+    for (const o of out) if (o.payback !== null && (!best || o.payback < best.payback!)) best = o;
+    if (best) best.recommended = true;
+    return out;
+  }
+  /** 노선 화면에서 바로 사기: how = 새것·중고·임대. 슬롯이 모자라면 필요한 만큼 함께 사서 최대 횟수로 배정한다. total은 한 번에 드는 돈(기체 값 또는 보증금 + 슬롯) */
+  purchasePlan(routeId: number, typeId: string, how: 'new' | 'used' | 'lease'): Result<{ weekly: number; price: number; slotCost: number; slotNeeds: { city: string; n: number }[]; total: number }> {
+    const r = this.route(routeId);
+    if (!r || !r.open) return fail('열려 있는 노선이 아닙니다');
+    const t = typeById(typeId), A = cityById(r.a), B = cityById(r.b);
+    if (!canFly(t, A, B).ok) return fail('이 기종은 이 노선을 날 수 없습니다');
+    const weekly = maxWeeklyRoundTrips(distanceKm(A, B), t); if (weekly < 1) return fail('하루 가용 시간 안에 왕복할 수 없는 거리입니다');
+    const price = how === 'used' ? Math.round(t.price * config.used.price * 10) / 10 : how === 'lease' ? t.price * config.lease.rate * config.lease.deposit : t.price;
+    const sf = this.slotShortfall(null, routeId, weekly);
+    return { ok: true, weekly, price, slotCost: sf.cost, slotNeeds: sf.needs, total: price + sf.cost };
+  }
+  buyForRoute(routeId: number, typeId: string, how: 'new' | 'used' | 'lease'): Result<{ planeId: number; weekly: number; slotCost: number }> {
+    if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
+    const plan = this.purchasePlan(routeId, typeId, how);
+    if (!plan.ok) return plan;
+    if (how === 'lease' && this.leasedCount >= this.leaseCap) return fail(`임대는 내 항공기 수 + ${config.lease.extra}대(지금 ${this.leaseCap}대)까지 가능합니다`);
+    if (this.state.cash < plan.total) return fail(`현금이 모자랍니다 (필요 $${plan.total.toFixed(1)}M)`);
+    const b = how === 'lease' ? this.leasePlane(typeId) : this.buyPlane(typeId, how === 'used');
+    if (!b.ok) return b;
+    const r = this.assignBuyingSlots(b.planeId, routeId, plan.weekly);
+    if (!r.ok) return fail(`항공기는 샀지만 배정하지 못했습니다: ${r.error}`);
+    return { ok: true, planeId: b.planeId, weekly: plan.weekly, slotCost: r.slotCost };
   }
   /** 진행 중인 사건에 비용을 내고 대응한다(효과가 줄어든다) */
   respondEvent(index: number): Result {
@@ -656,6 +728,7 @@ export class Game {
     }
     if (st.formatVersion < 4) st.economy = st.economy ?? 1; // 형식 3 → 4: 경기 보통
     if (st.formatVersion < 8) st.ally = st.ally ?? null; // 형식 7 → 8
+    if (st.formatVersion < 9 && st.competitors.length < config.competitors.count) st.competitors.push(...Game.initCompetitors(config.difficulty[st.difficulty ?? 'normal'].rival, st.competitors.length)); // 형식 8 → 9: 새 경쟁사를 덧붙인다
     if (st.formatVersion < 7) for (const r of st.routes) r.priority = r.priority ?? 1; // 형식 6 → 7
     if (st.formatVersion < 6) { st.fuel = st.fuel ?? 1; st.hedge = st.hedge ?? null; st.freeze = st.freeze ?? 0; for (const p of st.planes) { p.cond = p.cond ?? 1; p.shop = p.shop ?? 0; } } // 형식 5 → 6
     if (st.formatVersion < 5) { st.base = st.base ?? 'ICN'; st.difficulty = st.difficulty ?? 'normal'; st.scenario = st.scenario ?? 'free'; } // 형식 4 → 5
