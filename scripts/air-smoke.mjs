@@ -64,7 +64,7 @@ await page.evaluate(() => { window.__air.setSpeed(0); window.__air.game.advanceD
 const st = await page.evaluate(() => ({ day: window.__air.game.state.day, hist: window.__air.game.state.history.length, cash: window.__air.game.state.cash }));
 check('시간이 흘러 월 정산이 쌓임', st.day >= 60 && st.hist >= 2, JSON.stringify(st));
 await page.evaluate(() => window.__air.report());
-check('월간 보고서 카드가 지도 위에 나타남(월 이익·최고 노선)', (await page.locator('#report').isVisible()) && (await page.locator('#report').innerText()).includes('개월차 보고') && (await page.locator('#report').innerText()).includes('최고 노선'), (await page.locator('#report').innerText()).replace(/\n/g, ' ').slice(0, 80));
+check('월간 보고서 카드가 지도 위에 나타남(월 이익, 자세히 보기 안에 최고 노선)', (await page.locator('#report').isVisible()) && (await page.locator('#report').innerText()).includes('개월차 보고') && (await page.locator('#report').textContent()).includes('최고 노선') && (await page.locator('#report summary').count()) === 1, (await page.locator('#report').innerText()).replace(/\n/g, ' ').slice(0, 80));
 await page.click('#report [data-act="closeReport"]');
 check('보고서 닫기', !(await page.locator('#report').isVisible()));
 await page.click('#tabs button[data-tab="money"]');
