@@ -54,7 +54,7 @@
       .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #2f7fd6; } .dot.bad { background: #d64545; } .dot.warn { background: #e8893a; }
       html, body, #app, #panel, #tabs, .overlay { touch-action: pan-x pan-y; } /* 더블 탭 확대·두 손가락 확대로 화면 전체가 커지는 것을 막는다(지도는 #map이 따로 처리) */
       details.rbuy > summary { cursor: pointer; font-weight: 700; padding: 11px 14px; background: #e8eff6; color: var(--accent2); border-radius: 12px; margin: 8px 0; list-style: none; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; } details.rbuy > summary::-webkit-details-marker { display: none; } details.rbuy > summary small { font-weight: 500; text-align: right; } details.rbuy > summary::after { content: '▾'; } details.rbuy[open] > summary::after { content: '▴'; }
-      .opt { padding: 10px 0; border-bottom: 1px solid var(--line); } .opt .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; } .opt .btnrow { display: flex; gap: 8px; margin-top: 8px; } .opt .btnrow button { flex: 1; padding: 8px 4px; font-size: 13px; min-height: 40px; } .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 9px; margin-left: 6px; background: #e8453a22; color: var(--neg); vertical-align: 1px; } .badge.rec { background: #1f9d5722; color: #157a43; } .badge.need { background: #e8893a22; color: #b8641a; }
+      .opt { padding: 10px 0; border-bottom: 1px solid var(--line); } .opt .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; } .opt .btnrow { display: flex; gap: 8px; margin-top: 8px; } .opt .btnrow button { flex: 1; padding: 8px 4px; font-size: 13px; min-height: 40px; } .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 9px; margin-left: 6px; background: #e8453a22; color: var(--neg); vertical-align: 1px; } .badge.rec { background: #1f9d5722; color: #157a43; } .badge.need { background: #e8893a22; color: #b8641a; }
       .ms { margin: 8px 0; } .ms .bar { margin: 3px 0; } .ms small { color: var(--ink2); }
       #panel.hasLive { padding-bottom: 0; } /* 예상 이익 띠가 패널 맨 아래에 틈 없이 붙도록 아래 여백을 없앤다 */
       button[data-why] { opacity: 0.45; }
@@ -99,6 +99,16 @@
         #stage { grid-template-columns: 1fr; grid-template-rows: 46% 1fr; } #stage.full { grid-template-columns: 1fr; grid-template-rows: 1fr 0; } #panel { border-left: 0; border-top: 1px solid var(--line); }
         #top { gap: 6px; padding: 0 8px; } #top .brand, #rep { display: none; }
       }
+          /* UX 정리(1.0.1): 터치 크기·글씨·겹침·긴 화면 */
+      #speeds button, #menubtn { min-height: 44px; } button.small { min-height: 36px; } #report h4 button { min-height: 36px; padding: 4px 12px; font-size: 13px; } #alerts .chip button { min-height: 38px; } #hint button { min-height: 36px; } .chips button { min-height: 40px; } .slot button { min-height: 40px; }
+      small { font-size: max(12px, 0.85em); } #report .rb, #report h5 { font-size: 12px; }
+      #report { max-height: calc(100% - 90px); overflow-y: auto; overscroll-behavior: contain; }
+      #report details.more > summary, details.more > summary { cursor: pointer; font-weight: 700; color: var(--accent2); padding: 8px 0; min-height: 40px; display: flex; align-items: center; list-style: none; } details.more > summary::-webkit-details-marker { display: none; } details.more > summary::after { content: ' ▾'; } details.more[open] > summary::after { content: ' ▴'; }
+      .row .grow, .rowc .grow { word-break: keep-all; overflow-wrap: anywhere; }
+      .chips { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; } .chips button { flex: none; white-space: nowrap; }
+      button .sub { font-size: 12px; font-weight: 500; opacity: .95; }
+      .pips i { background: #b9c6d4; }
+      #menu { width: 340px; display: grid; grid-template-columns: 1fr 1fr; max-height: calc(100% - 130px); overflow-y: auto; } #menu button { min-height: 44px; padding: 8px 10px; font-size: 14px; }
     </style>
   </head>
   <body>
