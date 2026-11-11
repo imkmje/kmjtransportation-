@@ -113,6 +113,7 @@ export function setVolumes(v: { sfx?: number; music?: number }) {
 }
 function tick() {
   if (!bus || document.hidden) return;
+  if (bus.ctx.state !== 'running') void (bus.ctx as AudioContext).resume().catch(() => undefined); // 팝업·전화 등으로 멈춘 소리를 되살린다
   const now = bus.ctx.currentTime;
   if (nextBar < now) nextBar = now + 0.1; // 탭이 숨겨졌다 돌아오면 지금부터 다시
   while (nextBar < now + 1.5) { musicBar(bus, bar++, nextBar); nextBar += BAR; } // 조금 앞서 예약해 끊기지 않게
