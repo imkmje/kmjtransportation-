@@ -19,6 +19,7 @@ export interface RouteDay {
   cargoT: number; cargoCap: number; cargoDemand: number; cargoRevenue: number; share: number; // share: 경쟁 점유율(1 = 독점)
   transfer: number; // 환승 수요(월, 운임 반영 전)
   otp: number; compensation: number; // otp: 정시율(0~1), compensation: 지연 보상금(M)
+  revenuePax: number; costOps: number; costLanding: number; costPax: number; // 손익 분해(M, 하루): 여객 수익, 운영·연료비, 착륙료, 승객당 수수료
 }
 
 /** 항공사 이름 풀: 앞의 둘은 처음부터 있고, 나머지는 시간이 지나며 신생 항공사로 등장한다(파산한 이름은 다시 쓰지 않는다) */
@@ -257,7 +258,8 @@ export class Game {
     const revenue = (paxE * r.fare + paxB * r.fareBiz) / 1e6 + cargoRevenue;
     const compensation = revenue * (1 - otp) * c.delay.compensation; // 지연 보상금
     const cost = (hours + (legs * c.cost.landingFeeK) / 1000 + (pax * c.cost.perPaxFee) / 1e6) * costMult + compensation;
-    return { demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
+    const revenuePax = (paxE * r.fare + paxB * r.fareBiz) / 1e6, costOps = hours * costMult, costLanding = ((legs * c.cost.landingFeeK) / 1000) * costMult, costPax = ((pax * c.cost.perPaxFee) / 1e6) * costMult;
+    return { revenuePax, costOps, costLanding, costPax, demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
   }
 
   // ---------- 행동 ----------

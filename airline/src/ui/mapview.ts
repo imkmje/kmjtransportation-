@@ -1,5 +1,5 @@
 import land from '../data/land.json';
-import { CITIES } from '../data';
+import { CITIES, EVENTS } from '../data';
 import type { Game } from '../sim/game';
 import { placeLabels, type LabelItem } from './labels';
 import { marketSize } from '../sim/model';
@@ -72,6 +72,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     for (const k of g.state.competitors) for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
     ctx.setLineDash([]);
     // 노선: 이익이면 초록, 적자면 빨강, 항공기가 없으면 회색 점선
+    let chip: { txt: string; color: string; lx: number; ly: number } | null = null;
     for (const r of g.state.routes) {
       if (!r.open) continue;
       const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, planes = g.planesOn(r.id).length, served = planes > 0;
@@ -83,12 +84,9 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
       }
       ctx.setLineDash([]);
-      if (served && r.id === selRoute) { // 선택한 노선: 곡선 가운데에 월 이익 표시
-        const [x1, y1, x2, y2] = arcSegments(A, B)[0], [mx, my] = ctrl(x1, y1, x2, y2), lx = 0.25 * x1 + 0.5 * mx + 0.25 * x2, ly = 0.25 * y1 + 0.5 * my + 0.25 * y2;
-        const txt = `월 ${profit >= 0 ? '+' : '−'}$${Math.abs(profit * config.daysPerMonth).toFixed(1)}M`;
-        ctx.font = '700 12px system-ui, sans-serif'; const tw = ctx.measureText(txt).width + 12;
-        ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(lx - tw / 2, ly - 22, tw, 18, 9); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, lx, ly - 13);
+      if (served && r.id === selRoute) { // 선택한 노선: 곡선 가운데의 월 이익 표시는 도시 이름을 다 그린 뒤 겹치지 않는 자리에 그린다
+        const [x1, y1, x2, y2] = arcSegments(A, B)[0], [mx, my] = ctrl(x1, y1, x2, y2);
+        chip = { txt: `월 ${profit >= 0 ? '+' : '−'}$${Math.abs(profit * config.daysPerMonth).toFixed(1)}M`, color, lx: 0.25 * x1 + 0.5 * mx + 0.25 * x2, ly: 0.25 * y1 + 0.5 * my + 0.25 * y2 };
       }
       if (served) for (const [x1, y1, x2, y2] of arcSegments(A, B)) {
         const [mx, my] = ctrl(x1, y1, x2, y2);
@@ -122,6 +120,25 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       if (!p) continue;
       ctx.fillStyle = locked && !sel ? '#6b7a89' : '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
       ctx.textAlign = p.align; ctx.fillText(c.name, p.x, p.y); ctx.textAlign = 'left'; ctx.shadowBlur = 0;
+    }
+    // 행사 표시: 예고되었거나 열려 있는 행사의 도시에 고리와 이름표
+    const tags = new Map<string, { text: string; color: string }>();
+    for (const u of g.state.upcoming) tags.set(u.city, { text: `${EVENTS.find((e) => e.id === u.def)?.name ?? '행사'} ${Math.max(0, u.start - g.monthsPassed)}개월 뒤`, color: '#8a5cc4' });
+    for (const e of g.state.events) if (e.city) { const d = EVENTS.find((x) => x.id === e.def); if (d) tags.set(e.city, { text: `${d.name} ${e.monthsLeft}개월`, color: (d.effect.cityCap ?? 0) < 0 ? '#d64545' : '#1f9d57' }); }
+    ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const it of items) { const tag = tags.get(it.id.split('@')[0]); if (!tag) continue;
+      ctx.strokeStyle = tag.color; ctx.lineWidth = 2.5; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.arc(it.x, it.y, 13, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      const tw = ctx.measureText(tag.text).width + 10; ctx.fillStyle = tag.color; ctx.beginPath(); ctx.roundRect(it.x - tw / 2, it.y + 17, tw, 15, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillText(tag.text, it.x, it.y + 25);
+    }
+    // 선택한 노선의 월 이익 표시: 도시 이름표와 겹치지 않는 자리를 찾는다
+    if (chip) {
+      ctx.font = '700 12px system-ui, sans-serif'; const tw = ctx.measureText(chip.txt).width + 12, th = 18;
+      const rects = items.filter((it) => placed.has(it.id)).map((it) => { const p = placed.get(it.id)!, x0 = p.align === 'left' ? p.x : p.align === 'right' ? p.x - it.w : p.x - it.w / 2; return { x0: x0 - 2, y0: p.y - it.h / 2 - 1, x1: x0 + it.w + 2, y1: p.y + it.h / 2 + 1 }; });
+      const hit = (x: number, y: number) => rects.some((r) => x - tw / 2 < r.x1 && x + tw / 2 > r.x0 && y < r.y1 && y + th > r.y0);
+      let best = { x: chip.lx, y: chip.ly - 22 };
+      outer: for (const dy of [0, -26, 26, -52, 52, -78]) for (const dx of [0, -70, 70, -140, 140]) { if (!hit(chip.lx + dx, chip.ly - 22 + dy)) { best = { x: chip.lx + dx, y: chip.ly - 22 + dy }; break outer; } }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = chip.color; ctx.beginPath(); ctx.roundRect(best.x - tw / 2, best.y, tw, th, 9); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(chip.txt, best.x, best.y + 9);
     }
   }
 
