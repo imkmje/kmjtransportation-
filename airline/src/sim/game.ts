@@ -677,7 +677,7 @@ export class Game {
     if (s.story) { if (m >= s.story.expires) { const d = this.storyDef(); s.log.push(`${m + 1}개월차: '${d?.title ?? '제안'}' — 답을 미뤄서 기회가 지나갔습니다.`); s.story = null; } return; }
     if (m + 1 < k.minMonth || this.rng.next() >= k.chance) return;
     const d = list[this.rng.int(list.length)]; s.story = { id: d.id, expires: m + k.expires };
-    s.log.push(`${m + 1}개월차: ${d.title} — ${d.desc} (지도 탭에서 ${k.expires}개월 안에 선택)`);
+    s.log.push(`${m + 1}개월차: ${d.title} — ${d.desc} (현황 탭에서 ${k.expires}개월 안에 선택)`);
   }
   chooseStory(i: number): Result<{ text: string }> {
     const s = this.state, d = this.storyDef(); if (!d || !s.story) return fail('선택할 이야기가 없습니다');
@@ -704,7 +704,7 @@ export class Game {
       const goal = kind === 'pax' ? Math.round((bestPax * 1.08) / 500) * 500 : kind === 'profit' ? Math.round(bestProfit * 1.1 * 10) / 10 : kind === 'otp' ? 0.97 : 2;
       const text = kind === 'pax' ? `올해 안에 한 달 탑승객 ${goal.toLocaleString('en-US')}명 기록` : kind === 'profit' ? `올해 안에 한 달 이익 $${goal}M 기록` : kind === 'otp' ? '올해 안에 한 달 정시율 97% 이상' : '올해 안에 새 도시 2곳에 취항';
       s.season = { year: yr, kind, goal, best: 0, start: this.servedCities().size, done: false, cash, text };
-      s.log.push(`${mp + 1}개월차: 올해의 도전 — ${text}. 달성하면 현금 $${cash}M과 평판 보너스(지도 탭).`);
+      s.log.push(`${mp + 1}개월차: 올해의 도전 — ${text}. 달성하면 현금 $${cash}M과 평판 보너스(현황 탭).`);
     }
     const se = s.season; if (!se || se.done || !last) return;
     se.best = se.kind === 'pax' ? Math.max(se.best, last.pax) : se.kind === 'profit' ? Math.max(se.best, last.profit) : se.kind === 'otp' ? Math.max(se.best, this.avgOtp) : this.servedCities().size - se.start;
@@ -769,7 +769,7 @@ export class Game {
   openRoute(aId: string, bId: string): Result<{ routeId: number }> {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     if (aId === bId) return fail('같은 도시입니다');
-    for (const id of [aId, bId]) if (!this.cityOpen(id)) return fail(`${cityById(id).name}은(는) ${this.regionName(cityById(id).region)} 지역이라 운수권이 필요합니다. 지도 탭의 '지역 운수권'에서 살 수 있습니다.`);
+    for (const id of [aId, bId]) if (!this.cityOpen(id)) return fail(`${cityById(id).name}은(는) ${this.regionName(cityById(id).region)} 지역이라 운수권이 필요합니다. 현황 탭의 '지역 운수권'에서 살 수 있습니다.`);
     const A = cityById(aId), B = cityById(bId);
     const ex = this.state.routes.find((r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
     if (ex) {
@@ -1045,7 +1045,7 @@ export class Game {
     else { const goal = Math.max(8, Math.round(Math.max(3, avg) * months * 1.25)); c = { kind: 'profit', goal, limit: months, title: `${months}개월 동안 누적 이익 ${m$(goal)} 달성` }; }
     const reward = this.makeReward(Math.max(k.rewardMin, Math.round(base * k.kindMult[kind])));
     s.contracts.push({ ...c, id: s.nextId++, status: 'offer', expires: mp + k.offerMonths, progress: 0, reward });
-    s.log.push(`${mp + 1}개월차: 새 계약 제안 — ${c.title}. 보상: ${reward.label} (지도 탭, ${k.offerMonths}개월 안에 수락)`);
+    s.log.push(`${mp + 1}개월차: 새 계약 제안 — ${c.title}. 보상: ${reward.label} (현황 탭, ${k.offerMonths}개월 안에 수락)`);
   }
   private makeReward(base: number): ContractReward {
     const s = this.state, roll = this.rng.next(), cash = (v = base): ContractReward => ({ type: 'cash', value: v, label: `현금 $${v}M` });
@@ -1104,7 +1104,7 @@ export class Game {
       const lots = Math.min(config.auction.maxLots, c.planes);
       for (let i = 0; i < lots; i++) s.auctions.push({ id: s.nextId++, from: c.name, type: 'B737', price: Math.round(typeById('B737').price * config.auction.price * 10) / 10, age: config.auction.age, cond: config.auction.cond, expires: this.monthsPassed + config.auction.months });
       this.note(m, 'rival', `${c.name} 파산`);
-      s.log.push(`${m}개월차: ${c.name}이(가) 파산했습니다. 노선 ${c.routes.length}개가 사라졌고${lots ? `, 항공기 ${lots}대가 ${config.auction.months}개월간 경매에 나왔습니다(지도 탭).` : '.'}`);
+      s.log.push(`${m}개월차: ${c.name}이(가) 파산했습니다. 노선 ${c.routes.length}개가 사라졌고${lots ? `, 항공기 ${lots}대가 ${config.auction.months}개월간 경매에 나왔습니다(현황 탭).` : '.'}`);
     }
     if (!s.competitors.some((c) => c.major) && m > k.major.startMonth) { // 대형 항공사 출범
       const used = new Set(s.competitors.map((c) => c.hub)), hub = k.major.hubs.find((h) => h !== s.base && !used.has(h)) ?? k.major.hubs[0];

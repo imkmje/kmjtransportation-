@@ -85,7 +85,7 @@ describe('이야기 사건', () => {
   });
   it('답을 미루면 기회가 지나가고, 자유 모드에서 가끔 새 이야기가 생긴다', () => {
     const g = sandbox(); g.state.story = { id: 'green', expires: 1 }; g.advanceDays(61); expect(g.state.log.some((l) => l.includes('기회가 지나갔습니다'))).toBe(true);
-    let seen = 0; for (let seed = 1; seed <= 6; seed++) { const h = sandbox(seed); h.advanceDays(30 * 24); if (h.state.log.some((l) => /\(지도 탭에서 \d개월 안에 선택\)/.test(l))) seen++; }
+    let seen = 0; for (let seed = 1; seed <= 6; seed++) { const h = sandbox(seed); h.advanceDays(30 * 24); if (h.state.log.some((l) => /\(현황 탭에서 \d개월 안에 선택\)/.test(l))) seen++; }
     expect(seen).toBeGreaterThan(0);
   });
   it('이야기 정의가 올바르다', () => { for (const d of config.story.list) { expect(d.choices.length).toBeGreaterThanOrEqual(2); expect(d.title.length).toBeGreaterThan(5); } });

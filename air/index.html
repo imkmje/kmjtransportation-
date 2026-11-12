@@ -115,6 +115,33 @@
           details.more > summary small { margin-left: 6px; font-weight: 500; color: var(--ink2); }
           .nw { white-space: nowrap; } .nw b { display: inline !important; font-size: inherit !important; } .sharebar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: #e4ecf3; margin-top: 6px; max-width: 320px; } .sharebar i { display: block; height: 100%; } .sharelg { display: block; margin-top: 3px; } .sharelg u { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; text-decoration: none; }
           .goal .btnrow { display: flex; gap: 8px; margin-top: 8px; } .goal .btnrow button { flex: 1; min-height: 42px; padding: 8px 4px; font-size: 13px; }
+          /* 2.0.0: 아래 서랍(접기·절반·크게) + 표 */
+      #app { grid-template-rows: 56px 1fr; }
+      #stage { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) var(--dh); } #stage.d-min { --dh: 60px; } #stage.d-half { --dh: 46%; } #stage.d-full { --dh: calc(100% - 72px); }
+      #drawer { display: flex; flex-direction: column; min-height: 0; background: var(--bg); border-top: 1px solid var(--line); box-shadow: 0 -8px 24px #0001; position: relative; z-index: 7; }
+      #dhead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border-bottom: 1px solid var(--line); flex: none; min-width: 0; }
+      #tabs { display: flex; gap: 2px; background: transparent; overflow-x: auto; scrollbar-width: none; flex: none; max-width: 70%; } #tabs button { flex: none; border-radius: 10px; background: transparent; color: var(--ink2); font-size: 14px; min-height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 6px; box-shadow: none; } #tabs button.on { background: #e8f1fc; color: var(--accent2); box-shadow: none; } #tabs button .ic { display: inline-block; margin: 0; } #tabs button[data-badge] { padding-right: 34px; } #tabs button[data-badge]::after { top: 50%; right: 6px; transform: translateY(-50%); }
+      #dsum { flex: 1; min-width: 0; font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+      #dsize { display: flex; gap: 4px; flex: none; } #dsize button { min-height: 40px; padding: 0 12px; font-size: 13px; background: #eef3f8; color: var(--accent2); border-radius: 999px; } #dsize button.on { background: var(--accent); color: #fff; }
+      #panel { flex: 1; min-height: 0; border-left: 0; padding: 12px 16px 20px; }
+      #stage.d-min #panel { display: none; }
+      #stage.d-full #drawer { display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+      #stage.d-full #dhead { flex-direction: column; align-items: stretch; border-bottom: 0; border-right: 1px solid var(--line); padding: 12px 10px; gap: 10px; background: #f8fafc; }
+      #stage.d-full #tabs { flex-direction: column; max-width: none; overflow: visible; } #stage.d-full #tabs button { justify-content: flex-start; min-height: 48px; font-size: 15px; width: 100%; }
+      #stage.d-full #dsum { flex: 1; white-space: normal; text-align: left; } #stage.d-full #dsize { flex-direction: column; } #stage.d-full #dsize button { width: 100%; }
+      #panel.hasSplit { overflow: hidden; padding: 0; }
+      .split { display: flex; height: 100%; min-height: 0; } .pmain { flex: 1; min-width: 0; overflow-y: auto; padding: 12px 16px 20px; } .pside { width: min(460px, 44%); flex: none; overflow-y: auto; border-left: 1px solid var(--line); background: #fbfdff; padding: 12px 16px 0; }
+      .pside > :last-child:not(.live) { margin-bottom: 20px; }
+      .cols2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; align-items: start; }
+      .tbl { background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin: 8px 0; }
+      .thead, .trow { display: grid; grid-template-columns: var(--cols); gap: 10px; align-items: center; padding: 0 12px; }
+      .thead { min-height: 38px; background: #f8fafc; border-bottom: 1px solid var(--line); position: sticky; top: -12px; z-index: 1; } .thead > * { font-size: 12px; font-weight: 700; color: var(--ink2); } .thead button { background: transparent; min-height: 36px; padding: 0; text-align: left; border-radius: 0; } .thead button.on { color: var(--accent2); }
+      button.trow { width: 100%; background: #fff; color: var(--ink); font-weight: 400; font-size: 14px; min-height: 46px; border-radius: 0; border-bottom: 1px solid #eef3f7; text-align: left; padding: 6px 12px; } button.trow:last-child { border-bottom: 0; } button.trow:hover { background: #f6f9fc; } button.trow.sel { background: #e8f1fc; box-shadow: inset 3px 0 0 var(--accent); }
+      .trow > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .trow b { font-weight: 700; } .trow small { color: var(--ink2); }
+      .mbar { display: flex; align-items: center; gap: 6px; } .mbar .b { flex: 1; height: 6px; border-radius: 3px; background: #e4ecf3; overflow: hidden; } .mbar i { display: block; height: 100%; background: var(--accent); } .mbar.low i { background: var(--warn); }
+      .btnrow2 { display: flex; gap: 8px; } .btnrow2 button { min-height: 44px; }
+      @media (min-width: 901px) { .pside > button.back { display: none; } }
+      @media (max-width: 900px) { .cols2 { grid-template-columns: 1fr; } .split { flex-direction: column; } .split.sel .pmain { display: none; } .split:not(.sel) .pside { display: none; } .pside { width: auto; border-left: 0; flex: 1; } #stage.d-half { --dh: 56%; } #dsum { display: none; } }
     </style>
   </head>
   <body>
@@ -124,8 +151,8 @@
         <div id="speeds"><button data-speed="0" aria-label="일시정지" data-ic="pause"></button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div>
         <button id="menubtn">메뉴</button>
       </header>
-      <main id="stage"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><div id="era" hidden></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><aside id="panel"></aside></main>
-      <nav id="tabs"><button data-tab="map">지도</button><button data-tab="routes">노선</button><button data-tab="fleet">기단</button><button data-tab="money">재무</button><button data-tab="news">알림</button></nav>
+      <main id="stage" class="d-half"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><div id="era" hidden></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><section id="drawer"><div id="dhead"><nav id="tabs"><button data-tab="map">현황</button><button data-tab="routes">노선</button><button data-tab="fleet">기단</button><button data-tab="rivals">경쟁사</button><button data-tab="money">재무</button><button data-tab="news">알림</button></nav><span id="dsum"></span><div id="dsize" role="group" aria-label="서랍 높이"><button data-h="min">접기</button><button data-h="half" class="on">절반</button><button data-h="full">크게</button></div></div><aside id="panel"></aside></section></main>
+      
     </div>
     <input type="file" id="import-file" accept=".json,application/json" hidden />
     <div id="menu" hidden><button data-m="save">빠른 저장</button><button data-m="load">빠른 불러오기</button><button data-m="saves">저장 관리</button><button data-m="stats">통계</button><button data-m="new">새 게임</button><button data-m="hints">힌트: 켜짐</button><button data-m="sound">소리: 켜짐</button><button data-m="volume">소리 크기</button><button data-m="music">배경 음악: 켜짐</button><button data-m="night">낮밤 표시: 켜짐</button><button data-m="help">도움말</button><button data-m="chronicle">연대기</button><button data-m="ach">업적</button><button data-m="records">기록</button><button data-m="autopause">사건 시 자동 정지: 켜짐</button><button data-m="title">시작 화면</button></div>
