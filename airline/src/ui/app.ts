@@ -179,7 +179,7 @@ export function startApp(): void {
   function routeLabel(a: string, b: string) { return `${cityById(a).name} ⇄ ${cityById(b).name}`; }
 
   let newsFilter: 'all' | LogKind = 'all', newsAll = false;
-  let advList: Advice[] = [], achSeen = new Set<string>(), msSeen = new Set<string>(), routeSort: 'profit' | 'loss' | 'share' | 'made' = 'profit';
+  let advList: Advice[] = [], achSeen = new Set<string>(), msSeen = new Set<string>(), routeSort: 'profit' | 'loss' | 'share' | 'made' = 'profit', destSort: 'demand' | 'near' | 'far' | 'season' | 'name' = 'demand', destNew = false;
   const rbuyOpen = new Map<number, boolean>(); // 노선별 '항공기 추가' 펼침 상태(누른 것만 기억)
   const detOpen = new Map<string, boolean>(); // 사용자가 누른 접이식 상태(알림이 와서 화면을 다시 그려도 유지)
   const detKey = (d: HTMLElement) => `${tab}|${selRoute ?? ''}|${selCity ?? ''}|${(d.querySelector('summary')?.textContent ?? '').replace(/[\d.,$%+\-]+/g, '').trim().slice(0, 24)}`;
@@ -220,8 +220,9 @@ export function startApp(): void {
     const selLocked = !game.cityOpen(c.id);
     const dests = CITIES.filter((d) => d.id !== c.id).map((d) => {
       const dist = distanceKm(c, d), ex = s.routes.find((r) => r.open && ((r.a === c.id && r.b === d.id) || (r.a === d.id && r.b === c.id)));
-      return { d, dist, demand: rawMonthlyDemand(c, d, game.month) * (1 + config.demand.repBoost * s.reputation), ex };
-    }).sort((x, y) => y.demand - x.demand);
+      const demand = rawMonthlyDemand(c, d, game.month) * (1 + config.demand.repBoost * s.reputation), avg = Array.from({ length: 12 }, (_, i) => rawMonthlyDemand(c, d, i + 1)).reduce((a, b) => a + b, 0) / 12;
+      return { d, dist, demand, ex, season: demand / (avg * (1 + config.demand.repBoost * s.reputation)) }; // season: 이번 달 수요 ÷ 연평균(1보다 크면 성수기)
+    }).filter((x) => !destNew || !x.ex).sort((x, y) => (destSort === 'near' ? x.dist - y.dist : destSort === 'far' ? y.dist - x.dist : destSort === 'season' ? y.season - x.season : destSort === 'name' ? (x.d.name < y.d.name ? -1 : 1) : 0) || y.demand - x.demand);
     const drow = ({ d, dist, demand, ex }: typeof dests[number]) => `<div class="row${ex ? ' clickable' : ''}"${ex ? ` data-act="goRoute" data-id="${ex.id}" title="눌러서 이 노선으로 이동"` : ''}><div class="grow"><b>${esc(d.name)}</b><small>${km(dist)} · 기준 운임 ${fare(baseFare(dist))} · 월 수요 ${num(demand)}명 </small><span class="season" title="1~12월 수요 변화(진한 막대가 이번 달)">${seasonBar(c, d)}</span></div>
         ${ex ? `<button data-act="goRoute" data-id="${ex.id}" class="ghost">운항 중</button>` : selLocked ? `<button class="ghost" ${no(true, `${c.name}은(는) ${game.regionName(c.region)} 지역이라 운수권이 필요합니다. 위의 운수권 구매 버튼을 누르세요.`)}>잠김</button>` : !game.cityOpen(d.id) ? `<button class="ghost" data-act="buyRights" data-region="${d.region}" ${no(!game.regionInfo(d.region).profitOk || !game.regionInfo(d.region).cashOk, !game.regionInfo(d.region).profitOk ? `누적 이익 ${money(game.rightsNeed)} 이상이 필요합니다 (지금 ${money(s.cumProfit)})` : short(game.regionInfo(d.region).price))}>운수권 ${money(game.regionInfo(d.region).price)}</button>` : `<button data-act="open" data-a="${c.id}" data-b="${d.id}">열기</button>`}</div>`;
     const hubX = s.routes.filter((r) => r.open).reduce((a, r) => a + game.transferDemand(r, c.id), 0), hubN = s.routes.filter((r) => r.open && (r.a === c.id || r.b === c.id) && game.planesOn(r.id).length).length;
@@ -232,7 +233,8 @@ export function startApp(): void {
       ${game.cityOpen(c.id) ? `<div class="goal"><div><b>허브 투자</b> <small>단계마다 월 운영비 ${money(config.investUpkeep)}</small></div>${(['terminal', 'mro', 'lounge'] as const).map((kind) => { const k = config.invest[kind], lv = game.hubLevel(c.id, kind), price = game.hubPrice(c.id, kind), allowed = game.linksAt(c.id) >= 1 || c.id === s.base; return `<div class="row" style="margin-top:6px"><div class="grow"><b>${k.name}</b><span class="pips">${[0, 1, 2].map((i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><small>${k.desc}</small></div>${price === null ? '<small class="pos">최고 단계</small>' : `<button data-act="hub" data-city="${c.id}" data-kind="${kind}" ${no(!allowed || s.cash < price, !allowed ? '이 도시에 취항(항공기 배정)한 뒤에 투자할 수 있습니다' : short(price))}>${money(price)}</button>`}</div>`; }).join('')}</div>` : ''}
       ${s.competitors.filter((k) => k.routes.some((r) => r.a === c.id || r.b === c.id)).map((k) => `<p class="hint">경쟁: <b>${esc(k.name)}</b>이(가) ${esc(c.name)}에 취항 중입니다.</p>`).join('')}
       ${selLocked ? `<div class="goal"><div><b>운수권이 없는 지역</b> <small>${esc(game.regionName(c.region))}</small></div><small>이 도시로 노선을 열려면 ${esc(game.regionName(c.region))} 운수권이 필요합니다.</small><button class="wide" data-act="buyRights" data-region="${c.region}" ${no(!game.regionInfo(c.region).profitOk || !game.regionInfo(c.region).cashOk, !game.regionInfo(c.region).profitOk ? `누적 이익 ${money(game.rightsNeed)} 이상이 필요합니다 (지금 ${money(s.cumProfit)})` : short(game.regionInfo(c.region).price))}>운수권 구매 ${money(game.regionInfo(c.region).price)}</button></div>` : ''}
-      <h3>${esc(c.name)}에서 노선 열기</h3><p class="hint">월 수요가 큰 순서입니다(기준 운임일 때). 먼 거리는 큰 비행기가 필요합니다.</p>
+      <h3>${esc(c.name)}에서 노선 열기</h3><p class="hint">월 수요는 기준 운임일 때의 값입니다. 먼 거리는 큰 비행기가 필요합니다.</p>
+      <div class="chips">${([['demand', '수요 많은 순'], ['near', '가까운 순'], ['far', '먼 순'], ['season', '지금 성수기'], ['name', '이름순']] as const).map(([v, t]) => `<button data-act="destSort" data-v="${v}" class="${destSort === v ? 'on' : ''}">${t}</button>`).join('')}<button data-act="destNew" class="${destNew ? 'on' : ''}">미취항만</button></div>
       <div class="list">${dests.slice(0, 8).map(drow).join('')}</div>${dests.length > 8 ? `<details class="more"><summary>나머지 도시 ${dests.length - 8}곳 보기</summary><div class="list">${dests.slice(8).map(drow).join('')}</div></details>` : ''}`;
   }
 
@@ -586,6 +588,8 @@ export function startApp(): void {
     else if (act === 'setRival') { const r = game.setRival(id); if (!r.ok) return err(r.error); done('라이벌로 정했습니다'); }
     else if (act === 'adRoute') { const r = game.adRoute(id); if (!r.ok) return err(r.error); done('맞대응 광고를 시작했습니다'); }
     else if (act === 'matchFare') { const r = game.matchRivalFare(id); if (!r.ok) return err(r.error); done('상대 운임 수준으로 맞췄습니다'); }
+    else if (act === 'destSort') { destSort = b.dataset.v as typeof destSort; done(); }
+    else if (act === 'destNew') { destNew = !destNew; done(); }
     else if (act === 'ally') { const on = game.state.ally === id, r = game.setAlly(on ? null : id); if (!r.ok) return err(r.error); done(on ? '제휴를 해지했습니다' : '제휴를 맺었습니다'); }
     else if (act === 'respond') { const r = game.respondEvent(id); if (!r.ok) return err(r.error); done('사건에 대응했습니다'); }
     else if (act === 'buy') { const r = game.buyPlane(b.dataset.id!); if (!r.ok) return err(r.error); done('항공기를 샀습니다. 노선에 배정하세요.'); }

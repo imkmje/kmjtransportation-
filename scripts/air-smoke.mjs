@@ -376,6 +376,10 @@ const sc2 = await page.evaluate(() => window.__air.screenOf('ICN')); await page.
 await page.locator('#panel details.more > summary', { hasText: '나머지 도시' }).click();
 await page.evaluate(() => { window.__air.game.state.cash = 3; window.__air.render(); });
 check('나머지 도시 보기: 화면이 다시 그려져도 펼친 상태가 유지됨', await page.locator('#panel details.more[open] > summary', { hasText: '나머지 도시' }).count() === 1);
+await page.locator('#panel button[data-act="destSort"][data-v="near"]').click();
+const kms = await page.locator('#panel .row.clickable small, #panel .list .row small').evaluateAll((els) => els.map((e) => Number((e.textContent.match(/([\d,]+) km/) ?? [])[1]?.replace(/,/g, ''))).filter((n) => n > 0).slice(0, 6));
+check('도착지 정렬: 가까운 순으로 바뀜', kms.length >= 3 && kms.every((v, i) => i === 0 || v >= kms[i - 1]), kms.join(','));
+await page.locator('#panel button[data-act="destSort"][data-v="demand"]').click();
 check('도시 화면: 도착지에 계절 막대가 있음', (await page.locator('#panel .season').count()) > 0);
 await page.click('#tabs button[data-tab="routes"]');
 check('노선 목록: 점유율(또는 독점) 표시와 점유율 정렬 버튼', (await page.locator('#panel').innerText()).includes('독점') || (await page.locator('#panel').innerText()).includes('점유'));
