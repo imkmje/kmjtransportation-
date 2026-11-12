@@ -142,6 +142,18 @@
       .btnrow2 { display: flex; gap: 8px; } .btnrow2 button { min-height: 44px; }
       @media (min-width: 901px) { .pside > button.back { display: none; } }
       @media (max-width: 900px) { .cols2 { grid-template-columns: 1fr; } .split { flex-direction: column; } .split.sel .pmain { display: none; } .split:not(.sel) .pside { display: none; } .pside { width: auto; border-left: 0; flex: 1; } #stage.d-half { --dh: 56%; } #dsum { display: none; } }
+          /* 2.1.0: 화면 다듬기 */
+      .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; } .toolbar h2 { margin: 0 !important; flex: 1; min-width: 160px; } .toolbar button { min-height: 40px; padding: 6px 14px; font-size: 14px; }
+      .pmain { padding-top: 10px; }
+      .tfoot { display: grid; grid-template-columns: var(--cols); gap: 10px; align-items: center; padding: 0 12px; min-height: 40px; background: #f8fafc; border-top: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--ink2); }
+      .rtabs { position: sticky; top: -12px; z-index: 3; background: #fbfdff; padding: 6px 0; margin: 4px 0 8px; } .rtabs button { min-height: 40px; font-size: 13px; }
+      #report.collapsed > :not(h4) { display: none; } #report.collapsed { padding-bottom: 8px; } #report h4 { gap: 8px; } #report h4 small { margin-left: 6px; font-size: 13px; } #report .rbtns { display: flex; gap: 6px; flex: none; }
+      #toast { top: 72px; bottom: auto; }
+      #dgrip { position: absolute; left: 50%; top: -14px; transform: translateX(-50%); width: 72px; height: 28px; cursor: ns-resize; touch-action: none; z-index: 8; } #dgrip::before { content: ''; position: absolute; left: 16px; right: 16px; top: 10px; height: 6px; border-radius: 3px; background: #9fb0c0; }
+      #dsum { touch-action: none; cursor: ns-resize; }
+      #mapback { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; min-height: 36px; padding: 4px 14px; font-size: 13px; box-shadow: 0 4px 12px #0002; }
+      #stage.d-full #mapback { display: block; } #stage.d-full #alerts, #stage.d-full #report, #stage.d-full #era, #stage.d-full #fold, #stage.d-full #hint { display: none !important; }
+      #stage.d-full { --dh: calc(100% - 48px); }
     </style>
   </head>
   <body>
@@ -151,7 +163,7 @@
         <div id="speeds"><button data-speed="0" aria-label="일시정지" data-ic="pause"></button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div>
         <button id="menubtn">메뉴</button>
       </header>
-      <main id="stage" class="d-half"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><div id="era" hidden></div><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><section id="drawer"><div id="dhead"><nav id="tabs"><button data-tab="map">현황</button><button data-tab="routes">노선</button><button data-tab="fleet">기단</button><button data-tab="rivals">경쟁사</button><button data-tab="money">재무</button><button data-tab="news">알림</button></nav><span id="dsum"></span><div id="dsize" role="group" aria-label="서랍 높이"><button data-h="min">접기</button><button data-h="half" class="on">절반</button><button data-h="full">크게</button></div></div><aside id="panel"></aside></section></main>
+      <main id="stage" class="d-half"><div id="mapwrap"><canvas id="map"></canvas><div id="alerts"></div><div id="era" hidden></div><button id="mapback" class="ghost">지도 보기</button><button id="fold" aria-label="패널 접기·펴기" title="패널 접기·펴기" data-ic="expand"></button><div id="report" hidden></div><div id="hint" hidden><span id="hint-text"></span><button id="hint-off" class="ghost">힌트 끄기</button></div></div><section id="drawer"><div id="dgrip" aria-hidden="true"></div><div id="dhead"><nav id="tabs"><button data-tab="map">현황</button><button data-tab="routes">노선</button><button data-tab="fleet">기단</button><button data-tab="rivals">경쟁사</button><button data-tab="money">재무</button><button data-tab="news">알림</button></nav><span id="dsum"></span><div id="dsize" role="group" aria-label="서랍 높이"><button data-h="min">접기</button><button data-h="half" class="on">절반</button><button data-h="full">크게</button></div></div><aside id="panel"></aside></section></main>
       
     </div>
     <input type="file" id="import-file" accept=".json,application/json" hidden />
