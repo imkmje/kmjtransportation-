@@ -15,7 +15,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   const ctx = canvas.getContext('2d')!;
   let W = 0, H = 0, dpr = 1, resized = false;
   let scale = 3, cx = 100, cy = 25; // scale: 화면 px/도, (cx, cy): 화면 가운데의 경도·위도
-  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null;
+  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null;
   const widths = new Map<string, number>();
   const toX = (lon: number) => W / 2 + (lon - cx) * scale, toY = (lat: number) => H / 2 - (lat - cy) * scale;
   const fitScale = () => Math.min(W / 360, H / (LAT_MAX - LAT_MIN));
@@ -69,7 +69,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       } }
     // 경쟁사 노선(보라색 가는 선)
     ctx.strokeStyle = 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
-    for (const k of g.state.competitors) for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
+    for (const k of g.state.competitors) { const f = k.id === focusComp; ctx.strokeStyle = f ? 'rgba(214, 128, 58, 0.95)' : 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = f ? 3.5 : 1.5; for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } } // 경쟁사 탭에서 고른 회사는 주황 굵은 선
     ctx.setLineDash([]);
     // 노선: 이익이면 초록, 적자면 빨강, 항공기가 없으면 회색 점선
     let chip: { txt: string; color: string; lx: number; ly: number } | null = null;
@@ -210,6 +210,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   let nightOn = true;
   return {
     setNight(v: boolean) { nightOn = v; },
+    /** 경쟁사 탭에서 고른 회사의 노선을 강조(null이면 끔) */
+    focusComp(id: number | null) { focusComp = id; },
     /** 일시정지 중이면 애니메이션을 멈춘다 */
     setPaused(v: boolean) { paused = v; },
     /** 점검용: 애니메이션 시계와 일시정지 상태 */

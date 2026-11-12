@@ -38,7 +38,8 @@ const $ = <T extends HTMLElement>(s: string, root: ParentNode = document) => roo
 export function startApp(): void {
   let game = new Game(1);
   let tab: Tab = 'map';
-  let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null;
+  let reportMonth = -1;
+  let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null, routeTab = 'sum', reportOpen = false, alertsOpen = false;
   let drawer: 'min' | 'half' | 'full' = 'half', lastSpeed = 1, resumeAfterFull = false; // 아래 서랍 높이, 마지막으로 고른 배속(크게 펼쳤다 닫으면 이 배속으로 다시 시작)
   const tsort: Record<string, { k: string; d: number }> = { routes: { k: 'profit', d: -1 }, fleet: { k: 'cond', d: 1 }, rivals: { k: 'rev', d: -1 } }; // 표마다 정렬 열과 방향
   let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
@@ -62,7 +63,7 @@ export function startApp(): void {
     onCity: (id) => { selCity = id; selRoute = null; if (id) { tab = 'map'; if (drawer === 'min') setDrawer('half'); } syncMap(); render(); },
     onRoute: (id) => { selRoute = id; selCity = null; tab = 'routes'; if (drawer === 'min') setDrawer('half'); syncMap(); render(); },
   });
-  const syncMap = () => map.select(selCity, selRoute);
+  const syncMap = () => { const pr = tab === 'fleet' && selPlane !== null ? game.state.planes.find((p) => p.id === selPlane)?.routeId ?? null : null; map.select(selCity, selRoute ?? pr); map.focusComp(tab === 'rivals' ? selComp : null); };
 
   // ---- 위쪽 바 ----
   function renderTop() {
@@ -80,17 +81,20 @@ export function startApp(): void {
   // ---- 알림 띠(지도 위에 항상 보임)와 탭 표시 ----
   function renderAlerts() {
     const s = game.state, el = $('#alerts');
-    const unread = Math.max(0, s.log.length - seenLog), open = s.events.filter((e) => { const d = EVENTS.find((x) => x.id === e.def)!; return !!d.option && !e.handled; }).length;
+    const unread = s.log.slice(seenLog).filter((l) => /사건|전쟁|진출|파산|인수|합병|계약|이야기|라이벌|고장|도전|대출|신기종|시대/.test(l)).length, open = s.events.filter((e) => { const d = EVENTS.find((x) => x.id === e.def)!; return !!d.option && !e.handled; }).length;
     const newsBtn = $('#tabs button[data-tab="news"]');
     const n = tab === 'news' ? 0 : Math.max(unread, open);
-    if (n > 0) newsBtn.dataset.badge = String(n); else delete newsBtn.dataset.badge;
+    if (n > 0) newsBtn.dataset.badge = n > 9 ? '9+' : String(n); else delete newsBtn.dataset.badge; // 중요한 알림만 센다
     const html = s.events.map((e, i) => {
       const def = EVENTS.find((x) => x.id === e.def)!, key = `${e.def}:${e.city ?? ''}:${s.day - (def.months - e.monthsLeft) * config.daysPerMonth}`, fresh = !seenEvents.has(key);
       return `<div class="chip${fresh ? ' new' : ''}" data-key="${key}"><span>${icon('alert', 18)}</span><div class="grow" data-act="goNews"><b>${esc(def.name)}${e.city ? ` · ${esc(cityById(e.city).name)}` : ''}</b> <small>${e.monthsLeft}개월 남음${e.handled ? ' · 대응함' : ''}</small></div>${def.option && !e.handled ? `<button data-act="respond" data-id="${i}" ${no(s.cash < game.eventCost(def), short(game.eventCost(def)))}>${esc(def.option.label)} ${money(game.eventCost(def))}</button>` : ''}</div>`;
     }).join('');
-    if (el.innerHTML !== html) { el.innerHTML = html; el.querySelectorAll<HTMLElement>('.chip').forEach((c) => seenEvents.add(c.dataset.key!)); }
+    const many = s.events.length > 1;
+    const out = !many ? html : alertsOpen ? html + `<div class="chip" data-act="alertsToggle"><div class="grow"><small>사건 ${s.events.length}건 접기</small></div></div>` : `<div class="chip" data-act="alertsToggle"><span>${icon('alert', 18)}</span><div class="grow"><b>진행 중인 사건 ${s.events.length}건</b> <small>${s.events.map((e) => esc(EVENTS.find((x) => x.id === e.def)!.name)).join(' · ')}</small></div><button class="ghost">펼치기</button></div>`;
+    if (el.innerHTML !== out) { el.innerHTML = out; el.querySelectorAll<HTMLElement>('.chip').forEach((c) => seenEvents.add(c.dataset.key!)); }
   }
   $('#alerts').addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('[data-act="alertsToggle"]')) { alertsOpen = !alertsOpen; renderAlerts(); return; }
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (!b) return;
     if (b.dataset.act === 'goNews') { tab = 'news'; seenLog = game.state.log.length; lastHtml = ''; render(); }
     else if (b.dataset.act === 'respond') { const r = game.respondEvent(Number(b.dataset.id)); if (!r.ok) return err(r.error); toast('사건에 대응했습니다'); lastHtml = ''; render(); }
@@ -187,7 +191,7 @@ export function startApp(): void {
   const detKey = (d: HTMLElement) => `${tab}|${selRoute ?? ''}|${selCity ?? ''}|${(d.querySelector('summary')?.textContent ?? '').replace(/[\d.,$%+\-]+/g, '').trim().slice(0, 24)}`;
   const secOpen = new Map<string, boolean>(); // 현황 탭 접이식 구역(사용자가 누른 것만 기억)
   /** <h3> 구역마다 접이식으로 바꾼다. 계약·경매처럼 바로 할 일이 있는 구역만 기본으로 펼친다 */
-  const fold = (html: string) => html.split('<h3>').filter(Boolean).map((chunk) => { const i = chunk.indexOf('</h3>'), head = chunk.slice(0, i), key = head.replace(/<[^>]*>/g, '').trim().split(' ')[0]; return `<details class="more sec" data-k="${key}" ${(secOpen.get(key) ?? /^(계약|항공기|이야기|진출)/.test(key)) ? 'open' : ''}><summary>${head}</summary>${chunk.slice(i + 5)}</details>`; }).join('');
+  const fold = (html: string) => html.split('<h3>').filter(Boolean).map((chunk) => { const i = chunk.indexOf('</h3>'), head = chunk.slice(0, i), key = head.replace(/<[^>]*>/g, '').trim().split(' ')[0]; return `<details class="more sec" data-k="${key}" ${(secOpen.get(key) ?? /^(계약|항공기|이야기|진출|라이벌|올해의)/.test(key)) ? 'open' : ''}><summary>${head}</summary>${chunk.slice(i + 5)}</details>`; }).join('');
   function viewMap(): string {
     const s = game.state;
     if (!selCity) {
@@ -262,13 +266,20 @@ export function startApp(): void {
     const sorted = tsorted('routes', rows, (x, k) => (k === 'name' ? x.name : k === 'profit' ? x.profit : k === 'share' ? x.share : k === 'lf' ? x.lf : k === 'otp' ? x.d.otp : x.n));
     const ordered = [...sorted.filter((x) => x.n === 0), ...sorted.filter((x) => x.n > 0)]; // 항공기가 없는 노선(할 일)은 늘 맨 위
     const status = (x: typeof rows[number]) => (x.n === 0 ? '<span class="badge need">배정 필요</span>' : game.warOn(x.r) ? `<span class="neg">${icon('war', 14)} 전쟁</span>` : x.profit < 0 ? '<span class="badge">적자</span>' : (x.r.ad ?? 0) > 0 ? '<small>광고 중</small>' : x.r.stance === 'share' ? '<small>점유 우선</small>' : '');
-    const main = `<h2>노선 <small>${open.length}개${losing ? ` · 적자 ${losing}개` : ''} · 월 합계 ${money(total)}</small></h2>
-      <div class="btnrow2"><button class="${s.autoFare ? '' : 'ghost'}" data-act="autoFare">자동 운임: <b>${s.autoFare ? '켜짐' : '꺼짐'}</b></button></div>
-      <div class="tbl" style="--cols: minmax(150px, 1.8fr) 0.9fr 1.3fr 0.7fr 0.7fr 0.6fr 0.9fr">${thead('routes', [['name', '노선'], ['profit', '월 이익'], ['share', '점유율'], ['lf', '탑승률'], ['otp', '정시율'], ['n', '항공기'], ['', '상태']])}
-      ${ordered.map((x) => `<button class="trow${x.r.id === sel ? ' sel' : ''}" data-act="goRoute" data-id="${x.r.id}"><span><b>${x.r.name ? `${esc(x.r.name)} · ` : ''}${routeLabel(x.r.a, x.r.b)}</b></span><span class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.n ? money(x.profit) : '-'}</span>${x.n ? (x.d.share < 1 ? mbar(x.d.share) : '<small>독점</small>') : '<span>-</span>'}<span>${x.n ? pct(x.lf) : '-'}</span><span>${x.n ? pct(x.d.otp) : '-'}</span><span>${x.n}대</span><span>${status(x)}</span></button>`).join('')}</div>
+    const hasSt = ordered.some((x) => status(x)), served = rows.filter((x) => x.n > 0), avg = (f: (x: typeof rows[number]) => number) => (served.length ? served.reduce((a, x) => a + f(x), 0) / served.length : 0);
+    const main = `<div class="toolbar"><h2>노선 <small>${open.length}개${losing ? ` · 적자 ${losing}개` : ''}</small></h2><button class="${s.autoFare ? '' : 'ghost'}" data-act="autoFare">자동 운임: <b>${s.autoFare ? '켜짐' : '꺼짐'}</b></button></div>
+      <div class="tbl" style="--cols: minmax(150px, 1.8fr) 0.9fr 1.3fr 0.7fr 0.7fr 0.6fr${hasSt ? ' 0.9fr' : ''}">${thead('routes', [['name', '노선'], ['profit', '월 이익'], ['share', '점유율'], ['lf', '탑승률'], ['otp', '정시율'], ['n', '항공기'], ...(hasSt ? [['', '상태'] as [string, string]] : [])])}
+      ${ordered.map((x) => `<button class="trow${x.r.id === sel ? ' sel' : ''}" data-act="goRoute" data-id="${x.r.id}"><span><b>${x.r.name ? `${esc(x.r.name)} · ` : ''}${routeLabel(x.r.a, x.r.b)}</b></span><span class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.n ? money(x.profit) : '-'}</span>${x.n ? (x.d.share < 1 ? mbar(x.d.share) : '<small>독점</small>') : '<span>-</span>'}<span>${x.n ? pct(x.lf) : '-'}</span><span>${x.n ? pct(x.d.otp) : '-'}</span><span>${x.n}대</span>${hasSt ? `<span>${status(x)}</span>` : ''}</button>`).join('')}
+      <div class="tfoot"><span>합계 ${open.length}개</span><span class="${total >= 0 ? 'pos' : 'neg'}">${money(total)}</span><span>평균 ${pct(avg((x) => x.d.share))}</span><span>${pct(avg((x) => x.lf))}</span><span>${pct(avg((x) => x.d.otp))}</span><span>${rows.reduce((a, x) => a + x.n, 0)}대</span>${hasSt ? '<span></span>' : ''}</div></div>
       ${open.length > 1 ? `<details class="more"><summary>노선 일괄 편집</summary><p class="hint">열려 있는 노선 ${open.length}개 전체에 한 번에 적용합니다.</p><div class="btnrow"><button class="ghost" data-act="bulk" data-v="fareDown" ${no(!!s.autoFare, '자동 운임이 켜져 있으면 운임은 매주 다시 맞춰집니다')}>운임 −5%</button><button class="ghost" data-act="bulk" data-v="fareUp" ${no(!!s.autoFare, '자동 운임이 켜져 있으면 운임은 매주 다시 맞춰집니다')}>운임 +5%</button><button class="ghost" data-act="bulk" data-v="fareBase" ${no(!!s.autoFare, '자동 운임이 켜져 있으면 운임은 매주 다시 맞춰집니다')}>기준 운임</button></div><div class="btnrow">${[1, 2, 3].map((n) => `<button class="ghost" data-act="bulk" data-v="pri${n}">우선순위 ${n}</button>`).join('')}</div><button class="wide danger" data-act="bulk" data-v="closeLoss" ${no(!losing, '적자 노선이 없습니다')}>적자 노선 모두 닫기 (${losing}개)</button></details>` : ''}
       <p class="hint">열 제목을 누르면 정렬됩니다. 자동 운임을 켜면 매주 모든 노선의 운임을 ‘자리를 꽉 채우는 가장 높은 운임’으로 맞춥니다(비즈니스석 포함, 화물 제외).</p>`;
-    const side = sel !== null ? viewRouteDetail(sel) : '<h3>노선을 고르세요</h3><p class="hint">왼쪽 표에서 노선을 누르면 여기서 운임·항공기·경쟁 대응을 바로 고칩니다.</p>';
+    const pick = (list: typeof rows, title: string, val: (x: typeof rows[number]) => string) => (list.length ? `<h3>${title}</h3><div class="list">${list.map((x) => `<button class="card" data-act="goRoute" data-id="${x.r.id}"><div class="row"><div class="grow"><b>${routeLabel(x.r.a, x.r.b)}</b></div><div class="right">${val(x)}</div></div></button>`).join('')}</div>` : '');
+    const byProfit = [...served].sort((a, b) => b.profit - a.profit);
+    const side = sel !== null ? viewRouteDetail(sel) : `<h3 style="margin-top:4px">한눈에 보기</h3><p class="hint">왼쪽 표에서 노선을 누르면 여기서 운임·항공기·경쟁 대응을 고칩니다.</p>
+      ${pick(rows.filter((x) => x.n === 0), '항공기 배정이 필요한 노선', () => '<span class="badge need">배정 필요</span>')}
+      ${pick(byProfit.slice(0, 3), '이익 상위 3', (x) => `<b class="pos">${money(x.profit)}</b>`)}
+      ${pick(byProfit.slice(-3).reverse().filter((x) => !byProfit.slice(0, 3).includes(x)), '이익 하위 3', (x) => `<b class="${x.profit >= 0 ? '' : 'neg'}">${money(x.profit)}</b>`)}
+      ${pick(served.filter((x) => x.d.share < 0.5).sort((a, b) => a.d.share - b.d.share).slice(0, 3), '점유율 낮은 노선', (x) => `<b class="warn">${pct(x.d.share)}</b>`)}`;
     return `<div class="split${sel !== null ? ' sel' : ''}"><div class="pmain" data-sc="m-routes">${main}</div><div class="pside" data-sc="s-r${sel}">${side}</div></div>`;
   }
 
@@ -326,22 +337,26 @@ export function startApp(): void {
     const base = game.routeBaseFare(r), lf = d.seats > 0 ? d.pax / d.seats : 0, profit = (d.revenue - d.cost) * config.daysPerMonth;
     const idle = s_idlePlanes().filter((p) => canFly(typeById(p.type), A, B).ok);
     const lo = Math.round(base * config.fare.minRatio), hi = Math.round(base * config.fare.maxRatio);
+    const hasComp = game.competitorsOn(r.a, r.b).length > 0;
+    const dtabs: [string, string][] = [['sum', '요약'], ['fare', '운임·우선순위'], ['planes', `항공기 ${planes.length}`], ...(hasComp ? [['comp', '경쟁'] as [string, string]] : [])];
+    const dt = planes.length === 0 ? 'planes' : dtabs.some(([k]) => k === routeTab) ? routeTab : 'sum'; // 항공기가 없으면 배정·구매부터
     return `<button class="back" data-act="routesHome">${icon('back', 14)} 노선 목록</button>
       <h2>${r.name ? `${esc(r.name)} <small>${routeLabel(r.a, r.b)}</small>` : routeLabel(r.a, r.b)} <button class="ghost small" data-act="rename">이름</button></h2>
       ${(() => { const w = game.warOn(r); return w ? `<p class="hint"><b class="neg">${icon('war', 14)} 운임 전쟁</b>: ${esc(w.comp.name)}이(가) 이 노선 운임을 크게 내렸습니다(${w.route.war}개월 남음). 따라 내리면 손님을 지키지만 이익이 줄고, 버티면 손님을 잃습니다. 제휴를 맺으면 바로 끝납니다.</p>` : ''; })()}
+      <div class="seg rtabs">${dtabs.map(([k, t]) => `<button data-act="rtab" data-v="${k}" class="${dt === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+      ${dt === 'sum' ? `
       <div class="kv"><div>거리</div><div>${km(dist)}</div><div>월 수요</div><div>${num(d.demand * config.daysPerMonth)}명</div><div>월 좌석</div><div>${num(d.seats * config.daysPerMonth)}석</div>
         <div>탑승률</div><div>${planes.length ? pct(lf) : '-'}</div><div>예상 월 수익</div><div>${money(d.revenue * config.daysPerMonth)}</div><div>예상 월 비용</div><div>${money(d.cost * config.daysPerMonth)}</div>
         <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div>
         <div>정시율</div><div class="${d.otp < 0.85 ? 'neg' : d.otp < 0.95 ? 'warn' : 'pos'}"><b>${pct(d.otp)}</b>${d.compensation > 0 ? ` <small>(보상금 월 ${money(d.compensation * config.daysPerMonth)})</small>` : ''}</div>
         ${d.transfer > 0 ? `<div>환승 수요</div><div class="pos"><b>+${num(d.transfer)}명/월</b> <small>(우리 다른 노선에서 갈아타는 손님)</small></div>` : ''}
         ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${game.competitorsOn(r.a, r.b).map(({ comp, route }) => `<div>${esc(comp.name)}${game.traitOf(comp) ? ` <small>${game.traitOf(comp)!.name}</small>` : ''}${route.war ? ` <span class="neg">${icon('war', 14)}</span>` : ''}</div><div>점유 ${pct(game.routeShares(r).find((x) => x.id === comp.id)?.share ?? 0)} · 운임 ${pct(route.fareRatio)} (내 ${pct(r.fare / game.routeBaseFare(r))}) · 하루 ${num(route.seatsDay)}석</div>`).join('')}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
-      ${rivalBlock(r)}
       <details class="rbuymore"><summary>월 손익 분해 보기</summary><table class="brk" style="width:100%"><tr><td>여객 수익</td><td class="pos">${money(d.revenuePax * config.daysPerMonth)}</td></tr>${d.cargoRevenue > 0 ? `<tr><td>화물 수익</td><td class="pos">${money(d.cargoRevenue * config.daysPerMonth)}</td></tr>` : ''}<tr><td>운영·연료비</td><td>−${money(d.costOps * config.daysPerMonth)}</td></tr><tr><td>착륙료</td><td>−${money(d.costLanding * config.daysPerMonth)}</td></tr><tr><td>승객당 수수료</td><td>−${money(d.costPax * config.daysPerMonth)}</td></tr><tr><td>지연 보상금</td><td>−${money(d.compensation * config.daysPerMonth)}</td></tr><tr><td><b>이익</b></td><td class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></td></tr></table><small class="hint">고정비(본사·정비·슬롯 등)는 노선이 아니라 회사 전체에 붙으므로 여기에 넣지 않았습니다.</small></details>
-      <h3>공항 우선순위 <small>(혼잡할 때 덜 지연됨 · 월 수수료)</small></h3>
-      <div class="seg">${[1, 2, 3].map((lv) => `<button data-act="priority" data-v="${lv}" class="${(r.priority ?? 1) === lv ? 'on' : ''}">${icon('star', 13).repeat(lv)}${lv > 1 ? ` ${money((lv - 1) * config.delay.priorityFee)}` : ' 무료'}</button>`).join('')}</div>
-      <p class="hint">정시율이 낮으면 손님이 줄고 보상금이 나가며 평판이 떨어집니다. 원인: 공항 슬롯 혼잡(${esc(cityById(r.a).name)} ${pct(game.slotsUsed(r.a) / game.slotCapacity(r.a))}, ${esc(cityById(r.b).name)} ${pct(game.slotsUsed(r.b) / game.slotCapacity(r.b))}), 정비 상태, 폭설·파업.</p>
       <h3>최근 ${r.daily.length}일</h3><div class="chartlabel"><small>일 이익(${money(r.daily.at(-1)?.profit ?? 0)})</small></div>${spark(r.daily.map((x) => x.profit), '#1f9d57', { zero: true })}
       <div class="chartlabel"><small>탑승률(${pct(r.daily.at(-1) && r.daily.at(-1)!.seats ? r.daily.at(-1)!.pax / r.daily.at(-1)!.seats : 0)})</small></div>${spark(r.daily.map((x) => (x.seats ? x.pax / x.seats : 0)), '#1f7ae0', { min: 0, max: 1 })}
+      <button class="wide danger" data-act="close">노선 닫기</button>
+      ` : ''}
+      ${dt === 'fare' ? `
       <h3>운임 <b>${fare(r.fare)}</b> <small>(기준 ${fare(base)})</small></h3>
       <input type="range" id="fare" min="${lo}" max="${hi}" step="1" value="${r.fare}" />
       <div class="two"><small>${fare(lo)}</small><small class="right">${fare(hi)}</small></div>
@@ -349,12 +364,20 @@ export function startApp(): void {
       ${d.seatsB > 0 || planes.some((p) => p.bizShare > 0) ? `<h3>비즈니스 운임 <b>${fare(r.fareBiz)}</b> <small>(기준 ${fare(game.routeBaseFareBiz(r))})</small></h3><input type="range" id="fareBiz" min="${Math.round(game.routeBaseFareBiz(r) * config.fare.minRatio)}" max="${Math.round(game.routeBaseFareBiz(r) * config.fare.maxRatio)}" step="1" value="${r.fareBiz}" />` : ''}
       ${d.cargoCap > 0 ? `<h3>화물 운임 배율 <b>×${r.cargoRatio.toFixed(2)}</b></h3><input type="range" id="cargoRatio" min="${config.fare.minRatio}" max="${config.fare.maxRatio}" step="0.05" value="${r.cargoRatio}" />` : ''}
       <p class="hint">운임이 높으면 수익은 늘지만 손님이 줄어요. 비행기가 비면 내리고, 자리가 모자라면 올려 보세요.</p>
+      <h3>공항 우선순위 <small>(혼잡할 때 덜 지연됨 · 월 수수료)</small></h3>
+      <div class="seg">${[1, 2, 3].map((lv) => `<button data-act="priority" data-v="${lv}" class="${(r.priority ?? 1) === lv ? 'on' : ''}">${icon('star', 13).repeat(lv)}${lv > 1 ? ` ${money((lv - 1) * config.delay.priorityFee)}` : ' 무료'}</button>`).join('')}</div>
+      <p class="hint">정시율이 낮으면 손님이 줄고 보상금이 나가며 평판이 떨어집니다. 원인: 공항 슬롯 혼잡(${esc(cityById(r.a).name)} ${pct(game.slotsUsed(r.a) / game.slotCapacity(r.a))}, ${esc(cityById(r.b).name)} ${pct(game.slotsUsed(r.b) / game.slotCapacity(r.b))}), 정비 상태, 폭설·파업.</p>
+      ` : ''}
+      ${dt === 'planes' ? `
       <h3>배정된 항공기</h3>
       ${planes.length ? planes.map((p) => { const t = typeById(p.type), max = maxWeeklyRoundTrips(dist, t); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석${t.seats ? ` (비즈니스 ${Math.round(p.bizShare * 100)}%)` : ' · 화물기'} · 주 ${p.weekly}회 왕복 (최대 ${max})</small></div>
         <div class="stepper"><button data-act="weekly" data-id="${p.id}" data-d="-1" aria-label="횟수 줄이기">−</button><button data-act="weekly" data-id="${p.id}" data-d="1" aria-label="횟수 늘리기">+</button><button class="ghost" data-act="unassign" data-id="${p.id}">빼기</button></div></div>${t.seats ? `<div class="cabin"><small>객실:</small>${config.cabin.shares.map((sh) => `<button class="ghost small ${p.bizShare === sh ? 'on' : ''}" data-act="cabin" data-id="${p.id}" data-share="${sh}">${sh === 0 ? '일반석만' : `비즈 ${sh * 100}%`}</button>`).join('')}</div>` : ''}`; }).join('') : '<p class="hint">배정된 항공기가 없습니다.</p>'}
       ${idle.length ? `<h3>대기 중인 항공기 배정</h3>${idle.map((p) => { const t = typeById(p.type); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석 · 최대 주 ${maxWeeklyRoundTrips(dist, t)}회</small></div><button data-act="assign" data-id="${p.id}">배정</button></div>`; }).join('')}` : ''}
       ${buyOptionsHtml(rId)}
-      <button class="wide danger" data-act="close">노선 닫기</button>
+      ` : ''}
+      ${dt === 'comp' ? `
+      ${rivalBlock(r)}
+      ` : ''}
       <div class="live" id="live">${liveHtml(rId)}</div>`;
   }
   const s_idlePlanes = () => game.state.planes.filter((p) => p.routeId === null);
@@ -382,10 +405,10 @@ export function startApp(): void {
     const counts = new Map<string, number>(); for (const p of s.planes) counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
     const summary = [...counts].map(([id, n]) => `${esc(typeById(id).name)} ×${n}`).join(' · ');
     const open = shopOpen ?? s.planes.length <= 3; // 기단이 커지면 구매 목록은 접어 둔다(펼친 상태는 기억)
-    const fleetMain = `<h2>기단 <small>${s.planes.length}대</small></h2>${summary ? `<p class="hint">${summary}</p>` : ''}<details id="shop" ${open ? 'open' : ''}><summary>항공기 구매·임대</summary><p class="hint">구매한 비행기는 노선 탭에서 배정해야 돈을 벌어요.<br><b>중고</b>: 싸지만 8년 된 기체라 운영비가 더 들고 정비 상태가 70%입니다. <b>임대</b>(지금 ${game.leasedCount}/${game.leaseCap}대): 보증금(임대료 ${config.lease.deposit}개월치, 반납 때 돌려받음)만 내고 바로 쓰지만, 매달 새 기체 값의 ${(config.lease.rate * 100).toFixed(0)}%를 임대료로 내고 대출 담보가 되지 않습니다. ${config.lease.minMonths}개월 안에 반납하면 남은 개월 임대료를 위약금으로 내고, <b>매입</b>하면 내 항공기가 됩니다(사용할수록 매입가가 내려감). 임대 가능 대수는 내 항공기 수 + ${config.lease.extra}대입니다.</p><div class="list">${shop}</div>${game.upcomingTypes().length ? `<h3>곧 출시</h3><div class="list">${game.upcomingTypes().map((t) => `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats ? `${t.seats}석` : '화물기'} · 항속 ${km(t.range)} · ${money(t.price)}</small></div><div class="right"><b>${(t.from ?? 0) - game.monthsPassed}개월 뒤</b><br><small>${t.from}개월차</small></div></div>`).join('')}</div>` : ''}</details><h3>보유 항공기</h3><div class="tbl" style="--cols: minmax(130px, 1.6fr) 0.7fr 0.8fr 1.2fr 1.5fr">${thead('fleet', [['type', '기종'], ['seats', '좌석'], ['age', '사용'], ['cond', '정비 상태'], ['route', '배정 노선']])}
-      ${tsorted('fleet', s.planes, (p, k) => (k === 'type' ? typeById(p.type).name : k === 'seats' ? typeById(p.type).seats : k === 'age' ? p.age : k === 'cond' ? p.cond : p.routeId === null ? '' : routeText(p.routeId))).map((p) => `<button class="trow${p.id === selPlane ? ' sel' : ''}" data-act="selPlane" data-id="${p.id}"><span><b>${esc(typeById(p.type).name)}</b>${p.leased ? ' <small>임대</small>' : ''}</span><span>${typeById(p.type).seats}석</span><span>${Math.floor(p.age / 12)}년 ${p.age % 12}개월</span>${mbar(p.cond)}<span>${p.routeId !== null && game.route(p.routeId) ? routeLabel(game.route(p.routeId)!.a, game.route(p.routeId)!.b) : p.shop > 0 ? '<span class="warn">정비 중</span>' : '<span class="warn">대기 중</span>'}</span></button>`).join('')}</div>`;
+    const fleetMain = `<div class="toolbar"><h2>기단 <small>${s.planes.length}대</small></h2></div>${summary ? `<p class="hint">${summary}</p>` : ''}<details id="shop" ${open ? 'open' : ''}><summary>항공기 구매·임대</summary><p class="hint">구매한 비행기는 노선 탭에서 배정해야 돈을 벌어요.<br><b>중고</b>: 싸지만 8년 된 기체라 운영비가 더 들고 정비 상태가 70%입니다. <b>임대</b>(지금 ${game.leasedCount}/${game.leaseCap}대): 보증금(임대료 ${config.lease.deposit}개월치, 반납 때 돌려받음)만 내고 바로 쓰지만, 매달 새 기체 값의 ${(config.lease.rate * 100).toFixed(0)}%를 임대료로 내고 대출 담보가 되지 않습니다. ${config.lease.minMonths}개월 안에 반납하면 남은 개월 임대료를 위약금으로 내고, <b>매입</b>하면 내 항공기가 됩니다(사용할수록 매입가가 내려감). 임대 가능 대수는 내 항공기 수 + ${config.lease.extra}대입니다.</p><div class="list">${shop}</div>${game.upcomingTypes().length ? `<h3>곧 출시</h3><div class="list">${game.upcomingTypes().map((t) => `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.cls} · ${t.seats ? `${t.seats}석` : '화물기'} · 항속 ${km(t.range)} · ${money(t.price)}</small></div><div class="right"><b>${(t.from ?? 0) - game.monthsPassed}개월 뒤</b><br><small>${t.from}개월차</small></div></div>`).join('')}</div>` : ''}</details><h3>보유 항공기</h3><div class="tbl" style="--cols: minmax(130px, 1.6fr) 0.7fr 0.8fr 1.2fr 1.5fr">${thead('fleet', [['type', '기종'], ['seats', '좌석'], ['age', '사용'], ['cond', '정비 상태'], ['route', '배정 노선']])}
+      ${tsorted('fleet', s.planes, (p, k) => (k === 'type' ? typeById(p.type).name : k === 'seats' ? typeById(p.type).seats : k === 'age' ? p.age : k === 'cond' ? p.cond : p.routeId === null ? '' : routeText(p.routeId))).map((p) => `<button class="trow${p.id === selPlane ? ' sel' : ''}" data-act="selPlane" data-id="${p.id}"><span><b>${esc(typeById(p.type).name)}</b>${p.leased ? ' <small>임대</small>' : ''}</span><span>${typeById(p.type).seats}석</span><span>${Math.floor(p.age / 12)}년 ${p.age % 12}개월</span>${mbar(p.cond)}<span>${p.routeId !== null && game.route(p.routeId) ? routeLabel(game.route(p.routeId)!.a, game.route(p.routeId)!.b) : p.shop > 0 ? '<span class="warn">정비 중</span>' : '<span class="warn">대기 중</span>'}</span></button>`).join('')}<div class="tfoot"><span>합계 ${s.planes.length}대</span><span>${num(s.planes.reduce((a, p) => a + typeById(p.type).seats, 0))}석</span><span></span><span>평균 ${pct(s.planes.length ? s.planes.reduce((a, p) => a + p.cond, 0) / s.planes.length : 0)}</span><span>대기 ${s.planes.filter((p) => p.routeId === null).length}대</span></div></div>`;
     const sp = selPlane !== null ? s.planes.find((p) => p.id === selPlane) : undefined;
-    return `<div class="split${sp ? ' sel' : ''}"><div class="pmain" data-sc="m-fleet">${fleetMain}</div><div class="pside" data-sc="s-p${sp?.id}">${sp ? `<button class="back" data-act="fleetHome">${icon('back', 14)} 기단 목록</button>${planeCard(sp)}` : '<h3>항공기를 고르세요</h3><p class="hint">왼쪽 표에서 항공기를 누르면 정비·매각·배정 추천을 여기서 합니다. 대기 중인 항공기는 배정 추천 노선이 같이 나옵니다.</p>'}</div></div>`;
+    return `<div class="split${sp ? ' sel' : ''}"><div class="pmain" data-sc="m-fleet">${fleetMain}</div><div class="pside" data-sc="s-p${sp?.id}">${sp ? `<button class="back" data-act="fleetHome">${icon('back', 14)} 기단 목록</button>${planeCard(sp)}` : `<h3 style="margin-top:4px">한눈에 보기</h3><p class="hint">왼쪽 표에서 항공기를 누르면 정비·매각·배정 추천을 여기서 합니다.</p>${(() => { const pk = (list: Plane[], title: string, val: (p: Plane) => string) => (list.length ? `<h3>${title}</h3><div class="list">${list.map((p) => `<button class="card" data-act="selPlane" data-id="${p.id}"><div class="row"><div class="grow"><b>${esc(typeById(p.type).name)}</b></div><div class="right">${val(p)}</div></div></button>`).join('')}</div>` : ''); return pk(s.planes.filter((p) => p.routeId === null && p.shop <= 0), '대기 중(배정 필요)', () => '<span class="badge need">배정 필요</span>') + pk([...s.planes].filter((p) => p.cond < 0.5).sort((a, b) => a.cond - b.cond).slice(0, 4), '정비가 필요한 항공기', (p) => `<b class="${p.cond < 0.3 ? 'neg' : 'warn'}">${pct(p.cond)}</b>`) + pk(s.planes.filter((p) => game.needsReplacement(p)).slice(0, 4), '교체를 생각할 항공기', (p) => `<small>${Math.floor(p.age / 12)}년</small>`); })()}`}</div></div>`;
   }
 
   function viewRivals(): string {
@@ -412,9 +435,12 @@ export function startApp(): void {
     const s = game.state, h = s.history.slice(-24), mx = Math.max(1, ...h.map((m) => Math.abs(m.profit)));
     const bars = h.map((m) => `<i class="${m.profit >= 0 ? 'p' : 'n'}" style="height:${Math.max(4, (Math.abs(m.profit) / mx) * 54)}px" title="${m.month}개월: ${money(m.profit)}"></i>`).join('');
     const cur = s.cur;
-    return `<h2>재무</h2>
+    return `<div class="cols2"><div><h2>재무</h2>
       <div class="kv"><div>현금</div><div><b class="${s.cash < 0 ? 'neg' : ''}">${money(s.cash)}</b></div><div>이번 달 수익</div><div>${money(cur.revenue)}</div><div>이번 달 비용</div><div>${money(cur.cost)}</div>
         <div>월 고정비</div><div>${money(game.fixedMonthly)}</div><div>누적 이익</div><div>${money(s.cumProfit)}</div></div>
+      <h3>월별 이익</h3>${h.length ? `<div class="chart">${bars}</div>` : '<p class="hint">첫 달이 끝나면 그래프가 나옵니다.</p>'}
+      <h3>월말 정산</h3>${s.history.length ? `<div class="list">${[...s.history].reverse().slice(0, 12).map((m) => `<div class="row"><div class="grow"><b>${m.month}개월차</b><small>수익 ${money(m.revenue)} · 비용 ${money(m.cost + m.fixed)} · 탑승률 ${pct(m.loadFactor)}</small></div><div class="right ${m.profit >= 0 ? 'pos' : 'neg'}">${money(m.profit)}</div></div>`).join('')}</div>` : '<p class="hint">아직 정산한 달이 없습니다.</p>'}
+      <p class="hint">월 이익 = 수익 − 운영비 − 감가상각 − 고정비. 현금이 ${money(config.rules.bankruptCash)} 아래로 ${config.rules.bankruptMonths}개월 이어지면 파산입니다.</p></div><div>
       <h3>회사 업그레이드 <small>(한 번 사면 계속 유지)</small></h3><div class="list">${config.upgrades.list.map((u) => { const lv = game.upgradeLevel(u.id), price = game.upgradePrice(u.id); return `<div class="row"><div class="grow"><b>${esc(u.name)}</b><span class="pips">${config.upgrades.prices.map((_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><small>단계마다 ${esc(u.desc)}</small></div>${price === null ? '<small class="pos">최고 단계</small>' : `<button data-act="upgrade" data-u="${u.id}" ${no(s.cash < price, short(price))}>${money(price)}</button>`}</div>`; }).join('')}</div>
       <h3>정비</h3><button class="wide ${s.autoMaint ? '' : 'ghost'}" data-act="autoMaint">자동 정비: <b>${s.autoMaint ? '켜짐' : '꺼짐'}</b></button>
       <p class="hint">켜면 노선에 배정된 항공기의 정비 상태가 ${Math.round(config.maint.autoBelow * 100)}% 아래로 떨어질 때 월말에 알아서 점검합니다(항공기 가격의 2%, 7일간 운항 불가). 현금이 모자라면 건너뜁니다.</p>
@@ -423,9 +449,7 @@ export function startApp(): void {
       <p class="hint">${s.hedge ? '' : s.fuel < 0.9 ? '지금 가격이 싼 편입니다. 길게 고정하면 이득일 수 있습니다.' : s.fuel > 1.15 ? '지금 가격이 비쌉니다. 고정하면 가격이 내려도 비싸게 냅니다. 짧게(3개월) 고정하는 것이 안전합니다.' : '가격이 보통입니다. 오를지 내릴지 알 수 없으니 급하지 않으면 기다려도 됩니다.'}</p>
       <h3>대출</h3>${s.freeze > 0 ? `<p class="hint"><b class="neg">경기 악화로 은행이 새 대출을 중단했습니다 (${s.freeze}개월 남음)</b></p>` : ''}<div class="kv"><div>대출 잔액</div><div><b>${money(s.loan)}</b></div><div>한도</div><div>${money(game.loanLimit)}</div><div>월 이율</div><div>${(game.loanRate * 100).toFixed(1)}% <small>(한도를 많이 쓸수록 비쌈)</small></div><div>월 이자</div><div>${money(s.loan * game.loanRate)}</div></div>
       <div class="two"><button data-act="borrow" ${no(s.loan + config.loan.step > game.loanLimit, `대출 한도를 넘습니다 (한도 ${money(game.loanLimit)}, 지금 잔액 ${money(s.loan)}). 항공기를 사면 한도가 늘어납니다.`)}>+${money(config.loan.step)} 대출</button><button class="ghost" data-act="repay" ${no(s.loan <= 0 || s.cash < Math.min(config.loan.step, s.loan), s.loan <= 0 ? '갚을 대출이 없습니다' : short(Math.min(config.loan.step, s.loan)))}>${money(Math.min(config.loan.step, s.loan || config.loan.step))} 상환</button></div>
-      <h3>월별 이익</h3>${h.length ? `<div class="chart">${bars}</div>` : '<p class="hint">첫 달이 끝나면 그래프가 나옵니다.</p>'}
-      <h3>월말 정산</h3>${s.history.length ? `<div class="list">${[...s.history].reverse().slice(0, 12).map((m) => `<div class="row"><div class="grow"><b>${m.month}개월차</b><small>수익 ${money(m.revenue)} · 비용 ${money(m.cost + m.fixed)} · 탑승률 ${pct(m.loadFactor)}</small></div><div class="right ${m.profit >= 0 ? 'pos' : 'neg'}">${money(m.profit)}</div></div>`).join('')}</div>` : '<p class="hint">아직 정산한 달이 없습니다.</p>'}
-      <p class="hint">월 이익 = 수익 − 운영비 − 감가상각 − 고정비. 현금이 ${money(config.rules.bankruptCash)} 아래로 ${config.rules.bankruptMonths}개월 이어지면 파산입니다.</p>`;
+      </div></div>`;
   }
 
   function achHtml(): string { const got = new Set(achieved(game)); return `<h3>업적 ${got.size}/${ACHIEVEMENTS.length}</h3><div class="list">${ACHIEVEMENTS.map((a) => `<div class="row"${got.has(a.id) ? '' : ' style="opacity:.45"'}><div class="grow"><b>${icon(got.has(a.id) ? 'medal' : 'lock')} ${esc(a.name)}</b><small>${esc(a.desc)}</small></div></div>`).join('')}</div>`; }
@@ -436,7 +460,7 @@ export function startApp(): void {
     const shown = log.filter((l) => newsFilter === 'all' || logKind(l) === newsFilter), cut = newsAll ? shown : shown.slice(0, 40);
     const chips = `<div class="chips">${kinds.map(([v, t]) => `<button data-act="newsFilter" data-v="${v}" class="${newsFilter === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
     const list = shown.length ? `<div class="list">${cut.map((l) => `<div class="row"><div class="grow">${esc(l)}</div></div>`).join('')}</div>${shown.length > cut.length ? `<button class="wide ghost" data-act="newsMore">이전 알림 ${shown.length - cut.length}개 더 보기</button>` : ''}` : (log.length ? '<p class="hint">이 종류의 알림이 없습니다.</p>' : '<p class="hint">아직 알림이 없습니다. 가끔 연료비·불황·폭설 같은 사건이 일어납니다.</p>');
-    return `<h2>알림 <small>${log.length}개</small></h2>${ev}${chips}${list}`;
+    return `<div class="cols2"><div><h2>알림 <small>${log.length}개</small></h2>${chips}${list}</div><div><h3>진행 중인 사건</h3>${ev || '<p class="hint">지금 진행 중인 사건이 없습니다.</p>'}</div></div>`;
   }
   
   /** 지도 오른쪽 위: 지금 시대와 예고된 다음 시대 */
@@ -517,7 +541,9 @@ export function startApp(): void {
     const compNote = prevComp && prevComp !== comp ? `<div class="rl"><span>경쟁사 변화</span><span>${esc(comp)}</span></div>` : '';
     prevComp = comp;
     el.hidden = false;
-    el.innerHTML = `<h4><span>${icon('report')}${h.month}개월차 보고</span><button class="ghost" data-act="closeReport">닫기</button></h4>
+    if (h.month !== reportMonth) { reportMonth = h.month; reportOpen = !!yr; } // 새 보고는 한 줄로 시작(연말 결산만 펼쳐서)
+    el.classList.toggle('collapsed', !reportOpen);
+    el.innerHTML = `<h4><span>${icon('report')}${h.month}개월차 보고 <small class="${h.profit >= 0 ? 'pos' : 'neg'}">${money(h.profit)}</small></span><span class="rbtns"><button class="ghost" data-act="toggleReport">${reportOpen ? '접기' : '펼치기'}</button><button class="ghost" data-act="closeReport">닫기</button></span></h4>
       <div class="rl"><span>월 이익</span><span class="${h.profit >= 0 ? 'pos' : 'neg'}">${money(h.profit)}</span></div>
       <div class="rl"><span>탑승률 · 정시율</span><span>${pct(h.loadFactor)} · ${pct(game.avgOtp)}</span></div>
       <div class="rl"><span>현금</span><span>${money(h.cash)}</span></div>
@@ -527,7 +553,7 @@ export function startApp(): void {
       <div class="rl"><span>경기 · 연료</span><span>${game.economyLabel} · ${game.fuelLabel}</span></div>
       ${bars}${year}${compNote}${evs.map((e) => `<small>• ${esc(e)}</small><br>`).join('')}</details>`;
   }
-  $('#report').addEventListener('click', (e) => { const t = e.target as HTMLElement; if (t.closest('[data-act="closeReport"]')) $('#report').hidden = true; const ad = t.closest<HTMLElement>('[data-act="advice"]'); if (ad && goAdvice(Number(ad.dataset.i))) { $('#report').hidden = true; play('tap'); lastHtml = ''; render(); } const pb = t.closest<HTMLElement>('[data-act="paper"]'); if (pb) showPaper(Number(pb.dataset.y)); });
+  $('#report').addEventListener('click', (e) => { const t = e.target as HTMLElement; if (t.closest('[data-act="closeReport"]')) $('#report').hidden = true; if (t.closest('[data-act="toggleReport"]')) { reportOpen = !reportOpen; showReport(); return; } const ad = t.closest<HTMLElement>('[data-act="advice"]'); if (ad && goAdvice(Number(ad.dataset.i))) { $('#report').hidden = true; play('tap'); lastHtml = ''; render(); } const pb = t.closest<HTMLElement>('[data-act="paper"]'); if (pb) showPaper(Number(pb.dataset.y)); });
   $('#info-body').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (b) void infoAct(b); });
 
   // ---- 끝난 게임 ----
@@ -574,8 +600,9 @@ export function startApp(): void {
     else if (act === 'weekly') { const p = game.plane(id)!; await assignOffer(id, p.routeId!, p.weekly + Number(b.dataset.d)); done(); }
     else if (act === 'assign' && selRoute !== null) { const r = game.route(selRoute)!, p = game.plane(id)!; const max = maxWeeklyRoundTrips(distanceKm(cityById(r.a), cityById(r.b)), typeById(p.type)); if (!await assignOffer(id, selRoute, max)) return; fillFare(game, selRoute); done('배정했습니다 (운임도 자동으로 맞췄어요)'); }
     else if (act === 'tsort') { const t = b.dataset.t!, k = b.dataset.k!, cur = tsort[t]; tsort[t] = { k, d: cur.k === k ? -cur.d : k === 'name' || k === 'type' || k === 'route' ? 1 : -1 }; done(); }
-    else if (act === 'selPlane') { selPlane = selPlane === id ? null : id; done(); }
-    else if (act === 'selComp') { selComp = selComp === id ? null : id; done(); }
+    else if (act === 'selPlane') { selPlane = selPlane === id ? null : id; syncMap(); done(); }
+    else if (act === 'selComp') { selComp = selComp === id ? null : id; syncMap(); done(); }
+    else if (act === 'rtab') { routeTab = b.dataset.v ?? 'sum'; done(); }
     else if (act === 'fleetHome') { selPlane = null; done(); }
     else if (act === 'rivalsHome') { selComp = null; done(); }
     else if (act === 'rbuy' && selRoute !== null) {
@@ -651,6 +678,14 @@ export function startApp(): void {
   // ---- 탭·속도·메뉴 ----
   $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; if (drawer === 'min') setDrawer('half'); selCity = selRoute = null; selPlane = selComp = null; syncMap(); panel.scrollTop = 0; lastHtml = ''; render(); }); // 탭을 누르면 항상 그 탭의 첫 화면
   $('#fold').addEventListener('click', () => setDrawer(drawer === 'min' ? 'half' : 'min'));
+  { // 서랍 윗부분(손잡이·탭 줄의 빈 곳)을 위아래로 끌면 높이가 바뀌고, 놓으면 가까운 단계(접기·절반·크게)로 맞춘다
+    const st = $('#stage'), grip = $('#dgrip'); let startY = 0, startH = 0, dragging = false;
+    const begin = (e: PointerEvent) => { if ((e.target as HTMLElement).closest('button')) return; dragging = true; startY = e.clientY; startH = $('#drawer').getBoundingClientRect().height; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
+    const move = (e: PointerEvent) => { if (!dragging) return; const H = st.getBoundingClientRect().height, h = Math.max(56, Math.min(H - 40, startH + (startY - e.clientY))); st.style.setProperty('--dh', `${h}px`); };
+    const end = () => { if (!dragging) return; dragging = false; const H = st.getBoundingClientRect().height, h = $('#drawer').getBoundingClientRect().height; st.style.removeProperty('--dh'); const r = h / H; setDrawer(r < 0.25 ? 'min' : r < 0.7 ? 'half' : 'full'); lastHtml = ''; render(); };
+    for (const el of [grip, $('#dsum')]) { el.addEventListener('pointerdown', begin as EventListener); el.addEventListener('pointermove', move as EventListener); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); }
+  }
+  $('#mapback').addEventListener('click', () => setDrawer('half'));
   $('#dsize').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-h]'); if (b) { setDrawer(b.dataset.h as typeof drawer); play('tap'); } });
   /** 서랍 높이: 크게 펼치면 시간이 멈추고, 크게에서 내려오면 마지막으로 고른 배속으로 다시 흐른다 */
   function setDrawer(h: typeof drawer) {
