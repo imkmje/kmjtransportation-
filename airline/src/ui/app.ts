@@ -236,10 +236,16 @@ export function startApp(): void {
       <div class="list">${dests.slice(0, 8).map(drow).join('')}</div>${dests.length > 8 ? `<details class="more"><summary>나머지 도시 ${dests.length - 8}곳 보기</summary><div class="list">${dests.slice(8).map(drow).join('')}</div></details>` : ''}`;
   }
 
+  /** 노선의 시장 점유율 막대(나 + 경쟁사별)와 범례 */
+  function shareBar(r: Route): string {
+    const sh = game.routeShares(r), col = ['#d6803a', '#8a6fc0', '#3aa6a0', '#c0587a', '#7a8a99'];
+    const color = (x: typeof sh[number], i: number) => (x.me ? 'var(--accent)' : col[(i - 1) % col.length]);
+    return `<div class="sharebar">${sh.map((x, i) => `<i style="width:${(x.share * 100).toFixed(1)}%;background:${color(x, i)}"></i>`).join('')}</div><small class="sharelg">${sh.map((x, i) => `<span class="nw"><u style="background:${color(x, i)}"></u>${x.me ? '우리' : esc(x.name.slice(0, 6))} ${pct(x.share)}</span>`).join(' ')}</small>`;
+  }
   function routeSummary(rId: number): string {
     const r = game.route(rId)!, d = game.routeDay(r), planes = game.planesOn(rId), profit = (d.revenue - d.cost) * config.daysPerMonth;
     const lf = d.seats > 0 ? d.pax / d.seats : 0;
-    return `<div class="row"><div class="grow"><b>${r.name ? `${esc(r.name)} · ` : ''}${routeLabel(r.a, r.b)}${game.warOn(r) ? ` <span class="neg">${icon('war', 14)}</span>` : ''}</b><small>${km(distanceKm(cityById(r.a), cityById(r.b)))} · 항공기 ${planes.length}대 · 탑승률 ${planes.length ? pct(lf) : '-'}${planes.length ? ` · ${d.share < 1 ? `점유 <b class="${d.share < 0.6 ? 'neg' : ''}">${pct(d.share)}</b>` : '독점'}` : ''}</small></div>
+    return `<div class="row"><div class="grow"><b>${r.name ? `${esc(r.name)} · ` : ''}${routeLabel(r.a, r.b)}${game.warOn(r) ? ` <span class="neg">${icon('war', 14)}</span>` : ''}</b><small>${km(distanceKm(cityById(r.a), cityById(r.b)))} · 항공기 ${planes.length}대 · 탑승률 ${planes.length ? pct(lf) : '-'}${planes.length ? ` · ${d.share < 1 ? `<span class="nw">점유 <b class="${d.share < 0.6 ? 'neg' : ''}">${pct(d.share)}</b></span>` : '<span class="nw">독점</span>'}` : ''}</small>${planes.length && d.share < 1 ? shareBar(r) : ''}</div>
       <div class="right ${profit >= 0 ? 'pos' : 'neg'}">${planes.length ? `${profit < 0 ? '<span class="badge">적자</span> ' : ''}${money(profit)}/월` : '<span class="badge need">배정 필요</span>'}</div></div>`;
   }
 
@@ -316,7 +322,7 @@ export function startApp(): void {
         <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div>
         <div>정시율</div><div class="${d.otp < 0.85 ? 'neg' : d.otp < 0.95 ? 'warn' : 'pos'}"><b>${pct(d.otp)}</b>${d.compensation > 0 ? ` <small>(보상금 월 ${money(d.compensation * config.daysPerMonth)})</small>` : ''}</div>
         ${d.transfer > 0 ? `<div>환승 수요</div><div class="pos"><b>+${num(d.transfer)}명/월</b> <small>(우리 다른 노선에서 갈아타는 손님)</small></div>` : ''}
-        ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${game.competitorsOn(r.a, r.b).map(({ comp, route }) => `<div>${esc(comp.name)}${game.traitOf(comp) ? ` <small>${game.traitOf(comp)!.name}</small>` : ''}${route.war ? ` <span class="neg">${icon('war', 14)}</span>` : ''}</div><div>운임 ${pct(route.fareRatio)} (내 ${pct(r.fare / game.routeBaseFare(r))}) · 하루 ${num(route.seatsDay)}석</div>`).join('')}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
+        ${d.share < 1 ? `<div>경쟁 점유율</div><div class="warn"><b>${pct(d.share)}</b></div>` : ''}${game.competitorsOn(r.a, r.b).map(({ comp, route }) => `<div>${esc(comp.name)}${game.traitOf(comp) ? ` <small>${game.traitOf(comp)!.name}</small>` : ''}${route.war ? ` <span class="neg">${icon('war', 14)}</span>` : ''}</div><div>점유 ${pct(game.routeShares(r).find((x) => x.id === comp.id)?.share ?? 0)} · 운임 ${pct(route.fareRatio)} (내 ${pct(r.fare / game.routeBaseFare(r))}) · 하루 ${num(route.seatsDay)}석</div>`).join('')}${d.seatsB > 0 ? `<div>비즈니스 탑승</div><div>${num(d.paxB * config.daysPerMonth)} / ${num(d.seatsB * config.daysPerMonth)}석</div>` : ''}${d.cargoCap > 0 ? `<div>화물</div><div>${num(d.cargoT * config.daysPerMonth)}t / ${num(d.cargoCap * config.daysPerMonth)}t · ${money(d.cargoRevenue * config.daysPerMonth)}</div>` : ''}</div>
       ${rivalBlock(r)}
       <details class="rbuymore"><summary>월 손익 분해 보기</summary><table class="brk" style="width:100%"><tr><td>여객 수익</td><td class="pos">${money(d.revenuePax * config.daysPerMonth)}</td></tr>${d.cargoRevenue > 0 ? `<tr><td>화물 수익</td><td class="pos">${money(d.cargoRevenue * config.daysPerMonth)}</td></tr>` : ''}<tr><td>운영·연료비</td><td>−${money(d.costOps * config.daysPerMonth)}</td></tr><tr><td>착륙료</td><td>−${money(d.costLanding * config.daysPerMonth)}</td></tr><tr><td>승객당 수수료</td><td>−${money(d.costPax * config.daysPerMonth)}</td></tr><tr><td>지연 보상금</td><td>−${money(d.compensation * config.daysPerMonth)}</td></tr><tr><td><b>이익</b></td><td class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></td></tr></table><small class="hint">고정비(본사·정비·슬롯 등)는 노선이 아니라 회사 전체에 붙으므로 여기에 넣지 않았습니다.</small></details>
       <h3>공항 우선순위 <small>(혼잡할 때 덜 지연됨 · 월 수수료)</small></h3>

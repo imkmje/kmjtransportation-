@@ -511,6 +511,13 @@ export class Game {
     }
     return out.sort((x, y) => y.profit - x.profit || x.routeId - y.routeId).slice(0, limit);
   }
+  /** 이 노선의 시장 점유율: 나와 경쟁사별(합계 1). 경쟁사가 없으면 내가 1 */
+  routeShares(r: Route): { name: string; share: number; me: boolean; id: number }[] {
+    const d = this.routeDay(r), cs = this.competitorsOn(r.a, r.b), me = { name: '우리', share: d.share, me: true, id: 0 };
+    if (!cs.length || d.share >= 1) return [{ ...me, share: 1 }];
+    const w = cs.map(({ comp, route }) => route.seatsDay * (1 / Math.max(0.3, route.fareRatio)) * this.quality(comp) * (comp.id === this.state.ally ? config.ally.weight : 1)), tot = w.reduce((a, b) => a + b, 0) || 1;
+    return [me, ...cs.map(({ comp }, i) => ({ name: comp.name, share: (1 - d.share) * (w[i] / tot), me: false, id: comp.id }))];
+  }
   /** 노선 화면에서 바로 사기: how = 새것·중고·임대. 슬롯이 모자라면 필요한 만큼 함께 사서 최대 횟수로 배정한다. total은 한 번에 드는 돈(기체 값 또는 보증금 + 슬롯) */
   purchasePlan(routeId: number, typeId: string, how: 'new' | 'used' | 'lease'): Result<{ weekly: number; price: number; slotCost: number; slotNeeds: { city: string; n: number }[]; total: number }> {
     const r = this.route(routeId);
