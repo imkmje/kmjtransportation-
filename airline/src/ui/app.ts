@@ -222,7 +222,7 @@ export function startApp(): void {
       const dist = distanceKm(c, d), ex = s.routes.find((r) => r.open && ((r.a === c.id && r.b === d.id) || (r.a === d.id && r.b === c.id)));
       return { d, dist, demand: rawMonthlyDemand(c, d, game.month) * (1 + config.demand.repBoost * s.reputation), ex };
     }).sort((x, y) => y.demand - x.demand);
-    const drow = ({ d, dist, demand, ex }: typeof dests[number]) => `<div class="row${ex ? ' clickable' : ''}"${ex ? ` data-act="goRoute" data-id="${ex.id}" title="눌러서 이 노선으로 이동"` : ''}><div class="grow"><b>${esc(d.name)}</b><small>${km(dist)} · 기준 운임 ${fare(baseFare(dist))} · 월 수요 ${num(demand)}명 <span class="season" title="1~12월 수요 변화(이번 달 표시)">${seasonBar(c, d)}</span></small></div>
+    const drow = ({ d, dist, demand, ex }: typeof dests[number]) => `<div class="row${ex ? ' clickable' : ''}"${ex ? ` data-act="goRoute" data-id="${ex.id}" title="눌러서 이 노선으로 이동"` : ''}><div class="grow"><b>${esc(d.name)}</b><small>${km(dist)} · 기준 운임 ${fare(baseFare(dist))} · 월 수요 ${num(demand)}명 </small><span class="season" title="1~12월 수요 변화(진한 막대가 이번 달)">${seasonBar(c, d)}</span></div>
         ${ex ? `<button data-act="goRoute" data-id="${ex.id}" class="ghost">운항 중</button>` : selLocked ? `<button class="ghost" ${no(true, `${c.name}은(는) ${game.regionName(c.region)} 지역이라 운수권이 필요합니다. 위의 운수권 구매 버튼을 누르세요.`)}>잠김</button>` : !game.cityOpen(d.id) ? `<button class="ghost" data-act="buyRights" data-region="${d.region}" ${no(!game.regionInfo(d.region).profitOk || !game.regionInfo(d.region).cashOk, !game.regionInfo(d.region).profitOk ? `누적 이익 ${money(game.rightsNeed)} 이상이 필요합니다 (지금 ${money(s.cumProfit)})` : short(game.regionInfo(d.region).price))}>운수권 ${money(game.regionInfo(d.region).price)}</button>` : `<button data-act="open" data-a="${c.id}" data-b="${d.id}">열기</button>`}</div>`;
     const hubX = s.routes.filter((r) => r.open).reduce((a, r) => a + game.transferDemand(r, c.id), 0), hubN = s.routes.filter((r) => r.open && (r.a === c.id || r.b === c.id) && game.planesOn(r.id).length).length;
     const peak = c.peak.months.map((m) => `${m}월`).join('·');
@@ -344,10 +344,11 @@ export function startApp(): void {
   let shopOpen: boolean | null = null;
   panel.addEventListener('click', (e) => { const gs = (e.target as HTMLElement).closest('details > summary'); if (gs) { const d = gs.parentElement as HTMLDetailsElement; detOpen.set(detKey(d), !d.open); } const rs = (e.target as HTMLElement).closest('details.rbuy > summary'); if (rs) { const d = rs.parentElement as HTMLDetailsElement; rbuyOpen.set(Number(d.dataset.rid), !d.open); } const sc = (e.target as HTMLElement).closest('details.sec > summary'); if (sc) { const d = sc.parentElement as HTMLDetailsElement; secOpen.set(d.dataset.k ?? '', !d.open); } const sm = (e.target as HTMLElement).closest('#shop > summary'); if (sm) shopOpen = !(sm.parentElement as HTMLDetailsElement).open; }); // 사용자가 누른 것만 기억(화면을 다시 그릴 때 생기는 toggle 신호는 무시)
   /** 대기 중인 항공기: 눌러서 어느 노선에 넣으면 좋은지 본다 */
-  /** 1~12월 수요 변화를 막대 글자로(이번 달은 굵게) */
+  /** 1~12월 수요 변화를 작은 막대 그림(SVG)으로. 이번 달은 진한 색, 가장 높은 달 위에 점 */
   function seasonBar(a: City, b: City): string {
-    const v = Array.from({ length: 12 }, (_, i) => rawMonthlyDemand(a, b, i + 1)), lo = Math.min(...v), hi = Math.max(...v), bars = '▁▂▃▄▅▆▇█', cur = game.month;
-    return v.map((x, i) => { const ch = bars[hi - lo < 1e-9 ? 3 : Math.round(((x - lo) / (hi - lo)) * 7)]; return i + 1 === cur ? `<b>${ch}</b>` : ch; }).join('');
+    const v = Array.from({ length: 12 }, (_, i) => rawMonthlyDemand(a, b, i + 1)), lo = Math.min(...v), hi = Math.max(...v), cur = game.month, H = 18;
+    const bars = v.map((x, i) => { const h = hi - lo < 1e-9 ? H / 2 : 4 + ((x - lo) / (hi - lo)) * (H - 4); return `<rect x="${i * 8}" y="${H - h}" width="6" height="${h}" rx="1.5" class="${i + 1 === cur ? 'cur' : ''}"/>`; }).join('');
+    return `<svg viewBox="0 0 94 ${H}" width="94" height="${H}" role="img" aria-label="1월부터 12월까지 수요 변화">${bars}</svg>`;
   }
   function idleAdvice(planeId: number): string {
     const adv = game.assignAdvice(planeId), good = adv.filter((a) => a.profit > 0.05);
