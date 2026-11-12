@@ -10,19 +10,21 @@ export interface GoalProgress { label: string; value: number; target: number; do
 
 export interface Plane { id: number; type: string; book: number; routeId: number | null; weekly: number; age: number; bizShare: number; cond: number; shop: number; leased?: boolean; deposit?: number } // age: 보유 개월 수, bizShare: 비즈니스석 비율, cond: 정비 상태(0~1), shop: 정비·수리로 못 나는 남은 일수 // weekly: 주간 왕복 횟수
 export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number } // 하루 기록(노선별 그래프용, 최근 60일)
-export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number; name?: string; closed?: number } // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
+export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number; name?: string; closed?: number; ad?: number } // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
 export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number; war?: number } // war: 운임 전쟁 남은 개월
-export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; pHist?: number[]; major?: boolean } // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
+export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; pHist?: number[]; trait?: string; major?: boolean } // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
 export interface Auction { id: number; from: string; type: string; price: number; age: number; cond: number; expires: number } // 파산한 경쟁사가 내놓은 항공기 한 대(expires: 이 개월차가 되면 사라진다)
 export interface Upcoming { def: string; city: string; start: number } // 예고된 행사(start: 시작하는 개월차)
 export interface ActiveEra { id: string; start: number; end: number } // 시대(start·end: 개월차)
 export interface ContractReward { type: 'cash' | 'plane' | 'upgrade' | 'rights' | 'rep'; value: number; label: string; plane?: string; upgrade?: string; region?: string }
 export interface Contract { id: number; kind: 'pax' | 'otp' | 'cities' | 'profit'; title: string; goal: number; progress: number; limit: number; status: 'offer' | 'active'; expires: number; start?: number; a?: string; b?: string; startCities?: number; reward: ContractReward } // limit: 수락한 뒤 주어지는 개월, expires: 제안이 사라지는 개월차
 export interface ChronEntry { m: number; kind: string; text: string; key?: string; d?: Record<string, number> } // 연대기 한 줄(m: 개월차, kind: 종류, d: 연말 결산 숫자)
-export interface RivalGone { name: string; month: number; acq?: boolean } // acq: 우리가 인수함
+export interface RivalGone { name: string; month: number; acq?: boolean; by?: string } // acq: 우리가 인수함
 export interface ActiveEvent { def: string; monthsLeft: number; city?: string; planeId?: number; handled?: boolean }
 export interface MonthReport { month: number; revenue: number; cost: number; depreciation: number; fixed: number; interest: number; cargo: number; profit: number; pax: number; seats: number; loadFactor: number; cash: number }
 
+export interface Threat { comp: number; a: string; b: string; start: number } // 경쟁사가 내 노선에 진출 예고(start: 이 개월차에 진출)
+export interface Season { year: number; kind: 'pax' | 'profit' | 'otp' | 'cities'; goal: number; best: number; start: number; done: boolean; cash: number; text: string } // 올해의 도전
 export interface GameState {
   formatVersion: number;
   seed: number;
@@ -70,4 +72,11 @@ export interface GameState {
   status: 'playing' | 'bankrupt' | 'won' | 'timeup';
   lowCashMonths: number;
   log: string[];
+  threats?: Threat[]; // 진출 예고 중인 경쟁사
+  taken?: Record<string, number>; // 경쟁사가 선점한 도시별 슬롯
+  rivalId?: number | null; // 라이벌로 지정한 경쟁사
+  rivalLead?: boolean; // 라이벌보다 앞서 있는가
+  story?: { id: string; expires: number } | null; // 선택을 기다리는 이야기 사건
+  season?: Season | null; // 올해의 도전
+  acquired?: number; // 인수한 경쟁사 수
 }

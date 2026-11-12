@@ -39,6 +39,32 @@ export const config = {
   score: { profit: 10, cash: 2, city: 40, win: 600, month: 5, bankrupt: 300, loan: 1 },
   loan: { baseRate: 0.01, spread: 0.03, crunch: 0.2, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
   aging: { maintPerMonth: 0.004, maxMult: 1.6, capStart: 84, capPerMonth: 0.004, capMin: 0.5, replaceBelow: 0.75 }, // capStart~: 7년이 넘으면 점검해도 정비 상태가 100%까지 안 돌아온다(상한 = 1 − 0.4%/월, 최소 50%). 상한이 75% 아래면 교체 권고. 점검 비용도 노후 배수만큼 든다. 아래는 원래 설명: // 노후 1개월당 운영비 +0.4%(최대 +60%)
+  rivalry: { // 자유 모드 경쟁 강화(시나리오는 균형 때문에 적용하지 않는다)
+    traits: { // 경쟁사 성격(자유 모드에서 ID로 정해진다)
+      aggro: { name: '공세형', desc: '운임 전쟁을 자주 겁니다', war: 2 },
+      expander: { name: '확장형', desc: '항공기를 빠르게 늘립니다', buy: 0.7, planes: 1.3 },
+      quality: { name: '서비스형', desc: '서비스가 좋아 점유율에 유리합니다', q: 1.12 },
+      steady: { name: '안정형', desc: '사고·파업 같은 충격에 강합니다', shock: 0.4 },
+    },
+    threat: { minPlanes: 3, chance: 0.06, lead: 2, minProfit: 0.3 }, // 내 이익 큰 노선에 진출 예고: 일반 경쟁사 항공기 minPlanes대 이상, 한 달 chance 확률, lead개월 전 예고
+    slots: { perRoute: 0.5 }, // 경쟁사가 도시에 노선 1개를 가질 때마다 빈 슬롯 0.5개씩 선점
+    rival: { startMonth: 12 }, // 라이벌 지정 시작(개월차)
+    merge: { chance: 0.05, minMonth: 18 }, // 경쟁사 합병: 한 달 확률
+    ad: { cost: 2, months: 3, boost: 1.25 }, // 맞대응 광고: 비용($M), 기간(개월), 점유율 가중치
+  },
+  story: { // 이야기 사건(자유 모드): 한 번에 하나, 선택하면 결과가 갈린다
+    chance: 0.12, minMonth: 6, expires: 2,
+    list: [
+      { id: 'celeb', title: '유명 인플루언서가 우리 항공사를 칭찬했습니다', desc: '협찬 계약을 제안받았습니다.', choices: [{ label: '협찬 $3M', cash: -3, rep: 0.05, result: '화제가 되어 평판이 올랐습니다.' }, { label: '그냥 둔다', rep: 0.01, result: '조용히 지나갔지만 조금은 알려졌습니다.' }] },
+      { id: 'union', title: '조종사 노조가 임금 인상을 요구합니다', desc: '협상이 결렬되면 파업이 날 수 있습니다.', choices: [{ label: '수용 $4M', cash: -4, rep: 0.02, result: '협상이 타결돼 사기가 올랐습니다.' }, { label: '거부', risk: { chance: 0.5, cash: -10, rep: -0.03, text: '파업이 일어나 $10M 손실을 입었습니다.' }, result: '협상은 결렬됐지만 파업은 피했습니다.' }] },
+      { id: 'green', title: '환경 단체가 배출가스를 항의합니다', desc: '언론이 관심을 보이고 있습니다.', choices: [{ label: '탄소 상쇄 $2.5M', cash: -2.5, rep: 0.03, result: '친환경 항공사로 호평받았습니다.' }, { label: '무시', rep: -0.03, result: '비판 기사가 나와 평판이 내려갔습니다.' }] },
+      { id: 'group', title: '대형 여행사가 단체 계약을 제안합니다', desc: '일정이 빠듯하지만 현금이 바로 들어옵니다.', choices: [{ label: '수락 +$6M', cash: 6, rep: -0.01, result: '현금을 받았지만 빡빡한 일정에 불만이 조금 나왔습니다.' }, { label: '거절', result: '제안을 정중히 거절했습니다.' }] },
+      { id: 'airport', title: '공항이 터미널 확장 공사를 알렸습니다', desc: '지금 투자하면 슬롯을 먼저 확보할 수 있습니다.', choices: [{ label: '투자 $4M', cash: -4, slot: true, result: '가장 많이 취항하는 도시의 슬롯 1개를 확보했습니다.' }, { label: '관망', result: '공사가 끝나길 기다리기로 했습니다.' }] },
+      { id: 'test', title: '제조사가 신기종 시범 운항을 제안합니다', desc: '홍보 효과가 있지만 비용이 듭니다.', choices: [{ label: '참여 $1.5M', cash: -1.5, rep: 0.04, result: '시범 운항이 보도돼 평판이 올랐습니다.' }, { label: '거절', result: '제안을 사양했습니다.' }] },
+      { id: 'rumor', title: '경쟁사가 우리 정비 소문을 퍼뜨립니다', desc: '근거 없는 소문이지만 퍼지고 있습니다.', choices: [{ label: '해명 광고 $2M', cash: -2, result: '해명이 받아들여져 소문이 가라앉았습니다.' }, { label: '무시', risk: { chance: 0.5, rep: -0.04, text: '소문이 퍼져 평판이 내려갔습니다.' }, result: '소문은 저절로 사라졌습니다.' }] },
+    ],
+  },
+  season: { start: 12, rewardMonths: 2.5, rewardMin: 5, rewardMax: 60, rep: 0.02 }, // 올해의 도전(자유 모드): 매년 하나, 보상은 월 이익의 rewardMonths배
   acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
   reopen: { months: 6, fee: 1.5, rep: 0.01 }, // 노선 폐지: 운항 중이던 노선을 닫으면 평판 −rep, 닫은 지 months개월 안에 다시 열면 fee($M)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9

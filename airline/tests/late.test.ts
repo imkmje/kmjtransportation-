@@ -72,7 +72,7 @@ describe('시대', () => {
     g.state.era = null; expect(g.agingMult(old)).toBeCloseTo(a0, 9);
   });
   it('유가 위기는 연료를, 호황·침체는 경기를 그 방향으로 끌어간다', () => {
-    const avg = (id: string | null, key: 'fuel' | 'economy') => { let t = 0, n = 0; for (const seed of [1, 2, 3, 4]) { const g = sandbox(seed); for (let m = 0; m < 40; m++) { g.state.era = id ? { id, start: 0, end: 999 } : null; months(g, 1); t += g.state[key]; n++; } } return t / n; };
+    const avg = (id: string | null, key: 'fuel' | 'economy') => { let t = 0, n = 0; for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) { const g = sandbox(seed); for (let m = 0; m < 40; m++) { g.state.era = id ? { id, start: 0, end: 999 } : null; months(g, 1); t += g.state[key]; n++; } } return t / n; };
     expect(avg('oil', 'fuel')).toBeGreaterThan(avg(null, 'fuel') + 0.15);
     expect(avg('boom', 'economy')).toBeGreaterThan(avg(null, 'economy') + 0.03);
     expect(avg('slump', 'economy')).toBeLessThan(avg(null, 'economy') - 0.03);

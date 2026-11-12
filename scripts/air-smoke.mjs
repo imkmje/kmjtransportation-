@@ -183,7 +183,8 @@ await page.click('#tabs button[data-tab="money"]');
 await page.locator('#panel button[data-act="upgrade"]').first().click();
 check('재무 탭: 업그레이드 5종이 있고 사면 1단계가 됨', (await page.locator('#panel .pips').count()) === 5 && (await page.evaluate(() => window.__air.game.upgradeLevel('marketing'))) === 1 && (await page.locator('#panel .pips i.on').count()) === 1);
 await page.click('#tabs button[data-tab="routes"]');
-await page.locator('#panel button[data-act="goRoute"]').first().click();
+const liveRid = await page.evaluate(() => { const g = window.__air.game; return g.state.routes.find((r) => r.open && g.planesOn(r.id).length > 0)?.id; }); // 항공기가 있는 노선(없는 노선은 예상 이익이 0)
+await page.locator(`#panel button[data-act="goRoute"][data-id="${liveRid}"]`).click();
 const pb = await page.locator('#panel').boundingBox(), lb = await page.locator('#live').boundingBox();
 const liveBefore = await page.locator('#live').innerText();
 await page.locator('#fare').evaluate((el) => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -378,6 +379,20 @@ check('나머지 도시 보기: 화면이 다시 그려져도 펼친 상태가 �
 check('도시 화면: 도착지에 계절 막대가 있음', (await page.locator('#panel .season').count()) > 0);
 await page.click('#tabs button[data-tab="routes"]');
 check('노선 목록: 점유율(또는 독점) 표시와 점유율 정렬 버튼', (await page.locator('#panel').innerText()).includes('독점') || (await page.locator('#panel').innerText()).includes('점유'));
+// 1.2.0: 자유 모드 경쟁·이야기·도전·지도 일시정지
+await page.evaluate(() => { const g = window.__air.game; g.state.sandbox = true; g.state.cash = 900; g.state.story = { id: 'celeb', expires: g.monthsPassed + 2 }; const k = g.state.competitors.find((c) => !c.major); g.state.threats = [{ comp: k.id, a: 'ICN', b: 'NRT', start: g.monthsPassed + 2 }]; g.state.rivalId = k.id; g.state.rivalLead = true; g.state.season = { year: 1, kind: 'cities', goal: 2, best: 0, start: 0, done: false, cash: 10, text: '올해 안에 새 도시 2곳에 취항' }; window.__air.render(); });
+await page.click('#tabs button[data-tab="map"]'); await openAll();
+const mapText2 = await page.locator('#panel').innerText();
+check('지도 탭(자유 모드): 이야기·진출 예고·라이벌·올해의 도전 구역', ['이야기', '진출 예고', '라이벌', '올해의 도전'].every((w) => mapText2.includes(w)), mapText2.slice(0, 80));
+await page.locator('#panel button[data-act="story"]').first().click();
+check('이야기 선택: 결과가 적용되고 카드가 사라짐', (await page.evaluate(() => window.__air.game.state.story)) === null && (await page.locator('#panel button[data-act="story"]').count()) === 0);
+await page.evaluate(() => { const g = window.__air.game; g.state.speed = 0; window.__air.setSpeed(0); });
+await page.waitForTimeout(200); const a0 = await page.evaluate(() => window.__air.anim()); await page.waitForTimeout(400); const a1 = await page.evaluate(() => window.__air.anim());
+check('일시정지하면 지도 애니메이션 시계가 멈춤', a0.paused && a1.clock === a0.clock, JSON.stringify([a0, a1]));
+await page.click('#menubtn'); if ((await page.locator('#menu button[data-m="autopause"]').innerText()).includes('켜짐')) await page.click('#menu button[data-m="autopause"]'); else await page.click('#menubtn'); // 새 알림이 있으면 자동 정지되므로 끈다
+await page.evaluate(() => window.__air.setSpeed(1)); await page.waitForFunction((c) => window.__air.anim().clock > c + 50, a1.clock, { timeout: 8000 }).catch(() => undefined); const a2 = await page.evaluate(() => window.__air.anim());
+check('재생하면 애니메이션이 다시 움직임(시계가 앞으로 감)', a2.clock > a1.clock + 50, JSON.stringify(a2) + await page.evaluate(() => `${window.__air.game.state.status} ${document.querySelector('#speeds button.on')?.textContent} ${document.visibilityState} ${window.__air.game.state.log.at(-1)}`));
+await page.evaluate(() => window.__air.setSpeed(0));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
