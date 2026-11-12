@@ -39,7 +39,7 @@ export function startApp(): void {
   let game = new Game(1);
   let tab: Tab = 'map';
   let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null;
-  let drawer: 'min' | 'half' | 'full' = 'half', lastSpeed = 1; // 아래 서랍 높이, 마지막으로 고른 배속(크게 펼쳤다 닫으면 이 배속으로 다시 시작)
+  let drawer: 'min' | 'half' | 'full' = 'half', lastSpeed = 1, resumeAfterFull = false; // 아래 서랍 높이, 마지막으로 고른 배속(크게 펼쳤다 닫으면 이 배속으로 다시 시작)
   const tsort: Record<string, { k: string; d: number }> = { routes: { k: 'profit', d: -1 }, fleet: { k: 'cond', d: 1 }, rivals: { k: 'rev', d: -1 } }; // 표마다 정렬 열과 방향
   let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
   let toastTimer = 0, seenLog = 0, seenEvents = new Set<string>();
@@ -129,7 +129,7 @@ export function startApp(): void {
 <h4>경쟁과 시장</h4><ul><li>같은 노선에 경쟁사가 있으면 손님을 나눠 갖습니다. 가끔 <b>운임 전쟁</b>을 걸어옵니다. <b>제휴</b>를 맺으면 그 항공사는 손님을 덜 빼앗고 전쟁도 하지 않습니다.</li><li>경쟁사는 새로 생기고 망합니다. 망하면 항공기가 반값쯤에 <b>경매</b>로 나옵니다(현황 탭).</li><li><b>대형 항공사</b>는 파산하지 않고 시장과 함께 커지며 내 노선에 들어옵니다. <b>매출 순위</b>로 겨뤄 보세요.</li></ul>
 <h4>계약·시대·행사</h4><ul><li><b>계약 제안</b>(현황 탭)은 보상이 크고, 못 해도 평판이 조금 깎일 뿐입니다. 부담 없이 받아 보세요.</li><li><b>시대</b>가 몇 해마다 바뀝니다(유가 위기·탄소세·소음 규제 등). 6개월 전에 예고합니다.</li><li><b>올림픽·월드컵·축제</b>는 6개월 전에 예고되고, 열리면 개최 도시 노선의 수요가 늘어납니다.</li></ul>
 <h4>기록</h4><ul><li><b>연대기</b>와 <b>연말 신문</b>(메뉴)에 회사의 역사가 쌓입니다. <b>통계</b>에서 손익과 노선별 성적을 봅니다.</li><li><b>저장 관리</b>(메뉴): 저장 칸 3개와 파일 내보내기. 사파리는 일주일 넘게 안 쓰면 저장이 지워질 수 있으니, 가끔 파일로 내보내거나 홈 화면에 추가해 두세요.</li><li>업적을 모으면 <b>칭호</b>가 오르고, 자유 모드 시작 자금 보너스와 도전 출발지가 열립니다.</li></ul>
-<h4>조작</h4><ul><li>스페이스: 정지/재생 · 1·2·3: 배속 · Esc: 선택 해제</li><li>지도: 두 손가락으로 확대·이동. 아래 서랍은 접기·절반·크게로 높이를 바꿉니다(크게 펼치면 시간이 멈추고, 내려오면 마지막 배속으로 다시 흐름). 오른쪽 아래 화살표 버튼으로 패널 접기</li><li>하단 탭을 누르면 그 탭의 첫 화면으로 돌아갑니다. 누를 수 없는 버튼은 눌러 보면 이유를 알려 줍니다.</li></ul><h4>자유 모드의 경쟁과 이야기</h4><ul><li>경쟁사마다 <b>성격</b>(공세형·확장형·서비스형·안정형)이 있고, 매출이 비슷한 곳이 <b>라이벌</b>로 정해집니다(직접 바꿀 수 있어요).</li><li>내 이익이 큰 노선에 경쟁사가 <b>진출을 예고</b>합니다. 제휴를 맺거나 인수하면 막을 수 있어요. 경쟁사끼리 합병하기도 하고, 노선이 많은 도시의 빈 슬롯은 경쟁사가 먼저 차지합니다.</li><li>경쟁사가 있는 노선에서는 노선 화면에서 상대 운임에 맞추거나 <b>맞대응 광고</b>를 낼 수 있습니다.</li><li>가끔 <b>이야기 사건</b>이 생깁니다. 두 선택지 중 하나를 고르면 결과가 갈립니다. 매년 <b>올해의 도전</b>도 하나씩 나옵니다.</li></ul>`;
+<h4>조작</h4><ul><li>스페이스: 정지/재생 · 1·2·3: 배속 · Esc: 선택 해제</li><li>지도: 두 손가락으로 확대·이동. 아래 서랍은 접기·절반·크게로 높이를 바꿉니다(크게 펼치면 시간이 멈추고, 흐르던 중이었다면 내려올 때 그 배속으로 다시 흐름). 오른쪽 아래 화살표 버튼으로 패널 접기</li><li>하단 탭을 누르면 그 탭의 첫 화면으로 돌아갑니다. 누를 수 없는 버튼은 눌러 보면 이유를 알려 줍니다.</li></ul><h4>자유 모드의 경쟁과 이야기</h4><ul><li>경쟁사마다 <b>성격</b>(공세형·확장형·서비스형·안정형)이 있고, 매출이 비슷한 곳이 <b>라이벌</b>로 정해집니다(직접 바꿀 수 있어요).</li><li>내 이익이 큰 노선에 경쟁사가 <b>진출을 예고</b>합니다. 제휴를 맺거나 인수하면 막을 수 있어요. 경쟁사끼리 합병하기도 하고, 노선이 많은 도시의 빈 슬롯은 경쟁사가 먼저 차지합니다.</li><li>경쟁사가 있는 노선에서는 노선 화면에서 상대 운임에 맞추거나 <b>맞대응 광고</b>를 낼 수 있습니다.</li><li>가끔 <b>이야기 사건</b>이 생깁니다. 두 선택지 중 하나를 고르면 결과가 갈립니다. 매년 <b>올해의 도전</b>도 하나씩 나옵니다.</li></ul>`;
   function showInfo(title: string, html: string) { $('#info-title').textContent = title; $('#info-body').innerHTML = html; $('#info').hidden = false; }
   const afterLoad = () => { selCity = selRoute = null; speed = 0; $('#report').hidden = true; prevComp = ''; prevLog = game.state.log.length; syncMap(); lastHtml = ''; render(); };
   /** 저장 관리: 저장 칸 3개, 파일 내보내기·가져오기, 홈 화면 추가 안내 */
@@ -658,8 +658,8 @@ export function startApp(): void {
     const was = drawer; drawer = h;
     $('#stage').classList.remove('d-min', 'd-half', 'd-full'); $('#stage').classList.add(`d-${h}`);
     document.querySelectorAll<HTMLElement>('#dsize button').forEach((x) => x.classList.toggle('on', x.dataset.h === h));
-    if (h === 'full') { if (speed > 0) lastSpeed = speed; speed = 0; }
-    else if (was === 'full' && game.state.status === 'playing' && $('#title').hidden) speed = lastSpeed;
+    if (h === 'full' && was !== 'full') { resumeAfterFull = speed > 0; if (speed > 0) lastSpeed = speed; speed = 0; } // 원래 멈춰 있었으면 내려와도 멈춘 그대로
+    else if (was === 'full' && resumeAfterFull && speed === 0 && game.state.status === 'playing' && $('#title').hidden) speed = lastSpeed;
     renderTop(); renderHint(); lastHtml = ''; render();
   }
   $('#speeds').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-speed]'); if (!b) return; speed = Number(b.dataset.speed); if (speed > 0) lastSpeed = speed; renderTop(); renderHint(); });
