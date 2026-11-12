@@ -393,7 +393,7 @@ check('이야기 선택: 결과가 적용되고 카드가 사라짐', (await pag
 await page.evaluate(() => { const g = window.__air.game; g.state.speed = 0; window.__air.setSpeed(0); });
 await page.waitForTimeout(200); const a0 = await page.evaluate(() => window.__air.anim()); await page.waitForTimeout(400); const a1 = await page.evaluate(() => window.__air.anim());
 check('일시정지하면 지도 애니메이션 시계가 멈춤', a0.paused && a1.clock === a0.clock, JSON.stringify([a0, a1]));
-await page.click('#menubtn'); if ((await page.locator('#menu button[data-m="autopause"]').innerText()).includes('켜짐')) await page.click('#menu button[data-m="autopause"]'); else await page.click('#menubtn'); // 새 알림이 있으면 자동 정지되므로 끈다
+await page.click('#menubtn'); if ((await page.locator('#menu button[data-m="autopause"]').innerText()).includes('켜짐')) { await page.click('#menu button[data-m="autopause"]'); await page.click('#menubtn'); } else await page.click('#menubtn'); // 새 알림이 있으면 자동 정지되므로 끈다
 await page.evaluate(() => window.__air.setSpeed(1)); await page.waitForFunction((c) => window.__air.anim().clock > c + 50, a1.clock, { timeout: 8000 }).catch(() => undefined); const a2 = await page.evaluate(() => window.__air.anim());
 check('재생하면 애니메이션이 다시 움직임(시계가 앞으로 감)', a2.clock > a1.clock + 50, JSON.stringify(a2) + await page.evaluate(() => `${window.__air.game.state.status} ${document.querySelector('#speeds button.on')?.textContent} ${document.visibilityState} ${window.__air.game.state.log.at(-1)}`));
 await page.evaluate(() => window.__air.setSpeed(0));
@@ -403,6 +403,13 @@ await page.evaluate(() => { document.querySelector('#panel').firstElementChild.d
 check('패널을 스크롤하는 중에는 자동 갱신이 미뤄짐(화면이 안 움직임)', await page.evaluate(() => document.querySelector('#panel').firstElementChild.dataset.mark === 'x'));
 await page.waitForFunction(() => document.querySelector('#panel').firstElementChild.dataset.mark !== 'x', null, { timeout: 5000 }).catch(() => undefined);
 check('멈추면 미룬 갱신이 반영됨', await page.evaluate(() => document.querySelector('#panel').firstElementChild.dataset.mark !== 'x'));
+// 1.4.0: 점유율 전략
+const sRid = await page.evaluate(() => { const g = window.__air.game; g.state.cash = 900; const rt = g.state.routes.find((r) => r.open && g.planesOn(r.id).length > 0); const k = g.state.competitors.find((c) => !c.major); k.routes = [{ a: rt.a, b: rt.b, seatsDay: 600, fareRatio: 0.8 }]; k.planes = 4; window.__air.render(); return rt.id; });
+await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button[data-act="goRoute"][data-id="${sRid}"]`).click();
+await page.locator('#panel button[data-act="stance"]').click();
+check('노선 화면: 점유율 우선 운임을 켜면 운임이 경쟁사보다 싸지고 버튼이 켜짐', await page.evaluate((id) => { const g = window.__air.game, r = g.route(id); return r.stance === 'share' && r.fare / g.routeBaseFare(r) <= 0.8 * 0.95 + 0.02; }, sRid) && (await page.locator('#panel button[data-act="stance"]').innerText()).includes('켜짐'));
+await page.locator('#panel button[data-act="svc"][data-v="1"]').click();
+check('서비스 등급을 고급으로 바꿈', await page.evaluate((id) => window.__air.game.route(id).svc === 1, sRid));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

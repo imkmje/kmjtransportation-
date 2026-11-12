@@ -39,6 +39,7 @@ export const config = {
   score: { profit: 10, cash: 2, city: 40, win: 600, month: 5, bankrupt: 300, loan: 1 },
   loan: { baseRate: 0.01, spread: 0.03, crunch: 0.2, limitBase: 20, limitBookRatio: 0.5, step: 10 }, // 월 이율 = 기본 + 가산 × (잔액 ÷ 한도): 한도에 가까울수록 비싸다. 한도 = 기본 + 장부가 합 × 비율
   aging: { maintPerMonth: 0.004, maxMult: 1.6, capStart: 84, capPerMonth: 0.004, capMin: 0.5, replaceBelow: 0.75 }, // capStart~: 7년이 넘으면 점검해도 정비 상태가 100%까지 안 돌아온다(상한 = 1 − 0.4%/월, 최소 50%). 상한이 75% 아래면 교체 권고. 점검 비용도 노후 배수만큼 든다. 아래는 원래 설명: // 노후 1개월당 운영비 +0.4%(최대 +60%)
+  strategy: { svcWeight: [1, 1.1, 1.22], svcCost: [0, 0.12, 0.3], svcName: ['기본', '고급', '최고급'], undercut: 0.95 }, // 점유율 전략: 노선 서비스 등급(경쟁사와 나누는 몫의 가중치, 항공기 1대당 월 비용 $M), 점유율 우선 운임은 경쟁사 최저가의 95%
   rivalry: { // 자유 모드 경쟁 강화(시나리오는 균형 때문에 적용하지 않는다)
     traits: { // 경쟁사 성격(자유 모드에서 ID로 정해진다)
       aggro: { name: '공세형', desc: '운임 전쟁을 자주 겁니다', war: 2 },

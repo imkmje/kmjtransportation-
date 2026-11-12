@@ -11,7 +11,7 @@ export type StoryDef = { id: string; title: string; desc: string; choices: Story
 const TRAIT_IDS = ['aggro', 'expander', 'quality', 'steady'];
 export const FORMAT_VERSION = 13; // 12 → 13: 연대기·허브 투자 / 11 → 12: 대형 항공사·시대·계약 / 10 → 11: 경매·예고된 행사 / 9 → 10: 경쟁사가 생기고 파산한다(경쟁사 ID 카운터·파산 기록) / 8 → 9: 경쟁사 수 증가 / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
 export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean; rights?: boolean } // rights: 자유 모드에서 지역 운수권 제한을 켠다 // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
-export interface RouteOption { type: string; weekly: number; price: number; profit: number; payback: number | null; slotCost: number; slotNeeds: { city: string; n: number }[]; recommended: boolean } // profit: 이 기종 한 대를 더 넣었을 때 늘어나는 월 이익(고정비·슬롯 임대료 반영), payback: 새 기체 값 ÷ profit(개월)
+export interface RouteOption { shareBefore: number; shareAfter: number; type: string; weekly: number; price: number; profit: number; payback: number | null; slotCost: number; slotNeeds: { city: string; n: number }[]; recommended: boolean } // profit: 이 기종 한 대를 더 넣었을 때 늘어나는 월 이익(고정비·슬롯 임대료 반영), payback: 새 기체 값 ÷ profit(개월)
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const month1 = (day: number) => (Math.floor(day / config.daysPerMonth) % 12) + 1; // 1일차는 1월
@@ -257,7 +257,7 @@ export class Game {
     let share = 1;
     const comps = this.competitorsOn(r.a, r.b);
     if (comps.length && seatsE + seatsB > 0) {
-      const wp = Math.max(1, seatsE + seatsB) * (base / Math.max(1, r.fare)) * (1 + c.demand.repBoost * s.reputation) * ((r.ad ?? 0) > 0 ? c.rivalry.ad.boost : 1);
+      const wp = Math.max(1, seatsE + seatsB) * (base / Math.max(1, r.fare)) * (1 + c.demand.repBoost * s.reputation) * ((r.ad ?? 0) > 0 ? c.rivalry.ad.boost : 1) * c.strategy.svcWeight[r.svc ?? 0];
       let wc = 0;
       for (const { comp, route } of comps) wc += route.seatsDay * (1 / Math.max(0.3, route.fareRatio)) * this.quality(comp) * (comp.id === s.ally ? c.ally.weight : 1);
       share = Math.min(1, Math.max(0.1, wp / (wp + wc)));
@@ -269,8 +269,9 @@ export class Game {
     const cargoRevenue = (cargoT * cargoRate(km) * r.cargoRatio) / 1e6;
     const revenue = (paxE * r.fare + paxB * r.fareBiz) / 1e6 + cargoRevenue;
     const compensation = revenue * (1 - otp) * c.delay.compensation; // 지연 보상금
-    const cost = (hours + (legs * c.cost.landingFeeK) / 1000 + (pax * c.cost.perPaxFee) / 1e6) * costMult + compensation;
-    const revenuePax = (paxE * r.fare + paxB * r.fareBiz) / 1e6, costOps = hours * costMult, costLanding = ((legs * c.cost.landingFeeK) / 1000) * costMult, costPax = ((pax * c.cost.perPaxFee) / 1e6) * costMult;
+    const svcDaily = (this.planesOn(r.id).length * c.strategy.svcCost[r.svc ?? 0]) / c.daysPerMonth; // 노선 서비스 등급 비용(항공기 1대당 월 비용)
+    const cost = (hours + (legs * c.cost.landingFeeK) / 1000 + (pax * c.cost.perPaxFee) / 1e6) * costMult + compensation + svcDaily;
+    const revenuePax = (paxE * r.fare + paxB * r.fareBiz) / 1e6, costOps = hours * costMult + svcDaily, costLanding = ((legs * c.cost.landingFeeK) / 1000) * costMult, costPax = ((pax * c.cost.perPaxFee) / 1e6) * costMult;
     return { revenuePax, costOps, costLanding, costPax, demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
   }
 
@@ -413,6 +414,10 @@ export class Game {
     if (d.seatsE <= 0 || d.demandE <= 0) { r.fare = saved; return; }
     const ratio = 1 + Math.log(d.demandE / d.seatsE) / config.demand.elasticity; // 수요(운임) = 수요(기준)·priceFactor 이므로 해석적으로 구한다
     this.setFare(routeId, base * Math.min(config.fare.maxRatio, Math.max(config.fare.minRatio, ratio)));
+    if (r.stance === 'share') { // 점유율 우선: 경쟁사 최저가보다 5% 싸게(자리가 안 차도 점유율을 먼저 챙긴다)
+      const cs = this.competitorsOn(r.a, r.b);
+      if (cs.length) { const low = Math.min(...cs.map((x) => x.route.fareRatio)) * config.strategy.undercut; if (r.fare / base > low) this.setFare(routeId, base * low); }
+    }
     // 비즈니스석도 같은 방식으로: 수요가 좌석보다 많으면 운임을 올리고 모자라면 내린다(기내 서비스·라운지 같은 수요 효과가 운임으로 돌아온다)
     if (d.seatsB > 0) {
       const baseB = this.routeBaseFareBiz(r), savedB = r.fareBiz; r.fareBiz = Math.round(baseB);
@@ -422,6 +427,21 @@ export class Game {
     }
   }
   setAutoFare(on: boolean): void { this.state.autoFare = on; }
+  /** 점유율 우선 운임: 켜면 매주 경쟁사 최저가보다 5% 싸게 맞춘다(경쟁사가 없으면 그냥 자동 운임) */
+  setStance(routeId: number, on: boolean): Result {
+    const r = this.route(routeId); if (!r || !r.open) return fail('열려 있는 노선이 아닙니다');
+    if (on && !this.competitorsOn(r.a, r.b).length) return fail('경쟁사가 없는 노선입니다');
+    if (on) r.stance = 'share'; else delete r.stance;
+    if (on && this.planesOn(routeId).length) this.fillFare(routeId);
+    return { ok: true };
+  }
+  /** 노선 서비스 등급(0 기본·1 고급·2 최고급): 경쟁사와 나누는 몫이 커지고, 항공기 1대당 월 비용이 든다 */
+  setService(routeId: number, level: number): Result {
+    const r = this.route(routeId); if (!r || !r.open) return fail('열려 있는 노선이 아닙니다');
+    if (!Number.isInteger(level) || level < 0 || level >= config.strategy.svcWeight.length) return fail('없는 등급입니다');
+    if (level) r.svc = level; else delete r.svc;
+    return { ok: true };
+  }
   /** 노선 별명(빈 문자열이면 지움, 최대 16자) */
   setRouteName(routeId: number, name: string): Result {
     const r = this.route(routeId);
@@ -487,7 +507,7 @@ export class Game {
       let a; try { a = this.routeDay(r); } finally { s.planes.pop(); }
       const sf = this.slotShortfall(null, routeId, weekly), slots = sf.needs.reduce((x, n) => x + n.n, 0);
       const profit = (a.revenue - a.cost - before) * dpm - (config.cost.perPlaneMonthly + config.slot.lease * slots) * this.mods.fixed;
-      out.push({ type: t.id, weekly, price: t.price, profit, payback: profit > 0.05 ? t.price / profit : null, slotCost: sf.cost, slotNeeds: sf.needs, recommended: false });
+      out.push({ shareBefore: b.share, shareAfter: a.share, type: t.id, weekly, price: t.price, profit, payback: profit > 0.05 ? t.price / profit : null, slotCost: sf.cost, slotNeeds: sf.needs, recommended: false });
     }
     let best: RouteOption | null = null;
     for (const o of out) if (o.payback !== null && (!best || o.payback < best.payback!)) best = o;
@@ -842,7 +862,7 @@ export class Game {
     const s = this.state;
     if (s.status !== 'playing') return;
     if (s.day > 0 && s.day % config.daysPerMonth === 0) this.startMonth();
-    if (s.autoFare && s.day % 7 === 0) for (const r of s.routes) if (r.open && this.planesOn(r.id).length) this.fillFare(r.id); // 자동 운임: 매주
+    if (s.day % 7 === 0) for (const r of s.routes) if (r.open && (s.autoFare || r.stance === 'share') && this.planesOn(r.id).length) this.fillFare(r.id); // 자동 운임·점유율 우선: 매주
     for (const r of s.routes) {
       if (!r.open) continue;
       const d = this.routeDay(r);

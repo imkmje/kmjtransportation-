@@ -13,6 +13,10 @@ export function advise(g: Game): Advice[] {
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length === 0) out.push({ level: 'warn', text: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 배정된 항공기가 없습니다.`, tab: 'routes', routeId: r.id });
   for (const p of s.planes) if (p.cond < 0.5 && p.shop <= 0) out.push({ level: p.cond < 0.3 ? 'bad' : 'warn', text: `${typeById(p.type).name}의 정비 상태가 ${Math.round(p.cond * 100)}%입니다. 고장 나기 전에 점검하세요.`, tab: 'fleet' });
   for (const p of s.planes) if (g.needsReplacement(p)) out.push({ level: 'info', text: `${typeById(p.type).name}이(가) ${Math.floor(p.age / 12)}년 넘게 낡아 정비해도 ${Math.round(g.maxCond(p) * 100)}%까지만 회복됩니다. 팔고 새로 사는 편이 나을 수 있어요.`, tab: 'fleet' });
+  if (s.competitors.length) { // 점유율이 낮은데 이익은 나는 노선: 점유율을 올려 볼 만하다
+    const low = s.routes.filter((r) => r.open && g.planesOn(r.id).length).map((r) => ({ r, d: g.routeDay(r) })).filter((x) => x.d.share < 0.5 && x.d.revenue > x.d.cost).sort((a, b) => a.d.share - b.d.share)[0];
+    if (low) out.push({ level: 'info', text: `${cityById(low.r.a).name} ⇄ ${cityById(low.r.b).name} 점유율이 ${Math.round(low.d.share * 100)}%입니다. 광고·서비스 등급·점유율 우선 운임·증편으로 올려 보세요.`, tab: 'routes', routeId: low.r.id });
+  }
   { const d = s.story ? g.storyDef() : undefined; if (d) out.push({ level: 'info', text: `선택할 일이 있습니다: ${d.title}`, tab: 'map' }); }
   for (const t of s.threats ?? []) { const c = s.competitors.find((x) => x.id === t.comp); if (c) out.push({ level: 'warn', text: `${c.name}이(가) ${cityById(t.a).name} ⇄ ${cityById(t.b).name} 노선 진출을 예고했습니다. 제휴나 인수로 막을 수 있어요.`, tab: 'map' }); }
   { const o = s.contracts.filter((c) => c.status === 'offer'); if (o.length) out.push({ level: 'info', text: `새 계약 제안이 ${o.length}건 있습니다. 보상: ${o[0].reward.label}`, tab: 'map' }); }
