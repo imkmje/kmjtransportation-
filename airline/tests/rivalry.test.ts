@@ -115,3 +115,27 @@ describe('노선 점유율', () => {
     expect(sh[0].share).toBeCloseTo(g.routeDay(r).share, 9); expect(sh.every((x) => x.share > 0)).toBe(true);
   });
 });
+
+describe('점유율 전략', () => {
+  const setup = () => { const g = sandbox(); const rid = myRoute(g); g.state.competitors = []; comp(g, 90, 'NRT', 6, [{ a: 'ICN', b: 'NRT' }]); g.state.competitors[0].routes[0].seatsDay = 900; return { g, rid, r: g.route(rid)! }; };
+  it('서비스 등급은 점유율을 올리고 항공기 1대당 월 비용이 든다', () => {
+    const { g, rid, r } = setup(); const s0 = g.routeDay(r).share, c0 = g.routeDay(r).cost;
+    expect(g.setService(rid, 2).ok).toBe(true); const d = g.routeDay(r);
+    expect(d.share).toBeGreaterThan(s0); expect((d.cost - c0) * config.daysPerMonth).toBeGreaterThan(config.strategy.svcCost[2] * 0.9 - 0.5); // 비용 증가(수요 변화로 일부 상쇄 가능)
+    expect(g.setService(rid, 9).ok).toBe(false); expect(g.setService(rid, 0).ok).toBe(true); expect(r.svc).toBeUndefined();
+  });
+  it('점유율 우선 운임은 경쟁사 최저가보다 싸게 맞추고, 경쟁사가 없으면 거절', () => {
+    const { g, rid, r } = setup(); g.setFare(rid, g.routeBaseFare(r) * 1.3);
+    expect(g.setStance(rid, true).ok).toBe(true); const base = g.routeBaseFare(r);
+    expect(r.fare / base).toBeLessThanOrEqual(0.9 * config.strategy.undercut + 0.01);
+    g.setFare(rid, base * 1.3); g.advanceDays(8); expect(r.fare / base).toBeLessThanOrEqual(0.9 * config.strategy.undercut + 0.01); // 매주 다시 맞춘다
+    g.setStance(rid, false); expect(r.stance).toBeUndefined();
+    const solo = sandbox(); const rid2 = myRoute(solo); solo.state.competitors = []; expect(solo.setStance(rid2, true).ok).toBe(false);
+  });
+  it('항공기 추가 추천에 점유율 변화가 나오고, 점유율 낮은 노선은 조언에 뜬다', () => {
+    const { g, rid } = setup(); const o = g.routeOptions(rid)[0];
+    expect(o.shareAfter).toBeGreaterThan(o.shareBefore);
+    g.state.competitors[0].routes[0].seatsDay = 5000; g.state.competitors[0].routes[0].fareRatio = 0.6;
+    expect(g.routeDay(g.route(rid)!).share).toBeLessThan(0.5);
+  });
+});
