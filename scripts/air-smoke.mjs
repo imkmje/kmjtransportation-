@@ -393,6 +393,12 @@ await page.click('#menubtn'); if ((await page.locator('#menu button[data-m="auto
 await page.evaluate(() => window.__air.setSpeed(1)); await page.waitForFunction((c) => window.__air.anim().clock > c + 50, a1.clock, { timeout: 8000 }).catch(() => undefined); const a2 = await page.evaluate(() => window.__air.anim());
 check('재생하면 애니메이션이 다시 움직임(시계가 앞으로 감)', a2.clock > a1.clock + 50, JSON.stringify(a2) + await page.evaluate(() => `${window.__air.game.state.status} ${document.querySelector('#speeds button.on')?.textContent} ${document.visibilityState} ${window.__air.game.state.log.at(-1)}`));
 await page.evaluate(() => window.__air.setSpeed(0));
+// 1.2.3: 스크롤 중에는 저절로 다시 그리지 않는다
+await page.click('#tabs button[data-tab="money"]');
+await page.evaluate(() => { document.querySelector('#panel').firstElementChild.dataset.mark = 'x'; document.querySelector('#panel').dispatchEvent(new Event('scroll')); window.__air.game.state.cash += 1.7; window.__air.render(true); });
+check('패널을 스크롤하는 중에는 자동 갱신이 미뤄짐(화면이 안 움직임)', await page.evaluate(() => document.querySelector('#panel').firstElementChild.dataset.mark === 'x'));
+await page.waitForFunction(() => document.querySelector('#panel').firstElementChild.dataset.mark !== 'x', null, { timeout: 5000 }).catch(() => undefined);
+check('멈추면 미룬 갱신이 반영됨', await page.evaluate(() => document.querySelector('#panel').firstElementChild.dataset.mark !== 'x'));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
