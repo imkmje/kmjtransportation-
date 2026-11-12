@@ -105,3 +105,13 @@ describe('후반 이정표', () => {
     for (const l of LADDERS) for (let i = 1; i < l.steps.length; i++) expect(l.steps[i]).toBeGreaterThan(l.steps[i - 1]);
   });
 });
+
+describe('노선 점유율', () => {
+  it('경쟁사가 없으면 내가 100%, 있으면 나와 경쟁사 점유율의 합이 100%', () => {
+    const g = sandbox(); const rid = myRoute(g); g.state.competitors = []; const r = g.route(rid)!;
+    expect(g.routeShares(r)).toEqual([{ name: '우리', share: 1, me: true, id: 0 }]);
+    comp(g, 90, 'NRT', 4, [{ a: 'ICN', b: 'NRT' }]); comp(g, 91, 'HKG', 4, [{ a: 'ICN', b: 'NRT' }]);
+    const sh = g.routeShares(r); expect(sh.length).toBe(3); expect(sh.reduce((a, x) => a + x.share, 0)).toBeCloseTo(1, 9);
+    expect(sh[0].share).toBeCloseTo(g.routeDay(r).share, 9); expect(sh.every((x) => x.share > 0)).toBe(true);
+  });
+});
