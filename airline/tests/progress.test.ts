@@ -75,7 +75,7 @@ describe('매출 순위', () => {
     expect(g.rank()).toBe(r.findIndex((x) => x.me) + 1);
   });
   it('노선이 없으면 꼴찌, 큰 노선망을 운영하면 순위가 오른다', () => {
-    const idle = sandbox(); idle.advanceDays(30 * 14); expect(idle.rank()).toBe(idle.state.competitors.length + 1);
+    const idle = sandbox(); idle.advanceDays(30 * 14); expect(idle.rank()).toBeGreaterThanOrEqual(idle.state.competitors.filter((c) => (c.revHist ?? []).some((x) => x > 0)).length + 1); // 매출 0인 신생 경쟁사와는 같은 꼴찌일 수 있다
     const g = sandbox(); const rid = open(g, 'ICN', 'NRT'); g.assign(g.state.planes[0].id, rid, 14);
     for (let i = 0; i < 4; i++) { const o = open(g, 'ICN', ['PEK', 'HKG', 'BKK', 'SIN'][i]); const b = g.buyForRoute(o, 'B737', 'new'); if (!b.ok) throw new Error(b.error); }
     g.advanceDays(30 * 14); expect(g.rank()).toBeLessThan(g.state.competitors.length + 1);

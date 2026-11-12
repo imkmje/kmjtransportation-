@@ -34,10 +34,14 @@ export const achieved = (g: Game): string[] => ACHIEVEMENTS.filter((a) => a.test
 /** 이정표(자유 모드용): 단계가 있는 목표. 저장 파일에 넣지 않고 게임 상태에서 계산한다 */
 export interface Ladder { id: string; name: string; unit: string; steps: number[]; value: (g: Game) => number }
 export const LADDERS: Ladder[] = [
-  { id: 'profit', name: '누적 이익', unit: 'M', steps: [25, 50, 100, 200, 400, 800, 1500], value: (g) => g.state.cumProfit },
+  { id: 'profit', name: '누적 이익', unit: 'M', steps: [25, 50, 100, 200, 400, 800, 1500, 3000, 6000, 12000], value: (g) => g.state.cumProfit },
   { id: 'cities', name: '취항 도시', unit: '곳', steps: [3, 6, 10, 15, 20, 30, CITIES.length], value: (g) => g.servedCities().size },
-  { id: 'fleet', name: '보유 항공기', unit: '대', steps: [3, 5, 10, 15, 25, 40], value: (g) => g.state.planes.length },
-  { id: 'pax', name: '지난달 탑승객', unit: '명', steps: [5000, 10000, 25000, 50000, 100000, 200000], value: (g) => g.state.history.at(-1)?.pax ?? 0 },
+  { id: 'fleet', name: '보유 항공기', unit: '대', steps: [3, 5, 10, 15, 25, 40, 60, 100], value: (g) => g.state.planes.length },
+  { id: 'pax', name: '지난달 탑승객', unit: '명', steps: [5000, 10000, 25000, 50000, 100000, 200000, 400000, 800000], value: (g) => g.state.history.at(-1)?.pax ?? 0 },
+  { id: 'totalpax', name: '누적 탑승객', unit: '명', steps: [100000, 500000, 1000000, 5000000, 10000000, 50000000, 100000000], value: (g) => g.state.history.reduce((a, h) => a + h.pax, 0) },
+  { id: 'years', name: '운영 연수', unit: '년', steps: [3, 5, 10, 15, 20, 30], value: (g) => Math.floor(g.monthsPassed / 12) },
+  { id: 'acq', name: '인수한 경쟁사', unit: '곳', steps: [1, 2, 3, 5], value: (g) => g.state.acquired ?? 0 },
+  { id: 'rights', name: '운수권 지역', unit: '곳', steps: [2, 4, 6, 8], value: (g) => g.state.rights?.length ?? 0 },
 ];
 /** 지금까지 넘은 이정표 키("ladder:step") */
 export const reachedSteps = (g: Game): string[] => LADDERS.flatMap((l) => { const v = l.value(g); return l.steps.filter((s) => v >= s).map((s) => `${l.id}:${s}`); });
