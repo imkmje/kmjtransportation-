@@ -406,16 +406,19 @@ export function startApp(): void {
     const mapBtn = $('#tabs button[data-tab="map"]'), n = s.contracts.filter((c) => c.status === 'offer').length + s.auctions.length; // 새 계약 제안·경매가 있으면 지도 탭에 표시
     if (n > 0 && tab !== 'map') mapBtn.dataset.badge = String(n); else delete mapBtn.dataset.badge;
   }
-  function render() {
+  /** auto: 시간이 흘러 저절로 다시 그리는 경우. 사용자가 패널을 스크롤·터치 중이면 잠시 미룬다(화면이 지 혼자 움직이는 느낌 방지) */
+  function render(auto = false) {
     renderTop(); renderEra();
     document.querySelectorAll<HTMLElement>('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     if (tab === 'news') seenLog = game.state.log.length;
     const html = tab === 'map' ? viewMap() : tab === 'routes' ? viewRoutes() : tab === 'fleet' ? viewFleet() : tab === 'money' ? viewMoney() : viewNews();
-    if (html !== lastHtml) { const y = panel.scrollTop; panel.classList.toggle('hasLive', html.includes('id="live"')); panel.innerHTML = html; panel.scrollTop = y; lastHtml = html; panel.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => { const o = detOpen.get(detKey(d)); if (o !== undefined) d.open = o; }); }
+    if (html !== lastHtml && auto && performance.now() - panelBusy < 900) renderLater = true;
+    else if (html !== lastHtml) { renderLater = false; const y = panel.scrollTop; panel.classList.toggle('hasLive', html.includes('id="live"')); panel.innerHTML = html; panel.scrollTop = y; lastHtml = html; panel.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => { const o = detOpen.get(detKey(d)); if (o !== undefined) d.open = o; }); }
     renderEnd();
     renderHint();
   }
-  let lastHtml = '';
+  let lastHtml = '', panelBusy = 0, renderLater = false;
+  for (const ev of ['scroll', 'touchstart', 'touchmove', 'touchend', 'wheel']) panel.addEventListener(ev, () => { panelBusy = performance.now(); }, { passive: true });
 
   // ---- 첫 5분 안내: 말풍선 없이, 지도 아래 한 줄 + 눌러야 할 곳이 반짝임 ----
   /** 힌트용 첫 목적지: 시작 기종으로 갈 수 있는 가장 가까운 큰 도시(수요가 큰 곳 중 2,500km 안) */
@@ -682,6 +685,7 @@ export function startApp(): void {
   function frame(now: number) {
     const dt = Math.min(0.5, (now - last) / 1000); last = now;
     map.setPaused(speed === 0 || game.state.status !== 'playing');
+    if (renderLater && performance.now() - panelBusy >= 900) render(true);
     if (speed > 0 && game.state.status === 'playing' && document.visibilityState === 'visible') {
       acc += dt * speed;
       let n = 0;
@@ -695,7 +699,7 @@ export function startApp(): void {
           if (autoPause && game.state.status === 'playing') { speed = 0; renderTop(); }
         }
         prevLog = lg.length;
-        lastHtml = tab === 'map' && !selCity ? '' : lastHtml; render();
+        render(true);
         if (game.state.status !== 'playing') speed = 0;
       }
     }
