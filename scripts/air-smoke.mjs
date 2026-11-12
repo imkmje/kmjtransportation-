@@ -423,6 +423,8 @@ check('서랍 크게: 화면 대부분을 덮고 시간이 멈춤', (await page.
 await page.click('#dsize button[data-h="half"]');
 check('크게에서 내려오면 마지막으로 고른 배속(2×)으로 다시 흐름', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
 await page.click('#speeds button[data-speed="0"]');
+await page.click('#dsize button[data-h="full"]'); await page.click('#dsize button[data-h="half"]');
+check('원래 멈춰 있었으면 크게에서 내려와도 멈춘 그대로', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
 await page.click('#dsize button[data-h="min"]');
 check('서랍 접기: 표가 숨고 탭·요약 줄만 남음', !(await page.locator('#panel').isVisible()) && (await page.locator('#dsum').innerText()).includes('노선'));
 await page.click('#tabs button[data-tab="routes"]');
