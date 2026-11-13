@@ -66,6 +66,7 @@ export const config = {
     ],
   },
   season: { start: 12, rewardMonths: 2.5, rewardMin: 5, rewardMax: 60, rep: 0.02 }, // 올해의 도전(자유 모드): 매년 하나, 보상은 월 이익의 rewardMonths배
+  livery: ['#ffffff', '#ffd86b', '#ff9d6b', '#7cc4ff', '#8fdc9c', '#c9a6ff', '#ff8fb1'], // 도색(지도의 내 비행기 색) 고를 수 있는 색
   subsidiary: { // 자회사(자유 모드): 경쟁사 지분을 사서 회사는 그대로 두고 배당을 받는다
     priceMult: 1.2, // 지분 값 = 인수가 × 지분율 × 1.2(경영권 웃돈)
     weight: { 0.2: 0.6, 0.51: 0.3 } as Record<string, number>, // 내 노선과 겹칠 때 손님을 빼앗는 힘(1 = 보통 경쟁사, 제휴 0.5)
