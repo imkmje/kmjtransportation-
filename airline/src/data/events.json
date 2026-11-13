@@ -189,5 +189,60 @@
    "routeDemand": 0.3
   },
   "text": "대형 축제가 열려 개최 도시를 오가는 노선의 수요가 한 달간 30% 늘어납니다."
+ },
+ {
+  "id": "typhoon",
+  "name": "태풍",
+  "months": 1,
+  "effect": {
+   "cityCap": -0.5
+  },
+  "text": "태풍이 와서 한 공항의 운항이 1개월간 절반으로 줄어듭니다.",
+  "snowCities": [
+   "NRT",
+   "TPE",
+   "HKG",
+   "MNL",
+   "PVG",
+   "ICN",
+   "KIX",
+   "CJU"
+  ],
+  "season": [
+   7,
+   8,
+   9
+  ],
+  "sandboxOnly": true,
+  "option": {
+   "label": "사전 대비",
+   "cost": 1.5,
+   "scale": 0.4,
+   "text": "항공기를 미리 옮기고 일정을 조정해 피해를 줄입니다."
+  }
+ },
+ {
+  "id": "ash",
+  "name": "화산재",
+  "months": 1,
+  "effect": {
+   "cityCap": -0.7
+  },
+  "text": "화산 폭발로 화산재가 퍼져 한 공항의 운항이 크게 줄어듭니다.",
+  "snowCities": [
+   "CGK",
+   "NRT",
+   "MEX",
+   "SCL",
+   "AKL",
+   "MNL"
+  ],
+  "sandboxOnly": true,
+  "option": {
+   "label": "우회 항로",
+   "cost": 2.0,
+   "scale": 0.5,
+   "text": "우회 항로를 잡아 운항 감소를 절반으로 줄입니다."
+  }
  }
 ]

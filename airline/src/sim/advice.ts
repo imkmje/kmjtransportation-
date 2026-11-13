@@ -8,7 +8,7 @@ export interface Advice { level: 'bad' | 'warn' | 'info'; text: string; tab?: 'm
 export function advise(g: Game): Advice[] {
   const s = g.state, out: Advice[] = [];
   if (s.status !== 'playing') return out;
-  const idle = s.planes.filter((p) => p.routeId === null && p.shop <= 0);
+  const idle = s.planes.filter((p) => p.routeId === null && p.shop <= 0 && p.charter === undefined);
   if (idle.length) out.push({ level: 'bad', text: `노는 항공기가 ${idle.length}대 있습니다. 노선에 배정해야 돈을 벌어요.`, tab: s.routes.some((r) => r.open) ? 'routes' : 'map' });
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length === 0) out.push({ level: 'warn', text: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 배정된 항공기가 없습니다.`, tab: 'routes', routeId: r.id });
   for (const p of s.planes) if (p.cond < 0.5 && p.shop <= 0) out.push({ level: p.cond < 0.3 ? 'bad' : 'warn', text: `${typeById(p.type).name}의 정비 상태가 ${Math.round(p.cond * 100)}%입니다. 고장 나기 전에 점검하세요.`, tab: 'fleet' });

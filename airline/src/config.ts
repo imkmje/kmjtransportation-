@@ -56,19 +56,40 @@ export const config = {
   story: { // 이야기 사건(자유 모드): 한 번에 하나, 선택하면 결과가 갈린다
     chance: 0.12, minMonth: 6, expires: 2,
     list: [
-      { id: 'celeb', title: '유명 인플루언서가 우리 항공사를 칭찬했습니다', desc: '협찬 계약을 제안받았습니다.', choices: [{ label: '협찬 $3M', cash: -3, rep: 0.05, result: '화제가 되어 평판이 올랐습니다.' }, { label: '그냥 둔다', rep: 0.01, result: '조용히 지나갔지만 조금은 알려졌습니다.' }] },
-      { id: 'union', title: '조종사 노조가 임금 인상을 요구합니다', desc: '협상이 결렬되면 파업이 날 수 있습니다.', choices: [{ label: '수용 $4M', cash: -4, rep: 0.02, result: '협상이 타결돼 사기가 올랐습니다.' }, { label: '거부', risk: { chance: 0.5, cash: -10, rep: -0.03, text: '파업이 일어나 $10M 손실을 입었습니다.' }, result: '협상은 결렬됐지만 파업은 피했습니다.' }] },
-      { id: 'green', title: '환경 단체가 배출가스를 항의합니다', desc: '언론이 관심을 보이고 있습니다.', choices: [{ label: '탄소 상쇄 $2.5M', cash: -2.5, rep: 0.03, result: '친환경 항공사로 호평받았습니다.' }, { label: '무시', rep: -0.03, result: '비판 기사가 나와 평판이 내려갔습니다.' }] },
+      { id: 'celeb', title: '유명 인플루언서가 우리 항공사를 칭찬했습니다', desc: '협찬 계약을 제안받았습니다.', choices: [{ label: '협찬 $3M', cash: -3, rep: 0.05, result: '화제가 되어 평판이 올랐습니다.', next: { id: 'celeb2', months: 8 } }, { label: '그냥 둔다', rep: 0.01, result: '조용히 지나갔지만 조금은 알려졌습니다.' }] },
+      { id: 'union', title: '조종사 노조가 임금 인상을 요구합니다', desc: '협상이 결렬되면 파업이 날 수 있습니다.', choices: [{ label: '수용 $4M', cash: -4, rep: 0.02, result: '협상이 타결돼 사기가 올랐습니다.', next: { id: 'union2', months: 12 } }, { label: '거부', risk: { chance: 0.5, cash: -10, rep: -0.03, text: '파업이 일어나 $10M 손실을 입었습니다.' }, result: '협상은 결렬됐지만 파업은 피했습니다.' }] },
+      { id: 'green', title: '환경 단체가 배출가스를 항의합니다', desc: '언론이 관심을 보이고 있습니다.', choices: [{ label: '탄소 상쇄 $2.5M', cash: -2.5, rep: 0.03, result: '친환경 항공사로 호평받았습니다.', next: { id: 'green2', months: 12 } }, { label: '무시', rep: -0.03, result: '비판 기사가 나와 평판이 내려갔습니다.' }] },
       { id: 'group', title: '대형 여행사가 단체 계약을 제안합니다', desc: '일정이 빠듯하지만 현금이 바로 들어옵니다.', choices: [{ label: '수락 +$6M', cash: 6, rep: -0.01, result: '현금을 받았지만 빡빡한 일정에 불만이 조금 나왔습니다.' }, { label: '거절', result: '제안을 정중히 거절했습니다.' }] },
       { id: 'airport', title: '공항이 터미널 확장 공사를 알렸습니다', desc: '지금 투자하면 슬롯을 먼저 확보할 수 있습니다.', choices: [{ label: '투자 $4M', cash: -4, slot: true, result: '가장 많이 취항하는 도시의 슬롯 1개를 확보했습니다.' }, { label: '관망', result: '공사가 끝나길 기다리기로 했습니다.' }] },
       { id: 'test', title: '제조사가 신기종 시범 운항을 제안합니다', desc: '홍보 효과가 있지만 비용이 듭니다.', choices: [{ label: '참여 $1.5M', cash: -1.5, rep: 0.04, result: '시범 운항이 보도돼 평판이 올랐습니다.' }, { label: '거절', result: '제안을 사양했습니다.' }] },
       { id: 'subStrike', needSub: true, title: '자회사 노조가 파업을 예고했습니다', desc: '모회사가 지원하면 협상이 쉬워집니다.', choices: [{ label: '지원 $3M', cash: -3, rep: 0.01, result: '자회사 노사가 합의해 파업을 피했습니다.' }, { label: '자회사에 맡긴다', risk: { chance: 0.5, subCash: -15, text: '파업이 일어나 자회사가 $15M 손실을 입었습니다.' }, result: '자회사가 스스로 협상을 마무리했습니다.' }] },
       { id: 'subIndep', needSub: true, title: '자회사 경영진이 독립을 원합니다', desc: '지분을 넉넉한 값에 되사겠다고 제안합니다.', choices: [{ label: '지분 매각(웃돈 25%)', subSell: true, result: '지분을 웃돈을 받고 팔았습니다. 이제 독립한 경쟁사입니다.' }, { label: '거절', rep: -0.01, result: '경영진을 설득해 자회사로 남겼습니다(관계가 조금 서먹해졌습니다).' }] },
+      { id: 'film', title: '영화 제작사가 기내 촬영을 요청합니다', desc: '개봉하면 홍보가 되지만 촬영 동안 한 편이 멈춥니다.', choices: [{ label: '허락(+$2M)', cash: 2, rep: 0.03, result: '영화에 우리 항공기가 나와 화제가 됐습니다.' }, { label: '거절', result: '정중히 거절했습니다.' }] },
+      { id: 'vip', title: '유명 배우가 전용기 대신 우리 항공편을 타겠다고 합니다', desc: '특별 서비스를 준비하면 좋은 인상을 남깁니다.', choices: [{ label: '특별 준비 $1M', cash: -1, rep: 0.04, result: '배우의 칭찬 글이 퍼졌습니다.' }, { label: '평소대로', risk: { chance: 0.4, rep: -0.02, text: '불편했다는 후기가 퍼졌습니다.' }, result: '무난하게 지나갔습니다.' }] },
+      { id: 'union2', chain: true, title: '작년 임금 합의가 만료돼 노조가 재협상을 요구합니다', desc: '지난번 수용한 조건을 이어 갈지 정해야 합니다.', choices: [{ label: '재계약 $5M', cash: -5, rep: 0.01, result: '노사 관계가 안정됐습니다.' }, { label: '동결', risk: { chance: 0.6, cash: -12, rep: -0.02, text: '파업이 일어나 $12M 손실을 입었습니다.' }, result: '노조가 동결을 받아들였습니다.' }] },
+      { id: 'celeb2', chain: true, title: '그 인플루언서가 장기 홍보 계약을 제안합니다', desc: '지난 협찬 반응이 좋아 1년 계약을 원합니다.', choices: [{ label: '1년 계약 $6M', cash: -6, rep: 0.06, result: '꾸준한 홍보로 평판이 크게 올랐습니다.' }, { label: '거절', result: '한 번으로 충분하다고 판단했습니다.' }] },
+      { id: 'green2', chain: true, title: '친환경 인증 심사가 열립니다', desc: '지난번 탄소 상쇄 덕분에 인증 후보가 됐습니다.', choices: [{ label: '인증 투자 $4M', cash: -4, rep: 0.05, result: '친환경 인증을 받아 평판이 올랐습니다.' }, { label: '포기', result: '이번 심사는 건너뛰었습니다.' }] },
+      { id: 'accident', chain: true, title: '항공기 고장으로 승객들이 크게 불편을 겪었습니다', desc: '언론이 대응을 지켜보고 있습니다.', choices: [{ label: '사과와 보상 $4M', cash: -4, rep: 0.01, result: '빠른 사과와 보상으로 신뢰를 지켰습니다.' }, { label: '원인 공개 조사 $2M', cash: -2, result: '투명한 조사로 비판이 가라앉았습니다.' }, { label: '최소 대응', rep: -0.04, result: '대응이 미흡하다는 비판을 받았습니다.' }] },
       { id: 'rumor', title: '경쟁사가 우리 정비 소문을 퍼뜨립니다', desc: '근거 없는 소문이지만 퍼지고 있습니다.', choices: [{ label: '해명 광고 $2M', cash: -2, result: '해명이 받아들여져 소문이 가라앉았습니다.' }, { label: '무시', risk: { chance: 0.5, rep: -0.04, text: '소문이 퍼져 평판이 내려갔습니다.' }, result: '소문은 저절로 사라졌습니다.' }] },
     ],
   },
   season: { start: 12, rewardMonths: 2.5, rewardMin: 5, rewardMax: 60, rep: 0.02 }, // 올해의 도전(자유 모드): 매년 하나, 보상은 월 이익의 rewardMonths배
   livery: ['#ffffff', '#ffd86b', '#ff9d6b', '#7cc4ff', '#8fdc9c', '#c9a6ff', '#ff8fb1'], // 도색(지도의 내 비행기 색) 고를 수 있는 색
+  extra: { // 자유 모드 재미 요소(시나리오에는 적용하지 않는다)
+    loyalty: { names: ['없음', '기본', '풍성'], join: [0, 0.02, 0.035], churn: [0.1, 0.01, 0.005], costPerM: [0, 0.4, 0.9], maxBoost: [0, 0.06, 0.12] }, // 마일리지: 탑승객 중 가입 비율, 월 이탈, 회원 100만 명당 월 비용($M), 최대 수요 증가
+    charter: { chance: 0.15, startMonth: 6, maxOffers: 2, offerMonths: 2, months: [2, 4], seats: [120, 180, 250], payK: 0.0055 }, // 전세기 주문
+    alliance: { max: 3, joinFee: 3, monthly: 0.3, weight: 0.5, codeshare: 0.3, rivalMonth: 24, rivalQ: 1.08 }, // 항공 동맹
+    bid: { months: 2, step: 2, concessionChance: 0.08, concessionMin: 10, concessionMonths: 60, concessionSlots: 3, concessionFee: 0.7, airportChance: 0.04, airportPublic: 3, airportLot: 5, startMonth: 12 }, // 입찰: 공항 운영권·신공항 슬롯
+    rating: { weight: 0.04 }, // 별점 1점당 수요 ±4%
+    award: { rep: 0.02 }, // 연말 시상식 수상 1개당 평판
+    mega: { list: [
+      { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +12', cost: 120, months: 24 },
+      { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 150, months: 30 },
+      { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 완공 때 평판 +5%', cost: 90, months: 18 },
+    ] },
+    preorder: { deposit: 0.1, discount: 0.15, max: 3 }, // 신기종 선주문: 계약금 10%, 15% 할인, 최대 3대
+    pioneer: { months: 6, boost: 0.15 }, // 첫 취항 보너스
+  },
   subsidiary: { // 자회사(자유 모드): 경쟁사 지분을 사서 회사는 그대로 두고 배당을 받는다
     priceMult: 1.2, // 지분 값 = 인수가 × 지분율 × 1.2(경영권 웃돈)
     weight: { 0.2: 0.6, 0.51: 0.3 } as Record<string, number>, // 내 노선과 겹칠 때 손님을 빼앗는 힘(1 = 보통 경쟁사, 제휴 0.5)

@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { CITIES, cityById, typeById } from '../data';
+import { AIRCRAFT, CITIES, cityById, typeById } from '../data';
 import type { Game } from './game';
 import { distanceKm } from './model';
 
@@ -40,6 +40,7 @@ export const LADDERS: Ladder[] = [
   { id: 'pax', name: '지난달 탑승객', unit: '명', steps: [5000, 10000, 25000, 50000, 100000, 200000, 400000, 800000], value: (g) => g.state.history.at(-1)?.pax ?? 0 },
   { id: 'totalpax', name: '누적 탑승객', unit: '명', steps: [100000, 500000, 1000000, 5000000, 10000000, 50000000, 100000000], value: (g) => g.state.history.reduce((a, h) => a + h.pax, 0) },
   { id: 'years', name: '운영 연수', unit: '년', steps: [3, 5, 10, 15, 20, 30], value: (g) => Math.floor(g.monthsPassed / 12) },
+  { id: 'types', name: '기종 도감', unit: '종', steps: [3, 6, 10, 15, AIRCRAFT.length], value: (g) => g.state.typesFlown?.length ?? 0 },
   { id: 'acq', name: '인수한 경쟁사', unit: '곳', steps: [1, 2, 3, 5], value: (g) => g.state.acquired ?? 0 },
   { id: 'rights', name: '운수권 지역', unit: '곳', steps: [2, 4, 6, 8], value: (g) => g.state.rights?.length ?? 0 },
 ];
