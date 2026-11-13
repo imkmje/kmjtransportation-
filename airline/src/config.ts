@@ -62,6 +62,8 @@ export const config = {
       { id: 'group', title: '대형 여행사가 단체 계약을 제안합니다', desc: '일정이 빠듯하지만 현금이 바로 들어옵니다.', choices: [{ label: '수락 +$6M', cash: 6, rep: -0.01, result: '현금을 받았지만 빡빡한 일정에 불만이 조금 나왔습니다.' }, { label: '거절', result: '제안을 정중히 거절했습니다.' }] },
       { id: 'airport', title: '공항이 터미널 확장 공사를 알렸습니다', desc: '지금 투자하면 슬롯을 먼저 확보할 수 있습니다.', choices: [{ label: '투자 $4M', cash: -4, slot: true, result: '가장 많이 취항하는 도시의 슬롯 1개를 확보했습니다.' }, { label: '관망', result: '공사가 끝나길 기다리기로 했습니다.' }] },
       { id: 'test', title: '제조사가 신기종 시범 운항을 제안합니다', desc: '홍보 효과가 있지만 비용이 듭니다.', choices: [{ label: '참여 $1.5M', cash: -1.5, rep: 0.04, result: '시범 운항이 보도돼 평판이 올랐습니다.' }, { label: '거절', result: '제안을 사양했습니다.' }] },
+      { id: 'subStrike', needSub: true, title: '자회사 노조가 파업을 예고했습니다', desc: '모회사가 지원하면 협상이 쉬워집니다.', choices: [{ label: '지원 $3M', cash: -3, rep: 0.01, result: '자회사 노사가 합의해 파업을 피했습니다.' }, { label: '자회사에 맡긴다', risk: { chance: 0.5, subCash: -15, text: '파업이 일어나 자회사가 $15M 손실을 입었습니다.' }, result: '자회사가 스스로 협상을 마무리했습니다.' }] },
+      { id: 'subIndep', needSub: true, title: '자회사 경영진이 독립을 원합니다', desc: '지분을 넉넉한 값에 되사겠다고 제안합니다.', choices: [{ label: '지분 매각(웃돈 25%)', subSell: true, result: '지분을 웃돈을 받고 팔았습니다. 이제 독립한 경쟁사입니다.' }, { label: '거절', rep: -0.01, result: '경영진을 설득해 자회사로 남겼습니다(관계가 조금 서먹해졌습니다).' }] },
       { id: 'rumor', title: '경쟁사가 우리 정비 소문을 퍼뜨립니다', desc: '근거 없는 소문이지만 퍼지고 있습니다.', choices: [{ label: '해명 광고 $2M', cash: -2, result: '해명이 받아들여져 소문이 가라앉았습니다.' }, { label: '무시', risk: { chance: 0.5, rep: -0.04, text: '소문이 퍼져 평판이 내려갔습니다.' }, result: '소문은 저절로 사라졌습니다.' }] },
     ],
   },
@@ -74,6 +76,8 @@ export const config = {
     sellRatio: 0.8, // 지분을 팔 때 받는 값 = 지분 값 × 0.8
     callMonths: 2, callMax: 30, // 증자 요청: 응답 기한(개월), 최대 금액($M, 지분율을 곱함)
     failRep: 0.03, // 자회사가 파산하면 평판 하락
+    codeshare: 0.5, // 51% 자회사 노선과 내 노선이 이어지면 환승 손님(내 노선끼리의 절반)
+    lendRate: 0.8, // 내 항공기를 자회사에 빌려주면 받는 월 임대료 = 새 기체 값 × 임대율 × 0.8
     dirs: { grow: { name: '확장', desc: '항공기를 빨리 늘립니다(배당 적음)' }, profit: { name: '수익', desc: '배당을 많이 줍니다(성장 느림)' }, attack: { name: '공세', desc: '다른 경쟁사 노선에 들어가 손님을 빼앗습니다' } } as Record<string, { name: string; desc: string }>,
   },
   acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
@@ -105,6 +109,7 @@ export const config = {
   growth: { perMonth: 0.003, decay: 0.02, max: 1.8 }, // 운항 중인 도시는 매달 시장이 자란다
   competitors: { major: { name: '글로벌 스카이', hubs: ['DXB', 'FRA', 'JFK', 'SIN'], startMonth: 9, base: 3, perMonth: 0.12, perPlayerPlane: 0.8, cap: 45, eff: 0.97, addPerMonth: 1, bidChance: 0.3, invadeChance: 0.15, warMult: 2, seatMult: 2 }, // 대형 항공사: 파산하지 않고, 시장(내 항공기 수·시간)에 맞춰 커지며, 내 노선에 들어오고, 경매에도 입찰한다
     start: 2, max: 6, entryChance: 0.1, entryMinMonth: 4, entryCash: 0.6, bankruptMonths: 3, effSpread: 0.12, shockChance: 0.012, shockMin: 10, shockMax: 40, // start: 처음에 있는 경쟁사 수, max: 동시에 있을 수 있는 최대 수, entryChance: 한 달에 신생 항공사가 생길 확률, bankruptMonths: 현금이 마이너스인 채 이만큼 지나면 파산, effSpread: 항공사마다 운영 효율이 ±12% 다르다
-    startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, costRatio: 0.62, planeFixed: 0.4, profitScale: 1.8, buyRatio: 0.5 }, // 자유 모드에서만: profitScale: 경쟁사 이익 배수(시나리오는 목표 균형 때문에 1배), buyRatio: 항공기 한 대를 살 때 실제로 현금에서 나가는 비율(나머지는 할부)
+    startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, sandboxCap: 40, capGrowMonths: 6, // 자유 모드는 상한이 6개월마다 1대씩 올라 최대 40대
+     costRatio: 0.62, planeFixed: 0.4, profitScale: 1.8, buyRatio: 0.5 }, // 자유 모드에서만: profitScale: 경쟁사 이익 배수(시나리오는 목표 균형 때문에 1배), buyRatio: 항공기 한 대를 살 때 실제로 현금에서 나가는 비율(나머지는 할부)
 };
 export type Config = typeof config;
