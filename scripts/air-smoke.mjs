@@ -430,7 +430,9 @@ const sRid = await page.evaluate(() => { const g = window.__air.game; g.state.ca
 await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button.trow[data-act="goRoute"][data-id="${sRid}"]`).click();
 await rtab('comp');
 await page.locator('#panel button[data-act="stance"]').click();
+await rtab();
 check('노선 화면: 점유율 우선 운임을 켜면 운임이 경쟁사보다 싸지고 버튼이 켜짐', await page.evaluate((id) => { const g = window.__air.game, r = g.route(id); return r.stance === 'share' && r.fare / g.routeBaseFare(r) <= 0.8 * 0.95 + 0.02; }, sRid) && (await page.locator('#panel button[data-act="stance"]').innerText()).includes('켜짐'), await page.evaluate((id) => { const g = window.__air.game, r = g.route(id); return `${r.stance} ${(r.fare / g.routeBaseFare(r)).toFixed(3)} ${g.planesOn(id).length} ${JSON.stringify(g.competitorsOn(r.a, r.b).map((x) => x.route.fareRatio))}`; }, sRid) + ' ' + (await page.locator('#panel button[data-act="stance"]').innerText()));
+await rtab();
 await page.locator('#panel button[data-act="svc"][data-v="1"]').click();
 check('서비스 등급을 고급으로 바꿈', await page.evaluate((id) => window.__air.game.route(id).svc === 1, sRid));
 // 2.0.0: 아래 서랍 — 크게 펼치면 일시정지, 내려오면 마지막 배속으로 다시
@@ -460,6 +462,11 @@ check('서랍 손잡이를 위로 끌면 크게로 맞춰짐', (await page.locat
 check('크게 상태: 지도 띠에 "지도 보기" 버튼', await page.locator('#mapback').isVisible());
 await page.click('#mapback');
 check('"지도 보기"를 누르면 절반으로', (await page.locator('#stage').getAttribute('class')).includes('d-half'));
+// 2.2.1: 크게 상태에서 지도를 누르면 접기
+await page.click('#dsize button[data-h="full"]');
+{ const mb = await page.locator('#mapwrap').boundingBox(); await page.mouse.click(mb.x + 40, mb.y + mb.height / 2); }
+check('크게 상태에서 지도 띠를 누르면 서랍이 접힘', (await page.locator('#stage').getAttribute('class')).includes('d-min'));
+await page.click('#dsize button[data-h="half"]');
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

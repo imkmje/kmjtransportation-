@@ -513,6 +513,7 @@ export function startApp(): void {
     if (speed === 0) return { text: '④ 위쪽 ‘1×’ 버튼을 눌러 시간을 흘려 보세요', sel: '#speeds button[data-speed="1"]' };
     return { text: '⑤ 시간이 흐르는 동안 ‘노선’ 탭의 운임 슬라이더를 움직여 보세요. 탑승률이 꽉 차면 올리고, 비면 내리세요', sel: tab === 'routes' ? '#fare' : '#tabs button[data-tab="routes"]' };
   }
+  let hintScrolled = '';
   function renderHint() {
     const h = hintStep(), el = $('#hint');
     document.querySelectorAll('.pulse').forEach((e) => e.classList.remove('pulse'));
@@ -520,7 +521,7 @@ export function startApp(): void {
     el.hidden = !h;
     if (!h) return;
     $('#hint-text').textContent = h.text;
-    if (h.sel) { const els = document.querySelectorAll<HTMLElement>(h.sel); els.forEach((e) => e.classList.add('pulse')); if (els[0] && panel.contains(els[0])) els[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); } // 패널 안에 있으면 보이는 곳으로 스크롤
+    if (h.sel) { const els = document.querySelectorAll<HTMLElement>(h.sel); els.forEach((e) => e.classList.add('pulse')); if (els[0] && panel.contains(els[0]) && h.text !== hintScrolled) { hintScrolled = h.text; els[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); } } // 패널 안에 있으면 보이는 곳으로 스크롤(새 안내가 나왔을 때 한 번만: 매번 하면 사거나 고칠 때마다 화면이 운임 쪽으로 튄다)
   }
   $('#hint-off').addEventListener('click', () => { hintsOn = false; try { localStorage.setItem(HINT_KEY, 'off'); } catch { /* 저장 불가 */ } renderHint(); toast('힌트를 껐습니다. 메뉴에서 다시 켤 수 있어요'); });
 
@@ -686,6 +687,7 @@ export function startApp(): void {
     for (const el of [grip, $('#dsum')]) { el.addEventListener('pointerdown', begin as EventListener); el.addEventListener('pointermove', move as EventListener); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); }
   }
   $('#mapback').addEventListener('click', () => setDrawer('half'));
+  $('#mapwrap').addEventListener('click', (e) => { if (drawer === 'full' && !(e.target as HTMLElement).closest('button')) setDrawer('min'); }); // 크게 상태에서 지도 띠를 누르면 서랍을 접는다
   $('#dsize').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-h]'); if (b) { setDrawer(b.dataset.h as typeof drawer); play('tap'); } });
   /** 서랍 높이: 크게 펼치면 시간이 멈추고, 크게에서 내려오면 마지막으로 고른 배속으로 다시 흐른다 */
   function setDrawer(h: typeof drawer) {
