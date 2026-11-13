@@ -69,7 +69,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       } }
     // 경쟁사 노선(보라색 가는 선)
     ctx.strokeStyle = 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
-    for (const k of g.state.competitors) { const f = k.id === focusComp; ctx.strokeStyle = f ? 'rgba(214, 128, 58, 0.95)' : 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = f ? 3.5 : 1.5; for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } } // 경쟁사 탭에서 고른 회사는 주황 굵은 선
+    for (const k of g.state.competitors) { const f = k.id === focusComp; ctx.strokeStyle = f ? 'rgba(214, 128, 58, 0.95)' : k.stake ? 'rgba(47, 158, 91, 0.8)' : 'rgba(138, 92, 196, 0.55)'; for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { ctx.lineWidth = f ? 3.5 : k.stake ? (cr.atk ? 3 : 2) : 1.5; const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } } // 경쟁사 탭에서 고른 회사는 주황 굵은 선
     ctx.setLineDash([]);
     // 노선: 이익이면 초록, 적자면 빨강, 항공기가 없으면 회색 점선
     let chip: { txt: string; color: string; lx: number; ly: number } | null = null;

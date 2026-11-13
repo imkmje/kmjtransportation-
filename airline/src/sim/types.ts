@@ -11,8 +11,8 @@ export interface GoalProgress { label: string; value: number; target: number; do
 export interface Plane { id: number; type: string; book: number; routeId: number | null; weekly: number; age: number; bizShare: number; cond: number; shop: number; leased?: boolean; deposit?: number; name?: string } // age: 보유 개월 수, bizShare: 비즈니스석 비율, cond: 정비 상태(0~1), shop: 정비·수리로 못 나는 남은 일수 // weekly: 주간 왕복 횟수
 export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number; share?: number } // 하루 기록(노선별 그래프용, 최근 60일)
 export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number; name?: string; closed?: number; ad?: number; stance?: 'share'; svc?: number; monthly?: { p: number; s: number }[] } // monthly: 최근 12개월 월 이익·평균 점유율 // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
-export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number; war?: number } // war: 운임 전쟁 남은 개월
-export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; pHist?: number[]; trait?: string; major?: boolean; stake?: number; dir?: 'grow' | 'profit' | 'attack'; call?: { amount: number; expires: number }; lastDiv?: number; divTotal?: number } // stake: 내 지분(0.2·0.51), dir: 51% 자회사의 운영 방향, call: 증자 요청 // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
+export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number; war?: number; rev?: number; share?: number; atk?: boolean; lost?: number } // rev: 지난달 매출(M), share: 우리와 나눈 몫(추정), atk: 공세로 진출, lost: 공세 자회사에 빼앗긴 몫 // war: 운임 전쟁 남은 개월
+export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; pHist?: number[]; trait?: string; major?: boolean; stake?: number; dir?: 'grow' | 'profit' | 'attack'; call?: { amount: number; expires: number }; lastDiv?: number; divTotal?: number; hist?: { rev: number; profit: number; planes: number }[]; target?: number; region?: string; lent?: { type: string; book: number; age: number }[]; lastRent?: number } // stake: 내 지분(0.2·0.51), dir: 51% 자회사의 운영 방향, call: 증자 요청 // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
 export interface Auction { id: number; from: string; type: string; price: number; age: number; cond: number; expires: number } // 파산한 경쟁사가 내놓은 항공기 한 대(expires: 이 개월차가 되면 사라진다)
 export interface Upcoming { def: string; city: string; start: number } // 예고된 행사(start: 시작하는 개월차)
 export interface ActiveEra { id: string; start: number; end: number } // 시대(start·end: 개월차)
@@ -76,7 +76,7 @@ export interface GameState {
   taken?: Record<string, number>; // 경쟁사가 선점한 도시별 슬롯
   rivalId?: number | null; // 라이벌로 지정한 경쟁사
   rivalLead?: boolean; // 라이벌보다 앞서 있는가
-  story?: { id: string; expires: number } | null; // 선택을 기다리는 이야기 사건
+  story?: { id: string; expires: number; sub?: number } | null; // 선택을 기다리는 이야기 사건
   season?: Season | null; // 올해의 도전
   acquired?: number; // 인수한 경쟁사 수
   livery?: string; // 도색 색(지도의 내 비행기)

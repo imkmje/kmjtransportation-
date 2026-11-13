@@ -6,8 +6,8 @@ import { ACHIEVEMENTS, LADDERS } from './achievements';
 import type { ChronEntry, Competitor, Season, Threat, Contract, ContractReward, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
 
 type Trait = { name: string; desc: string; war?: number; buy?: number; planes?: number; q?: number; shock?: number };
-type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean; result: string; risk?: { chance: number; cash?: number; rep?: number; text: string } };
-export type StoryDef = { id: string; title: string; desc: string; choices: StoryChoice[] };
+type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean; subSell?: boolean; result: string; risk?: { chance: number; cash?: number; rep?: number; subCash?: number; text: string } };
+export type StoryDef = { id: string; title: string; desc: string; needSub?: boolean; choices: StoryChoice[] };
 const TRAIT_IDS = ['aggro', 'expander', 'quality', 'steady'];
 export const FORMAT_VERSION = 13; // 12 → 13: 연대기·허브 투자 / 11 → 12: 대형 항공사·시대·계약 / 10 → 11: 경매·예고된 행사 / 9 → 10: 경쟁사가 생기고 파산한다(경쟁사 ID 카운터·파산 기록) / 8 → 9: 경쟁사 수 증가 / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
 export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean; rights?: boolean } // rights: 자유 모드에서 지역 운수권 제한을 켠다 // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
@@ -75,14 +75,16 @@ export class Game {
   transferDemand(r: Route, via?: string): number {
     if (!this.planesOn(r.id).length) return 0;
     const t = config.transfer, served = this.state.routes.filter((x) => x.open && x.id !== r.id && this.planesOn(x.id).length > 0);
+    const dpm = config.daysPerMonth, subs = this.state.sandbox ? this.state.competitors.filter((c) => (c.stake ?? 0) >= 0.51).flatMap((c) => c.routes.map((y) => ({ a: y.a, b: y.b, cap: y.seatsDay * dpm, f: config.subsidiary.codeshare }))) : [];
+    const links = [...served.map((x) => ({ a: x.a, b: x.b, cap: this.monthlySeats(x.id), f: 1 })), ...subs]; // 자회사 노선도 갈아탈 수 있다(공동 운항)
     let sum = 0;
-    for (const [h, o] of [[r.a, r.b], [r.b, r.a]]) for (const x of served) {
+    for (const [h, o] of [[r.a, r.b], [r.b, r.a]]) for (const x of links) {
       if (via && h !== via) continue;
       const far = x.a === h ? x.b : x.b === h ? x.a : null;
       if (!far || far === o || served.some((y) => (y.a === o && y.b === far) || (y.a === far && y.b === o))) continue;
       const O = cityById(o), H = cityById(h), X = cityById(far);
       if ((distanceKm(O, H) + distanceKm(H, X)) / Math.max(1, distanceKm(O, X)) > t.maxDetour) continue;
-      sum += Math.min(rawMonthlyDemand(O, X, this.month, this.growthOf(o), this.growthOf(far)) * t.share, this.monthlySeats(x.id) * t.seatCap); // 이어지는 노선에 자리가 있어야 갈아탈 수 있다
+      sum += Math.min(rawMonthlyDemand(O, X, this.month, this.growthOf(o), this.growthOf(far)) * t.share * x.f, x.cap * t.seatCap); // 이어지는 노선에 자리가 있어야 갈아탈 수 있다
     }
     return sum;
   }
@@ -130,6 +132,19 @@ export class Game {
   hubPrice(cityId: string, kind: 'terminal' | 'mro' | 'lounge'): number | null { return config.invest[kind].prices[this.hubLevel(cityId, kind)] ?? null; }
   /** 허브 투자의 월 운영비 합계 */
   get hubUpkeep(): number { return Object.values(this.state.hubs ?? {}).reduce((a, h) => a + (h.terminal ?? 0) + (h.mro ?? 0) + (h.lounge ?? 0), 0) * config.investUpkeep; }
+  /** 허브 투자 일괄: 'one' = 세 가지를 한 단계씩, 'max' = 모두 최고 단계까지. 살 순서와 합계 */
+  hubBulkPlan(cityId: string, mode: 'one' | 'max'): { list: { kind: 'terminal' | 'mro' | 'lounge'; price: number }[]; total: number } {
+    const kinds = ['terminal', 'mro', 'lounge'] as const, list: { kind: 'terminal' | 'mro' | 'lounge'; price: number }[] = [];
+    for (const kind of kinds) { const lv = this.hubLevel(cityId, kind), prices = config.invest[kind].prices; for (let i = lv; i < (mode === 'one' ? Math.min(lv + 1, prices.length) : prices.length); i++) list.push({ kind, price: prices[i] }); }
+    return { list, total: list.reduce((a, x) => a + x.price, 0) };
+  }
+  buyHubBulk(cityId: string, mode: 'one' | 'max'): Result<{ count: number; total: number }> {
+    const plan = this.hubBulkPlan(cityId, mode);
+    if (!plan.list.length) return fail('이미 모두 최고 단계입니다');
+    if (this.state.cash < plan.total) return fail(`현금이 모자랍니다 (필요 $${plan.total}M, 지금 $${this.state.cash.toFixed(1)}M)`);
+    for (const x of plan.list) { const r = this.buyHub(cityId, x.kind); if (!r.ok) return fail(r.error); }
+    return { ok: true, count: plan.list.length, total: plan.total };
+  }
   buyHub(cityId: string, kind: 'terminal' | 'mro' | 'lounge'): Result<{ level: number }> {
     const s = this.state;
     if (s.status !== 'playing') return fail('게임이 끝났습니다');
@@ -717,7 +732,8 @@ export class Game {
     const s = this.state, k = config.story, list = k.list as unknown as StoryDef[];
     if (s.story) { if (m >= s.story.expires) { const d = this.storyDef(); s.log.push(`${m + 1}개월차: '${d?.title ?? '제안'}' — 답을 미뤄서 기회가 지나갔습니다.`); s.story = null; } return; }
     if (m + 1 < k.minMonth || this.rng.next() >= k.chance) return;
-    const d = list[this.rng.int(list.length)]; s.story = { id: d.id, expires: m + k.expires };
+    const sub = s.competitors.find((c) => (c.stake ?? 0) >= 0.51), pool = list.filter((x) => !x.needSub || sub);
+    const d = pool[this.rng.int(pool.length)]; s.story = { id: d.id, expires: m + k.expires, ...(d.needSub && sub ? { sub: sub.id } : {}) };
     s.log.push(`${m + 1}개월차: ${d.title} — ${d.desc} (현황 탭에서 ${k.expires}개월 안에 선택)`);
   }
   chooseStory(i: number): Result<{ text: string }> {
@@ -727,7 +743,9 @@ export class Game {
     const m = this.monthsPassed + 1; let text = ch.result;
     s.cash += ch.cash ?? 0; s.reputation = Math.min(1, Math.max(0, s.reputation + (ch.rep ?? 0)));
     if (ch.slot) { const c = [...CITIES].sort((a, b) => this.linksAt(b.id) - this.linksAt(a.id) || (a.id < b.id ? -1 : 1))[0]; const id = this.linksAt(c.id) > 0 ? c.id : s.base; s.slots[id] = (s.slots[id] ?? 0) + 1; text = `${cityById(id).name} 슬롯 1개를 확보했습니다.`; }
-    if (ch.risk && this.rng.next() < ch.risk.chance) { s.cash += ch.risk.cash ?? 0; s.reputation = Math.min(1, Math.max(0, s.reputation + (ch.risk.rep ?? 0))); text = ch.risk.text; }
+    const sc = s.story.sub !== undefined ? s.competitors.find((x) => x.id === s.story!.sub) : undefined;
+    if (ch.subSell && sc && sc.stake) { const bonus = Math.round(this.acquirePrice(sc) * sc.stake * config.subsidiary.priceMult * 0.25 * 10) / 10; const r = this.sellStake(sc.id); if (r.ok) { s.cash += bonus; text = `${ch.result} (매각 $${r.price}M + 웃돈 $${bonus}M)`; } }
+    if (ch.risk && this.rng.next() < ch.risk.chance) { if (ch.risk.subCash && sc) sc.cash += ch.risk.subCash; s.cash += ch.risk.cash ?? 0; s.reputation = Math.min(1, Math.max(0, s.reputation + (ch.risk.rep ?? 0))); text = ch.risk.text; }
     s.story = null; s.log.push(`${m}개월차: ${d.title} → ${ch.label}: ${text}`); this.note(m, 'story', `${d.title} → ${ch.label}`);
     return { ok: true, text };
   }
@@ -793,8 +811,75 @@ export class Game {
     if (!c || !c.stake) return fail('지분이 없습니다');
     const price = Math.round(this.acquirePrice(c) * c.stake * config.subsidiary.priceMult * config.subsidiary.sellRatio * 10) / 10;
     s.cash += price; s.log.push(`${this.monthsPassed + 1}개월차: ${c.name} 지분 ${Math.round(c.stake * 100)}%를 $${price}M에 팔았습니다.`);
-    delete c.stake; delete c.dir; delete c.call;
+    this.returnLent(c); delete c.stake; delete c.dir; delete c.call; delete c.target; delete c.region;
     return { ok: true, price };
+  }
+  /** 공세 대상 회사(null이면 자동) */
+  setSubTarget(id: number, target: number | null): Result {
+    const c = this.state.competitors.find((x) => x.id === id);
+    if (!c || (c.stake ?? 0) < 0.51) return fail('경영권(51%)을 가진 자회사만 정할 수 있습니다');
+    if (target === null) { delete c.target; return { ok: true }; }
+    const t = this.state.competitors.find((x) => x.id === target);
+    if (!t || t.id === id || t.stake) return fail('공세 대상으로 정할 수 없는 회사입니다');
+    c.target = target; return { ok: true };
+  }
+  /** 확장 지역(null이면 자유) */
+  setSubRegion(id: number, region: string | null): Result {
+    const c = this.state.competitors.find((x) => x.id === id);
+    if (!c || (c.stake ?? 0) < 0.51) return fail('경영권(51%)을 가진 자회사만 정할 수 있습니다');
+    if (region === null) { delete c.region; return { ok: true }; }
+    if (!CITIES.some((x) => x.region === region)) return fail('없는 지역입니다');
+    c.region = region; return { ok: true };
+  }
+  /** 노는 내 항공기를 51% 자회사에 빌려준다: 매달 임대료를 받고, 자회사는 그만큼 커진다 */
+  lendPlane(planeId: number, id: number): Result<{ rent: number }> {
+    const s = this.state, c = s.competitors.find((x) => x.id === id), p = this.plane(planeId);
+    if (!c || (c.stake ?? 0) < 0.51) return fail('경영권(51%)을 가진 자회사에만 빌려줄 수 있습니다');
+    if (!p) return fail('없는 항공기입니다');
+    if (p.routeId !== null || p.shop > 0) return fail('노선에 배정되지 않고 정비 중이 아닌 항공기만 빌려줄 수 있습니다');
+    if (p.leased) return fail('임대해 온 항공기는 다시 빌려줄 수 없습니다');
+    if (typeById(p.type).seats <= 0) return fail('화물기는 빌려줄 수 없습니다');
+    s.planes = s.planes.filter((x) => x.id !== planeId);
+    c.lent = [...(c.lent ?? []), { type: p.type, book: p.book, age: p.age }];
+    this.compBuy(c, this.month, true);
+    const rent = Math.round(typeById(p.type).price * config.lease.rate * config.subsidiary.lendRate * 100) / 100;
+    s.log.push(`${this.monthsPassed + 1}개월차: ${typeById(p.type).name}을(를) 자회사 ${c.name}에 빌려주었습니다(월 임대료 $${rent}M).`);
+    return { ok: true, rent };
+  }
+  /** 빌려준 항공기 한 대를 돌려받는다(자회사의 좌석이 그만큼 준다) */
+  recallPlane(id: number): Result {
+    const s = this.state, c = s.competitors.find((x) => x.id === id);
+    if (!c || !c.lent?.length) return fail('빌려준 항공기가 없습니다');
+    const l = c.lent[c.lent.length - 1]; c.lent = c.lent.slice(0, -1);
+    const f = c.planes > 1 ? (c.planes - 1) / c.planes : 1; c.planes = Math.max(1, c.planes - 1);
+    for (const r of c.routes) r.seatsDay = Math.round(r.seatsDay * f);
+    this.addPlane(l.type, l.book, { age: l.age, cond: 0.7 });
+    s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}에 빌려준 ${typeById(l.type).name}을(를) 돌려받았습니다(대기 중).`);
+    return { ok: true };
+  }
+  private returnLent(c: Competitor): void {
+    for (const l of c.lent ?? []) this.addPlane(l.type, l.book, { age: l.age, cond: 0.7 });
+    if (c.lent?.length) this.state.log.push(`${this.monthsPassed + 1}개월차: ${c.name}에 빌려준 항공기 ${c.lent.length}대를 돌려받았습니다(대기 중).`);
+    delete c.lent;
+  }
+  /** 이 도시 쌍의 시장 몫(추정): 우리·각 경쟁사. 화면용 */
+  marketShares(a: string, b: string): { id: number; name: string; share: number; me: boolean; stake?: number }[] {
+    const s = this.state, A = cityById(a), B = cityById(b), base = baseFare(distanceKm(A, B)), out: { id: number; name: string; w: number; me: boolean; stake?: number }[] = [];
+    const mine = s.routes.find((x) => x.open && ((x.a === a && x.b === b) || (x.a === b && x.b === a)) && this.planesOn(x.id).length > 0);
+    if (mine) out.push({ id: 0, name: '우리', w: this.routeDay(mine).seats * (base / Math.max(1, mine.fare)) * (1 + config.demand.repBoost * s.reputation), me: true });
+    for (const { comp, route } of this.competitorsOn(a, b)) {
+      const atk = !comp.stake && s.competitors.some((x) => x.dir === 'attack' && x.stake && x.routes.some((y) => (y.a === a && y.b === b) || (y.a === b && y.b === a)));
+      out.push({ id: comp.id, name: comp.name, w: route.seatsDay / Math.max(0.3, route.fareRatio) * this.quality(comp) * (atk ? 0.75 : 1), me: false, stake: comp.stake });
+    }
+    const tot = out.reduce((x, y) => x + y.w, 0) || 1;
+    return out.map(({ w, ...o }) => ({ ...o, share: w / tot }));
+  }
+  /** 그룹(우리 + 51% 자회사) 최근 12개월 매출 순위 */
+  groupRank(): { rank: number; total: number; revenue: number } {
+    const s = this.state, sum = (x: number[]) => x.reduce((a, b) => a + b, 0);
+    const group = sum(s.history.slice(-12).map((h) => h.revenue)) + sum(s.competitors.filter((c) => (c.stake ?? 0) >= 0.51).map((c) => sum(c.revHist ?? [])));
+    const others = s.competitors.filter((c) => (c.stake ?? 0) < 0.51).map((c) => sum(c.revHist ?? []));
+    return { rank: 1 + others.filter((v) => v > group).length, total: others.length + 1, revenue: group };
   }
   /** 증자 요청에 응한다 */
   fundSubsidiary(id: number): Result<{ price: number }> {
@@ -810,6 +895,9 @@ export class Game {
   private subsidiaryMonth(c: Competitor, net: number): void {
     const s = this.state, k = config.subsidiary, m = this.monthsPassed;
     if (net > 0 && c.cash > 0) { const div = Math.round(net * c.stake! * (k.payout[c.dir ?? 'none'] ?? 0.4) * 100) / 100; if (div > 0) { c.cash -= div; s.cash += div; s.cur.revenue += div; s.cur.div = (s.cur.div ?? 0) + div; } c.lastDiv = div > 0 ? div : 0; c.divTotal = Math.round(((c.divTotal ?? 0) + Math.max(0, div)) * 100) / 100; } else c.lastDiv = 0;
+    const rent = (c.lent ?? []).reduce((a, l) => a + typeById(l.type).price * config.lease.rate * k.lendRate, 0);
+    c.lastRent = 0;
+    if (rent > 0 && c.cash > 0) { const pay = Math.round(Math.min(rent, c.cash) * 100) / 100; c.cash -= pay; s.cash += pay; s.cur.revenue += pay; c.lastRent = pay; }
     if (c.call && m >= c.call.expires) { delete c.call; s.log.push(`${m + 1}개월차: 자회사 ${c.name}의 증자 요청 기한이 지났습니다. 자금난이 이어지면 파산할 수 있습니다.`); }
     if (!c.call && c.cash < 0) {
       const amount = Math.round(Math.min(k.callMax, -c.cash + 10) * c.stake! * 10) / 10;
@@ -832,7 +920,7 @@ export class Game {
     const price = this.absorbPrice(c);
     if (s.cash < price) return fail('현금이 모자랍니다');
     const k = config.acquire, n = Math.min(k.maxPlanes, c.planes), m = this.monthsPassed + 1;
-    s.cash -= price; s.competitors = s.competitors.filter((x) => x.id !== id); if (s.ally === id) s.ally = null;
+    s.cash -= price; this.returnLent(c); s.competitors = s.competitors.filter((x) => x.id !== id); if (s.ally === id) s.ally = null;
     s.acquired = (s.acquired ?? 0) + 1; if (s.rivalId === id) s.rivalId = null;
     s.rivalsGone = [...s.rivalsGone, { name: c.name, month: m, acq: true }].slice(-12);
     for (let i = 0; i < n; i++) this.addPlane('B737', typeById('B737').price * 0.5, { age: 48, cond: 0.7 });
@@ -1045,7 +1133,8 @@ export class Game {
     for (const c of s.competitors) {
       if (s.sandbox && !c.trait && !c.major) c.trait = TRAIT_IDS[(c.id * 7 + c.hub.charCodeAt(0)) % TRAIT_IDS.length]; // 성격은 ID로 정해진다(난수 없음)
       const tr = this.traitOf(c);
-      const maxPlanes = Math.min(k.maxPlanesCap, Math.floor((k.maxPlanesBase + k.maxPlanesPerMonth * (this.monthsPassed - (c.born ?? 0))) * (tr?.planes ?? 1) * (c.dir === 'grow' ? 1.2 : 1))); // 늦게 생긴 항공사는 처음부터 다시 키운다
+      const capNow = s.sandbox ? Math.min(k.sandboxCap, k.maxPlanesCap + Math.floor(this.monthsPassed / k.capGrowMonths)) : k.maxPlanesCap; // 자유 모드는 시간이 갈수록 경쟁사도 더 커질 수 있다
+      const maxPlanes = Math.min(capNow, Math.floor((k.maxPlanesBase + k.maxPlanesPerMonth * (this.monthsPassed - (c.born ?? 0))) * (tr?.planes ?? 1) * (c.dir === 'grow' ? 1.2 : 1))); // 늦게 생긴 항공사는 처음부터 다시 키운다
       let profit = 0, revenue = 0;
       for (const r of c.routes) {
         const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), base = baseFare(km), fare = base * r.fareRatio;
@@ -1055,6 +1144,7 @@ export class Game {
         const wc = r.seatsDay / Math.max(0.3, r.fareRatio) * this.quality(c), share = (wc / (wc + myW || 1)) * (atk ? 0.75 : 1); // 내 공세 자회사와 겹치면 손님을 빼앗긴다
         const dem = (rawMonthlyDemand(A, B, month, this.growthOf(r.a), this.growthOf(r.b)) * eco * priceFactor(fare, base) * share) / config.daysPerMonth;
         const pax = Math.min(dem, r.seatsDay * 0.9);
+        r.rev = Math.round((pax * fare * config.daysPerMonth) / 1e4) / 100; r.share = Math.round(share * 1000) / 1000; r.lost = atk ? Math.round((share / 0.75) * 0.25 * 1000) / 1000 : 0; // 화면용 노선별 기록(추정)
         revenue += (pax * fare * config.daysPerMonth) / 1e6;
         profit += (pax * fare * (1 - Math.min(1.2, (k.costRatio * fuelMult) / (c.eff ?? 1))) * config.daysPerMonth) / 1e6; // 비용 비율은 연료비가 오르면 커지고 효율이 낮으면 더 커진다(적자 가능)
       }
@@ -1080,7 +1170,7 @@ export class Game {
       c.pHist = [...(c.pHist ?? [c.planes]), c.planes].slice(-13); // 항공기 수 기록(화면의 증감 표시용)
       const net = profit * (s.sandbox ? k.profitScale : 1) - k.planeFixed * c.planes;
       c.cash += net;
-      if (c.stake) this.subsidiaryMonth(c, net); // profitScale: 모형에 없는 노선·부대 수입까지 포함한 몫(1이면 노선 하나 분만 계산)
+      if (c.stake) { this.subsidiaryMonth(c, net); c.hist = [...(c.hist ?? []), { rev: Math.round(revenue * 100) / 100, profit: Math.round(net * 100) / 100, planes: c.planes }].slice(-12); } // profitScale: 모형에 없는 노선·부대 수입까지 포함한 몫(1이면 노선 하나 분만 계산)
       if (!c.major && c.planes > 0 && this.rng.next() < k.shockChance * (tr?.shock ?? 1)) { // 경영 충격: 사고·파업·리콜·소송으로 큰돈이 나간다(현금이 얇은 항공사는 이것 하나로 무너질 수 있다)
         const loss = Math.round(k.shockMin + this.rng.next() * (k.shockMax - k.shockMin)), why = ['대형 사고 보상금', '장기 파업', '엔진 리콜', '소송 패소'][this.rng.int(4)];
         c.cash -= loss; s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${why}으로 $${loss}M 손실을 입었습니다.`);
@@ -1111,15 +1201,20 @@ export class Game {
       }
     }
     if (c.stake && c.dir === 'attack') { // 공세 자회사: 다른 경쟁사의 노선 중 아직 안 가는 곳으로 들어간다
-      const opp = s.competitors.filter((x) => x.id !== c.id && !x.stake).flatMap((x) => x.routes).filter((r) => !c.routes.some((y) => (y.a === r.a && y.b === r.b) || (y.a === r.b && y.b === r.a)) && canFly(B737, cityById(r.a), cityById(r.b)).ok).sort((x, y) => y.seatsDay - x.seatsDay || (x.a + x.b < y.a + y.b ? -1 : 1))[0];
-      if (opp) { c.routes.push({ a: opp.a, b: opp.b, seatsDay: B737.seats * legsDay(distanceKm(cityById(opp.a), cityById(opp.b))), fareRatio: 0.9 }); s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}이(가) ${cityById(opp.a).name} ⇄ ${cityById(opp.b).name} 노선에 공세로 진출했습니다.`); return; }
+      const tgt = s.competitors.some((y) => y.id === c.target) ? c.target : undefined;
+      const opp = s.competitors.filter((x) => x.id !== c.id && !x.stake && (tgt === undefined || x.id === tgt)).flatMap((x) => x.routes).filter((r) => !c.routes.some((y) => (y.a === r.a && y.b === r.b) || (y.a === r.b && y.b === r.a)) && canFly(B737, cityById(r.a), cityById(r.b)).ok).sort((x, y) => y.seatsDay - x.seatsDay || (x.a + x.b < y.a + y.b ? -1 : 1))[0];
+      if (opp) { c.routes.push({ a: opp.a, b: opp.b, seatsDay: B737.seats * legsDay(distanceKm(cityById(opp.a), cityById(opp.b))), fareRatio: 0.9, atk: true }); s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}이(가) ${cityById(opp.a).name} ⇄ ${cityById(opp.b).name} 노선에 공세로 진출했습니다.`); return; }
     }
     // 아직 안 열린 최고 점수 노선(허브에서 출발, 항속 범위 안)
     let best: { b: string; score: number } | null = null;
-    for (const d of CITIES) {
-      if (d.id === c.hub || !canFly(B737, cityById(c.hub), d).ok || c.routes.some((r) => (r.a === c.hub && r.b === d.id) || (r.b === c.hub && r.a === d.id))) continue;
-      const km = distanceKm(cityById(c.hub), d), sc = rawMonthlyDemand(cityById(c.hub), d, month) / (1 + km / 6000);
-      if (!best || sc > best.score || (sc === best.score && d.id < best.b)) best = { b: d.id, score: sc };
+    for (const only of c.region ? [true, false] : [false]) { // 자회사에 확장 지역을 정했으면 그 지역 도시부터
+      for (const d of CITIES) {
+        if (only && d.region !== c.region) continue;
+        if (d.id === c.hub || !canFly(B737, cityById(c.hub), d).ok || c.routes.some((r) => (r.a === c.hub && r.b === d.id) || (r.b === c.hub && r.a === d.id))) continue;
+        const km = distanceKm(cityById(c.hub), d), sc = rawMonthlyDemand(cityById(c.hub), d, month) / (1 + km / 6000);
+        if (!best || sc > best.score || (sc === best.score && d.id < best.b)) best = { b: d.id, score: sc };
+      }
+      if (best) break;
     }
     const addTo = c.routes.length >= Math.ceil(c.planes / 2) ? c.routes[0] : undefined; // 노선 수가 비행기의 절반을 넘으면 증편
     if (best && !addTo) c.routes.push({ a: c.hub, b: best.b, seatsDay: B737.seats * legsDay(distanceKm(cityById(c.hub), cityById(best.b))), fareRatio: style });
@@ -1214,7 +1309,7 @@ export class Game {
       s.competitors = s.competitors.filter((x) => x.id !== c.id);
       s.rivalsGone = [...s.rivalsGone, { name: c.name, month: m }].slice(-12);
       if (s.ally === c.id) s.ally = null;
-      if (c.stake) { s.reputation = Math.max(0, s.reputation - config.subsidiary.failRep); s.log.push(`${m}개월차: 자회사 ${c.name}이(가) 파산해 지분 ${Math.round(c.stake * 100)}%를 잃고 평판이 떨어졌습니다.`); this.note(m, 'rival', `자회사 ${c.name} 파산`); }
+      if (c.stake) { this.returnLent(c); s.reputation = Math.max(0, s.reputation - config.subsidiary.failRep); s.log.push(`${m}개월차: 자회사 ${c.name}이(가) 파산해 지분 ${Math.round(c.stake * 100)}%를 잃고 평판이 떨어졌습니다.`); this.note(m, 'rival', `자회사 ${c.name} 파산`); }
       const lots = Math.min(config.auction.maxLots, c.planes);
       for (let i = 0; i < lots; i++) s.auctions.push({ id: s.nextId++, from: c.name, type: 'B737', price: Math.round(typeById('B737').price * config.auction.price * 10) / 10, age: config.auction.age, cond: config.auction.cond, expires: this.monthsPassed + config.auction.months });
       this.note(m, 'rival', `${c.name} 파산`);

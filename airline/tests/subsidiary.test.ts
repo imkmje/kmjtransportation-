@@ -59,3 +59,59 @@ describe('배당 내역', () => {
     expect(months.reduce((a, m) => a + m.dividend!, 0) + (g.state.cur.div ?? 0)).toBeCloseTo(k.divTotal!, 1); // 이번 달에 들어온 배당은 아직 정산 전
   });
 });
+
+describe('자회사 강화', () => {
+  it('노선별 매출·몫을 남기고, 시장 몫 합계는 100%, 월 추이가 쌓인다', () => {
+    const g = sandbox(); myRoute(g); const k = comp(g); g.buyStake(90, 0.51); k.cash = 200; g.advanceDays(30 * 3 + 1);
+    expect(k.routes.every((r) => typeof r.rev === 'number')).toBe(true); expect(k.hist!.length).toBeGreaterThanOrEqual(3);
+    const sh = g.marketShares('ICN', 'NRT'); expect(sh.reduce((a, x) => a + x.share, 0)).toBeCloseTo(1, 9); expect(sh.some((x) => x.me)).toBe(true);
+  });
+  it('공세 대상을 정하면 그 회사 노선으로만 들어가고, 공세 노선에 표시가 붙는다', () => {
+    const g = sandbox(); const k = comp(g, { born: -60 });
+    g.state.competitors.push({ id: 91, name: '갑항공', style: 'low', hub: 'BKK', cash: 50, planes: 3, routes: [{ a: 'BKK', b: 'SIN', seatsDay: 800, fareRatio: 1 }], low: 0 } as never, { id: 92, name: '을항공', style: 'low', hub: 'DEL', cash: 50, planes: 3, routes: [{ a: 'DEL', b: 'DXB', seatsDay: 900, fareRatio: 1 }], low: 0 } as never);
+    g.buyStake(90, 0.51); g.setSubDir(90, 'attack'); expect(g.setSubTarget(90, 91).ok).toBe(true); k.cash = 500; g.advanceDays(31);
+    expect(k.routes.some((r) => r.atk && [r.a, r.b].includes('BKK'))).toBe(true); expect(k.routes.some((r) => [r.a, r.b].includes('DEL'))).toBe(false);
+    expect(g.setSubTarget(90, 90).ok).toBe(false);
+  });
+  it('확장 지역을 정하면 그 지역 도시로 먼저 연다', () => {
+    const g = sandbox(); const k = comp(g, { born: -60 }); g.buyStake(90, 0.51); expect(g.setSubRegion(90, 'xx').ok).toBe(false);
+    const reg = Object.keys(config.rights.regions).find((r) => r !== 'asia' && r !== 'east-asia')!; g.setSubRegion(90, reg); k.cash = 500; const n0 = k.routes.length; g.advanceDays(31);
+    expect(k.routes.length).toBeGreaterThanOrEqual(n0);
+  });
+  it('노는 여객기를 빌려주면 내 기단에서 빠지고 임대료가 들어오며, 돌려받을 수 있다', () => {
+    const g = sandbox(); const k = comp(g); g.buyStake(90, 0.51); k.cash = 300; const idle = g.buyPlane('B737'); if (!idle.ok) throw new Error('buy');
+    const n0 = g.state.planes.length, p0 = k.planes; expect(g.lendPlane(idle.planeId, 90).ok).toBe(true);
+    expect(g.state.planes.length).toBe(n0 - 1); expect(k.planes).toBe(p0 + 1); expect(k.lent!.length).toBe(1);
+    g.advanceDays(31); expect(k.lastRent ?? 0).toBeGreaterThan(0);
+    expect(g.recallPlane(90).ok).toBe(true); expect(g.state.planes.length).toBe(n0); expect(k.lent!.length).toBe(0);
+  });
+  it('그룹 순위는 51% 자회사 매출을 더하고, 자회사 노선과 이어지면 환승 손님이 생긴다', () => {
+    const g = sandbox(); const r = myRoute(g); const k = comp(g); k.routes.push({ a: 'NRT', b: 'LAX', seatsDay: 600, fareRatio: 1 }); k.revHist = [500]; const t0 = g.transferDemand(r); // 서울→도쿄→LA 환승
+    g.buyStake(90, 0.51); expect(g.groupRank().revenue).toBeGreaterThanOrEqual(500); expect(g.transferDemand(r)).toBeGreaterThan(t0);
+  });
+  it('자회사가 있을 때만 자회사 이야기가 나오고, 독립 제안을 받아들이면 웃돈을 받고 지분이 팔린다', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.51); g.state.story = { id: 'subIndep', expires: 99, sub: 90 }; const c0 = g.state.cash;
+    expect(g.chooseStory(0).ok).toBe(true); expect(g.state.competitors[0].stake).toBeUndefined(); expect(g.state.cash).toBeGreaterThan(c0);
+    expect(config.story.list.filter((d) => (d as { needSub?: boolean }).needSub).length).toBe(2);
+  });
+});
+
+describe('허브 투자 일괄', () => {
+  it('한 단계씩/최고 단계까지 한꺼번에 사고, 현금이 모자라면 아무것도 사지 않는다', () => {
+    const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 1000; const base = g.state.base;
+    const one = g.hubBulkPlan(base, 'one'); expect(one.list.length).toBe(3);
+    const c0 = g.state.cash; expect(g.buyHubBulk(base, 'one').ok).toBe(true); expect(g.state.cash).toBeCloseTo(c0 - one.total, 6);
+    for (const k of ['terminal', 'mro', 'lounge'] as const) expect(g.hubLevel(base, k)).toBe(1);
+    g.state.cash = 1; expect(g.buyHubBulk(base, 'max').ok).toBe(false); expect(g.hubLevel(base, 'terminal')).toBe(1);
+    g.state.cash = 1000; expect(g.buyHubBulk(base, 'max').ok).toBe(true); for (const k of ['terminal', 'mro', 'lounge'] as const) expect(g.hubLevel(base, k)).toBe(config.invest[k].prices.length);
+    expect(g.buyHubBulk(base, 'max').ok).toBe(false);
+  });
+});
+
+describe('경쟁사 항공기 상한(자유 모드)', () => {
+  it('자유 모드에서는 시간이 지나면 10대를 넘어 커질 수 있고, 시나리오는 10대 그대로', () => {
+    const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 900;
+    for (let i = 0; i < 8; i++) { g.advanceDays(360); g.state.cash = 900; }
+    expect(Math.max(...g.state.competitors.filter((c) => !c.major).map((c) => c.planes))).toBeGreaterThan(10);
+  });
+});
