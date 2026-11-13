@@ -9,12 +9,12 @@ const sandbox = (seed = 3) => { const g = new Game(seed, undefined, { sandbox: t
 const open = (g: Game, a: string, b: string) => { const o = g.openRoute(a, b); if (!o.ok) throw new Error(o.error); return o.routeId; };
 
 describe('기종 다양화와 신기종 출시', () => {
-  it('데이터: 13종, ID·이름이 겹치지 않고 값이 올바르며, 신기종은 출시 개월이 있다', () => {
-    expect(AIRCRAFT.length).toBe(13);
-    expect(new Set(AIRCRAFT.map((t) => t.id)).size).toBe(13); expect(new Set(AIRCRAFT.map((t) => t.name)).size).toBe(13);
+  it('데이터: 18종, ID·이름이 겹치지 않고 값이 올바르며, 신기종은 출시 개월이 있다', () => {
+    expect(AIRCRAFT.length).toBe(18);
+    expect(new Set(AIRCRAFT.map((t) => t.id)).size).toBe(18); expect(new Set(AIRCRAFT.map((t) => t.name)).size).toBe(18);
     for (const t of AIRCRAFT) { expect(t.seats).toBeGreaterThanOrEqual(0); expect(t.price).toBeGreaterThan(0); expect(t.range).toBeGreaterThan(500); expect(t.runway).toBeGreaterThan(500); expect(t.speed).toBeGreaterThan(300); expect(t.hourly).toBeGreaterThan(0); expect(t.cargo).toBeGreaterThan(0); }
     const later = AIRCRAFT.filter((t) => (t.from ?? 0) > 0).map((t) => t.id).sort();
-    expect(later).toEqual(['A321XLR', 'B737NX', 'B757', 'B787', 'F330']);
+    expect(later).toEqual(['A321XLR', 'A350U', 'B737NX', 'B757', 'B777X', 'B787', 'F330']);
     // 신형은 같은 좌석당 운영비가 더 낮다
     const perSeat = (id: string) => typeById(id).hourly / typeById(id).seats;
     expect(perSeat('B737NX')).toBeLessThan(perSeat('B737')); expect(perSeat('B787')).toBeLessThan(perSeat('A350'));
@@ -24,12 +24,12 @@ describe('기종 다양화와 신기종 출시', () => {
     expect(g.isAvailable('B787')).toBe(false);
     const buy = g.buyPlane('B787'); expect(buy.ok).toBe(false); if (!buy.ok) expect(buy.error).toContain('24개월차 출시');
     expect(g.leasePlane('B787').ok).toBe(false);
-    expect(g.upcomingTypes().map((t) => t.id)).toEqual(['B757', 'F330', 'B787', 'B737NX', 'A321XLR']);
+    expect(g.upcomingTypes().map((t) => t.id)).toEqual(['B757', 'F330', 'B787', 'B737NX', 'A321XLR', 'A350U', 'B777X']);
     const rid = open(g, 'ICN', 'LAX');
     expect(g.routeOptions(rid).map((o) => o.type)).not.toContain('B787'); expect(g.purchasePlan(rid, 'B787', 'new').ok).toBe(false);
     g.advanceDays(30 * 24);
     expect(g.isAvailable('B787')).toBe(true); expect(g.buyPlane('B787').ok).toBe(true);
-    expect(g.upcomingTypes().map((t) => t.id)).toEqual(['B737NX', 'A321XLR']);
+    expect(g.upcomingTypes().map((t) => t.id)).toEqual(['B737NX', 'A321XLR', 'A350U', 'B777X']);
     // 시나리오가 주는 시작 기종은 처음부터 가능(화물 전문의 F7-77)
     expect(new Game(1, undefined, { scenario: 'cargo' }).isAvailable('F77')).toBe(true);
   });
