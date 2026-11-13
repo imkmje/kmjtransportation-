@@ -7,7 +7,7 @@ const server = await preview({ preview: { port: 4190, strictPort: true } });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const pickPlane = async (fn) => { const id = await page.evaluate(fn); await page.locator(`#panel button.trow[data-act="selPlane"][data-id="${id}"]`).click(); }; // 기단 표에서 항공기를 골라 오른쪽 카드 열기
 const pickComp = async () => { await page.click('#tabs button[data-tab="rivals"]'); const id = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major).id); await page.locator(`#panel button[data-act="selComp"][data-id="${id}"]`).click(); }; // 경쟁사 탭에서 일반 경쟁사를 골라 오른쪽 카드 열기
-const rtab = async (v) => { const b = page.locator(`#panel button[data-act="rtab"][data-v="${v}"]`); if (await b.count()) await b.click(); }; // 노선 상세의 작은 탭 고르기
+const rtab = async () => { await page.evaluate(() => { document.querySelectorAll('#panel .pside details').forEach((d) => { d.open = true; }); }); }; // 노선 상세의 접이식 구역을 모두 펼침
 const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
 const openAll = () => page.evaluate(() => { document.querySelectorAll('#panel details.sec').forEach((d) => { d.open = true; }); }); // 지도 탭 구역은 접혀 있어 점검에서는 펼친다
 await page.addInitScript(() => { window.__airYes = true; }); // 확인 창은 자동 수락(아래 인수 점검에서만 실제 창을 쓴다)
@@ -84,7 +84,7 @@ await shot('money');
 await page.click('#tabs button[data-tab="fleet"]');
 await page.locator('#panel button[data-act="selPlane"]').first().click();
 check('기단 탭: 정비 상태 막대와 정비 점검 버튼', (await page.locator('#panel .condbar').count()) >= 1 && (await page.locator('#panel button[data-act="service"]').count()) >= 1);
-check('기단 탭: 출시된 항공기 구매 목록(8종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 8 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
+check('기단 탭: 출시된 항공기 구매 목록(11종)과 매각 버튼', (await page.locator('#panel button[data-act="buy"]').count()) === 11 && (await page.locator('#panel button[data-act="sell"]').count()) >= 1);
 await page.click('#tabs button[data-tab="money"]');
 await page.locator('#panel button[data-act="hedge"][data-m="6"]').click();
 check('재무 탭: 연료 계약을 맺을 수 있음(상단 칩에 계약 표시)', (await page.evaluate(() => window.__air.game.state.hedge !== null)) && (await page.locator('#fuel').innerText()).includes('계약'));
@@ -448,7 +448,7 @@ await page.click('#tabs button[data-tab="routes"]');
 check('접힌 상태에서 탭을 누르면 절반으로 열림', (await page.locator('#stage').getAttribute('class')).includes('d-half') && await page.locator('#panel').isVisible());
 // 2.1.0: 화면 다듬기
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button.trow[data-act="goRoute"]').first().click();
-check('노선 상세: 작은 탭(요약·운임·항공기)이 있고 운임 탭에 슬라이더', (await page.locator('#panel button[data-act="rtab"]').count()) >= 3 && await (async () => { await rtab('fare'); return (await page.locator('#fare').count()) === 1; })());
+check('노선 상세: 탭 없이 한 화면(핵심 숫자 4칸 → 운임 슬라이더 → 항공기)', (await page.locator('#panel .kpi > div').count()) === 4 && (await page.locator('#fare').isVisible()) && (await page.locator('#panel .pside h3', { hasText: '배정된 항공기' }).count()) === 1);
 check('노선 표 아래 합계 줄', (await page.locator('#panel .tfoot').innerText()).includes('합계'));
 await page.click('#tabs button[data-tab="money"]');
 check('재무 탭: 두 칸(왼쪽 손익, 오른쪽 업그레이드·연료·대출)', (await page.locator('#panel .cols2 > div').count()) === 2);

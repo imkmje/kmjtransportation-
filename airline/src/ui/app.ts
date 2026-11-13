@@ -39,7 +39,7 @@ export function startApp(): void {
   let game = new Game(1);
   let tab: Tab = 'map';
   let reportMonth = -1;
-  let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null, routeTab = 'sum', reportOpen = false, alertsOpen = false;
+  let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null, reportOpen = false, alertsOpen = false;
   let drawer: 'min' | 'half' | 'full' = 'half', lastSpeed = 1, resumeAfterFull = false; // 아래 서랍 높이, 마지막으로 고른 배속(크게 펼쳤다 닫으면 이 배속으로 다시 시작)
   const tsort: Record<string, { k: string; d: number }> = { routes: { k: 'profit', d: -1 }, fleet: { k: 'cond', d: 1 }, rivals: { k: 'rev', d: -1 } }; // 표마다 정렬 열과 방향
   let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
@@ -256,6 +256,12 @@ export function startApp(): void {
     const { k, d } = tsort[t];
     return [...rows].sort((a, b) => { const x = val(a, k), y = val(b, k); return (typeof x === 'string' ? String(x).localeCompare(String(y)) : (x as number) - (y as number)) * d; });
   }
+  /** 노선 표의 점유율 칸: 우리와 경쟁사별 몫을 한 막대에 색으로 나누고, 아래에 이름과 % */
+  const SHARE_COL = ['#d6803a', '#8a6fc0', '#3aa6a0', '#c0587a', '#7a8a99'];
+  function shareCell(r: Route): string {
+    const sh = game.routeShares(r), col = (x: typeof sh[number], i: number) => (x.me ? 'var(--accent)' : SHARE_COL[(i - 1) % SHARE_COL.length]);
+    return `<span class="scell"><span class="sbar">${sh.map((x, i) => `<i style="width:${(x.share * 100).toFixed(1)}%;background:${col(x, i)}"></i>`).join('')}</span><small>${sh.map((x, i) => `<span class="nw"><u style="background:${col(x, i)}"></u>${x.me ? '우리' : esc(x.name.slice(0, 5))} ${pct(x.share)}</span>`).join(' ')}</small></span>`;
+  }
   const mbar = (v: number) => `<span class="mbar${v < 0.3 ? ' low' : ''}"><span class="b"><i style="width:${(v * 100).toFixed(0)}%"></i></span>${pct(v)}</span>`;
   function viewRoutes(): string {
     const s = game.state, open = s.routes.filter((r) => r.open);
@@ -268,8 +274,8 @@ export function startApp(): void {
     const status = (x: typeof rows[number]) => (x.n === 0 ? '<span class="badge need">배정 필요</span>' : game.warOn(x.r) ? `<span class="neg">${icon('war', 14)} 전쟁</span>` : x.profit < 0 ? '<span class="badge">적자</span>' : (x.r.ad ?? 0) > 0 ? '<small>광고 중</small>' : x.r.stance === 'share' ? '<small>점유 우선</small>' : '');
     const hasSt = ordered.some((x) => status(x)), served = rows.filter((x) => x.n > 0), avg = (f: (x: typeof rows[number]) => number) => (served.length ? served.reduce((a, x) => a + f(x), 0) / served.length : 0);
     const main = `<div class="toolbar"><h2>노선 <small>${open.length}개${losing ? ` · 적자 ${losing}개` : ''}</small></h2><button class="${s.autoFare ? '' : 'ghost'}" data-act="autoFare">자동 운임: <b>${s.autoFare ? '켜짐' : '꺼짐'}</b></button></div>
-      <div class="tbl" style="--cols: minmax(150px, 1.8fr) 0.9fr 1.3fr 0.7fr 0.7fr 0.6fr${hasSt ? ' 0.9fr' : ''}">${thead('routes', [['name', '노선'], ['profit', '월 이익'], ['share', '점유율'], ['lf', '탑승률'], ['otp', '정시율'], ['n', '항공기'], ...(hasSt ? [['', '상태'] as [string, string]] : [])])}
-      ${ordered.map((x) => `<button class="trow${x.r.id === sel ? ' sel' : ''}" data-act="goRoute" data-id="${x.r.id}"><span><b>${x.r.name ? `${esc(x.r.name)} · ` : ''}${routeLabel(x.r.a, x.r.b)}</b></span><span class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.n ? money(x.profit) : '-'}</span>${x.n ? (x.d.share < 1 ? mbar(x.d.share) : '<small>독점</small>') : '<span>-</span>'}<span>${x.n ? pct(x.lf) : '-'}</span><span>${x.n ? pct(x.d.otp) : '-'}</span><span>${x.n}대</span>${hasSt ? `<span>${status(x)}</span>` : ''}</button>`).join('')}
+      <div class="tbl" style="--cols: minmax(96px, 1.2fr) 68px minmax(120px, 2fr) 46px 46px 38px${hasSt ? ' 64px' : ''}">${thead('routes', [['name', '노선'], ['profit', '월 이익'], ['share', '점유율'], ['lf', '탑승률'], ['otp', '정시율'], ['n', '항공기'], ...(hasSt ? [['', '상태'] as [string, string]] : [])])}
+      ${ordered.map((x) => `<button class="trow${x.r.id === sel ? ' sel' : ''}" data-act="goRoute" data-id="${x.r.id}"><span><b>${x.r.name ? `${esc(x.r.name)} · ` : ''}${routeLabel(x.r.a, x.r.b)}</b></span><span class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.n ? money(x.profit) : '-'}</span>${x.n ? (x.d.share < 1 ? shareCell(x.r) : '<span><small>독점</small></span>') : '<span>-</span>'}<span>${x.n ? pct(x.lf) : '-'}</span><span>${x.n ? pct(x.d.otp) : '-'}</span><span>${x.n}대</span>${hasSt ? `<span>${status(x)}</span>` : ''}</button>`).join('')}
       <div class="tfoot"><span>합계 ${open.length}개</span><span class="${total >= 0 ? 'pos' : 'neg'}">${money(total)}</span><span>평균 ${pct(avg((x) => x.d.share))}</span><span>${pct(avg((x) => x.lf))}</span><span>${pct(avg((x) => x.d.otp))}</span><span>${rows.reduce((a, x) => a + x.n, 0)}대</span>${hasSt ? '<span></span>' : ''}</div></div>
       ${open.length > 1 ? `<details class="more"><summary>노선 일괄 편집</summary><p class="hint">열려 있는 노선 ${open.length}개 전체에 한 번에 적용합니다.</p><div class="btnrow"><button class="ghost" data-act="bulk" data-v="fareDown" ${no(!!s.autoFare, '자동 운임이 켜져 있으면 운임은 매주 다시 맞춰집니다')}>운임 −5%</button><button class="ghost" data-act="bulk" data-v="fareUp" ${no(!!s.autoFare, '자동 운임이 켜져 있으면 운임은 매주 다시 맞춰집니다')}>운임 +5%</button><button class="ghost" data-act="bulk" data-v="fareBase" ${no(!!s.autoFare, '자동 운임이 켜져 있으면 운임은 매주 다시 맞춰집니다')}>기준 운임</button></div><div class="btnrow">${[1, 2, 3].map((n) => `<button class="ghost" data-act="bulk" data-v="pri${n}">우선순위 ${n}</button>`).join('')}</div><button class="wide danger" data-act="bulk" data-v="closeLoss" ${no(!losing, '적자 노선이 없습니다')}>적자 노선 모두 닫기 (${losing}개)</button></details>` : ''}
       <p class="hint">열 제목을 누르면 정렬됩니다. 자동 운임을 켜면 매주 모든 노선의 운임을 ‘자리를 꽉 채우는 가장 높은 운임’으로 맞춥니다(비즈니스석 포함, 화물 제외).</p>`;
@@ -338,13 +344,30 @@ export function startApp(): void {
     const idle = s_idlePlanes().filter((p) => canFly(typeById(p.type), A, B).ok);
     const lo = Math.round(base * config.fare.minRatio), hi = Math.round(base * config.fare.maxRatio);
     const hasComp = game.competitorsOn(r.a, r.b).length > 0;
-    const dtabs: [string, string][] = [['sum', '요약'], ['fare', '운임·우선순위'], ['planes', `항공기 ${planes.length}`], ...(hasComp ? [['comp', '경쟁'] as [string, string]] : [])];
-    const dt = planes.length === 0 ? 'planes' : dtabs.some(([k]) => k === routeTab) ? routeTab : 'sum'; // 항공기가 없으면 배정·구매부터
     return `<button class="back" data-act="routesHome">${icon('back', 14)} 노선 목록</button>
       <h2>${r.name ? `${esc(r.name)} <small>${routeLabel(r.a, r.b)}</small>` : routeLabel(r.a, r.b)} <button class="ghost small" data-act="rename">이름</button></h2>
       ${(() => { const w = game.warOn(r); return w ? `<p class="hint"><b class="neg">${icon('war', 14)} 운임 전쟁</b>: ${esc(w.comp.name)}이(가) 이 노선 운임을 크게 내렸습니다(${w.route.war}개월 남음). 따라 내리면 손님을 지키지만 이익이 줄고, 버티면 손님을 잃습니다. 제휴를 맺으면 바로 끝납니다.</p>` : ''; })()}
-      <div class="seg rtabs">${dtabs.map(([k, t]) => `<button data-act="rtab" data-v="${k}" class="${dt === k ? 'on' : ''}">${t}</button>`).join('')}</div>
-      ${dt === 'sum' ? `
+      <div class="kpi"><div><small>예상 월 이익</small><b class="${profit >= 0 ? 'pos' : 'neg'}">${money(profit)}</b></div><div><small>탑승률</small><b>${planes.length ? pct(lf) : '-'}</b></div><div><small>정시율</small><b class="${d.otp < 0.85 ? 'neg' : d.otp < 0.95 ? 'warn' : ''}">${pct(d.otp)}</b></div><div><small>점유율</small><b class="${d.share < 0.5 ? 'warn' : ''}">${d.share < 1 ? pct(d.share) : '독점'}</b></div></div>
+      <h3>운임 <b>${fare(r.fare)}</b> <small>(기준 ${fare(base)})</small></h3>
+      <input type="range" id="fare" min="${lo}" max="${hi}" step="1" value="${r.fare}" />
+      <div class="two"><small>${fare(lo)}</small><small class="right">${fare(hi)}</small></div>
+      <button class="wide" data-act="fillFare">자리를 꽉 채우는 운임으로 맞추기</button>
+      ${d.seatsB > 0 || planes.some((p) => p.bizShare > 0) ? `<h3>비즈니스 운임 <b>${fare(r.fareBiz)}</b> <small>(기준 ${fare(game.routeBaseFareBiz(r))})</small></h3><input type="range" id="fareBiz" min="${Math.round(game.routeBaseFareBiz(r) * config.fare.minRatio)}" max="${Math.round(game.routeBaseFareBiz(r) * config.fare.maxRatio)}" step="1" value="${r.fareBiz}" />` : ''}
+      ${d.cargoCap > 0 ? `<h3>화물 운임 배율 <b>×${r.cargoRatio.toFixed(2)}</b></h3><input type="range" id="cargoRatio" min="${config.fare.minRatio}" max="${config.fare.maxRatio}" step="0.05" value="${r.cargoRatio}" />` : ''}
+      <p class="hint">운임이 높으면 수익은 늘지만 손님이 줄어요. 비행기가 비면 내리고, 자리가 모자라면 올려 보세요.</p>
+      <h3>배정된 항공기</h3>
+      ${planes.length ? planes.map((p) => { const t = typeById(p.type), max = maxWeeklyRoundTrips(dist, t); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석${t.seats ? ` (비즈니스 ${Math.round(p.bizShare * 100)}%)` : ' · 화물기'} · 주 ${p.weekly}회 왕복 (최대 ${max})</small></div>
+        <div class="stepper"><button data-act="weekly" data-id="${p.id}" data-d="-1" aria-label="횟수 줄이기">−</button><button data-act="weekly" data-id="${p.id}" data-d="1" aria-label="횟수 늘리기">+</button><button class="ghost" data-act="unassign" data-id="${p.id}">빼기</button></div></div>${t.seats ? `<div class="cabin"><small>객실:</small>${config.cabin.shares.map((sh) => `<button class="ghost small ${p.bizShare === sh ? 'on' : ''}" data-act="cabin" data-id="${p.id}" data-share="${sh}">${sh === 0 ? '일반석만' : `비즈 ${sh * 100}%`}</button>`).join('')}</div>` : ''}`; }).join('') : '<p class="hint">배정된 항공기가 없습니다.</p>'}
+      ${idle.length ? `<h3>대기 중인 항공기 배정</h3>${idle.map((p) => { const t = typeById(p.type); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석 · 최대 주 ${maxWeeklyRoundTrips(dist, t)}회</small></div><button data-act="assign" data-id="${p.id}">배정</button></div>`; }).join('')}` : ''}
+      ${buyOptionsHtml(rId)}
+      ${hasComp ? `<details class="more rsec" ${game.warOn(r) || d.share < 0.5 ? 'open' : ''}><summary>경쟁 대응 <small>점유 ${pct(d.share)}${game.warOn(r) ? ' · 운임 전쟁 중' : ''}</small></summary>` : ''}
+      ${rivalBlock(r)}
+      ${hasComp ? '</details>' : ''}
+      <details class="more rsec"><summary>공항 우선순위 <small>지금 ${r.priority ?? 1}단계</small></summary>
+      <div class="seg">${[1, 2, 3].map((lv) => `<button data-act="priority" data-v="${lv}" class="${(r.priority ?? 1) === lv ? 'on' : ''}">${icon('star', 13).repeat(lv)}${lv > 1 ? ` ${money((lv - 1) * config.delay.priorityFee)}` : ' 무료'}</button>`).join('')}</div>
+      <p class="hint">정시율이 낮으면 손님이 줄고 보상금이 나가며 평판이 떨어집니다. 원인: 공항 슬롯 혼잡(${esc(cityById(r.a).name)} ${pct(game.slotsUsed(r.a) / game.slotCapacity(r.a))}, ${esc(cityById(r.b).name)} ${pct(game.slotsUsed(r.b) / game.slotCapacity(r.b))}), 정비 상태, 폭설·파업.</p>
+      </details>
+      <details class="more rsec"><summary>상세 지표 · 손익 분해 · 최근 그래프</summary>
       <div class="kv"><div>거리</div><div>${km(dist)}</div><div>월 수요</div><div>${num(d.demand * config.daysPerMonth)}명</div><div>월 좌석</div><div>${num(d.seats * config.daysPerMonth)}석</div>
         <div>탑승률</div><div>${planes.length ? pct(lf) : '-'}</div><div>예상 월 수익</div><div>${money(d.revenue * config.daysPerMonth)}</div><div>예상 월 비용</div><div>${money(d.cost * config.daysPerMonth)}</div>
         <div>예상 월 이익</div><div class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></div>
@@ -354,30 +377,8 @@ export function startApp(): void {
       <details class="rbuymore"><summary>월 손익 분해 보기</summary><table class="brk" style="width:100%"><tr><td>여객 수익</td><td class="pos">${money(d.revenuePax * config.daysPerMonth)}</td></tr>${d.cargoRevenue > 0 ? `<tr><td>화물 수익</td><td class="pos">${money(d.cargoRevenue * config.daysPerMonth)}</td></tr>` : ''}<tr><td>운영·연료비</td><td>−${money(d.costOps * config.daysPerMonth)}</td></tr><tr><td>착륙료</td><td>−${money(d.costLanding * config.daysPerMonth)}</td></tr><tr><td>승객당 수수료</td><td>−${money(d.costPax * config.daysPerMonth)}</td></tr><tr><td>지연 보상금</td><td>−${money(d.compensation * config.daysPerMonth)}</td></tr><tr><td><b>이익</b></td><td class="${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></td></tr></table><small class="hint">고정비(본사·정비·슬롯 등)는 노선이 아니라 회사 전체에 붙으므로 여기에 넣지 않았습니다.</small></details>
       <h3>최근 ${r.daily.length}일</h3><div class="chartlabel"><small>일 이익(${money(r.daily.at(-1)?.profit ?? 0)})</small></div>${spark(r.daily.map((x) => x.profit), '#1f9d57', { zero: true })}
       <div class="chartlabel"><small>탑승률(${pct(r.daily.at(-1) && r.daily.at(-1)!.seats ? r.daily.at(-1)!.pax / r.daily.at(-1)!.seats : 0)})</small></div>${spark(r.daily.map((x) => (x.seats ? x.pax / x.seats : 0)), '#1f7ae0', { min: 0, max: 1 })}
+      </details>
       <button class="wide danger" data-act="close">노선 닫기</button>
-      ` : ''}
-      ${dt === 'fare' ? `
-      <h3>운임 <b>${fare(r.fare)}</b> <small>(기준 ${fare(base)})</small></h3>
-      <input type="range" id="fare" min="${lo}" max="${hi}" step="1" value="${r.fare}" />
-      <div class="two"><small>${fare(lo)}</small><small class="right">${fare(hi)}</small></div>
-      <button class="wide" data-act="fillFare">자리를 꽉 채우는 운임으로 맞추기</button>
-      ${d.seatsB > 0 || planes.some((p) => p.bizShare > 0) ? `<h3>비즈니스 운임 <b>${fare(r.fareBiz)}</b> <small>(기준 ${fare(game.routeBaseFareBiz(r))})</small></h3><input type="range" id="fareBiz" min="${Math.round(game.routeBaseFareBiz(r) * config.fare.minRatio)}" max="${Math.round(game.routeBaseFareBiz(r) * config.fare.maxRatio)}" step="1" value="${r.fareBiz}" />` : ''}
-      ${d.cargoCap > 0 ? `<h3>화물 운임 배율 <b>×${r.cargoRatio.toFixed(2)}</b></h3><input type="range" id="cargoRatio" min="${config.fare.minRatio}" max="${config.fare.maxRatio}" step="0.05" value="${r.cargoRatio}" />` : ''}
-      <p class="hint">운임이 높으면 수익은 늘지만 손님이 줄어요. 비행기가 비면 내리고, 자리가 모자라면 올려 보세요.</p>
-      <h3>공항 우선순위 <small>(혼잡할 때 덜 지연됨 · 월 수수료)</small></h3>
-      <div class="seg">${[1, 2, 3].map((lv) => `<button data-act="priority" data-v="${lv}" class="${(r.priority ?? 1) === lv ? 'on' : ''}">${icon('star', 13).repeat(lv)}${lv > 1 ? ` ${money((lv - 1) * config.delay.priorityFee)}` : ' 무료'}</button>`).join('')}</div>
-      <p class="hint">정시율이 낮으면 손님이 줄고 보상금이 나가며 평판이 떨어집니다. 원인: 공항 슬롯 혼잡(${esc(cityById(r.a).name)} ${pct(game.slotsUsed(r.a) / game.slotCapacity(r.a))}, ${esc(cityById(r.b).name)} ${pct(game.slotsUsed(r.b) / game.slotCapacity(r.b))}), 정비 상태, 폭설·파업.</p>
-      ` : ''}
-      ${dt === 'planes' ? `
-      <h3>배정된 항공기</h3>
-      ${planes.length ? planes.map((p) => { const t = typeById(p.type), max = maxWeeklyRoundTrips(dist, t); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석${t.seats ? ` (비즈니스 ${Math.round(p.bizShare * 100)}%)` : ' · 화물기'} · 주 ${p.weekly}회 왕복 (최대 ${max})</small></div>
-        <div class="stepper"><button data-act="weekly" data-id="${p.id}" data-d="-1" aria-label="횟수 줄이기">−</button><button data-act="weekly" data-id="${p.id}" data-d="1" aria-label="횟수 늘리기">+</button><button class="ghost" data-act="unassign" data-id="${p.id}">빼기</button></div></div>${t.seats ? `<div class="cabin"><small>객실:</small>${config.cabin.shares.map((sh) => `<button class="ghost small ${p.bizShare === sh ? 'on' : ''}" data-act="cabin" data-id="${p.id}" data-share="${sh}">${sh === 0 ? '일반석만' : `비즈 ${sh * 100}%`}</button>`).join('')}</div>` : ''}`; }).join('') : '<p class="hint">배정된 항공기가 없습니다.</p>'}
-      ${idle.length ? `<h3>대기 중인 항공기 배정</h3>${idle.map((p) => { const t = typeById(p.type); return `<div class="row"><div class="grow"><b>${esc(t.name)}</b><small>${t.seats}석 · 최대 주 ${maxWeeklyRoundTrips(dist, t)}회</small></div><button data-act="assign" data-id="${p.id}">배정</button></div>`; }).join('')}` : ''}
-      ${buyOptionsHtml(rId)}
-      ` : ''}
-      ${dt === 'comp' ? `
-      ${rivalBlock(r)}
-      ` : ''}
       <div class="live" id="live">${liveHtml(rId)}</div>`;
   }
   const s_idlePlanes = () => game.state.planes.filter((p) => p.routeId === null);
@@ -602,7 +603,6 @@ export function startApp(): void {
     else if (act === 'tsort') { const t = b.dataset.t!, k = b.dataset.k!, cur = tsort[t]; tsort[t] = { k, d: cur.k === k ? -cur.d : k === 'name' || k === 'type' || k === 'route' ? 1 : -1 }; done(); }
     else if (act === 'selPlane') { selPlane = selPlane === id ? null : id; syncMap(); done(); }
     else if (act === 'selComp') { selComp = selComp === id ? null : id; syncMap(); done(); }
-    else if (act === 'rtab') { routeTab = b.dataset.v ?? 'sum'; done(); }
     else if (act === 'fleetHome') { selPlane = null; done(); }
     else if (act === 'rivalsHome') { selComp = null; done(); }
     else if (act === 'rbuy' && selRoute !== null) {

@@ -73,6 +73,18 @@
   "from": 30
  },
  {
+  "id": "A321N",
+  "name": "에어바츠 A3-21neo",
+  "cls": "중형 협동체(고효율)",
+  "seats": 220,
+  "speed": 840,
+  "range": 7400,
+  "runway": 2100,
+  "price": 72,
+  "hourly": 4.9,
+  "cargo": 5.0
+ },
+ {
   "id": "A321XLR",
   "name": "에어바츠 A3-21 XLR",
   "cls": "장거리 협동체",
@@ -112,6 +124,18 @@
   "from": 18
  },
  {
+  "id": "A330N",
+  "name": "에어바츠 A3-30neo",
+  "cls": "중형 광동체(장거리)",
+  "seats": 260,
+  "speed": 870,
+  "range": 12000,
+  "runway": 2500,
+  "price": 110,
+  "hourly": 7.6,
+  "cargo": 14.0
+ },
+ {
   "id": "B787",
   "name": "보임 B7-87 드림",
   "cls": "중대형 광동체(고효율)",
@@ -147,6 +171,44 @@
   "price": 150,
   "hourly": 9.5,
   "cargo": 16.0
+ },
+ {
+  "id": "B777",
+  "name": "보임 B7-77",
+  "cls": "대형 광동체(장거리)",
+  "seats": 350,
+  "speed": 900,
+  "range": 13600,
+  "runway": 3000,
+  "price": 175,
+  "hourly": 11.0,
+  "cargo": 20.0
+ },
+ {
+  "id": "A350U",
+  "name": "에어바츠 A3-50 ULR",
+  "cls": "초장거리 광동체",
+  "seats": 260,
+  "speed": 910,
+  "range": 17500,
+  "runway": 3000,
+  "price": 180,
+  "hourly": 9.6,
+  "cargo": 12.0,
+  "from": 40
+ },
+ {
+  "id": "B777X",
+  "name": "보임 B7-77X",
+  "cls": "신형 대형 광동체",
+  "seats": 400,
+  "speed": 900,
+  "range": 13500,
+  "runway": 3000,
+  "price": 215,
+  "hourly": 11.4,
+  "cargo": 22.0,
+  "from": 48
  },
  {
   "id": "A380",
