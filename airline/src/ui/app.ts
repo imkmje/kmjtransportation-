@@ -421,7 +421,7 @@ export function startApp(): void {
       <div class="btnrow"><button class="ghost" data-act="buyStake" data-id="${k.id}" data-v="0.2" ${no(s.cash < game.stakePrice(k, 0.2), short(game.stakePrice(k, 0.2)))}>지분 20% ${money(game.stakePrice(k, 0.2))}</button><button data-act="buyStake" data-id="${k.id}" data-v="0.51" ${no(s.cash < game.stakePrice(k, 0.51), short(game.stakePrice(k, 0.51)))}>자회사 51% ${money(game.stakePrice(k, 0.51))}</button></div>
       <p class="hint">20%: 배당만(이익의 ${Math.round(K.payout.none * 100)}% × 20%). 51%: 경영권 — 운영 방향(확장·수익·공세)을 정합니다.</p></div>`;
     const dirs = st >= 0.51 ? `<div class="seg">${Object.entries(K.dirs).map(([d, v]) => `<button data-act="subDir" data-id="${k.id}" data-v="${d}" class="${k.dir === d ? 'on' : ''}">${v.name}</button>`).join('')}</div><p class="hint">${esc(K.dirs[k.dir ?? 'grow'].desc)} · 배당: 이익의 ${Math.round((K.payout[k.dir ?? 'grow'] ?? 0.4) * 100)}% × 지분 ${Math.round(st * 100)}%</p>` : `<p class="hint">배당: 이익의 ${Math.round(K.payout.none * 100)}% × 지분 20%. 51%로 올리면 운영 방향을 정할 수 있습니다.</p>`;
-    return `<div class="goal"><div><b>${st >= 0.51 ? '자회사' : '지분 보유'} ${Math.round(st * 100)}%</b> <small>현금 ${money(k.cash)}</small></div>${call}${dirs}
+    return `<div class="goal"><div><b>${st >= 0.51 ? '자회사' : '지분 보유'} ${Math.round(st * 100)}%</b> <small>현금 ${money(k.cash)}</small></div><div class="kpi" style="grid-template-columns: repeat(2, minmax(0, 1fr))"><div><small>지난달 배당</small><b class="pos">${money(k.lastDiv ?? 0)}</b></div><div><small>누적 배당</small><b>${money(k.divTotal ?? 0)}</b></div></div>${call}${dirs}
       <div class="btnrow">${st < 0.51 ? `<button data-act="buyStake" data-id="${k.id}" data-v="0.51" ${no(s.cash < game.stakePrice(k, 0.51), short(game.stakePrice(k, 0.51)))}>51%로 ${money(game.stakePrice(k, 0.51))}</button>` : ''}<button class="ghost" data-act="sellStake" data-id="${k.id}">지분 매각 ${money(sell)}</button></div></div>`;
   }
   function viewRivals(): string {
@@ -444,6 +444,12 @@ export function startApp(): void {
       <p class="hint">경쟁사는 시간이 지나며 새로 생기고, 자금난이 길어지면 파산합니다. 제휴(공동 운항)하면 그 항공사가 같은 노선에서 우리 손님을 덜 빼앗고, 운임 경쟁도 걸어오지 않습니다. 한 번에 한 곳만.</p>${s.routes.some((r) => r.open) ? `<div class="row"><div class="grow"><b>우리 시장 점유율</b><small>경쟁사와 겹치는 노선에서의 좌석 점유</small></div><div class="right">${pct(game.marketShare)}</div></div>` : ''}` : `${rank}<p class="hint">왼쪽 표에서 항공사를 누르면 제휴·라이벌 지정·인수와 그 회사의 노선을 볼 수 있습니다.</p>`;
     return `<div class="split${k ? ' sel' : ''}"><div class="pmain" data-sc="m-rivals">${main}</div><div class="pside" data-sc="s-c${k?.id}">${side}</div></div>`;
   }
+  /** 배당 내역: 지분을 가진 회사별 지난달·누적 배당과 최근 12개월 합계 */
+  function divHtml(): string {
+    const s = game.state, subs = s.competitors.filter((c) => c.stake), y = s.history.slice(-12).reduce((a, m) => a + (m.dividend ?? 0), 0);
+    if (!subs.length && !y) return '';
+    return `<h3>배당 내역 <small>최근 12개월 ${money(y)}</small></h3><div class="list">${subs.map((c) => `<div class="row"><div class="grow"><b>${esc(c.name)}</b><small>${c.stake! >= 0.51 ? `자회사 51% · ${esc(config.subsidiary.dirs[c.dir ?? 'grow'].name)}` : '지분 20%'} · 누적 ${money(c.divTotal ?? 0)}${c.call ? ' · <b class="neg">증자 요청</b>' : ''}</small></div><div class="right"><small>지난달</small><br><b class="${(c.lastDiv ?? 0) > 0 ? 'pos' : ''}">${money(c.lastDiv ?? 0)}</b></div></div>`).join('') || '<p class="hint">지금 지분을 가진 회사가 없습니다.</p>'}</div>`;
+  }
   function viewMoney(): string {
     const s = game.state, h = s.history.slice(-24), mx = Math.max(1, ...h.map((m) => Math.abs(m.profit)));
     const bars = h.map((m) => `<i class="${m.profit >= 0 ? 'p' : 'n'}" style="height:${Math.max(4, (Math.abs(m.profit) / mx) * 54)}px" title="${m.month}개월: ${money(m.profit)}"></i>`).join('');
@@ -451,8 +457,9 @@ export function startApp(): void {
     return `<div class="cols2"><div><h2>재무</h2>
       <div class="kv"><div>현금</div><div><b class="${s.cash < 0 ? 'neg' : ''}">${money(s.cash)}</b></div><div>이번 달 수익</div><div>${money(cur.revenue)}</div><div>이번 달 비용</div><div>${money(cur.cost)}</div>
         <div>월 고정비</div><div>${money(game.fixedMonthly)}</div><div>누적 이익</div><div>${money(s.cumProfit)}</div></div>
+      ${divHtml()}
       <h3>월별 이익</h3>${h.length ? `<div class="chart">${bars}</div>` : '<p class="hint">첫 달이 끝나면 그래프가 나옵니다.</p>'}
-      <h3>월말 정산</h3>${s.history.length ? `<div class="list">${[...s.history].reverse().slice(0, 12).map((m) => `<div class="row"><div class="grow"><b>${m.month}개월차</b><small>수익 ${money(m.revenue)} · 비용 ${money(m.cost + m.fixed)} · 탑승률 ${pct(m.loadFactor)}</small></div><div class="right ${m.profit >= 0 ? 'pos' : 'neg'}">${money(m.profit)}</div></div>`).join('')}</div>` : '<p class="hint">아직 정산한 달이 없습니다.</p>'}
+      <h3>월말 정산</h3>${s.history.length ? `<div class="list">${[...s.history].reverse().slice(0, 12).map((m) => `<div class="row"><div class="grow"><b>${m.month}개월차</b><small>수익 ${money(m.revenue)}${m.dividend ? ` (배당 ${money(m.dividend)} 포함)` : ''} · 비용 ${money(m.cost + m.fixed)} · 탑승률 ${pct(m.loadFactor)}</small></div><div class="right ${m.profit >= 0 ? 'pos' : 'neg'}">${money(m.profit)}</div></div>`).join('')}</div>` : '<p class="hint">아직 정산한 달이 없습니다.</p>'}
       <p class="hint">월 이익 = 수익 − 운영비 − 감가상각 − 고정비. 현금이 ${money(config.rules.bankruptCash)} 아래로 ${config.rules.bankruptMonths}개월 이어지면 파산입니다.</p></div><div>
       <h3>회사 업그레이드 <small>(한 번 사면 계속 유지)</small></h3><div class="list">${config.upgrades.list.map((u) => { const lv = game.upgradeLevel(u.id), price = game.upgradePrice(u.id); return `<div class="row"><div class="grow"><b>${esc(u.name)}</b><span class="pips">${config.upgrades.prices.map((_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><small>단계마다 ${esc(u.desc)}</small></div>${price === null ? '<small class="pos">최고 단계</small>' : `<button data-act="upgrade" data-u="${u.id}" ${no(s.cash < price, short(price))}>${money(price)}</button>`}</div>`; }).join('')}</div>
       <h3>정비</h3><button class="wide ${s.autoMaint ? '' : 'ghost'}" data-act="autoMaint">자동 정비: <b>${s.autoMaint ? '켜짐' : '꺼짐'}</b></button>

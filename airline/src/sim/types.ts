@@ -12,7 +12,7 @@ export interface Plane { id: number; type: string; book: number; routeId: number
 export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number } // 하루 기록(노선별 그래프용, 최근 60일)
 export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number; name?: string; closed?: number; ad?: number; stance?: 'share'; svc?: number } // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
 export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number; war?: number } // war: 운임 전쟁 남은 개월
-export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; pHist?: number[]; trait?: string; major?: boolean; stake?: number; dir?: 'grow' | 'profit' | 'attack'; call?: { amount: number; expires: number } } // stake: 내 지분(0.2·0.51), dir: 51% 자회사의 운영 방향, call: 증자 요청 // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
+export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; pHist?: number[]; trait?: string; major?: boolean; stake?: number; dir?: 'grow' | 'profit' | 'attack'; call?: { amount: number; expires: number }; lastDiv?: number; divTotal?: number } // stake: 내 지분(0.2·0.51), dir: 51% 자회사의 운영 방향, call: 증자 요청 // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
 export interface Auction { id: number; from: string; type: string; price: number; age: number; cond: number; expires: number } // 파산한 경쟁사가 내놓은 항공기 한 대(expires: 이 개월차가 되면 사라진다)
 export interface Upcoming { def: string; city: string; start: number } // 예고된 행사(start: 시작하는 개월차)
 export interface ActiveEra { id: string; start: number; end: number } // 시대(start·end: 개월차)
@@ -21,7 +21,7 @@ export interface Contract { id: number; kind: 'pax' | 'otp' | 'cities' | 'profit
 export interface ChronEntry { m: number; kind: string; text: string; key?: string; d?: Record<string, number> } // 연대기 한 줄(m: 개월차, kind: 종류, d: 연말 결산 숫자)
 export interface RivalGone { name: string; month: number; acq?: boolean; by?: string } // acq: 우리가 인수함
 export interface ActiveEvent { def: string; monthsLeft: number; city?: string; planeId?: number; handled?: boolean }
-export interface MonthReport { month: number; revenue: number; cost: number; depreciation: number; fixed: number; interest: number; cargo: number; profit: number; pax: number; seats: number; loadFactor: number; cash: number }
+export interface MonthReport { month: number; revenue: number; cost: number; depreciation: number; fixed: number; interest: number; cargo: number; profit: number; pax: number; seats: number; loadFactor: number; cash: number; dividend?: number }
 
 export interface Threat { comp: number; a: string; b: string; start: number } // 경쟁사가 내 노선에 진출 예고(start: 이 개월차에 진출)
 export interface Season { year: number; kind: 'pax' | 'profit' | 'otp' | 'cities'; goal: number; best: number; start: number; done: boolean; cash: number; text: string } // 올해의 도전
@@ -68,7 +68,7 @@ export interface GameState {
   scenario: string; // 시나리오 ID
   sandbox: boolean; // 목표·기한 없이 계속 운영
   history: MonthReport[];
-  cur: { revenue: number; cost: number; pax: number; seats: number }; // 이번 달 누적
+  cur: { revenue: number; cost: number; pax: number; seats: number; div?: number }; // 이번 달 누적
   status: 'playing' | 'bankrupt' | 'won' | 'timeup';
   lowCashMonths: number;
   log: string[];
