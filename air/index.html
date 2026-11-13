@@ -164,6 +164,7 @@
       #stage.d-full #offerpop { display: none !important; }
           .subtag { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 5px; border-radius: 6px; background: #2f9e5b; color: #fff; margin-left: 2px; vertical-align: 1px; } .subtag.lite { background: #d8f0de; color: #1f7a43; }
           label.chk { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; cursor: pointer; margin: -4px 0 6px; } label.chk input { width: 22px; height: 22px; accent-color: var(--accent); }
+          .dex { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; } .dex span { font-size: 12px; padding: 4px 8px; border-radius: 8px; background: #eef3f8; color: #9aa8b6; } .dex span.got { background: #e8f1fc; color: var(--accent2); font-weight: 700; }
     </style>
   </head>
   <body>
@@ -177,7 +178,7 @@
       
     </div>
     <input type="file" id="import-file" accept=".json,application/json" hidden />
-    <div id="menu" hidden><button data-m="save">빠른 저장</button><button data-m="load">빠른 불러오기</button><button data-m="saves">저장 관리</button><button data-m="stats">통계</button><button data-m="new">새 게임</button><button data-m="hints">힌트: 켜짐</button><button data-m="sound">소리: 켜짐</button><button data-m="volume">소리 크기</button><button data-m="music">배경 음악: 켜짐</button><button data-m="night">낮밤 표시: 켜짐</button><button data-m="help">도움말</button><button data-m="chronicle">연대기</button><button data-m="ach">업적</button><button data-m="records">기록</button><button data-m="autopause">사건 시 자동 정지: 켜짐</button><button data-m="title">시작 화면</button></div>
+    <div id="menu" hidden><button data-m="save">빠른 저장</button><button data-m="load">빠른 불러오기</button><button data-m="saves">저장 관리</button><button data-m="stats">통계</button><button data-m="new">새 게임</button><button data-m="hints">힌트: 켜짐</button><button data-m="sound">소리: 켜짐</button><button data-m="volume">소리 크기</button><button data-m="music">배경 음악: 켜짐</button><button data-m="night">낮밤 표시: 켜짐</button><button data-m="help">도움말</button><button data-m="chronicle">연대기</button><button data-m="timelapse">성장 타임랩스</button><button data-m="ach">업적</button><button data-m="records">기록</button><button data-m="autopause">사건 시 자동 정지: 켜짐</button><button data-m="title">시작 화면</button></div>
     <div id="toast"></div>
     <div id="end" class="overlay" hidden><div class="card2"><h1 id="end-title" style="font-size:28px"></h1><p id="end-body"></p><div class="btns"><button id="end-continue" hidden>계속하기 (자유 모드)</button><button id="end-new" class="ghost">새 게임</button></div></div></div>
     <div id="info" class="overlay" hidden style="z-index:46"><div class="card2 wide"><h1 id="info-title" style="font-size:24px"></h1><div id="info-body"></div><div class="btns"><button id="info-close">닫기</button></div></div></div>

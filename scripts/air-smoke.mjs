@@ -513,6 +513,28 @@ await page.click('#tabs button[data-tab="fleet"]'); await page.evaluate(() => { 
 await page.locator('#panel button[data-act="shopSort"][data-v="seats"]').click(); await page.evaluate(() => { const d = document.getElementById('shop'); if (d) d.open = true; });
 const seatsOrder = await page.evaluate(() => [...document.querySelectorAll('#shop .rowc small')].map((e) => Number((e.textContent.match(/(\d+)석/) ?? [0, 0])[1])).filter((n) => n > 0));
 check('구매 목록: 좌석 많은 순 정렬', seatsOrder.length >= 3 && seatsOrder.every((v, i) => i === 0 || v <= seatsOrder[i - 1]), seatsOrder.join(','));
+// 2.6.0: 자유 모드 즐길 거리
+await page.evaluate(() => { window.__airYes = true; const g = window.__air.game; g.state.sandbox = true; g.state.cash = 5000; g.buyPlane('B737'); g.state.charters = [{ id: 88801, a: 'ICN', b: 'BKK', months: 2, seats: 120, perMonth: 1.5, expires: g.monthsPassed + 2 }]; g.state.bids = [{ id: 88802, kind: 'concession', city: 'NRT', n: 0, ends: g.monthsPassed + 2, best: null, min: 10 }]; window.__air.render(); });
+await page.click('#dsize button[data-h="half"]').catch(() => undefined);
+await page.click('#tabs button[data-tab="map"]'); await openAll();
+await page.locator('#panel button[data-act="charter"]').first().click();
+check('현황: 전세기 주문에 노는 항공기를 보내면 전세 운항', await page.evaluate(() => window.__air.game.state.charters.some((c) => c.planeId !== undefined)));
+await openAll(); await page.locator('#panel button[data-act="bid"]').first().click();
+check('현황: 입찰에서 값을 부르면 우리가 최고가', await page.evaluate(() => window.__air.game.state.bids[0].best?.who === 0));
+await page.click('#tabs button[data-tab="money"]');
+await page.locator('#panel button[data-act="loyalty"][data-v="1"]').click();
+check('재무: 마일리지 기본 단계', await page.evaluate(() => window.__air.game.state.loyalty?.level === 1));
+await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
+check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
+await pickComp(); const alBtn = page.locator('#panel button[data-act="joinAlliance"]');
+if (await alBtn.count()) { await alBtn.first().click(); }
+check('경쟁사: 동맹 초대', await page.evaluate(() => (window.__air.game.state.alliance ?? []).length > 0 || window.__air.game.state.competitors.every((c) => c.major || c.stake || (window.__air.game.state.rivalAlliance ?? []).includes(c.id))));
+await page.click('#tabs button[data-tab="fleet"]');
+check('기단: 기종 도감', (await page.locator('#panel').innerText()).includes('기종 도감'));
+await page.evaluate(() => { const g = window.__air.game; g.state.netHist = [{ m: 0, routes: [['ICN', 'NRT']] }, { m: 6, routes: [['ICN', 'NRT'], ['ICN', 'PEK']] }]; });
+await page.click('#menubtn'); await page.click('#menu button[data-m="timelapse"]');
+check('메뉴: 성장 타임랩스 재생(그동안 시간 정지)', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
+await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

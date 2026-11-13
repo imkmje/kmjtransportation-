@@ -15,7 +15,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   const ctx = canvas.getContext('2d')!;
   let W = 0, H = 0, dpr = 1, resized = false;
   let scale = 3, cx = 100, cy = 25; // scale: 화면 px/도, (cx, cy): 화면 가운데의 경도·위도
-  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null;
+  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null, overlay: [string, string][] | null = null, overlayLabel = '';
   const widths = new Map<string, number>();
   const toX = (lon: number) => W / 2 + (lon - cx) * scale, toY = (lat: number) => H / 2 - (lat - cy) * scale;
   const fitScale = () => Math.min(W / 360, H / (LAT_MAX - LAT_MIN));
@@ -73,7 +73,11 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     ctx.setLineDash([]);
     // 노선: 이익이면 초록, 적자면 빨강, 항공기가 없으면 회색 점선
     let chip: { txt: string; color: string; lx: number; ly: number } | null = null;
-    for (const r of g.state.routes) {
+    if (overlay) { // 타임랩스: 기록된 노선망만 그린다
+      ctx.strokeStyle = '#2f9e5b'; ctx.lineWidth = 3;
+      for (const [a, b] of overlay) for (const [x1, y1, x2, y2] of arcSegments(cityOf(a), cityOf(b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
+    }
+    for (const r of overlay ? [] : g.state.routes) {
       if (!r.open) continue;
       const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, planes = g.planesOn(r.id).length, served = planes > 0;
       const color = !served ? '#8a96a3' : profit >= 0 ? '#2f9e5b' : '#d64545';
@@ -135,6 +139,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       const tw = ctx.measureText(tag.text).width + 10; ctx.fillStyle = tag.color; ctx.beginPath(); ctx.roundRect(it.x - tw / 2, it.y + 17, tw, 15, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillText(tag.text, it.x, it.y + 25);
     }
     // 선택한 노선의 월 이익 표시: 도시 이름표와 겹치지 않는 자리를 찾는다
+    if (overlay && overlayLabel) { ctx.font = '800 22px system-ui, "Apple SD Gothic Neo", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(18,32,45,0.85)'; const w = ctx.measureText(overlayLabel).width + 28; ctx.beginPath(); ctx.roundRect(W / 2 - w / 2, 14, w, 40, 12); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillText(overlayLabel, W / 2, 35); ctx.textAlign = 'left'; }
     if (chip) {
       ctx.font = '700 12px system-ui, sans-serif'; const tw = ctx.measureText(chip.txt).width + 12, th = 18;
       const rects = items.filter((it) => placed.has(it.id)).map((it) => { const p = placed.get(it.id)!, x0 = p.align === 'left' ? p.x : p.align === 'right' ? p.x - it.w : p.x - it.w / 2; return { x0: x0 - 2, y0: p.y - it.h / 2 - 1, x1: x0 + it.w + 2, y1: p.y + it.h / 2 + 1 }; });
@@ -212,6 +217,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     setNight(v: boolean) { nightOn = v; },
     /** 경쟁사 탭에서 고른 회사의 노선을 강조(null이면 끔) */
     focusComp(id: number | null) { focusComp = id; },
+    /** 타임랩스용: 이 노선망만 그린다(null이면 원래대로) */
+    setOverlay(routes: [string, string][] | null, label: string) { overlay = routes; overlayLabel = label; },
     /** 일시정지 중이면 애니메이션을 멈춘다 */
     setPaused(v: boolean) { paused = v; },
     /** 점검용: 애니메이션 시계와 일시정지 상태 */
