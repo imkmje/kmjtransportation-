@@ -66,6 +66,15 @@ export const config = {
     ],
   },
   season: { start: 12, rewardMonths: 2.5, rewardMin: 5, rewardMax: 60, rep: 0.02 }, // 올해의 도전(자유 모드): 매년 하나, 보상은 월 이익의 rewardMonths배
+  subsidiary: { // 자회사(자유 모드): 경쟁사 지분을 사서 회사는 그대로 두고 배당을 받는다
+    priceMult: 1.2, // 지분 값 = 인수가 × 지분율 × 1.2(경영권 웃돈)
+    weight: { 0.2: 0.6, 0.51: 0.3 } as Record<string, number>, // 내 노선과 겹칠 때 손님을 빼앗는 힘(1 = 보통 경쟁사, 제휴 0.5)
+    payout: { none: 0.4, grow: 0.2, profit: 0.6, attack: 0.3 } as Record<string, number>, // 자회사 월 이익 중 배당으로 나눠 주는 비율(방향별)
+    sellRatio: 0.8, // 지분을 팔 때 받는 값 = 지분 값 × 0.8
+    callMonths: 2, callMax: 30, // 증자 요청: 응답 기한(개월), 최대 금액($M, 지분율을 곱함)
+    failRep: 0.03, // 자회사가 파산하면 평판 하락
+    dirs: { grow: { name: '확장', desc: '항공기를 빨리 늘립니다(배당 적음)' }, profit: { name: '수익', desc: '배당을 많이 줍니다(성장 느림)' }, attack: { name: '공세', desc: '다른 경쟁사 노선에 들어가 손님을 빼앗습니다' } } as Record<string, { name: string; desc: string }>,
+  },
   acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
   reopen: { months: 6, fee: 1.5, rep: 0.01 }, // 노선 폐지: 운항 중이던 노선을 닫으면 평판 −rep, 닫은 지 months개월 안에 다시 열면 fee($M)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9

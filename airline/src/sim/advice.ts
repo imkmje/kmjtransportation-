@@ -3,7 +3,7 @@ import { cityById, typeById } from '../data';
 import type { Game } from './game';
 
 /** "지금 할 일" 조언: 게임 상태만 읽어서 문제와 기회를 우선순위 순으로 알려 준다(화면은 이를 눌러 해당 탭으로 이동시킨다) */
-export interface Advice { level: 'bad' | 'warn' | 'info'; text: string; tab?: 'map' | 'routes' | 'fleet' | 'money' | 'news'; routeId?: number; cityId?: string }
+export interface Advice { level: 'bad' | 'warn' | 'info'; text: string; tab?: 'map' | 'routes' | 'fleet' | 'rivals' | 'money' | 'news'; routeId?: number; cityId?: string }
 
 export function advise(g: Game): Advice[] {
   const s = g.state, out: Advice[] = [];
@@ -17,6 +17,7 @@ export function advise(g: Game): Advice[] {
     const low = s.routes.filter((r) => r.open && g.planesOn(r.id).length).map((r) => ({ r, d: g.routeDay(r) })).filter((x) => x.d.share < 0.5 && x.d.revenue > x.d.cost).sort((a, b) => a.d.share - b.d.share)[0];
     if (low) out.push({ level: 'info', text: `${cityById(low.r.a).name} ⇄ ${cityById(low.r.b).name} 점유율이 ${Math.round(low.d.share * 100)}%입니다. 광고·서비스 등급·점유율 우선 운임·증편으로 올려 보세요.`, tab: 'routes', routeId: low.r.id });
   }
+  for (const c of s.competitors) if (c.call) out.push({ level: 'warn', text: `자회사 ${c.name}이(가) $${c.call.amount}M 증자를 요청했습니다. 응하지 않으면 파산할 수 있어요.`, tab: 'rivals' });
   { const d = s.story ? g.storyDef() : undefined; if (d) out.push({ level: 'info', text: `선택할 일이 있습니다: ${d.title}`, tab: 'map' }); }
   for (const t of s.threats ?? []) { const c = s.competitors.find((x) => x.id === t.comp); if (c) out.push({ level: 'warn', text: `${c.name}이(가) ${cityById(t.a).name} ⇄ ${cityById(t.b).name} 노선 진출을 예고했습니다. 제휴나 인수로 막을 수 있어요.`, tab: 'map' }); }
   { const o = s.contracts.filter((c) => c.status === 'offer'); if (o.length) out.push({ level: 'info', text: `새 계약 제안이 ${o.length}건 있습니다. 보상: ${o[0].reward.label}`, tab: 'map' }); }
