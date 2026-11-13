@@ -139,7 +139,7 @@ export function startApp(): void {
 <h4>기단 관리</h4><ul><li>항공기 카드의 <b>교체 추천</b>: 같은 노선에서 새 기종으로 바꾸면 월 이익이 얼마 늘고 몇 달 만에 본전인지 보여 주고, 한 번에 교체합니다(지금 기체는 매각·반납).</li><li>항공기에 <b>이름</b>을 붙이고, 기단 탭 위쪽에서 <b>도색</b>(지도의 내 비행기 색)을 고릅니다.</li></ul>
 <h4>자유 모드의 경쟁과 이야기</h4><ul><li>경쟁사마다 <b>성격</b>(공세형·확장형·서비스형·안정형)이 있고, 매출이 비슷한 곳이 <b>라이벌</b>로 정해집니다(직접 바꿀 수 있어요).</li><li>내 이익이 큰 노선에 경쟁사가 <b>진출을 예고</b>합니다. 제휴를 맺거나 인수하면 막을 수 있어요. 경쟁사끼리 합병하기도 하고, 노선이 많은 도시의 빈 슬롯은 경쟁사가 먼저 차지합니다.</li><li>경쟁사가 있는 노선에서는 노선 화면에서 상대 운임에 맞추거나 <b>맞대응 광고</b>를 낼 수 있습니다.</li><li>가끔 <b>이야기 사건</b>이 생깁니다. 두 선택지 중 하나를 고르면 결과가 갈립니다. 매년 <b>올해의 도전</b>도 하나씩 나옵니다.</li></ul>`;
   function showInfo(title: string, html: string) { $('#info-title').textContent = title; $('#info-body').innerHTML = html; $('#info').hidden = false; }
-  const afterLoad = () => { selCity = selRoute = null; speed = 0; $('#report').hidden = true; prevComp = ''; prevLog = game.state.log.length; syncMap(); lastHtml = ''; render(); };
+  const afterLoad = () => { offerSeen = new Set(game.state.contracts.map((c) => c.id)); offerShown = null; selCity = selRoute = null; speed = 0; $('#report').hidden = true; prevComp = ''; prevLog = game.state.log.length; syncMap(); lastHtml = ''; render(); };
   /** 저장 관리: 저장 칸 3개, 파일 내보내기·가져오기, 홈 화면 추가 안내 */
   function showSaves() {
     const infos = slotInfos();
@@ -510,8 +510,20 @@ export function startApp(): void {
   }
   function flushRender() { if (!renderLater) return; if (performance.now() - panelBusy < 900) window.setTimeout(flushRender, 300); else render(true); }
   /** auto: 시간이 흘러 저절로 다시 그리는 경우. 사용자가 패널을 스크롤·터치 중이면 잠시 미룬다(화면이 지 혼자 움직이는 느낌 방지) */
+  /** 새 계약 제안: 지도 오른쪽 아래 구석에 작은 팝업(실제 시간 12초 뒤 저절로 사라짐, 누르고 있으면 유지) */
+  const OFFER_MS = 12000; let offerSeen = new Set<number>(), offerTimer = 0, offerShown: number | null = null;
+  function renderOffer() {
+    const s = game.state, el = $('#offerpop'), offers = s.contracts.filter((c) => c.status === 'offer');
+    const fresh = offers.filter((c) => !offerSeen.has(c.id));
+    if (fresh.length) { for (const c of fresh) offerSeen.add(c.id); offerShown = fresh[fresh.length - 1].id; clearTimeout(offerTimer); offerTimer = window.setTimeout(() => { offerShown = null; el.hidden = true; }, OFFER_MS); play('alert'); }
+    const c = offerShown !== null ? offers.find((x) => x.id === offerShown) : undefined;
+    if (!c || !$('#title').hidden) { el.hidden = true; return; }
+    const html = `<div class="ophead"><b>${icon('report', 16)} 새 계약 제안</b>${offers.length > 1 ? `<small>외 ${offers.length - 1}건</small>` : ''}<button class="ghost" data-act="offerClose" aria-label="닫기">닫기</button></div><div class="optitle">${esc(c.title)}</div><small>보상: ${esc(c.reward.label)}</small><div class="btnrow"><button data-act="acceptContract" data-id="${c.id}">수락</button><button class="ghost" data-act="declineContract" data-id="${c.id}">거절</button><button class="ghost" data-act="offerMore">자세히</button></div>`;
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.hidden = false;
+  }
   function render(auto = false) {
-    renderTop(); renderEra(); renderSum();
+    renderTop(); renderEra(); renderSum(); renderOffer();
     document.querySelectorAll<HTMLElement>('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     if (tab === 'news') seenLog = game.state.log.length;
     const html = tab === 'map' ? viewMap() : tab === 'routes' ? viewRoutes() : tab === 'fleet' ? viewFleet() : tab === 'rivals' ? viewRivals() : tab === 'money' ? viewMoney() : viewNews();
@@ -725,6 +737,16 @@ export function startApp(): void {
     for (const el of [grip, $('#dsum')]) { el.addEventListener('pointerdown', begin as EventListener); el.addEventListener('pointermove', move as EventListener); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); }
   }
   $('#mapback').addEventListener('click', () => setDrawer('half'));
+  $('#offerpop').addEventListener('pointerdown', () => { clearTimeout(offerTimer); offerTimer = window.setTimeout(() => { offerShown = null; $('#offerpop').hidden = true; }, OFFER_MS); }); // 만지면 시간을 다시 센다
+  $('#offerpop').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (!b) return;
+    const act = b.dataset.act, id = Number(b.dataset.id);
+    if (act === 'offerClose') { offerShown = null; $('#offerpop').hidden = true; return; }
+    if (act === 'offerMore') { offerShown = null; $('#offerpop').hidden = true; tab = 'map'; selCity = selRoute = null; if (drawer === 'min') setDrawer('half'); syncMap(); lastHtml = ''; render(); return; }
+    const r = act === 'acceptContract' ? game.acceptContract(id) : game.declineContract(id);
+    if (!r.ok) return err(r.error);
+    offerShown = null; $('#offerpop').hidden = true; toast(act === 'acceptContract' ? '계약을 수락했습니다' : '계약을 거절했습니다'); play(act === 'acceptContract' ? 'ok' : 'tap'); lastHtml = ''; render();
+  });
   $('#mapwrap').addEventListener('click', (e) => { if (drawer === 'full' && !(e.target as HTMLElement).closest('button')) setDrawer('min'); }); // 크게 상태에서 지도 띠를 누르면 서랍을 접는다
   $('#dsize').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-h]'); if (b) { setDrawer(b.dataset.h as typeof drawer); play('tap'); } });
   /** 서랍 높이: 크게 펼치면 시간이 멈추고, 크게에서 내려오면 마지막으로 고른 배속으로 다시 흐른다 */

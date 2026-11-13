@@ -489,6 +489,15 @@ if (repId !== null) { const n0 = await page.evaluate(() => window.__air.game.sta
 await page.click('#menubtn'); await page.click('#menu button[data-m="help"]');
 const helpText = await page.locator('#info').innerText(); await page.click('#info-close');
 check('도움말에 화면·점유율·자회사·기단 관리 설명', ['서랍', '점유율 우선 운임', '자회사', '교체 추천'].every((w) => helpText.includes(w)));
+// 2.4.1: 계약 제안 팝업
+await page.click('#dsize button[data-h="half"]').catch(() => undefined);
+await page.evaluate(() => { const g = window.__air.game; g.state.contracts = g.state.contracts.filter((c) => c.status !== 'offer'); g.state.contracts.push({ id: 99901, kind: 'cities', title: '시험 계약: 새 도시 2곳', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 10, label: '현금 $10M' } }); window.__air.render(); });
+check('새 계약 제안이 오면 지도 구석에 작은 팝업', await page.locator('#offerpop').isVisible() && (await page.locator('#offerpop').innerText()).includes('시험 계약'));
+await page.locator('#offerpop button[data-act="acceptContract"]').click();
+check('팝업에서 바로 수락하면 진행 중 계약이 되고 팝업이 사라짐', !(await page.locator('#offerpop').isVisible()) && await page.evaluate(() => window.__air.game.state.contracts.some((c) => c.id === 99901 && c.status === 'active')));
+await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 99902, kind: 'cities', title: '시험 계약 2', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 10, label: '현금 $10M' } }); window.__air.render(); });
+await page.waitForTimeout(12600);
+check('가만히 두면 12초 뒤 저절로 사라짐(제안은 현황 탭에 남음)', !(await page.locator('#offerpop').isVisible()) && await page.evaluate(() => window.__air.game.state.contracts.some((c) => c.id === 99902 && c.status === 'offer')));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
