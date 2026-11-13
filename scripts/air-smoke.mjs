@@ -467,6 +467,13 @@ await page.click('#dsize button[data-h="full"]');
 { const mb = await page.locator('#mapwrap').boundingBox(); await page.mouse.click(mb.x + 40, mb.y + mb.height / 2); }
 check('크게 상태에서 지도 띠를 누르면 서랍이 접힘', (await page.locator('#stage').getAttribute('class')).includes('d-min'));
 await page.click('#dsize button[data-h="half"]');
+// 2.3.0: 자회사
+await page.evaluate(() => { window.__airYes = true; const g = window.__air.game; g.state.sandbox = true; g.state.cash = 5000; window.__air.render(); });
+await pickComp();
+await page.locator('#panel button[data-act="buyStake"][data-v="0.51"]').first().click();
+check('경쟁사 탭: 자회사 51%로 만들면 표에 "자회사 51%"가 뜨고 회사는 남음', (await page.locator('#panel').innerText()).includes('자회사 51%') && await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.stake === 0.51)));
+await page.locator('#panel button[data-act="subDir"][data-v="profit"]').click();
+check('자회사 운영 방향을 수익으로 바꿈', await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.dir === 'profit')));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
