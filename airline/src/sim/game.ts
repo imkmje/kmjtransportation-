@@ -768,7 +768,7 @@ export class Game {
   /** 자회사 한 달: 이익이면 배당을 받고, 돈이 마르면 증자를 요청한다 */
   private subsidiaryMonth(c: Competitor, net: number): void {
     const s = this.state, k = config.subsidiary, m = this.monthsPassed;
-    if (net > 0 && c.cash > 0) { const div = Math.round(net * c.stake! * (k.payout[c.dir ?? 'none'] ?? 0.4) * 100) / 100; if (div > 0) { c.cash -= div; s.cash += div; s.cur.revenue += div; } }
+    if (net > 0 && c.cash > 0) { const div = Math.round(net * c.stake! * (k.payout[c.dir ?? 'none'] ?? 0.4) * 100) / 100; if (div > 0) { c.cash -= div; s.cash += div; s.cur.revenue += div; s.cur.div = (s.cur.div ?? 0) + div; } c.lastDiv = div > 0 ? div : 0; c.divTotal = Math.round(((c.divTotal ?? 0) + Math.max(0, div)) * 100) / 100; } else c.lastDiv = 0;
     if (c.call && m >= c.call.expires) { delete c.call; s.log.push(`${m + 1}개월차: 자회사 ${c.name}의 증자 요청 기한이 지났습니다. 자금난이 이어지면 파산할 수 있습니다.`); }
     if (!c.call && c.cash < 0) {
       const amount = Math.round(Math.min(k.callMax, -c.cash + 10) * c.stake! * 10) / 10;
@@ -1224,7 +1224,7 @@ export class Game {
     const lf = s.cur.seats > 0 ? s.cur.pax / s.cur.seats : 0;
     let cargoRev = 0;
     for (const r of s.routes) if (r.open && r.daily.length) { const last = r.daily.slice(-30); const km = distanceKm(cityById(r.a), cityById(r.b)); cargoRev += (last.reduce((a, d) => a + d.cargo, 0) * cargoRate(km) * r.cargoRatio) / 1e6; }
-    const rep: MonthReport = { month: this.monthsPassed, revenue: s.cur.revenue, cost: s.cur.cost, depreciation: dep, fixed, interest, cargo: cargoRev, profit, pax: s.cur.pax, seats: s.cur.seats, loadFactor: lf, cash: s.cash };
+    const rep: MonthReport = { month: this.monthsPassed, revenue: s.cur.revenue, cost: s.cur.cost, depreciation: dep, fixed, interest, cargo: cargoRev, profit, pax: s.cur.pax, seats: s.cur.seats, loadFactor: lf, cash: s.cash, ...(s.cur.div ? { dividend: Math.round(s.cur.div * 100) / 100 } : {}) };
     s.history.push(rep);
     this.evaluateContracts();
     this.noteMonthEnd();

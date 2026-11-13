@@ -474,6 +474,9 @@ await page.locator('#panel button[data-act="buyStake"][data-v="0.51"]').first().
 check('경쟁사 탭: 자회사 51%로 만들면 표에 "자회사 51%"가 뜨고 회사는 남음', (await page.locator('#panel').innerText()).includes('자회사 51%') && await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.stake === 0.51)));
 await page.locator('#panel button[data-act="subDir"][data-v="profit"]').click();
 check('자회사 운영 방향을 수익으로 바꿈', await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.dir === 'profit')));
+await page.evaluate(() => { const g = window.__air.game, k = g.state.competitors.find((c) => c.stake); k.cash = 300; g.advanceDays(31); window.__air.render(); });
+await page.click('#tabs button[data-tab="money"]');
+check('재무 탭: 배당 내역(회사별 지난달·누적, 최근 12개월 합계)', (await page.locator('#panel').innerText()).includes('배당 내역'));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

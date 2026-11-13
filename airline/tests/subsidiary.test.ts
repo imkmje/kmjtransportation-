@@ -48,3 +48,14 @@ describe('자회사', () => {
     expect(k.routes.some((r) => (r.a === 'BKK' && r.b === 'SIN') || (r.a === 'SIN' && r.b === 'BKK'))).toBe(true);
   });
 });
+
+describe('배당 내역', () => {
+  it('지난달·누적 배당을 회사별로 남기고, 월말 정산에 배당이 따로 기록된다', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.51); g.setSubDir(90, 'profit'); const k = g.state.competitors[0]; k.cash = 200;
+    g.advanceDays(30 * 3 + 1);
+    expect(k.divTotal ?? 0).toBeGreaterThan(0); expect(k.lastDiv).toBeGreaterThanOrEqual(0);
+    const months = g.state.history.filter((m) => (m.dividend ?? 0) > 0);
+    expect(months.length).toBeGreaterThan(0);
+    expect(months.reduce((a, m) => a + m.dividend!, 0) + (g.state.cur.div ?? 0)).toBeCloseTo(k.divTotal!, 1); // 이번 달에 들어온 배당은 아직 정산 전
+  });
+});
