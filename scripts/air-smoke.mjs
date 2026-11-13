@@ -477,6 +477,18 @@ check('자회사 운영 방향을 수익으로 바꿈', await page.evaluate(() =
 await page.evaluate(() => { const g = window.__air.game, k = g.state.competitors.find((c) => c.stake); k.cash = 300; g.advanceDays(31); window.__air.render(); });
 await page.click('#tabs button[data-tab="money"]');
 check('재무 탭: 배당 내역(회사별 지난달·누적, 최근 12개월 합계)', (await page.locator('#panel').innerText()).includes('배당 내역'));
+// 2.4.0: 교체 추천·이름·도색·월 추이·도움말
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 5000; const p = g.state.planes.find((q) => q.routeId !== null); p.age = 240; p.cond = 0.5; window.__air.render(); });
+await page.click('#tabs button[data-tab="fleet"]');
+await page.locator('#panel .livery button').nth(2).click();
+check('기단 탭: 도색을 고르면 저장됨', await page.evaluate(() => window.__air.game.state.livery === '#ff9d6b'));
+const repId = await page.evaluate(() => { const g = window.__air.game; return g.state.planes.find((p) => g.replaceOptions(p.id).length > 0)?.id ?? null; });
+if (repId !== null) { await pickPlane(() => window.__air.game.state.planes.find((p) => window.__air.game.replaceOptions(p.id).length > 0).id); await page.evaluate(() => { document.querySelectorAll('#panel .pside details').forEach((d) => { d.open = true; }); }); }
+check('항공기 카드: 교체 추천과 교체 버튼', repId !== null && (await page.locator('#panel button[data-act="replace"]').count()) > 0);
+if (repId !== null) { const n0 = await page.evaluate(() => window.__air.game.state.planes.length); await page.locator('#panel button[data-act="replace"]').first().click(); check('교체하면 항공기 수는 그대로, 옛 기체는 사라짐', await page.evaluate(([n, id]) => window.__air.game.state.planes.length === n && !window.__air.game.plane(id), [n0, repId])); }
+await page.click('#menubtn'); await page.click('#menu button[data-m="help"]');
+const helpText = await page.locator('#info').innerText(); await page.click('#info-close');
+check('도움말에 화면·점유율·자회사·기단 관리 설명', ['서랍', '점유율 우선 운임', '자회사', '교체 추천'].every((w) => helpText.includes(w)));
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();

@@ -94,7 +94,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
           const t = (now / 4000 + k / 3) % 1, u = 1 - t, px = u * u * x1 + 2 * u * t * mx + t * t * x2, py = u * u * y1 + 2 * u * t * my + t * t * y2;
           const tx = 2 * u * (mx - x1) + 2 * t * (x2 - mx), ty = 2 * u * (my - y1) + 2 * t * (y2 - my), ang = Math.atan2(ty, tx); // 진행 방향
           if (t < 0.07) { const ph = t / 0.07; ctx.save(); ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - ph)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x1, y1, 4 + ph * 14, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } // 이륙 고리
-          ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2;
+          ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.fillStyle = g.state.livery ?? '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, 3.6); ctx.lineTo(-2, 0); ctx.lineTo(-4, -3.6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
         }
       }
