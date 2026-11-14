@@ -97,9 +97,9 @@ export const config = {
       { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 150, months: 30 },
       { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 완공 때 평판 +5%', cost: 90, months: 18 },
       { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 200, months: 30 },
-      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '200석 단거리 고효율기. 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 250, months: 36 },
-      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '300석 중거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 380, months: 42 },
-      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '400석 장거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 500, months: 48 },
+      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '220석 단거리기. 시중 최고 기종보다 좌석당 운항비 약 30% 낮고 더 빠르며 새 객실(별점↑). 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 250, months: 36 },
+      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '330석 중장거리 광동체(13,000km). 시중 기종보다 좌석당 운항비 약 40% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 380, months: 42 },
+      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '450석 초장거리 광동체(18,000km, 세계 어디든 직항). 시중 기종보다 좌석당 운항비 약 45% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 500, months: 48 },
     ] },
     found: { capital: [40, 90, 180], planes: [2, 4, 8], cashShare: 0.35, max: 3, regionalKm: 1500, regionalSeat: 0.55, sizes: ['소', '중', '대'], kinds: { low: { name: '저가 항공사', desc: '운임이 싸고 운영비가 낮습니다', eff: 1.05 }, premium: { name: '프리미엄 항공사', desc: '운임이 비싸고 품질이 높습니다', eff: 0.97 }, regional: { name: '지역 항공사', desc: '1,500km 안 단거리만, 작은 기체로 자주 다닙니다', eff: 1 } } as Record<string, { name: string; desc: string; eff: number }> }, // 자회사 차리기: 자본금(고정) 중 35%는 운영 자금, 나머지로 항공기를 들인다
     cabin: { cost: [0.08, 0.14], rating: 0.3, biz: 0.08, premium: 0.08, shop: 5, names: ['기본', '개조', '최고급'] }, // 객실 개조: 새 기체 값의 8%·14%, 단계마다(노선 평균) 운임 수입 +8%·별점 +0.3·비즈니스 수요 +8%, 5일간 운항 못 함

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Game } from '../src/sim/game';
 import { config } from '../src/config';
 import { distanceKm } from '../src/sim/model';
-import { cityById, typeById } from '../src/data';
+import { AIRCRAFT, cityById, typeById } from '../src/data';
 
 const sb = () => { const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 5000; g.state.rights = undefined; return g; };
 const route = (g: Game, a: string, b: string) => { const r = g.openRoute(a, b); if (!r.ok) throw new Error(r.error); const p = g.buyPlane('B737'); if (!p.ok) throw new Error(p.error); g.assign(p.planeId, r.routeId, 7); return { rid: r.routeId, pid: p.planeId }; };
@@ -129,6 +129,12 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     expect(g.state.ownTypes).toContain('KX200'); expect(g.shopTypes().some((t) => t.id === 'KX200')).toBe(true); expect(g.buyPlane('KX200').ok).toBe(true);
     const c0 = g.state.cash, n = g.state.competitors.reduce((a, c) => a + c.planes, 0); (g as unknown as { lateStep(m: number): void }).lateStep(g.monthsPassed);
     expect(g.state.cash - c0).toBeCloseTo(Math.round(config.extra.royalty * n * 100) / 100);
+  });
+  it('자체 기종은 시중 최고 기종보다 좌석당 운항비가 25% 이상 낮고, 같은 노선에서 이익이 더 크다', () => {
+    const per = (id: string) => typeById(id).hourly / typeById(id).seats, market = AIRCRAFT.filter((t) => t.seats >= 150);
+    for (const id of ['KX200', 'KX300', 'KX400']) expect(per(id)).toBeLessThan(Math.min(...market.filter((t) => t.seats >= typeById(id).seats * 0.75).map((t) => t.hourly / t.seats)) * 0.75);
+    const run = (type: string) => { const g = sb(); g.state.ownTypes = ['KX200']; const o = g.openRoute('ICN', 'HKG'); if (!o.ok) throw new Error(o.error); const p = g.buyPlane(type); if (!p.ok) throw new Error(p.error); g.assign(p.planeId, o.routeId, 7); g.advanceDays(60); return g.state.history.at(-1)!.profit; };
+    expect(run('KX200')).toBeGreaterThan(run('A321N'));
   });
   it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
     const g = sb(); expect(g.startMega('airport').ok).toBe(false);
