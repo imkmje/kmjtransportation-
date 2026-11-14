@@ -219,7 +219,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
 
   let raf = 0;
   let clock = 0, lastReal = 0, paused = false; // 일시정지하면 노선의 비행기·낮밤 움직임이 멈춘다
-  const loop = (real: number) => { if (lastReal && !paused) clock += Math.min(100, real - lastReal); lastReal = real; draw(clock, real); raf = requestAnimationFrame(loop); };
+  const loop = (real: number) => { if (lastReal && !paused) clock += Math.min(100, real - lastReal); lastReal = real; getGame().scoped(() => draw(clock, real)); raf = requestAnimationFrame(loop); };
   new ResizeObserver(resize).observe(canvas);
   resize();
   raf = requestAnimationFrame(loop);

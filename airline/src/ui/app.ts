@@ -861,7 +861,8 @@ export function startApp(): void {
     if (el.innerHTML !== html) el.innerHTML = html;
     el.hidden = false;
   }
-  function render(auto = false) {
+  function render(auto = false) { game.scoped(() => renderNow(auto)); }
+  function renderNow(auto: boolean) {
     renderTop(); renderEra(); renderSum(); renderOffer();
     document.querySelectorAll<HTMLElement>('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     if (tab === 'news') seenLog = game.state.log.length;
@@ -1275,7 +1276,7 @@ export function startApp(): void {
       let n = 0;
       while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; const ar = game.applyRules(); if (ar.length) toast(ar[ar.length - 1], 3000); }
       if (n) {
-        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; save(); showReport(); play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
+        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; window.setTimeout(save, 0); showReport(); // 저장은 다음 틈에(월말 처리와 한 프레임에 몰리지 않게) play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
           if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h && h.month % 12 === 0) saveBackup(game); if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}${h.month % 12 === 0 ? ' · 올해의 성적표가 실린 연말 신문이 나왔습니다(보고 카드의 \'연말 신문 보기\')' : ''}`, h.month % 12 === 0 ? 5000 : 2600); } // 연말 신문은 저절로 열지 않는다(화면을 가리지 않게)
         const lg = game.state.log;
         if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다

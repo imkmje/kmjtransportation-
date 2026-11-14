@@ -70,7 +70,16 @@ export class Game {
   get monthsPassed(): number { return Math.floor(this.state.day / config.daysPerMonth); }
   plane(id: number): Plane | undefined { return this.state.planes.find((p) => p.id === id); }
   route(id: number): Route | undefined { return this.state.routes.find((r) => r.id === id); }
-  planesOn(routeId: number): Plane[] { return this.state.planes.filter((p) => p.routeId === routeId); }
+  planesOn(routeId: number): Plane[] {
+    const m = this.memo; if (!m) return this.state.planes.filter((p) => p.routeId === routeId);
+    if (!m.planes) { m.planes = new Map(); for (const p of this.state.planes) if (p.routeId !== null) { const l = m.planes.get(p.routeId); if (l) l.push(p); else m.planes.set(p.routeId, [p]); } }
+    return m.planes.get(routeId) ?? [];
+  }
+  private memo?: { planes?: Map<number, Plane[]>; xfer: Map<number, number> };
+  /** 항공기 배정이 바뀌지 않는 구간(하루 정산, 화면 그리기)에서 노선별 항공기·환승 수요를 한 번만 계산해 재사용한다. 노선이 많으면 매번 전체 기단을 훑는 것이 프레임 끊김의 원인이었다 */
+  /** 항공기 배정·노선이 바뀌면 재사용 값을 버린다 */
+  private touch(): void { if (this.memo) { this.memo.planes = undefined; this.memo.xfer.clear(); } }
+  scoped<T>(fn: () => T): T { if (this.memo) return fn(); this.memo = { xfer: new Map() }; try { return fn(); } finally { this.memo = undefined; } }
   routeBaseFare(r: Route): number { return baseFare(distanceKm(cityById(r.a), cityById(r.b))); }
   routeBaseFareBiz(r: Route): number { return this.routeBaseFare(r) * config.cabin.bizFareMult; }
   growthOf(id: string): number { return this.state.growth[id] ?? 1; }
@@ -86,6 +95,10 @@ export class Game {
   /** 환승 수요(월, 일반석 환산): 이 노선의 한쪽 끝을 허브 삼아 우리 다른 노선으로 갈아타는 손님. 우리 직항이 없고 너무 돌아가지 않는 도시 쌍만 센다 */
   /** via를 주면 그 도시를 거치는 환승만 센다(허브 도시 화면용) */
   transferDemand(r: Route, via?: string, flows?: Map<string, number>): number {
+    const key = !via && !flows && this.memo ? r.id : -1, hit = key >= 0 ? this.memo!.xfer.get(key) : undefined; if (hit !== undefined) return hit;
+    const v = this.transferDemandRaw(r, via, flows); if (key >= 0) this.memo!.xfer.set(key, v); return v;
+  }
+  private transferDemandRaw(r: Route, via?: string, flows?: Map<string, number>): number {
     if (!this.planesOn(r.id).length) return 0;
     const t = config.transfer, served = this.state.routes.filter((x) => x.open && x.id !== r.id && this.planesOn(x.id).length > 0);
     const dpm = config.daysPerMonth, subs = this.state.sandbox ? this.state.competitors.filter((c) => (c.stake ?? 0) >= 0.51).flatMap((c) => c.routes.map((y) => ({ a: y.a, b: y.b, cap: y.seatsDay * dpm, f: config.subsidiary.codeshare }))) : [];
@@ -314,7 +327,7 @@ export class Game {
   // ---------- 행동 ----------
   private addPlane(type: string, price: number, extra: Partial<Plane> = {}): Plane {
     const p: Plane = { id: this.state.nextId++, type, book: price, routeId: null, weekly: 0, age: 0, bizShare: 0, cond: 1, shop: 0, ...extra };
-    this.state.planes.push(p);
+    this.state.planes.push(p); this.touch();
     if (!(this.state.typesFlown ?? []).includes(type)) { this.state.typesFlown = [...(this.state.typesFlown ?? []), type]; if (this.state.typesFlown.length === AIRCRAFT.length) this.note(this.monthsPassed + 1, 'record', '기종 도감 완성'); }
     return p;
   }
@@ -431,7 +444,7 @@ export class Game {
     if (this.state.planes[i].charter !== undefined) return fail('전세 운항 중인 항공기는 전세가 끝난 뒤 팔 수 있습니다');
     const pl = this.state.planes[i], price = pl.leased ? (pl.deposit ?? 0) - this.leaseReturnFee(pl) : pl.book * config.sale.ratio; // 임대기는 반납: 보증금을 돌려받고 위약금을 낸다
     this.state.events = this.state.events.filter((e) => e.planeId !== planeId);
-    this.state.planes.splice(i, 1);
+    this.state.planes.splice(i, 1); this.touch();
     this.state.cash += price;
     return { ok: true, price };
   }
@@ -528,7 +541,8 @@ export class Game {
   /** 도색 색 */
   setLivery(color: string): Result { if (!config.livery.includes(color)) return fail('고를 수 없는 색입니다'); this.state.livery = color; return { ok: true }; }
   /** 이 항공기를 같은 노선에서 다른 새 기종으로 바꾸면: 월 이익 변화, 실제로 드는 돈(새 기체 값 − 지금 기체 매각·반납), 회수 개월 */
-  replaceOptions(planeId: number): { type: string; gain: number; cost: number; payback: number | null; weekly: number }[] {
+  replaceOptions(planeId: number): { type: string; gain: number; cost: number; payback: number | null; weekly: number }[] { const m = this.memo; this.memo = undefined; try { return this.replaceOptionsRaw(planeId); } finally { this.memo = m; } } // 잠깐 항공기를 넣어 보는 계산이라 재사용 값을 쓰지 않는다
+  private replaceOptionsRaw(planeId: number): { type: string; gain: number; cost: number; payback: number | null; weekly: number }[] {
     const p = this.plane(planeId); if (!p || p.routeId === null || p.shop > 0) return [];
     const r = this.route(p.routeId); if (!r) return [];
     const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), cur = typeById(p.type), dpm = config.daysPerMonth;
@@ -634,7 +648,8 @@ export class Game {
     return r.ok ? { ok: true, slotCost: sf.cost } : r;
   }
   /** 이 노선에 항공기 한 대를 더 넣는다면: 기종별 예상(현재 수요 기준의 추정). 추천 = 월 이익이 나면서 회수 기간이 가장 짧은 기종 */
-  routeOptions(routeId: number): RouteOption[] {
+  routeOptions(routeId: number): RouteOption[] { const m = this.memo; this.memo = undefined; try { return this.routeOptionsRaw(routeId); } finally { this.memo = m; } } // 잠깐 항공기를 넣어 보는 계산이라 재사용 값을 쓰지 않는다
+  private routeOptionsRaw(routeId: number): RouteOption[] {
     const r = this.route(routeId); if (!r || !r.open) return [];
     const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), s = this.state, dpm = config.daysPerMonth;
     const b = this.routeDay(r), before = b.revenue - b.cost, out: RouteOption[] = [];
@@ -653,7 +668,8 @@ export class Game {
     return out;
   }
   /** 놀고 있는 항공기를 어느 열린 노선에 넣으면 좋은지(월 이익 증가 추정 순). 최대 횟수로 배정한다고 가정하고, 슬롯이 모자라면 슬롯 값도 뺀다 */
-  assignAdvice(planeId: number, limit = 3): { routeId: number; weekly: number; profit: number; slotCost: number }[] {
+  assignAdvice(planeId: number, limit = 3): { routeId: number; weekly: number; profit: number; slotCost: number }[] { const m = this.memo; this.memo = undefined; try { return this.assignAdviceRaw(planeId, limit); } finally { this.memo = m; } } // 잠깐 항공기를 넣어 보는 계산이라 재사용 값을 쓰지 않는다
+  private assignAdviceRaw(planeId: number, limit = 3): { routeId: number; weekly: number; profit: number; slotCost: number }[] {
     const p = this.plane(planeId); if (!p || p.routeId !== null) return [];
     const t = typeById(p.type), dpm = config.daysPerMonth, out: { routeId: number; weekly: number; profit: number; slotCost: number }[] = [];
     for (const r of this.state.routes) {
@@ -1302,7 +1318,7 @@ export class Game {
     if (p.charter !== undefined) return fail('전세 운항 중인 항공기입니다');
     if (p.leased) return fail('임대해 온 항공기는 다시 빌려줄 수 없습니다');
     if (typeById(p.type).seats <= 0) return fail('화물기는 빌려줄 수 없습니다');
-    s.planes = s.planes.filter((x) => x.id !== planeId);
+    s.planes = s.planes.filter((x) => x.id !== planeId); this.touch();
     c.lent = [...(c.lent ?? []), { type: p.type, book: p.book, age: p.age }];
     this.compBuy(c, this.month, true);
     const rent = Math.round(typeById(p.type).price * config.lease.rate * config.subsidiary.lendRate * 100) / 100;
@@ -1433,7 +1449,7 @@ export class Game {
       if (ex.open) return { ok: true, routeId: ex.id };
       const k = config.reopen, fee = ex.closed !== undefined && this.monthsPassed - ex.closed < k.months ? k.fee : 0; // 닫은 지 얼마 안 된 노선을 다시 열면 비용이 든다
       if (this.state.cash < fee) return fail(`노선을 닫은 지 ${k.months}개월이 안 돼 재개 비용 $${fee}M이 듭니다(현금 모자람)`);
-      this.state.cash -= fee; this.state.cur.cost += fee; ex.open = true; delete ex.closed;
+      this.state.cash -= fee; this.state.cur.cost += fee; ex.open = true; delete ex.closed; this.touch();
       return { ok: true, routeId: ex.id };
     }
     const base = baseFare(distanceKm(A, B));
@@ -1447,7 +1463,7 @@ export class Game {
     const served = this.planesOn(routeId).length > 0;
     for (const p of this.planesOn(routeId)) { p.routeId = null; p.weekly = 0; }
     if (r.open) { r.closed = this.monthsPassed; if (served) this.state.reputation = Math.max(0, this.state.reputation - config.reopen.rep); } // 운항하던 노선을 닫으면 평판이 조금 떨어진다
-    r.open = false;
+    r.open = false; this.touch();
     return { ok: true };
   }
   setFare(routeId: number, fare: number): Result {
@@ -1504,13 +1520,13 @@ export class Game {
       const after = this.slotsUsed(c.id) - mine + (w * 2) / 7, cap = this.slotCapacity(c.id);
       if (after > cap + 1e-9) return fail(`${c.name} 공항 슬롯이 모자랍니다 (${after.toFixed(1)}/${cap}). 지도에서 ${c.name}을(를) 눌러 슬롯을 사세요`);
     }
-    p.routeId = routeId; p.weekly = w;
+    p.routeId = routeId; p.weekly = w; this.touch();
     return { ok: true };
   }
   unassign(planeId: number): Result {
     const p = this.plane(planeId);
     if (!p) return fail('없는 항공기입니다');
-    p.routeId = null; p.weekly = 0;
+    p.routeId = null; p.weekly = 0; this.touch();
     return { ok: true };
   }
 
@@ -1521,15 +1537,15 @@ export class Game {
     if (s.status !== 'playing') return;
     if (s.day > 0 && s.day % config.daysPerMonth === 0) this.startMonth();
     if (s.day % 7 === 0 && s.autoFreq) for (const r of s.routes) if (r.open) this.autoFreqStep(r);
-    if (s.day % 7 === 0) for (const r of s.routes) if (r.open && (s.autoFare || r.stance === 'share') && this.planesOn(r.id).length) this.fillFare(r.id); // 자동 운임·점유율 우선: 매주
-    for (const r of s.routes) {
+    if (s.day % 7 === 0) this.scoped(() => { for (const r of s.routes) if (r.open && (s.autoFare || r.stance === 'share') && this.planesOn(r.id).length) this.fillFare(r.id); }); // 자동 운임·점유율 우선: 매주(운임만 바뀌므로 재사용 계산 안전)
+    this.scoped(() => { for (const r of s.routes) {
       if (!r.open) continue;
       const d = this.routeDay(r);
       s.cash += d.revenue - d.cost;
       s.cur.revenue += d.revenue; s.cur.cost += d.cost; s.cur.pax += d.pax; s.cur.seats += d.seats;
       const st: DayStat = { pax: d.pax, seats: d.seats, profit: d.revenue - d.cost, cargo: d.cargoT, otp: d.otp, ...(this.planesOn(r.id).length ? { share: d.share } : {}) };
       r.daily.push(st); if (r.daily.length > 60) r.daily.shift();
-    }
+    } });
     for (const p of s.planes) if (p.shop > 0) p.shop--;
     this.refitStep();
     s.day++;
