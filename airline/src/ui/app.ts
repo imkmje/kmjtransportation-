@@ -741,7 +741,7 @@ export function startApp(): void {
     const sum = (a: number[]) => a.reduce((x, y) => x + y, 0), last3 = sum(h.slice(-3)), prev3 = h.length >= 6 ? sum(h.slice(-6, -3)) : 0, ch = prev3 > 0 ? last3 / prev3 - 1 : null;
     const mine = game.state.routes.filter((r) => r.open && game.planesOn(r.id).length && game.competitorsOn(r.a, r.b).some((x) => x.comp.id === k.id));
     const sh = mine.length ? mine.reduce((a, r) => a + game.routeDay(r).share, 0) / mine.length : 0, mx = Math.max(0.01, ...h), n = h.length;
-    const bars = h.map((v, i) => `<i style="height:${Math.max(3, (v / mx) * 54)}px" title="${n - i}개월 전: ${money(v)}"></i>`).join('');
+    const bars = h.map((v, i) => `<i class="p" style="height:${Math.max(3, (v / mx) * 54)}px" title="${n - i}개월 전: ${money(v)}"></i>`).join('');
     return `<div class="goal"><div><b>월 매출 추이</b> <small>최근 ${n}개월 · 지난달 ${money(h[n - 1])}</small></div><div class="chart">${bars}</div><small>${ch === null ? '기록이 6개월 쌓이면 변화율이 나옵니다' : `최근 3개월 ${money(last3)} · 그 전 3개월보다 <b class="${ch < 0 ? 'pos' : 'neg'}">${ch >= 0 ? '+' : ''}${Math.round(ch * 100)}%</b>${ch < 0 ? '(줄어드는 중)' : ''}`}</small><small>${mine.length ? `이 회사와 겹치는 내 노선 ${mine.length}개 · 그 노선 내 평균 점유율 ${pct(sh)}` : '이 회사와 겹치는 내 노선은 없습니다'}</small></div>`;
   }
   /** 경쟁사 움직임 예보: 다음 항공기를 사면 어디에 새 노선을 낼지(난수 없이 계산한 1순위) */
