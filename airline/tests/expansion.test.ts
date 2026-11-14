@@ -135,6 +135,8 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     for (const id of ['KX200', 'KX300', 'KX400']) expect(per(id)).toBeLessThan(Math.min(...market.filter((t) => t.seats >= typeById(id).seats * 0.75).map((t) => t.hourly / t.seats)) * 0.75);
     const run = (type: string) => { const g = sb(); g.state.ownTypes = ['KX200']; const o = g.openRoute('ICN', 'HKG'); if (!o.ok) throw new Error(o.error); const p = g.buyPlane(type); if (!p.ok) throw new Error(p.error); g.assign(p.planeId, o.routeId, 7); g.advanceDays(60); return g.state.history.at(-1)!.profit; };
     expect(run('KX200')).toBeGreaterThan(run('A321N'));
+    const g = sb(); const { rid, pid } = route(g, 'ICN', 'HKG'); expect(g.routeOptions(rid).some((x) => x.type === 'KX200')).toBe(false);
+    g.state.ownTypes = ['KX200']; expect(g.routeOptions(rid).some((x) => x.type === 'KX200')).toBe(true); expect(g.replaceOptions(pid).some((x) => x.type === 'KX200')).toBe(true); // 노선 '항공기 추가'·교체 추천에도 자체 기종
   });
   it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
     const g = sb(); expect(g.startMega('airport').ok).toBe(false);
