@@ -534,7 +534,7 @@ export class Game {
     const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), cur = typeById(p.type), dpm = config.daysPerMonth;
     const b = this.routeDay(r), before = b.revenue - b.cost, sale = p.leased ? (p.deposit ?? 0) - this.leaseReturnFee(p) : p.book * config.sale.ratio, rentSaved = p.leased ? cur.price * config.lease.rate : 0;
     const out: { type: string; gain: number; cost: number; payback: number | null; weekly: number }[] = [];
-    for (const t of AIRCRAFT) {
+    for (const t of this.shopTypes()) { // 자체 기종 포함
       if (t.id === p.type || !this.isAvailable(t.id) || (t.seats > 0) !== (cur.seats > 0) || !canFly(t, A, B).ok) continue;
       const weekly = Math.min(p.weekly || maxWeeklyRoundTrips(km, t), maxWeeklyRoundTrips(km, t)); if (weekly < 1) continue;
       const save = { type: p.type, age: p.age, cond: p.cond, weekly: p.weekly, bizShare: p.bizShare, leased: p.leased };
@@ -638,7 +638,7 @@ export class Game {
     const r = this.route(routeId); if (!r || !r.open) return [];
     const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), s = this.state, dpm = config.daysPerMonth;
     const b = this.routeDay(r), before = b.revenue - b.cost, out: RouteOption[] = [];
-    for (const t of AIRCRAFT) {
+    for (const t of this.shopTypes()) { // 자체 기종 포함
       if (!this.isAvailable(t.id) || !canFly(t, A, B).ok) continue;
       const weekly = maxWeeklyRoundTrips(km, t); if (weekly < 1) continue;
       s.planes.push({ id: -1, type: t.id, book: t.price, routeId, weekly, age: 0, bizShare: 0, cond: 1, shop: 0 }); // 잠깐 끼워 넣고 계산한 뒤 바로 뺀다
