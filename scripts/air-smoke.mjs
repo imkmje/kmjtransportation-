@@ -587,6 +587,12 @@ check('현황: 추천 노선에서 바로 열기 → 노선 탭', await page.eva
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 0 || g.monthsPassed < 48) g.advanceDays(30); window.__air.render(); window.__air.report(); });
 await page.evaluate(() => document.querySelector('#report button[data-act="paper"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 check('연말 신문에 올해의 성적표(작년 비교)', (await page.locator('#info').isVisible()) && (await page.locator('#info-body').innerText()).includes('올해의 성적표')); await page.click('#info-close').catch(() => undefined);
+// 2.16.0: 점유율 순위표·최후의 대결
+await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="routesHome"]').click().catch(() => undefined);
+await page.evaluate(() => { window.__air.render(); }); const rkText = await page.locator('#panel').evaluate((e) => e.textContent ?? '');
+check('노선: 점유율 순위표(우리가 1위인 노선 수)', rkText.includes('점유율 순위표') && rkText.includes('우리가 1위인 노선'));
+await page.evaluate(() => { const g = window.__air.game; g.state.duel = { start: g.monthsPassed, until: g.monthsPassed + 12 }; window.__air.render(); }); await page.click('#tabs button[data-tab="map"]'); await openAll();
+check('현황: 최후의 대결 진행 막대', (await page.locator('#panel').innerText()).includes('최후의 대결'));
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

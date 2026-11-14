@@ -6,7 +6,7 @@ import { ACHIEVEMENTS, LADDERS } from './achievements';
 import type { Charter, ChronEntry, Competitor, Season, Threat, Contract, ContractReward, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
 
 type Trait = { name: string; desc: string; war?: number; buy?: number; planes?: number; q?: number; shock?: number };
-type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean; subSell?: boolean; next?: { id: string; months: number }; result: string; risk?: { chance: number; cash?: number; rep?: number; subCash?: number; text: string } };
+type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean; baseTaken?: number; duel?: boolean; subSell?: boolean; next?: { id: string; months: number }; result: string; risk?: { chance: number; cash?: number; rep?: number; subCash?: number; text: string } };
 export type StoryDef = { id: string; title: string; desc: string; needSub?: boolean; chain?: boolean; choices: StoryChoice[] };
 const TRAIT_IDS = ['aggro', 'expander', 'quality', 'steady'];
 export const FORMAT_VERSION = 13; // 12 → 13: 연대기·허브 투자 / 11 → 12: 대형 항공사·시대·계약 / 10 → 11: 경매·예고된 행사 / 9 → 10: 경쟁사가 생기고 파산한다(경쟁사 ID 카운터·파산 기록) / 8 → 9: 경쟁사 수 증가 / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
@@ -1191,6 +1191,8 @@ export class Game {
     const sc = s.story.sub !== undefined ? s.competitors.find((x) => x.id === s.story!.sub) : undefined;
     if (ch.subSell && sc && sc.stake) { const bonus = Math.round(this.acquirePrice(sc) * sc.stake * config.subsidiary.priceMult * 0.25 * 10) / 10; const r = this.sellStake(sc.id); if (r.ok) { s.cash += bonus; text = `${ch.result} (매각 $${r.price}M + 웃돈 $${bonus}M)`; } }
     if (ch.risk && this.rng.next() < ch.risk.chance) { if (ch.risk.subCash && sc) sc.cash += ch.risk.subCash; s.cash += ch.risk.cash ?? 0; s.reputation = Math.min(1, Math.max(0, s.reputation + (ch.risk.rep ?? 0))); text = ch.risk.text; }
+    if (ch.baseTaken) { s.compSlots = { ...(s.compSlots ?? {}), [s.base]: (s.compSlots?.[s.base] ?? 0) + ch.baseTaken }; this.updateTaken(); } // 대형 항공사가 본사 공항 슬롯을 가져간다
+    if (ch.duel) s.duel = { start: this.monthsPassed, until: this.monthsPassed + 12 };
     if (ch.next) s.storyQueue = [...(s.storyQueue ?? []), { id: ch.next.id, at: this.monthsPassed + ch.next.months }];
     s.story = null; s.log.push(`${m}개월차: ${d.title} → ${ch.label}: ${text}`); this.note(m, 'story', `${d.title} → ${ch.label}`);
     return { ok: true, text };
@@ -1745,6 +1747,16 @@ export class Game {
       if (div > 0) { s.cash -= div; s.cur.cost += div; } if (div < want) s.reputation = Math.max(0, s.reputation - 0.02);
       s.log.push(`${m}개월차: 주주 총회 — 최근 12개월 이익 $${Math.round(p12)}M(목표 ${ip.base > 0 ? `$${Math.round(target)}M 이상` : '작년보다 $10M 이상 개선'}) ${ok ? '달성, 주가 상승' : '미달, 주가 하락·평판 하락'}. 주가 지수 ${ip.price}${div ? `, 배당 $${div}M` : ''}${div < want ? `(현금이 모자라 약속한 $${want}M보다 줄임, 평판 하락)` : ''}.`);
       ip.base = p12;
+    }
+    // 대형 항공사와의 장기 대결: 시작과 1년 매출 대결 결과
+    const major = s.competitors.find((c) => c.major), K = config.extra.saga;
+    if (major && !s.sagaStarted && m >= (major.born ?? 0) + K.startAfter) { s.sagaStarted = true; s.storyQueue = [...(s.storyQueue ?? []), { id: 'saga1', at: m }]; }
+    if (s.duel && m >= s.duel.until) {
+      const mine = sum(s.history.slice(-12).map((h) => h.revenue)), theirs = major ? sum(major.revHist ?? []) : 0, won = mine > theirs;
+      if (won) { s.reputation = Math.min(1, s.reputation + K.winRep); s.cash += K.winCash; s.cur.revenue += K.winCash; if (major) major.planes = Math.max(1, Math.round(major.planes * (1 - K.winShrink))); }
+      else { s.reputation = Math.max(0, s.reputation - K.loseRep); if (major) major.planes += K.loseGrow; }
+      s.duelWon = won; s.duelDone = true; s.duel = null;
+      s.log.push(`${m}개월차: 최후의 대결 결과 — 우리 $${Math.round(mine)}M vs 글로벌 스카이 $${Math.round(theirs)}M. ${won ? `승리! 평판 +${Math.round(K.winRep * 100)}%, 상금 $${K.winCash}M, 상대는 항공기를 줄입니다.` : '패배. 평판이 떨어지고 상대가 더 커집니다.'}`); this.note(m, 'rival', won ? '최후의 대결 승리' : '최후의 대결 패배');
     }
     // 정부 정책: 벽지 노선 보조금, 운수권 할인
     const P = config.extra.policy;
