@@ -394,6 +394,10 @@ await page.evaluate(() => { const g = window.__air.game; g.cancelRefitQueue(); f
 await pickComp();
 await page.evaluate(() => { const c = window.__air.game.state.competitors.find((x) => !x.major); c.revHist = [10, 12, 11, 9, 8, 7]; window.__air.render(); }); await pickComp();
 check('경쟁사 카드: 월 매출 추이와 변화율', (await page.locator('#panel').innerText()).includes('월 매출 추이') && (await page.locator('#panel').innerText()).includes('그 전 3개월보다'));
+await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors.find((x) => !x.major), r = g.state.routes.find((x) => x.open); if (!c.routes.some((x) => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a))) { c.routes.push({ ...c.routes[0], a: r.a, b: r.b, war: 0 }); window.__fakeR = true; } window.__goR = r.id; window.__air.render(); }); await pickComp();
+await page.locator('#panel button[data-act="goRoute"]').first().click();
+check('경쟁사 노선 목록: 겹치는 노선에서 내 노선으로 바로 이동', await page.evaluate(() => document.querySelector('#tabs button.on')?.dataset.tab === 'routes'));
+await page.evaluate(() => { if (window.__fakeR) window.__air.game.state.competitors.find((x) => !x.major).routes.pop(); window.__air.render(); }); await pickComp();
 const acq = await page.locator('#panel button[data-act="acquire"]').first();
 const nComp = await page.evaluate(() => window.__air.game.state.competitors.length);
 await page.evaluate(() => { window.__airYes = false; });
