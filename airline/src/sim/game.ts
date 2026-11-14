@@ -897,7 +897,7 @@ export class Game {
     for (const c of s.competitors) {
       if (c.major || this.isFriend(c) || c.planes < th.minPlanes || keep.some((x) => x.comp === c.id)) continue;
       if (this.rng.next() >= th.chance * this.mods.rival) continue;
-      const cand = s.routes.filter((r) => r.open && this.planesOn(r.id).length > 0 && !c.routes.some((x) => this.sameRoute(x, r.a, r.b)) && canFly(B737, cityById(r.a), cityById(r.b)).ok
+      const cand = s.routes.filter((r) => r.open && this.planesOn(r.id).length > 0 && !c.routes.some((x) => this.sameRoute(x, r.a, r.b)) && this.competitorsOn(r.a, r.b).length < config.competitors.maxOnRoute && canFly(B737, cityById(r.a), cityById(r.b)).ok
         && (r.a === c.hub || r.b === c.hub || c.routes.some((x) => [x.a, x.b].some((id) => id === r.a || id === r.b))))
         .map((r) => { const d = this.routeDay(r); return { r, p: (d.revenue - d.cost) * dpm }; }).filter((x) => x.p > th.minProfit).sort((x, y) => y.p - x.p || x.r.id - y.r.id)[0];
       if (!cand) continue;
@@ -949,7 +949,7 @@ export class Game {
     for (const l of s.compLots ?? []) cnt[l.city] = cnt[l.city] ?? 0;
     for (const id of Object.keys(s.compSlots ?? {})) cnt[id] = cnt[id] ?? 0;
     for (const [id, n] of Object.entries(cnt)) {
-      const want = Math.floor(n * config.rivalry.slots.perRoute) + (s.compSlots?.[id] ?? 0) + (s.compLots ?? []).filter((l) => l.city === id).reduce((a, l) => a + l.n, 0) + (s.concessions?.[id] && s.concessions[id].holder !== 0 && s.concessions[id].until > this.monthsPassed ? config.extra.bid.concessionSlots : 0), free = Math.floor(this.slotCapacityRaw(id) - this.slotsUsed(id)), t = Math.min(want, Math.max(0, free));
+      const want = Math.min(config.rivalry.slots.maxPerCity, Math.floor(n * config.rivalry.slots.perRoute)) + (s.compSlots?.[id] ?? 0) + (s.compLots ?? []).filter((l) => l.city === id).reduce((a, l) => a + l.n, 0) + (s.concessions?.[id] && s.concessions[id].holder !== 0 && s.concessions[id].until > this.monthsPassed ? config.extra.bid.concessionSlots : 0), free = Math.floor(this.slotCapacityRaw(id) - this.slotsUsed(id)), t = Math.min(want, Math.max(0, free));
       if (t > 0) out[id] = t;
     }
     s.taken = out;
@@ -1445,7 +1445,7 @@ export class Game {
     if (c.major && this.rng.next() < config.competitors.major.invadeChance) { // 내 노선 중 이익이 큰 곳으로 들어온다
       const mine = s.routes.filter((r) => r.open && this.planesOn(r.id).length > 0).map((r) => { const d = this.routeDay(r); return { r, p: d.revenue - d.cost }; }).sort((x, y) => y.p - x.p || x.r.id - y.r.id);
       for (const { r } of mine) {
-        if (c.routes.some((x) => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) || !canFly(B737, cityById(r.a), cityById(r.b)).ok) continue;
+        if (c.routes.some((x) => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) || !canFly(B737, cityById(r.a), cityById(r.b)).ok || (s.sandbox && this.competitorsOn(r.a, r.b).length >= config.competitors.maxOnRoute)) continue;
         c.routes.push({ a: r.a, b: r.b, seatsDay: B737.seats * legsDay(distanceKm(cityById(r.a), cityById(r.b))), fareRatio: style });
         s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 진출했습니다. 내 노선과 겹칩니다.`);
         return;
@@ -1462,7 +1462,8 @@ export class Game {
       for (const d of CITIES) {
         if (only && d.region !== c.region) continue;
         if (d.id === c.hub || !canFly(B737, cityById(c.hub), d).ok || c.routes.some((r) => (r.a === c.hub && r.b === d.id) || (r.b === c.hub && r.a === d.id))) continue;
-        const km = distanceKm(cityById(c.hub), d), sc = rawMonthlyDemand(cityById(c.hub), d, month) / (1 + km / 6000);
+        const km = distanceKm(cityById(c.hub), d), others = s.competitors.filter((x) => x.id !== c.id && x.routes.some((r) => (r.a === c.hub && r.b === d.id) || (r.b === c.hub && r.a === d.id))).length + (s.routes.some((r) => r.open && ((r.a === c.hub && r.b === d.id) || (r.b === c.hub && r.a === d.id))) ? 1 : 0);
+        const sc = rawMonthlyDemand(cityById(c.hub), d, month) / (1 + km / 6000) / (s.sandbox ? 1 + config.competitors.crowd * others : 1); // 자유 모드: 붐비는 노선은 피한다
         if (!best || sc > best.score || (sc === best.score && d.id < best.b)) best = { b: d.id, score: sc };
       }
       if (best) break;

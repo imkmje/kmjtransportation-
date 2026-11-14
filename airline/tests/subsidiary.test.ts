@@ -111,7 +111,7 @@ describe('허브 투자 일괄', () => {
 describe('경쟁사 항공기 상한(자유 모드)', () => {
   it('자유 모드에서는 시간이 지나면 10대를 넘어 커질 수 있고, 시나리오는 10대 그대로', () => {
     const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 900;
-    for (let i = 0; i < 8; i++) { g.advanceDays(360); g.state.cash = 900; }
+    for (let i = 0; i < 12; i++) { g.advanceDays(360); g.state.cash = 900; }
     expect(Math.max(...g.state.competitors.filter((c) => !c.major).map((c) => c.planes))).toBeGreaterThan(10);
   });
 });

@@ -28,7 +28,7 @@ describe('대형 항공사', () => {
     months(g, 600); expect(major(g)!.planes).toBeLessThanOrEqual(config.competitors.major.cap);
   });
   it('내 이익이 큰 노선으로 진출하고(겹침 알림), 경매에도 입찰한다', () => {
-    const k = config.competitors.major, inv = k.invadeChance, bid = k.bidChance; k.invadeChance = 1; k.bidChance = 1;
+    const k = config.competitors.major, inv = k.invadeChance, bid = k.bidChance, cap = config.competitors.maxOnRoute; k.invadeChance = 1; k.bidChance = 1; config.competitors.maxOnRoute = 9; // 노선당 진출 한도와 무관하게 진출 동작만 본다
     try {
       const g = sandbox(); const rid = open(g, 'ICN', 'NRT'); g.assign(g.state.planes[0].id, rid, 14); months(g, 14);
       const m = major(g)!; expect(m.routes.some((r) => (r.a === 'ICN' && r.b === 'NRT') || (r.a === 'NRT' && r.b === 'ICN'))).toBe(true);
@@ -38,7 +38,7 @@ describe('대형 항공사', () => {
       months(g, 1); expect(g.state.auctions.some((a) => a.id === 9999)).toBe(true); // 첫 달은 우리에게 양보
       months(g, 1); expect(g.state.auctions.some((a) => a.id === 9999)).toBe(false);
       expect(g.state.log.some((l) => l.includes('경매에 나온 항공기를 낙찰받았습니다'))).toBe(true);
-    } finally { k.invadeChance = inv; k.bidChance = bid; }
+    } finally { k.invadeChance = inv; k.bidChance = bid; config.competitors.maxOnRoute = cap; }
   });
   it('매출 순위에 포함되고 저장·불러오기 후에도 유지된다', () => {
     const g = sandbox(); months(g, 24);
