@@ -131,7 +131,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     }
     // 행사 표시: 예고되었거나 열려 있는 행사의 도시에 고리와 이름표
     const tags = new Map<string, { text: string; color: string }>();
-    for (const u of g.state.upcoming) tags.set(u.city, { text: `${EVENTS.find((e) => e.id === u.def)?.name ?? '행사'} ${Math.max(0, u.start - g.monthsPassed)}개월 뒤`, color: '#8a5cc4' });
+    for (const u of g.state.upcoming) tags.set(u.city, { text: `${EVENTS.find((e) => e.id === u.def)?.name ?? '행사'} ${u.start - g.monthsPassed <= 0 ? '이번 달' : `${u.start - g.monthsPassed}개월 뒤`}`, color: '#8a5cc4' });
     for (const e of g.state.events) if (e.city) { const d = EVENTS.find((x) => x.id === e.def); if (d) tags.set(e.city, { text: `${d.name} ${e.monthsLeft}개월`, color: (d.effect.cityCap ?? 0) < 0 ? '#d64545' : '#1f9d57' }); }
     ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const it of items) { const tag = tags.get(it.id.split('@')[0]); if (!tag) continue;

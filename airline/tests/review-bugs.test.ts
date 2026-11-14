@@ -29,3 +29,21 @@ describe('점검 보고 BUG-1~4', () => {
     expect(config.extra.bid.concessionSlots).toBeGreaterThan(0);
   });
 });
+
+describe('점검 보고 BUG-5·8', () => {
+  it('BUG-5: 같은 기종 두 대가 정비 불량이면 지금 할 일 문장이 서로 다르다(배정 노선을 적는다)', async () => {
+    const { advise } = await import('../src/sim/advice');
+    const g = sb(); const r1 = g.openRoute('ICN', 'NRT'), r2 = g.openRoute('ICN', 'KIX');
+    if (!r1.ok || !r2.ok) throw new Error('노선');
+    const b = g.buyPlane(g.state.planes[0].type); if (!b.ok) throw new Error(b.error);
+    g.assign(g.state.planes[0].id, r1.routeId, 7); g.assign(b.planeId, r2.routeId, 7);
+    for (const p of g.state.planes) p.cond = 0.2;
+    const t = advise(g).filter((a) => a.text.includes('정비 상태')).map((a) => a.text);
+    expect(t.length).toBe(2); expect(new Set(t).size).toBe(2);
+  });
+  it('BUG-8: 개인 기록의 탑승객은 정수로 저장한다', () => {
+    const g = sb(); const r = g.openRoute('ICN', 'NRT'); if (!r.ok) throw new Error(r.error);
+    g.assign(g.state.planes[0].id, r.routeId, 14); g.advanceDays(65);
+    const v = g.state.records?.pax?.v; expect(v).toBeGreaterThan(0); expect(Number.isInteger(v)).toBe(true);
+  });
+});

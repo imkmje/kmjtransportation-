@@ -831,7 +831,7 @@ export class Game {
     const s = this.state, h = s.history.at(-1); if (!h) return;
     s.noFail = (s.noFail ?? 0) + 1;
     const served = s.routes.filter((r) => r.open && this.planesOn(r.id).length);
-    const cur: Record<string, number> = { profit: h.profit, pax: h.pax, planes: s.planes.length, cities: this.servedCities().size, longest: Math.round(Math.max(0, ...served.map((r) => distanceKm(cityById(r.a), cityById(r.b))))), noFail: s.noFail };
+    const cur: Record<string, number> = { profit: h.profit, pax: Math.round(h.pax), planes: s.planes.length, cities: this.servedCities().size, longest: Math.round(Math.max(0, ...served.map((r) => distanceKm(cityById(r.a), cityById(r.b))))), noFail: s.noFail };
     const rec = { ...(s.records ?? {}) }, names: Record<string, string> = { profit: '월 최고 이익', pax: '월 최다 탑승객', planes: '최대 기단', cities: '최다 취항 도시', longest: '최장 노선', noFail: '최장 무고장' };
     const newOnes: string[] = [];
     for (const [k, v] of Object.entries(cur)) { if (!rec[k] || v > rec[k].v) { if (rec[k] && rec[k].v > 0 && k !== 'noFail' && k !== 'planes' && k !== 'cities') newOnes.push(names[k]); rec[k] = { v, m }; } }
