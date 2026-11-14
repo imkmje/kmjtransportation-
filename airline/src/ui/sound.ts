@@ -2,8 +2,8 @@
  * 소리: 파일 없이 WebAudio로 합성한다. 모든 소리는 한 버스(잔향 + 압축기)를 지나 한 공간에서 나는 것처럼 들린다.
  * 첫 터치 뒤에만 켜지고(브라우저 규칙), 메뉴에서 효과음·배경 음악을 따로 끌 수 있다.
  */
-export type Sfx = 'tap' | 'ok' | 'buy' | 'sell' | 'takeoff' | 'coin' | 'alert' | 'error' | 'achieve' | 'win' | 'lose';
-export const SFX: Sfx[] = ['tap', 'ok', 'buy', 'sell', 'takeoff', 'coin', 'alert', 'error', 'achieve', 'win', 'lose'];
+export type Sfx = 'tap' | 'ok' | 'buy' | 'sell' | 'takeoff' | 'coin' | 'alert' | 'error' | 'achieve' | 'win' | 'lose' | 'fanfare';
+export const SFX: Sfx[] = ['tap', 'ok', 'buy', 'sell', 'takeoff', 'coin', 'alert', 'error', 'achieve', 'win', 'lose', 'fanfare'];
 type Ctx = BaseAudioContext;
 interface Bus { ctx: Ctx; dry: GainNode; wet: GainNode; music: GainNode }
 
@@ -72,6 +72,7 @@ function trigger(b: Bus, name: Sfx, t: number) {
     case 'coin': bell(b, midi(79), t, 1.4, 0.09); bell(b, midi(74), t + 0.32, 1.8, 0.09); break; // 월말: 기내 안내 "딩-동"
     case 'alert': bell(b, midi(81), t, 0.5, 0.08); bell(b, midi(77), t + 0.2, 0.5, 0.08); bell(b, midi(81), t + 0.4, 0.5, 0.08); bell(b, midi(77), t + 0.6, 0.9, 0.08); break; // 사건: 주의를 끄는 반복 두 음
     case 'error': tone(b, 170, t, 0.14, { type: 'square', gain: 0.05, cutoff: 600 }); tone(b, 130, t + 0.12, 0.2, { type: 'square', gain: 0.05, cutoff: 500 }); break; // 안 됨: 낮고 짧게
+    case 'fanfare': seq([67, 72, 76, 79, 84, 88], 0.09, 1.2, 0.07); bell(b, midi(91), t + 0.55, 1.8, 0.05); break; // 큰 순간(상장·대결 승리·왕조 달성·완공): 짧은 팡파르
     case 'achieve': seq([84, 88, 91, 96, 100], 0.07, 1.1, 0.06); break; // 업적: 반짝이며 올라간다
     case 'win': seq([72, 76, 79, 84], 0.14, 1.6, 0.08); [60, 64, 67, 72].forEach((n) => tone(b, midi(n), t + 0.56, 2.6, { gain: 0.045, type: 'triangle', attack: 0.3, wet: 0.7 })); bell(b, midi(96), t + 0.9, 2, 0.05); break; // 승리: 장조로 올라가 화음으로 맺는다
     case 'lose': seq([69, 65, 62, 57], 0.3, 1.8, 0.07); tone(b, midi(45), t + 0.9, 2.4, { gain: 0.06, attack: 0.4, wet: 0.7, cutoff: 500, type: 'triangle' }); break; // 패배: 단조로 내려간다

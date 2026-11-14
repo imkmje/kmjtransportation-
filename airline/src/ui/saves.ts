@@ -25,6 +25,11 @@ export function slotInfos(s?: Store): SlotInfo[] {
     try { const raw = st?.getItem(slotKey(slot)); if (!raw) return { slot, empty: true }; const v = JSON.parse(raw); return { slot, empty: false, when: String(v.when ?? '').slice(0, 16).replace('T', ' '), summary: summarize(v.game) }; } catch { return { slot, empty: true }; }
   });
 }
+/** 연말 자동 백업: 저장 칸과 따로 둔다(덮어쓰는 실수·깨진 저장 대비. 브라우저 저장소가 지워지면 함께 사라진다) */
+const BACKUP_KEY = 'the-air-backup';
+export function saveBackup(game: Game, s?: Store): boolean { const st = store(s); if (!st) return false; try { st.setItem(BACKUP_KEY, JSON.stringify({ v: 1, when: new Date().toISOString(), game: game.toJSON() })); return true; } catch { return false; } }
+export function backupInfo(s?: Store): { when: string; summary: string } | null { try { const raw = store(s)?.getItem(BACKUP_KEY); if (!raw) return null; const v = JSON.parse(raw); return { when: String(v.when ?? '').slice(0, 16).replace('T', ' '), summary: summarize(v.game) }; } catch { return null; } }
+export function loadBackup(s?: Store): Game | null { try { const raw = store(s)?.getItem(BACKUP_KEY); return raw ? Game.fromJSON(JSON.parse(raw).game) : null; } catch { return null; } }
 /** 저장 칸의 게임을 불러온다(깨진 파일이면 null) */
 export function loadSlot(i: number, s?: Store): Game | null {
   try { const raw = store(s)?.getItem(slotKey(i)); return raw ? Game.fromJSON(JSON.parse(raw).game) : null; } catch { return null; }
