@@ -542,6 +542,8 @@ check('기단: 기종 도감', (await page.locator('#panel').innerText()).includ
 await page.evaluate(() => { const g = window.__air.game; g.state.netHist = [{ m: 0, routes: [['ICN', 'NRT']] }, { m: 6, routes: [['ICN', 'NRT'], ['ICN', 'PEK']] }]; });
 await page.click('#menubtn'); await page.click('#menu button[data-m="timelapse"]');
 check('메뉴: 성장 타임랩스 재생(그동안 시간 정지)', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
+await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
+check('지도: 경쟁사 노선 보기 전환(전부→겹침만→…→전부)', cl1.includes('겹침만') && (await page.locator('#complayer').innerText()).includes('전부'), cl1);
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

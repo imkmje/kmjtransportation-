@@ -63,6 +63,11 @@ export function startApp(): void {
     onCity: (id) => { selCity = id; selRoute = null; if (id) { tab = 'map'; if (drawer === 'min') setDrawer('half'); } syncMap(); render(); },
     onRoute: (id) => { selRoute = id; selCity = null; tab = 'routes'; if (drawer === 'min') setDrawer('half'); syncMap(); render(); },
   });
+  const CL: Record<string, string> = { all: '전부', mine: '겹침만', subs: '자회사만', off: '끔' }, CL_KEY = 'the-air-complayer';
+  let compLayer = (() => { try { const v = localStorage.getItem(CL_KEY); return v && CL[v] ? v : 'all'; } catch { return 'all'; } })();
+  const syncLayer = () => { map.setCompMode(compLayer as 'all'); $('#complayer').textContent = `경쟁사 노선: ${CL[compLayer]}`; };
+  $('#complayer').addEventListener('click', () => { const ks = Object.keys(CL); compLayer = ks[(ks.indexOf(compLayer) + 1) % ks.length]; try { localStorage.setItem(CL_KEY, compLayer); } catch { /* 저장 불가 */ } syncLayer(); });
+  syncLayer();
   const syncMap = () => { const pr = tab === 'fleet' && selPlane !== null ? game.state.planes.find((p) => p.id === selPlane)?.routeId ?? null : null; map.select(selCity, selRoute ?? pr); map.focusComp(tab === 'rivals' ? selComp : null); };
 
   // ---- 위쪽 바 ----
@@ -186,7 +191,8 @@ export function startApp(): void {
   function playTimelapse() {
     const h = game.state.netHist ?? []; if (h.length < 2) return err('6개월마다 기록이 쌓입니다. 1년쯤 지나면 볼 수 있어요');
     const sp = speed; speed = 0; renderTop(); let i = 0;
-    const step = () => { if (i >= h.length) { map.setOverlay(null, ''); speed = sp; renderTop(); toast('타임랩스가 끝났습니다'); return; } const x = h[i++]; map.setOverlay(x.routes, `${Math.floor(x.m / 12) + 1}년차 ${(x.m % 12) + 1}월 · 노선 ${x.routes.length}개`); window.setTimeout(step, 900); };
+    const cities = (r: [string, string][]) => new Set(r.flat()).size, first = h[0], last = h[h.length - 1];
+    const step = () => { if (i >= h.length) { map.setOverlay(null, ''); speed = sp; renderTop(); toast(`${Math.floor(last.m / 12) + 1}년 동안 노선 ${first.routes.length}→${last.routes.length}개, 도시 ${cities(first.routes)}→${cities(last.routes)}곳`, 6000); return; } const x = h[i++], prev = new Set((i > 1 ? h[i - 2].routes : []).map(([a, b]) => `${a}|${b}`)); map.setOverlay(x.routes, `${Math.floor(x.m / 12) + 1}년차 ${(x.m % 12) + 1}월 · 노선 ${x.routes.length}개`, x.routes.map(([a, b]) => `${a}|${b}`).filter((k) => i > 1 && !prev.has(k))); window.setTimeout(step, 900); }; // 새로 생긴 노선은 노랗게
     toast('성장 타임랩스 재생'); step();
   }
   function showChronicle() {
