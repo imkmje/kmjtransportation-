@@ -872,7 +872,8 @@ export class Game {
   cleanGone(): void {
     const s = this.state, ids = new Set(s.competitors.map((c) => c.id)), stake = new Set(s.competitors.filter((c) => c.stake).map((c) => c.id));
     if (s.alliance) s.alliance = s.alliance.filter((id) => ids.has(id) && !stake.has(id));
-    if (s.rivalAlliance) s.rivalAlliance = s.rivalAlliance.filter((id) => ids.has(id));
+    const sub = new Set(s.competitors.filter((c) => (c.stake ?? 0) >= 0.51).map((c) => c.id)); // 자회사는 라이벌 동맹에 남지 않는다
+    if (s.rivalAlliance) s.rivalAlliance = s.rivalAlliance.filter((id) => ids.has(id) && !sub.has(id));
     if (s.concessions) for (const [city, c] of Object.entries(s.concessions)) if (c.holder !== 0 && !ids.has(c.holder)) { const nc: Record<string, { holder: number; until: number }> = { ...s.concessions }; delete nc[city]; s.concessions = nc; }
     if (s.compLots) s.compLots = s.compLots.filter((l) => ids.has(l.holder));
   }

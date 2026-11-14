@@ -47,3 +47,11 @@ describe('점검 보고 BUG-5·8', () => {
     const v = g.state.records?.pax?.v; expect(v).toBeGreaterThan(0); expect(Number.isInteger(v)).toBe(true);
   });
 });
+
+describe('자회사와 스카이 동맹', () => {
+  it('자회사(51%)가 되면 라이벌 쪽 스카이 동맹에서 빠진다', () => {
+    const g = sb(); comp(g, 7); g.state.rivalAlliance = [7];
+    const r = g.buyStake(7, 0.51); expect(r.ok).toBe(true);
+    g.cleanGone(); expect(g.state.rivalAlliance).not.toContain(7);
+  });
+});
