@@ -159,3 +159,21 @@ describe('플레이 감각: 도전 조건·자동 처리·추천 노선', () => 
     expect(g.openRoute(r[0].a, r[0].b).ok).toBe(true); expect(g.recommendRoutes(3).some((x) => (x.a === r[0].a && x.b === r[0].b) || (x.a === r[0].b && x.b === r[0].a))).toBe(false);
   });
 });
+
+describe('대형 항공사와의 장기 대결', () => {
+  it('대형 항공사 등장 18개월 뒤 슬롯 쟁탈 이야기가 오고, 양보하면 본사 슬롯을 잃고 2년 뒤 다음 이야기가 예약된다', () => {
+    const g = sb(); let guard = 0;
+    while (!g.state.story?.id.startsWith('saga') && guard++ < 80) { if (g.state.story) g.chooseStory(g.storyDef()!.choices.length - 1); g.advanceDays(30); }
+    expect(g.state.story?.id).toBe('saga1');
+    const cap = g.slotCapacity(g.state.base); expect(g.chooseStory(1).ok).toBe(true);
+    expect(g.slotCapacity(g.state.base)).toBe(cap - 4); expect(g.state.storyQueue?.some((q) => q.id === 'saga2')).toBe(true);
+  });
+  it('최후의 대결: 12개월 뒤 매출로 판정하고, 이기면 평판·상금·업적', async () => {
+    const { achieved } = await import('../src/sim/achievements');
+    const g = sb(); route(g, 'ICN', 'NRT'); g.advanceDays(30 * 12);
+    const major = g.state.competitors.find((c) => c.major)!; expect(major).toBeDefined();
+    g.state.duel = { start: g.monthsPassed, until: g.monthsPassed + 1 }; major.revHist = [0]; const rep = g.state.reputation, planes = major.planes;
+    g.advanceDays(30); expect(g.state.duelWon).toBe(true); expect(g.state.reputation).toBeGreaterThan(rep); expect(major.planes).toBeLessThanOrEqual(planes);
+    expect(achieved(g)).toContain('giant');
+  });
+});
