@@ -85,7 +85,7 @@ export interface GameState {
   loyalty?: { level: number; members: number }; // 마일리지 프로그램
   charters?: Charter[]; // 전세기 주문(제안·진행)
   alliance?: number[]; rivalAlliance?: number[]; // 우리 동맹 회원, 대형 항공사가 만든 동맹
-  bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯
+  bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; compLots?: { city: string; n: number; holder: number }[]; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯
   mega?: { id: string; city?: string; done: number } | null; megaDone?: string[]; megaCity?: Record<string, number>; // 메가 프로젝트
   preorders?: { type: string; n: number; deposit: number }[]; // 신기종 선주문
   pioneered?: string[]; pioneer?: Record<string, number>; // 첫 취항한 도시, 보너스가 끝나는 개월차
