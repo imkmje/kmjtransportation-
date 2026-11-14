@@ -1,5 +1,5 @@
 import land from '../data/land.json';
-import { CITIES, EVENTS } from '../data';
+import { CITIES, EVENTS, typeById } from '../data';
 import type { Game } from '../sim/game';
 import { placeLabels, type LabelItem } from './labels';
 import { marketSize, seasonOf } from '../sim/model';
@@ -15,7 +15,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   const ctx = canvas.getContext('2d')!;
   let W = 0, H = 0, dpr = 1, resized = false;
   let scale = 3, cx = 100, cy = 25; // scale: 화면 px/도, (cx, cy): 화면 가운데의 경도·위도
-  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null, overlay: [string, string][] | null = null, overlayLabel = '';
+  let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null, overlay: [string, string][] | null = null, overlayLabel = '', overlayNew = new Set<string>();
+  let compMode: 'all' | 'mine' | 'subs' | 'off' = 'all'; // 경쟁사 노선 보기: 전부 / 내 노선과 겹치는 것만 / 자회사만 / 끔(경쟁사 탭에서 고른 회사는 늘 보임)
   const widths = new Map<string, number>();
   const toX = (lon: number) => W / 2 + (lon - cx) * scale, toY = (lat: number) => H / 2 - (lat - cy) * scale;
   const fitScale = () => Math.min(W / 360, H / (LAT_MAX - LAT_MIN));
@@ -69,17 +70,18 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       } }
     // 경쟁사 노선(보라색 가는 선)
     ctx.strokeStyle = 'rgba(138, 92, 196, 0.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
-    for (const k of g.state.competitors) { const f = k.id === focusComp; ctx.strokeStyle = f ? 'rgba(214, 128, 58, 0.95)' : k.stake ? 'rgba(47, 158, 91, 0.8)' : 'rgba(138, 92, 196, 0.55)'; for (const cr of k.routes) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { ctx.lineWidth = f ? 3.5 : k.stake ? (cr.atk ? 3 : 2) : 1.5; const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } } // 경쟁사 탭에서 고른 회사는 주황 굵은 선
+    const mineSet = new Set(g.state.routes.filter((r) => r.open && g.planesOn(r.id).length).flatMap((r) => [`${r.a}|${r.b}`, `${r.b}|${r.a}`]));
+    for (const k of g.state.competitors) { const f = k.id === focusComp; if (!f && (compMode === 'off' || (compMode === 'subs' && !k.stake))) continue; ctx.strokeStyle = f ? 'rgba(214, 128, 58, 0.95)' : k.stake ? 'rgba(47, 158, 91, 0.8)' : 'rgba(138, 92, 196, 0.55)'; for (const cr of k.routes) if (f || compMode !== 'mine' || mineSet.has(`${cr.a}|${cr.b}`)) for (const [x1, y1, x2, y2] of arcSegments(cityOf(cr.a), cityOf(cr.b))) { ctx.lineWidth = f ? 3.5 : k.stake ? (cr.atk ? 3 : 2) : 1.5; const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } } // 경쟁사 탭에서 고른 회사는 주황 굵은 선
     ctx.setLineDash([]);
     // 노선: 이익이면 초록, 적자면 빨강, 항공기가 없으면 회색 점선
     let chip: { txt: string; color: string; lx: number; ly: number } | null = null;
     if (overlay) { // 타임랩스: 기록된 노선망만 그린다
       ctx.strokeStyle = '#2f9e5b'; ctx.lineWidth = 3;
-      for (const [a, b] of overlay) for (const [x1, y1, x2, y2] of arcSegments(cityOf(a), cityOf(b))) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
+      for (const [a, b] of overlay) for (const [x1, y1, x2, y2] of arcSegments(cityOf(a), cityOf(b))) { const nw = overlayNew.has(`${a}|${b}`); ctx.strokeStyle = nw ? '#f2b705' : '#2f9e5b'; ctx.lineWidth = nw ? 5 : 3; const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
     }
     for (const r of overlay ? [] : g.state.routes) {
       if (!r.open) continue;
-      const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, planes = g.planesOn(r.id).length, served = planes > 0;
+      const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, onR = g.planesOn(r.id), planes = onR.length, served = planes > 0;
       const color = !served ? '#8a96a3' : profit >= 0 ? '#2f9e5b' : '#d64545';
       ctx.strokeStyle = color; ctx.lineWidth = r.id === selRoute ? 5 : served ? 2 + Math.min(5, Math.abs(profit) * config.daysPerMonth / 1.2) : 1.5; // 굵기 = 월 이익(손실)의 크기
       ctx.setLineDash(served ? [] : [6, 5]);
@@ -88,6 +90,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
       }
       ctx.setLineDash([]);
+      if (served && d.share < 0.2) { ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 5]); for (const [x1, y1, x2, y2] of arcSegments(A, B)) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } ctx.restore(); }
       if (served && r.id === selRoute) { // 선택한 노선: 곡선 가운데의 월 이익 표시는 도시 이름을 다 그린 뒤 겹치지 않는 자리에 그린다
         const [x1, y1, x2, y2] = arcSegments(A, B)[0], [mx, my] = ctrl(x1, y1, x2, y2);
         chip = { txt: `월 ${profit >= 0 ? '+' : '−'}$${Math.abs(profit * config.daysPerMonth).toFixed(1)}M`, color, lx: 0.25 * x1 + 0.5 * mx + 0.25 * x2, ly: 0.25 * y1 + 0.5 * my + 0.25 * y2 };
@@ -98,7 +101,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
           const t = (now / 4000 + k / 3) % 1, u = 1 - t, px = u * u * x1 + 2 * u * t * mx + t * t * x2, py = u * u * y1 + 2 * u * t * my + t * t * y2;
           const tx = 2 * u * (mx - x1) + 2 * t * (x2 - mx), ty = 2 * u * (my - y1) + 2 * t * (y2 - my), ang = Math.atan2(ty, tx); // 진행 방향
           if (t < 0.07) { const ph = t / 0.07; ctx.save(); ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - ph)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x1, y1, 4 + ph * 14, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } // 이륙 고리
-          ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.fillStyle = g.state.livery ?? '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2;
+          const seats = typeById(onR[k].type).seats, sz = seats <= 150 ? 0.8 : seats <= 300 ? 1 : 1.35; ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.scale(sz, sz); ctx.fillStyle = g.state.livery ?? '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, 3.6); ctx.lineTo(-2, 0); ctx.lineTo(-4, -3.6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
         }
       }
@@ -218,7 +221,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     /** 경쟁사 탭에서 고른 회사의 노선을 강조(null이면 끔) */
     focusComp(id: number | null) { focusComp = id; },
     /** 타임랩스용: 이 노선망만 그린다(null이면 원래대로) */
-    setOverlay(routes: [string, string][] | null, label: string) { overlay = routes; overlayLabel = label; },
+    setOverlay(routes: [string, string][] | null, label: string, fresh: string[] = []) { overlay = routes; overlayLabel = label; overlayNew = new Set(fresh); },
+    setCompMode(m: 'all' | 'mine' | 'subs' | 'off') { compMode = m; },
     /** 일시정지 중이면 애니메이션을 멈춘다 */
     setPaused(v: boolean) { paused = v; },
     /** 점검용: 애니메이션 시계와 일시정지 상태 */
