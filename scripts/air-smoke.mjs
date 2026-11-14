@@ -15,7 +15,10 @@ const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 const fails = [];
-const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
+let checks = 0; // 점검 항목 수(중간에 멈추면 몇 번째에서 멈췄는지 알 수 있게)
+const halt = (e) => { console.log(`FAIL 점검이 중간에 멈춤(${checks}번째 항목 뒤): ${String(e?.message ?? e).split('\n')[0]}`); process.exit(1); };
+process.on('uncaughtException', halt); process.on('unhandledRejection', halt);
+const check = (name, ok, detail = '') => { checks++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
 // 스크린샷은 경로를 줬을 때만 찍는다(움직이는 지도 캡처가 한 장에 수 초~20초 걸려 점검 시간 대부분을 차지)
 const shot = (n) => !process.argv[2] ? Promise.resolve() : page.screenshot({ path: (process.argv[2] ?? 'air.png').replace('.png', `-${n}.png`), timeout: 60000 }).catch((e) => console.log('WARN 스크린샷 실패(참고용이라 계속 진행):', n, String(e.message).split('\n')[0]));
 
@@ -597,4 +600,5 @@ await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
 await server.close();
+console.log(`SMOKE DONE 점검 ${checks}개 · 실패 ${fails.length}개`); // 이 줄이 없으면 끝까지 돌지 않은 것
 process.exit(fails.length ? 1 : 0);
