@@ -3,11 +3,18 @@ import { cityById, typeById } from '../data';
 import type { Game } from './game';
 
 /** "지금 할 일" 조언: 게임 상태만 읽어서 문제와 기회를 우선순위 순으로 알려 준다(화면은 이를 눌러 해당 탭으로 이동시킨다) */
-export interface Advice { level: 'bad' | 'warn' | 'info'; text: string; tab?: 'map' | 'routes' | 'fleet' | 'rivals' | 'money' | 'news'; routeId?: number; cityId?: string }
+export interface Advice { level: 'bad' | 'warn' | 'info'; text: string; tab?: 'map' | 'routes' | 'fleet' | 'rivals' | 'money' | 'news'; routeId?: number; cityId?: string; pend?: boolean } // pend: 현황 탭 '결정 대기'에도 있는 항목(현황의 할 일 목록에서는 뺀다)
 
 export function advise(g: Game): Advice[] {
   const s = g.state, out: Advice[] = [];
   if (s.status !== 'playing') return out;
+  const rw = g.runway(); // 파산 경보: 이대로면 몇 달 뒤 현금이 바닥나는지
+  if (rw !== null && rw <= 6) out.push({ level: 'bad', text: `이대로면 약 ${rw}개월 뒤 현금이 바닥납니다(최근 3개월 평균 적자). 적자 노선 정리·운임 조정·세일 앤 리스백(기단 탭)을 검토하세요.`, tab: 'fleet' });
+  for (const c of s.competitors) { // 경쟁사 움직임 예보: 살 돈이 준비됐고 다음 새 노선이 내 노선과 겹치면
+    if (c.stake || c.major || s.ally === c.id || s.alliance?.includes(c.id)) continue;
+    const f = g.forecastOf(c); if (!f.newRoute || !f.b || f.need > 0) continue;
+    if (s.routes.some((r) => r.open && g.planesOn(r.id).length && ((r.a === c.hub && r.b === f.b) || (r.b === c.hub && r.a === f.b)))) out.push({ level: 'warn', text: `${c.name}이(가) 곧 ${cityById(c.hub).name} ⇄ ${cityById(f.b).name}에 들어올 수 있습니다(항공기 살 돈 준비됨).`, tab: 'rivals' });
+  }
   const idle = s.planes.filter((p) => p.routeId === null && p.shop <= 0 && p.charter === undefined);
   if (idle.length) out.push({ level: 'bad', text: `노는 항공기가 ${idle.length}대 있습니다. 노선에 배정해야 돈을 벌어요.`, tab: s.routes.some((r) => r.open) ? 'routes' : 'map' });
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length === 0) out.push({ level: 'warn', text: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 배정된 항공기가 없습니다.`, tab: 'routes', routeId: r.id });
@@ -18,15 +25,15 @@ export function advise(g: Game): Advice[] {
     const low = s.routes.filter((r) => r.open && g.planesOn(r.id).length).map((r) => ({ r, d: g.routeDay(r) })).filter((x) => x.d.share < 0.5 && x.d.revenue > x.d.cost).sort((a, b) => a.d.share - b.d.share)[0];
     if (low) out.push({ level: 'info', text: `${cityById(low.r.a).name} ⇄ ${cityById(low.r.b).name} 점유율이 ${Math.round(low.d.share * 100)}%입니다. 광고·서비스 등급·점유율 우선 운임·증편으로 올려 보세요.`, tab: 'routes', routeId: low.r.id });
   }
-  for (const c of s.competitors) if (c.call) out.push({ level: 'warn', text: `자회사 ${c.name}이(가) $${c.call.amount}M 증자를 요청했습니다. 응하지 않으면 파산할 수 있어요.`, tab: 'rivals' });
-  { const d = s.story ? g.storyDef() : undefined; if (d) out.push({ level: 'info', text: `선택할 일이 있습니다: ${d.title}`, tab: 'map' }); }
-  for (const t of s.threats ?? []) { const c = s.competitors.find((x) => x.id === t.comp); if (c) out.push({ level: 'warn', text: `${c.name}이(가) ${cityById(t.a).name} ⇄ ${cityById(t.b).name} 노선 진출을 예고했습니다. 제휴나 인수로 막을 수 있어요.`, tab: 'map' }); }
-  { const o = s.contracts.filter((c) => c.status === 'offer'); if (o.length) out.push({ level: 'info', text: `새 계약 제안이 ${o.length}건 있습니다. 보상: ${o[0].reward.label}`, tab: 'map' }); }
+  for (const c of s.competitors) if (c.call) out.push({ pend: true, level: 'warn', text: `자회사 ${c.name}이(가) $${c.call.amount}M 증자를 요청했습니다. 응하지 않으면 파산할 수 있어요.`, tab: 'rivals' });
+  { const d = s.story ? g.storyDef() : undefined; if (d) out.push({ pend: true, level: 'info', text: `선택할 일이 있습니다: ${d.title}`, tab: 'map' }); }
+  for (const t of s.threats ?? []) { const c = s.competitors.find((x) => x.id === t.comp); if (c) out.push({ pend: true, level: 'warn', text: `${c.name}이(가) ${cityById(t.a).name} ⇄ ${cityById(t.b).name} 노선 진출을 예고했습니다. 제휴나 인수로 막을 수 있어요.`, tab: 'map' }); }
+  { const o = s.contracts.filter((c) => c.status === 'offer'); if (o.length) out.push({ pend: true, level: 'info', text: `새 계약 제안이 ${o.length}건 있습니다. 보상: ${o[0].reward.label}`, tab: 'map' }); }
   if (g.rightsOn && s.routes.filter((r) => r.open && g.planesOn(r.id).length).length >= 2) { // 운수권을 살 수 있는 지역이 있으면 알려 준다
     const ok = Object.keys(config.rights.regions).map((r) => g.regionInfo(r)).filter((i) => !i.owned && i.profitOk && s.cash >= i.price + 10).sort((a, b) => a.price - b.price)[0];
     if (ok) out.push({ level: 'info', text: `${ok.name} 운수권($${ok.price}M)을 살 수 있습니다. 노선을 넓혀 보세요.`, tab: 'map' });
   }
-  if (s.auctions.length) out.push({ level: 'info', text: `파산한 ${s.auctions[0].from}의 항공기 ${s.auctions.length}대가 새 값의 ${Math.round(config.auction.price * 100)}%에 경매 중입니다(${s.auctions[0].expires - g.monthsPassed}개월 남음).`, tab: 'map' });
+  if (s.auctions.length) out.push({ pend: true, level: 'info', text: `파산한 ${s.auctions[0].from}의 항공기 ${s.auctions.length}대가 새 값의 ${Math.round(config.auction.price * 100)}%에 경매 중입니다(${s.auctions[0].expires - g.monthsPassed}개월 남음).`, tab: 'map' });
   const seen = new Set<string>();
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length) for (const c of [r.a, r.b]) {
     if (seen.has(c)) continue; seen.add(c);

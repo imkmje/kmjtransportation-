@@ -28,6 +28,7 @@ export interface Strategy { name: string; step(g: Game, rng: Rng): void }
 /** 아무것도 하지 않음(기준선: 고정비만 나간다) */
 export const passive: Strategy = { name: '방치', step() { /* 아무것도 안 함 */ } };
 
+let spread = false; // shortcut: 모듈 변수로 featured의 spread 옵션을 전한다. 전략이 동시에 여러 게임을 돌리게 되면 인자로 바꾼다
 /** 기단이 놀고 있으면 서울에서 갈 수 있는 가장 수요가 큰 노선에 배정, 현금이 남으면 같은 기종을 더 산다 */
 function bestRouteFor(g: Game, typeId: string, minLegsOk = 1): { a: string; b: string } | null {
   const t = typeById(typeId);
@@ -45,7 +46,8 @@ function bestRouteFor(g: Game, typeId: string, minLegsOk = 1): { a: string; b: s
     const base = baseFare(km), season = 1;
     const demandProxy = (A.pop * A.income * B.pop * B.income) / Math.pow(km / 1000 + config.demand.distOffset, config.demand.distExp);
     const revPerSeat = base * priceFactor(base, base);
-    const score = demandProxy * revPerSeat * season * (A.id === g.state.base || B.id === g.state.base || connected ? 1.5 : 1) / (1 + km / 8000);
+    const on = spread ? g.state.routes.filter((r) => r.open && ((r.a === A.id && r.b === B.id) || (r.a === B.id && r.b === A.id))).reduce((a, r) => a + g.planesOn(r.id).length, 0) : 0; // spread: 이미 비행기가 있는 노선은 대수만큼 덜 고른다(측정용)
+    const score = demandProxy * revPerSeat * season * (A.id === g.state.base || B.id === g.state.base || connected ? 1.5 : 1) / (1 + km / 8000) / (1 + on);
     if (!best || score > best.score) best = { a: A.id, b: B.id, score };
   }
   return best;
@@ -141,13 +143,13 @@ export const smart: Strategy = {
 };
 
 /** 새 기능 활용 전략: 종합형에 기능을 하나씩(또는 전부) 더한 것. 어떤 기능이 너무 세거나 쓸모없는지 재기 위한 측정용 */
-export interface Feat { upgrades?: boolean | string[]; hubs?: boolean | ('terminal' | 'mro' | 'lounge')[]; contracts?: boolean; newgen?: boolean; auction?: boolean; rights?: boolean }
+export interface Feat { upgrades?: boolean | string[]; hubs?: boolean | ('terminal' | 'mro' | 'lounge')[]; contracts?: boolean; newgen?: boolean; auction?: boolean; rights?: boolean; spread?: boolean } // spread: 노선을 넓게 퍼뜨린다(사람 플레이에 가까운 측정용)
 export function featured(name: string, f: Feat): Strategy {
   return {
     name,
     step(g) {
       if (g.state.day % 30 !== 0) return;
-      const s = g.state;
+      const s = g.state; spread = !!f.spread;
       leveragedStep(g, f.newgen ? ['B787', 'A350', 'B737NX', 'B737'] : ['A350', 'B737']);
       smartExtras(g);
       if (f.upgrades) for (const u of Array.isArray(f.upgrades) ? f.upgrades : ['marketing', 'ops', 'service', 'ground', 'hangar']) { const price = g.upgradePrice(u); if (price !== null && s.cash > price + 25) { g.buyUpgrade(u); break; } }
@@ -165,6 +167,7 @@ export function featured(name: string, f: Feat): Strategy {
         const r = Object.keys(config.rights.regions).map((x) => g.regionInfo(x)).filter((i) => !i.owned && i.profitOk && s.cash > i.price + 30).sort((a, b) => a.price - b.price)[0];
         if (r) g.buyRights(r.id);
       }
+      spread = false;
     },
   };
 }
