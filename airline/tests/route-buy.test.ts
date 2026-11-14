@@ -142,7 +142,7 @@ describe('자유 모드·경쟁사', () => {
   it('시간이 지나면 신생 항공사가 생기고, 동시에 max곳을 넘지 않으며 ID·이름이 겹치지 않는다', () => {
     const { g, counts } = run(5, 60);
     expect(g.state.log.some((l) => l.includes('신생 항공사'))).toBe(true);
-    expect(Math.max(...counts)).toBeGreaterThan(config.competitors.start); expect(Math.max(...counts)).toBeLessThanOrEqual(config.competitors.max + 1); // 일반 6곳 + 대형 1곳
+    expect(Math.max(...counts)).toBeGreaterThan(config.competitors.start); expect(Math.max(...counts)).toBeLessThanOrEqual(config.competitors.max + Math.floor(60 / config.competitors.maxGrowMonths) + 1); // 자유 모드: 일반 6곳에 2년마다 +1, 대형 1곳
     const ids = g.state.competitors.map((c) => c.id); expect(new Set(ids).size).toBe(ids.length);
     const names = g.state.competitors.map((c) => c.name); expect(new Set(names).size).toBe(names.length);
     expect(g.state.nextRival).toBeGreaterThan(Math.max(...ids));
