@@ -312,10 +312,10 @@ export function startApp(): void {
     return [...rows].sort((a, b) => { const x = val(a, k), y = val(b, k); return (typeof x === 'string' ? String(x).localeCompare(String(y)) : (x as number) - (y as number)) * d; });
   }
   /** 노선 표의 점유율 칸: 우리와 경쟁사별 몫을 한 막대에 색으로 나누고, 아래에 이름과 % */
-  const SHARE_COL = ['#d6803a', '#8a6fc0', '#3aa6a0', '#c0587a', '#7a8a99'];
+  const SHARE_COL = ['#8a6fc0', '#7a8a99', '#c0587a', '#5b6fa8', '#a08a6a']; // 경쟁사는 보라·회색 계열(주황=경고, 청록=자회사, 초록=이익과 겹치지 않게)
   function shareCell(r: Route): string {
     const sh = game.routeShares(r), stakeOf = (id: number) => game.state.competitors.find((c) => c.id === id)?.stake ?? 0;
-    const col = (x: typeof sh[number], i: number) => (x.me ? 'var(--accent)' : stakeOf(x.id) >= 0.51 ? '#2f9e5b' : stakeOf(x.id) > 0 ? '#8fcf9f' : SHARE_COL[(i - 1) % SHARE_COL.length]); // 자회사는 초록(20% 지분은 연한 초록)
+    const col = (x: typeof sh[number], i: number) => (x.me ? 'var(--accent)' : stakeOf(x.id) >= 0.51 ? '#138a8a' : stakeOf(x.id) > 0 ? '#8fd3d1' : SHARE_COL[(i - 1) % SHARE_COL.length]); // 자회사는 청록(20% 지분은 연한 청록)
     const tag = (x: typeof sh[number]) => (stakeOf(x.id) >= 0.51 ? ' <b class="subtag">자회사</b>' : stakeOf(x.id) > 0 ? ' <b class="subtag lite">지분 20%</b>' : '');
     const m = r.monthly ?? [], dlt = m.length >= 2 ? m.at(-1)!.s - m.at(-2)!.s : 0, trend = Math.abs(dlt) >= 0.01 ? ` <b class="${dlt > 0 ? 'pos' : 'neg'}">${dlt > 0 ? '▲' : '▼'}${Math.round(Math.abs(dlt) * 100)}%p</b>` : '';
     return `<span class="scell"><span class="sbar">${sh.map((x, i) => `<i style="width:${(x.share * 100).toFixed(1)}%;background:${col(x, i)}"></i>`).join('')}</span><small>${sh.map((x, i) => `<span class="nw"><u style="background:${col(x, i)}"></u>${x.me ? '우리' : esc(x.name)}${x.me ? '' : tag(x)} ${pct(x.share)}${x.me ? trend : ''}</span>`).join(' ')}</small></span>`;
@@ -519,7 +519,7 @@ export function startApp(): void {
   }
   /** 자회사 노선 표: 지난달 매출, 시장 몫(자회사·다른 경쟁사·우리), 공세 성과 */
   function subRoutes(k: Competitor): string {
-    const col = (x: { me: boolean; id: number }) => (x.me ? 'var(--accent)' : x.id === k.id ? '#2f9e5b' : SHARE_COL[x.id % SHARE_COL.length]);
+    const col = (x: { me: boolean; id: number }) => (x.me ? 'var(--accent)' : x.id === k.id ? '#5b3fa0' : SHARE_COL[x.id % SHARE_COL.length]);
     const atk = k.routes.filter((r) => r.atk), lostAvg = atk.length ? atk.reduce((a, r) => a + Math.max(0, ...game.competitorsOn(r.a, r.b).filter((x) => x.comp.id !== k.id).map((x) => x.route.lost ?? 0)), 0) / atk.length : 0;
     const rows = k.routes.map((r) => { const sh = game.marketShares(r.a, r.b), mine = sh.find((x) => x.id === k.id)?.share ?? 0, lost = Math.max(0, ...game.competitorsOn(r.a, r.b).filter((x) => x.comp.id !== k.id).map((x) => x.route.lost ?? 0));
       return `<div class="trow" style="cursor:default"><span><b>${routeLabel(r.a, r.b)}</b>${r.atk ? ' <span class="badge">공세</span>' : ''}</span><span>${money(r.rev ?? 0)}</span><span class="scell"><span class="sbar">${sh.map((x) => `<i style="width:${(x.share * 100).toFixed(1)}%;background:${col(x)}"></i>`).join('')}</span><small>${sh.map((x) => `<span class="nw"><u style="background:${col(x)}"></u>${x.me ? '우리' : x.id === k.id ? '자회사' : esc(x.name)} ${pct(x.share)}</span>`).join(' ')}</small></span><span>${pct(mine)}${r.atk && lost > 0 ? `<br><small class="pos">상대 −${Math.round(lost * 100)}%p</small>` : ''}</span></div>`; }).join('');
@@ -535,7 +535,7 @@ export function startApp(): void {
     const mine = s.routes.filter((r) => r.open && game.planesOn(r.id).length > 0);
     const rows = s.competitors.map((k) => ({ k, rev: sum(k.revHist ?? []), grow: (k.pHist?.length ?? 0) > 1 ? k.planes - k.pHist![0] : 0, overlap: mine.filter((r) => k.routes.some((x) => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a))).length }));
     const sorted = tsorted('rivals', rows, (x, key) => (key === 'name' ? x.k.name : key === 'planes' ? x.k.planes : key === 'routes' ? x.k.routes.length : key === 'overlap' ? x.overlap : x.rev));
-    const st = (k: typeof s.competitors[number]) => [s.alliance?.includes(k.id) ? '<b class="pos">동맹</b>' : '', s.rivalAlliance?.includes(k.id) ? '<b class="neg">스카이 동맹</b>' : '',k.stake ? `<b class="pos">${k.stake >= 0.51 ? '자회사' : '지분'} ${Math.round(k.stake * 100)}%</b>` : '', k.call ? '<b class="neg">증자 요청</b>' : '', s.rivalId === k.id ? '<b class="warn">라이벌</b>' : '', s.ally === k.id ? '<b class="pos">제휴</b>' : '', k.major ? '<b class="neg">대형</b>' : '', (k.low ?? 0) > 0 ? '<b class="neg">자금난</b>' : '', (s.threats ?? []).some((t) => t.comp === k.id) ? '<b class="warn">진출 예고</b>' : ''].filter(Boolean).join(' ');
+    const st = (k: typeof s.competitors[number]) => [s.alliance?.includes(k.id) ? '<b class="pos">동맹</b>' : '', s.rivalAlliance?.includes(k.id) ? '<b class="neg">스카이 동맹</b>' : '',k.stake ? `<b class="subc">${k.stake >= 0.51 ? '자회사' : '지분'} ${Math.round(k.stake * 100)}%</b>` : '', k.call ? '<b class="neg">증자 요청</b>' : '', s.rivalId === k.id ? '<b class="warn">라이벌</b>' : '', s.ally === k.id ? '<b class="pos">제휴</b>' : '', k.major ? '<b class="neg">대형</b>' : '', (k.low ?? 0) > 0 ? '<b class="neg">자금난</b>' : '', (s.threats ?? []).some((t) => t.comp === k.id) ? '<b class="warn">진출 예고</b>' : ''].filter(Boolean).join(' ');
     const gr = s.competitors.some((c) => (c.stake ?? 0) >= 0.51) ? game.groupRank() : null;
     const main = `<h2>경쟁사 <small>${s.competitors.length}곳 · 우리 매출 순위 ${game.rank()}위${gr ? ` · 그룹(우리+자회사) ${gr.rank}위/${gr.total}곳` : ''}${s.sandbox ? ` · 우리 동맹 ${(s.alliance ?? []).length}/${config.extra.alliance.max}` : ''}</small></h2>
       <div class="tbl" style="--cols: minmax(120px, 1.5fr) 1fr 0.9fr 0.6fr 0.9fr 0.8fr 1.2fr">${thead('rivals', [['name', '항공사'], ['', '유형'], ['planes', '항공기'], ['routes', '노선'], ['rev', '매출 12개월'], ['overlap', '겹치는 노선'], ['', '상태']])}
