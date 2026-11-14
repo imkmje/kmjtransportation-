@@ -186,3 +186,15 @@ describe('중요한 알림 표시', () => {
     const old = Game.fromJSON({ ...JSON.parse(JSON.stringify(g.toJSON())), alertsAt: undefined }); expect(old.isAlert(0)).toBeNull(); // 옛 저장은 화면이 낱말로 판단
   });
 });
+
+describe('화면 다듬기용 계산', () => {
+  it('자체 기종 이름을 지으면 기종 이름이 바뀌고, 새 게임에서는 원래 이름으로', () => {
+    const g = sb(); expect(g.nameOwnType('KX200', '하늘새').ok).toBe(false); g.state.ownTypes = ['KX200'];
+    expect(g.nameOwnType('KX200', '하늘새').ok).toBe(true); expect(typeById('KX200').name).toBe('하늘새');
+    const back = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON()))); expect(typeById('KX200').name).toBe('하늘새'); void back;
+    sb(); expect(typeById('KX200').name).toBe('KX-200');
+  });
+  it('왕조 목표 진행값', () => {
+    const g = sb(); expect(g.dynastyProgress('fleet')).toMatchObject({ v: 1, t: 100 }); expect(g.dynastyProgress('regions').t).toBe(Object.keys(config.rights.regions).length);
+  });
+});

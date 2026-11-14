@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { AIRCRAFT, EVENTS, CITIES, OWN_TYPES, typeById, cityById, scenarioById } from '../data';
+import { AIRCRAFT, EVENTS, CITIES, OWN_TYPES, applyOwnNames, typeById, cityById, scenarioById } from '../data';
 import { Rng } from './rng';
 import { marketSize, baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
 import { ACHIEVEMENTS, LADDERS } from './achievements';
@@ -36,7 +36,8 @@ export class Game {
   private rng: Rng;
 
   constructor(seed = 1, state?: GameState, opts: GameOptions = {}) {
-    if (state) { this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); return; }
+    if (state) { this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); applyOwnNames(state.ownNames); return; }
+    applyOwnNames();
     this.rng = new Rng(seed);
     const sc = scenarioById(opts.sandbox ? 'free' : opts.scenario ?? 'free'), diff = opts.difficulty ?? 'normal', dm = config.difficulty[diff];
     const base = sc.lockBase && sc.base ? sc.base : (opts.base && CITIES.some((c) => c.id === opts.base) ? opts.base : (sc.base ?? 'ICN'));
@@ -1723,6 +1724,21 @@ export class Game {
     if (!k.list[id]) return fail('없는 목표입니다'); if (s.dynasty) return fail('이미 도전 중인 목표가 있습니다'); if (s.dynastyDone?.includes(id)) return fail('이미 이룬 목표입니다');
     s.dynasty = { id, until: this.monthsPassed + k.months }; s.log.push(`${this.monthsPassed + 1}개월차: 왕조 목표 '${k.list[id].name}'에 도전합니다(${k.months / 12}년 안).`); return { ok: true };
   }
+  /** 왕조 목표 진행: 지금 값·목표·단위 */
+  dynastyProgress(id: string): { v: number; t: number; text: string } {
+    const s = this.state, sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+    if (id === 'world1') { const r = this.rank(); return { v: Math.max(0, 6 - r), t: 5, text: `지금 매출 ${r}위` }; }
+    if (id === 'regions') { const served = this.servedCities(), all = Object.keys(config.rights.regions), n = all.filter((r) => CITIES.some((c) => c.region === r && served.has(c.id))).length; return { v: n, t: all.length, text: `${n}/${all.length}개 지역` }; }
+    if (id === 'group') { const v = sum(s.history.slice(-12).map((h) => h.revenue)) + sum(s.competitors.filter((c) => (c.stake ?? 0) >= 0.51).map((c) => sum((c.hist ?? []).map((x) => x.rev)))); return { v, t: 3000, text: `그룹 연 매출 $${Math.round(v)}M / $3,000M` }; }
+    if (id === 'fleet') return { v: s.planes.length, t: 100, text: `항공기 ${s.planes.length}/100대` };
+    return { v: 0, t: 1, text: '' };
+  }
+  /** 자체 기종 이름 짓기 */
+  nameOwnType(id: string, name: string): Result {
+    const s = this.state, n = name.replace(/[<>&"']/g, '').trim(); if (!s.ownTypes?.includes(id)) return fail('개발을 마친 자체 기종이 아닙니다');
+    if (n.length < 1 || n.length > 16) return fail('이름은 1~16자로 지어 주세요');
+    s.ownNames = { ...(s.ownNames ?? {}), [id]: n }; applyOwnNames(s.ownNames); return { ok: true };
+  }
   giveUpDynasty(): Result { if (!this.state.dynasty) return fail('도전 중인 목표가 없습니다'); this.state.dynasty = null; return { ok: true }; }
   /** 회사 가치: 항공기 장부가 + 최근 12개월 이익 × 8(적자면 0) */
   get companyValue(): number { const s = this.state, p12 = s.history.slice(-12).reduce((a, h) => a + h.profit, 0); return Math.max(50, Math.round(s.planes.reduce((a, p) => a + p.book, 0) + Math.max(0, p12) * config.extra.ipo.pe)); }
@@ -1753,7 +1769,7 @@ export class Game {
       const want = p12 > 0 ? Math.round(p12 * k.payout * 10) / 10 : 0, div = Math.min(want, Math.max(0, Math.floor((s.cash - Math.max(k.cashKeep, this.monthlyRev * k.keepRev)) * 10) / 10)); // 현금이 모자라면 배당을 줄인다(대신 평판 하락)
       if (div > 0) { s.cash -= div; s.cur.cost += div; } if (div < want) s.reputation = Math.max(0, s.reputation - 0.02);
       s.log.push(`${m}개월차: 주주 총회 — 최근 12개월 이익 $${Math.round(p12)}M(목표 ${ip.base > 0 ? `$${Math.round(target)}M 이상` : '작년보다 $10M 이상 개선'}) ${ok ? '달성, 주가 상승' : '미달, 주가 하락·평판 하락'}. 주가 지수 ${ip.price}${div ? `, 배당 $${div}M` : ''}${div < want ? `(현금이 모자라 약속한 $${want}M보다 줄임, 평판 하락)` : ''}.`);
-      ip.base = p12;
+      ip.base = p12; ip.res = [...(ip.res ?? []), ok].slice(-20);
     }
     // 대형 항공사와의 장기 대결: 시작과 1년 매출 대결 결과
     const major = s.competitors.find((c) => c.major), K = config.extra.saga;
