@@ -306,7 +306,7 @@ export function startApp(): void {
           ${game.goalProgress().map((g) => `<div class="bar"><i style="width:${Math.min(100, Math.max(0, (g.value / g.target) * 100))}%"></i></div><small>${esc(g.label)} ${g.unit === 'M' ? money(g.value) : num(g.value)}${g.unit === 'M' ? '' : g.unit} / ${g.unit === 'M' ? money(g.target) : num(g.target)}${g.unit === 'M' ? '' : g.unit}${g.done ? ` <span class="pos">${icon('check', 13)}</span>` : ''}</small>`).join('')}
           <small>남은 기간 ${Math.max(0, game.scenario.timeLimit - game.monthsPassed)}개월 · 현재 점수 ${num(game.score)}</small></div>
         ${todo}${compTop}</div><div>${compRest}
-        <h3>시작하기</h3><ol class="steps"><li>${esc(eulReul(cityById(s.base).name))} 눌러 <b>노선을 엽니다</b>.</li><li>노선 탭에서 <b>항공기를 배정</b>합니다.</li><li>위쪽 <b>1×</b> 버튼을 눌러 시간을 흘리고, <b>운임</b>을 조절해 이익을 냅니다.</li></ol></div></div>`;
+        ${s.routes.some((r) => r.open && game.planesOn(r.id).length) ? '' : `<h3>시작하기</h3><ol class="steps"><li>${esc(eulReul(cityById(s.base).name))} 눌러 <b>노선을 엽니다</b>.</li><li>노선 탭에서 <b>항공기를 배정</b>합니다.</li><li>위쪽 <b>1×</b> 버튼을 눌러 시간을 흘리고, <b>운임</b>을 조절해 이익을 냅니다.</li></ol>`}</div></div>`;
     }
     const c = cityById(selCity);
     const selLocked = !game.cityOpen(c.id);
@@ -682,7 +682,7 @@ export function startApp(): void {
     const g = s.green ?? 0, gc = game.greenCost();
     const green = `<h3>친환경 연료 <small>${g}/${K.green.max}단계</small></h3><div class="bar"><i style="width:${(g / K.green.max) * 100}%"></i></div><p class="hint">지금 운영비 −${Math.round(K.green.ops * g * 100)}% · 탄소세 시대에 낡은 기체 부담 −${Math.round(K.green.carbon * g * 100)}%. 단계가 오를수록 비쌉니다.</p>${gc === null ? '<p class="hint"><b class="pos">최고 단계</b></p>' : `<button class="wide" data-act="green" ${no(s.cash < gc, short(gc))}>${g + 1}단계 투자 ${money(gc)}</button>`}`;
     const k2 = K.ipo, ip = s.ipo, nextAgm = ip ? ip.month + 12 * (Math.floor((mp - ip.month) / 12) + 1) : 0;
-    const ipo = `<h3>주식 상장 <small>${ip ? `주가 지수 ${ip.price}` : `회사 가치 ${money(game.companyValue)}`}</small></h3>${ip ? `<div class="chart">${ip.hist.map((x) => `<i class="p" style="height:${Math.max(4, (x / Math.max(...ip.hist)) * 54)}px" title="${x}"></i>`).join('')}</div><p class="hint">다음 주주 총회 ${nextAgm - mp}개월 뒤: 최근 12개월 이익이 ${money(ip.base > 0 ? ip.base * (1 + k2.growth) : ip.base + 10)} 이상이어야 주가가 오릅니다. 그때 이익의 ${Math.round(k2.payout * 100)}%를 배당합니다.</p>` : `<p class="hint">지분 ${Math.round(k2.share * 100)}%를 팔아 ${money(game.companyValue * k2.share)}을 한 번에 받습니다. 대신 해마다 이익의 ${Math.round(k2.payout * 100)}%를 배당하고, 이익이 ${Math.round(k2.growth * 100)}% 이상 늘지 않으면 주가·평판이 떨어집니다. 회사 가치 = 항공기 장부가 + 최근 12개월 이익 × ${k2.pe}.</p><button class="wide" data-act="ipo" ${no(mp < k2.minMonth, `${k2.minMonth / 12}년차부터 상장할 수 있습니다`)}>상장하기 +${money(game.companyValue * k2.share)}</button>`}`;
+    const ipo = `<h3>주식 상장 <small>${ip ? `주가 지수 ${ip.price}` : `회사 가치 ${money(game.companyValue)}`}</small></h3>${ip ? `<div class="chart">${ip.hist.map((x) => `<i class="p" style="height:${Math.max(4, (x / Math.max(...ip.hist)) * 54)}px" title="${x}"></i>`).join('')}</div><p class="hint">다음 주주 총회 ${nextAgm - mp}개월 뒤: 최근 12개월 이익이 ${ip.base > 0 ? `${money(ip.base * (1 + k2.growth))} 이상이어야` : `작년(${money(ip.base)})보다 $10.0M 이상 나아져야`} 주가가 오릅니다. 그때 이익의 ${Math.round(k2.payout * 100)}%를 배당합니다(현금이 모자라면 줄이고 평판 하락).</p>` : `<p class="hint">지분 ${Math.round(k2.share * 100)}%를 팔아 ${money(game.companyValue * k2.share)}을 한 번에 받습니다. 대신 해마다 이익의 ${Math.round(k2.payout * 100)}%를 배당하고, 이익이 ${Math.round(k2.growth * 100)}% 이상 늘지 않으면 주가·평판이 떨어집니다. 회사 가치 = 항공기 장부가 + 최근 12개월 이익 × ${k2.pe}.</p><button class="wide" data-act="ipo" ${no(mp < k2.minMonth, `${k2.minMonth / 12}년차부터 상장할 수 있습니다`)}>상장하기 +${money(game.companyValue * k2.share)}</button>`}`;
     return part === 'cust' ? loy : mega + camp + green + ipo;
   }
   function viewMoney(): string {
@@ -1079,7 +1079,7 @@ export function startApp(): void {
     }
     else if (m === 'music') { setMusic(!musicOn()); menuLabels(); menu.hidden = false; return; }
     else if (m === 'night') { nightOn = !nightOn; try { localStorage.setItem('the-air-night', nightOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } map.setNight(nightOn); menuLabels(); menu.hidden = false; return; }
-    else if (m === 'help') { showInfo('도움말', HELP_HTML); }
+    else if (m === 'help') { showInfo('도움말', `<p class="hint">제목을 누르면 펼쳐집니다.</p>${HELP_HTML.split('<h4>').filter(Boolean).map((c, i) => { const j = c.indexOf('</h4>'); return `<details class="more help" ${i ? '' : 'open'}><summary>${c.slice(0, j)}</summary>${c.slice(j + 5)}</details>`; }).join('')}`); } // 구역마다 접기(길어서)
     else if (m === 'chronicle') { showChronicle(); }
     else if (m === 'timelapse') { menu.hidden = true; playTimelapse(); return; }
     else if (m === 'ach') { showInfo('업적', achHtml()); }

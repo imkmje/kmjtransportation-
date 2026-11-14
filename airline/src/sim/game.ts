@@ -1731,9 +1731,10 @@ export class Game {
     if (ip && m > ip.month && (m - ip.month) % 12 === 0) {
       const p12 = sum(s.history.slice(-12).map((h) => h.profit)), target = ip.base > 0 ? ip.base * (1 + k.growth) : ip.base + 10, ok = p12 >= target;
       const g = ip.base > 0 ? p12 / ip.base - 1 : (p12 - ip.base) / 50; ip.price = Math.max(10, Math.round(ip.price * (1 + Math.max(-0.4, Math.min(0.6, g))))); ip.hist = [...ip.hist, ip.price].slice(-20);
-      s.reputation = Math.max(0, Math.min(1, s.reputation + (ok ? 0.01 : -0.03)));
-      const div = p12 > 0 ? Math.round(p12 * k.payout * 10) / 10 : 0; if (div > 0) { s.cash -= div; s.cur.cost += div; }
-      s.log.push(`${m}개월차: 주주 총회 — 최근 12개월 이익 $${Math.round(p12)}M(목표 $${Math.round(target)}M) ${ok ? '달성, 주가 상승' : '미달, 주가 하락·평판 하락'}. 주가 지수 ${ip.price}${div ? `, 배당 $${div}M` : ''}.`);
+      s.reputation = Math.max(0, Math.min(1, s.reputation + (ok ? k.repUp : -k.repDown)));
+      const want = p12 > 0 ? Math.round(p12 * k.payout * 10) / 10 : 0, div = Math.min(want, Math.max(0, Math.floor((s.cash - Math.max(k.cashKeep, this.monthlyRev * k.keepRev)) * 10) / 10)); // 현금이 모자라면 배당을 줄인다(대신 평판 하락)
+      if (div > 0) { s.cash -= div; s.cur.cost += div; } if (div < want) s.reputation = Math.max(0, s.reputation - 0.02);
+      s.log.push(`${m}개월차: 주주 총회 — 최근 12개월 이익 $${Math.round(p12)}M(목표 ${ip.base > 0 ? `$${Math.round(target)}M 이상` : '작년보다 $10M 이상 개선'}) ${ok ? '달성, 주가 상승' : '미달, 주가 하락·평판 하락'}. 주가 지수 ${ip.price}${div ? `, 배당 $${div}M` : ''}${div < want ? `(현금이 모자라 약속한 $${want}M보다 줄임, 평판 하락)` : ''}.`);
       ip.base = p12;
     }
     // 정부 정책: 벽지 노선 보조금, 운수권 할인
