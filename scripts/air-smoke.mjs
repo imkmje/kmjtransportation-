@@ -501,6 +501,7 @@ const helpText = await page.locator('#info').innerText(); await page.click('#inf
 check('도움말에 화면·점유율·자회사·기단 관리 설명', ['서랍', '점유율 우선 운임', '자회사', '교체 추천'].every((w) => helpText.includes(w)));
 // 2.4.1: 계약 제안 팝업
 await page.click('#dsize button[data-h="half"]').catch(() => undefined);
+await page.locator('#offerpop button[data-act="offerClose"]').click({ timeout: 1000 }).catch(() => undefined); // 앞에서 쌓인 알림 줄 비우기
 await page.evaluate(() => { const g = window.__air.game; g.state.contracts = g.state.contracts.filter((c) => c.status !== 'offer'); g.state.contracts.push({ id: 99901, kind: 'cities', title: '시험 계약: 새 도시 2곳', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 10, label: '현금 $10M' } }); window.__air.render(); });
 check('새 계약 제안이 오면 지도 구석에 작은 팝업', await page.locator('#offerpop').isVisible() && (await page.locator('#offerpop').innerText()).includes('시험 계약'));
 await page.locator('#offerpop button[data-act="acceptContract"]').click();
@@ -508,6 +509,13 @@ check('팝업에서 바로 수락하면 진행 중 계약이 되고 팝업이 �
 await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 99902, kind: 'cities', title: '시험 계약 2', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 10, label: '현금 $10M' } }); window.__air.render(); });
 await page.waitForTimeout(12600);
 check('가만히 두면 12초 뒤 저절로 사라짐(제안은 현황 탭에 남음)', !(await page.locator('#offerpop').isVisible()) && await page.evaluate(() => window.__air.game.state.contracts.some((c) => c.id === 99902 && c.status === 'offer')));
+// 2.7.1: 결정 대기 목록·팝업 통일
+await page.evaluate(() => { const g = window.__air.game; g.state.charters = [...(g.state.charters ?? []), { id: 88801, a: 'ICN', b: 'NRT', months: 2, seats: 100, perMonth: 1, expires: g.monthsPassed + 2 }]; window.__air.render(); });
+check('전세기 주문도 지도 구석 팝업으로 알림', await page.locator('#offerpop').isVisible() && (await page.locator('#offerpop').innerText()).includes('전세기 주문'));
+await page.locator('#offerpop button[data-act="offerMore"]').click();
+check('팝업의 보러 가기 → 현황 탭 맨 위 결정 대기 목록(계약·전세기)', !(await page.locator('#offerpop').isVisible()) && await page.evaluate(() => { const t = document.querySelector('#panel details.sec[data-k="결정"]')?.textContent ?? ''; return t.includes('시험 계약 2') && t.includes('전세기'); }));
+check('요약 줄은 노선 이익과 지난달 실제 이익을 나눠 표시', (await page.locator('#dsum').innerText()).includes('노선 이익'));
+await page.evaluate(() => { const g = window.__air.game; g.state.charters = g.state.charters.filter((c) => c.id !== 88801); window.__air.render(); });
 // 2.5.0: 구매 목록 정렬
 await page.click('#tabs button[data-tab="fleet"]'); await page.evaluate(() => { const d = document.getElementById('shop'); if (d) d.open = true; });
 await page.locator('#panel button[data-act="shopSort"][data-v="seats"]').click(); await page.evaluate(() => { const d = document.getElementById('shop'); if (d) d.open = true; });
