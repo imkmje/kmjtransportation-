@@ -78,8 +78,8 @@ export const config = {
   extra: { // 자유 모드 재미 요소(시나리오에는 적용하지 않는다)
     loyalty: { names: ['없음', '기본', '풍성'], join: [0, 0.02, 0.035], churn: [0.1, 0.01, 0.005], costPerM: [0, 5, 11], maxBoost: [0, 0.06, 0.12],
       promote: [0.01, 0.03, 0.02], eliteChurn: 0.01, tierCost: [0.5, 2, 5], bizMax: [0, 0.1, 0.2], // 등급: 일반→실버 1%/월, 실버→골드 3%, 골드→플래티넘 2%. 등급 회원은 비용이 더 든다(일반 대비 +50%·+200%·+500%). (골드 + 2×플래티넘) ÷ 월 탑승객만큼 비즈니스 수요(기본 최대 +10%, 풍성 +20%)
-      card: { fee: 5, perM: 3, join: 1.25 }, // 제휴 신용카드: 가입비 $5M, 회원 100만 명당 월 $3M 수입, 가입 1.25배
-      promo: { base: 3, perM: 1.5, join: 3, boost: 0.04, months: 2, cool: 6 } }, // 마일 2배 프로모션: $3M + 회원 100만 명당 $1.5M, 2개월간 가입 3배·수요 +4%, 끝나고 6개월 뒤 다시 // 마일리지: 탑승객 중 가입 비율, 월 이탈, 회원 100만 명당 월 비용($M), 최대 수요 증가
+      card: { fee: 3, perM: 4, join: 1.25 }, // 제휴 신용카드: 가입비 $3M, 회원 100만 명당 월 $4M 수입, 가입 1.25배
+      promo: { base: 1.5, perM: 1.5, join: 3, boost: 0.04, months: 2, cool: 6 } }, // 마일 2배 프로모션: $3M + 회원 100만 명당 $1.5M, 2개월간 가입 3배·수요 +4%, 끝나고 6개월 뒤 다시 // 마일리지: 탑승객 중 가입 비율, 월 이탈, 회원 100만 명당 월 비용($M), 최대 수요 증가
     charter: { chance: 0.15, startMonth: 6, maxOffers: 2, offerMonths: 2, months: [2, 4], seats: [120, 180, 250], payK: 0.0055 }, // 전세기 주문
     alliance: { max: 3, joinFee: 3, monthly: 0.3, weight: 0.5, codeshare: 0.3, rivalMonth: 24, rivalQ: 1.08, // 항공 동맹
       levels: [12, 36, 72, 120], lvCodeshare: 0.05, lvWeight: 0.05, // 동맹 경험치(매달 회원 수만큼): 12·36·72·120이면 2~5등급. 등급마다 환승 +0.05, 동맹사가 빼앗는 힘 −0.05, 3·5등급에 회원 한도 +1
@@ -95,9 +95,9 @@ export const config = {
       { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 완공 때 평판 +5%', cost: 90, months: 18 },
     ] },
     found: { capital: [40, 90, 180], planes: [2, 4, 8], cashShare: 0.35, max: 3, regionalKm: 1500, regionalSeat: 0.55, sizes: ['소', '중', '대'], kinds: { low: { name: '저가 항공사', desc: '운임이 싸고 운영비가 낮습니다', eff: 1.05 }, premium: { name: '프리미엄 항공사', desc: '운임이 비싸고 품질이 높습니다', eff: 0.97 }, regional: { name: '지역 항공사', desc: '1,500km 안 단거리만, 작은 기체로 자주 다닙니다', eff: 1 } } as Record<string, { name: string; desc: string; eff: number }> }, // 자회사 차리기: 자본금(고정) 중 35%는 운영 자금, 나머지로 항공기를 들인다
-    cabin: { cost: [0.12, 0.2], rating: 0.3, biz: 0.08, shop: 10, names: ['기본', '개조', '최고급'] }, // 객실 개조: 새 기체 값의 12%·20%, 단계마다 노선 별점 +0.3·비즈니스 수요 +8%, 10일간 운항 못 함
-    campaign: { national: { name: '전국 광고', cost: 20, rev: 0.25, rep: 0.03, boost: 0.05, months: 6 }, global: { name: '세계 광고', cost: 60, rev: 0.5, rep: 0.08, boost: 0.1, months: 6 } } as Record<string, { name: string; cost: number; rev: number; rep: number; boost: number; months: number }>, // 대형 광고: 비용 = max(기본, 최근 월평균 매출 × rev). 바로 평판, 6개월간 전체 수요
-    green: { max: 5, cost: 60, rev: 0.3, fuel: 0.05, carbon: 0.15 }, // 친환경 연료 투자: n단계 비용 = max($60M, 최근 월평균 매출 × 0.3) × n, 단계마다 연료비 −5%, 탄소세 시대 낡은 기체 부담 −15%
+    cabin: { cost: [0.08, 0.14], rating: 0.3, biz: 0.08, premium: 0.08, shop: 5, names: ['기본', '개조', '최고급'] }, // 객실 개조: 새 기체 값의 8%·14%, 단계마다(노선 평균) 운임 수입 +8%·별점 +0.3·비즈니스 수요 +8%, 5일간 운항 못 함
+    campaign: { national: { name: '전국 광고', cost: 10, rev: 0.1, rep: 0.03, boost: 0.03, premium: 0.04, months: 6 }, global: { name: '세계 광고', cost: 30, rev: 0.2, rep: 0.08, boost: 0.06, premium: 0.08, months: 6 } } as Record<string, { name: string; cost: number; rev: number; rep: number; boost: number; premium: number; months: number }>, // 대형 광고: 비용 = max(기본, 최근 월평균 매출 × rev). 바로 평판, 6개월간 운임 수입 +premium(브랜드 값)·수요 +boost
+    green: { max: 5, cost: 15, rev: 0.12, ops: 0.03, carbon: 0.15 }, // 친환경 연료 투자: n단계 비용 = max($15M, 최근 월평균 매출 × 0.12) × n, 단계마다 운영비 −3%(연료 효율), 탄소세 시대 낡은 기체 부담 −15%
     preorder: { deposit: 0.1, discount: 0.15, max: 3 }, // 신기종 선주문: 계약금 10%, 15% 할인, 최대 3대
     pioneer: { months: 6, boost: 0.15 }, // 첫 취항 보너스
   },

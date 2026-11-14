@@ -16,6 +16,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   let W = 0, H = 0, dpr = 1, resized = false;
   let scale = 3, cx = 100, cy = 25; // scale: 화면 px/도, (cx, cy): 화면 가운데의 경도·위도
   let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null, overlay: [string, string][] | null = null, overlayLabel = '', overlayNew = new Set<string>();
+  let routeMode: 'profit' | 'share' | 'rating' | 'lf' = 'profit'; // 노선 색: 이익(초록·빨강) 또는 점유율·별점·탑승률(빨강→노랑→초록)
   let compMode: 'all' | 'mine' | 'subs' | 'off' = 'all'; // 경쟁사 노선 보기: 전부 / 내 노선과 겹치는 것만 / 자회사만 / 끔(경쟁사 탭에서 고른 회사는 늘 보임)
   const widths = new Map<string, number>();
   const toX = (lon: number) => W / 2 + (lon - cx) * scale, toY = (lat: number) => H / 2 - (lat - cy) * scale;
@@ -82,7 +83,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     for (const r of overlay ? [] : g.state.routes) {
       if (!r.open) continue;
       const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, onR = g.planesOn(r.id), planes = onR.length, served = planes > 0;
-      const color = !served ? '#8a96a3' : profit >= 0 ? '#2f9e5b' : '#d64545';
+      const scale = (v: number) => `hsl(${Math.round(Math.max(0, Math.min(1, v)) * 125)}, 62%, 44%)`; // 0 빨강 → 0.5 노랑 → 1 초록
+      const color = !served ? '#8a96a3' : routeMode === 'share' ? scale(d.share) : routeMode === 'rating' ? scale((g.routeRating(r) - 1) / 4) : routeMode === 'lf' ? scale(d.seats > 0 ? (d.pax / d.seats - 0.5) / 0.5 : 0) : profit >= 0 ? '#2f9e5b' : '#d64545';
       ctx.strokeStyle = color; ctx.lineWidth = r.id === selRoute ? 5 : served ? 2 + Math.min(5, Math.abs(profit) * config.daysPerMonth / 1.2) : 1.5; // 굵기 = 월 이익(손실)의 크기
       ctx.setLineDash(served ? [] : [6, 5]);
       for (const [x1, y1, x2, y2] of arcSegments(A, B)) {
@@ -223,6 +225,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     /** 타임랩스용: 이 노선망만 그린다(null이면 원래대로) */
     setOverlay(routes: [string, string][] | null, label: string, fresh: string[] = []) { overlay = routes; overlayLabel = label; overlayNew = new Set(fresh); },
     setCompMode(m: 'all' | 'mine' | 'subs' | 'off') { compMode = m; },
+    setRouteMode(m: 'profit' | 'share' | 'rating' | 'lf') { routeMode = m; },
     /** 일시정지 중이면 애니메이션을 멈춘다 */
     setPaused(v: boolean) { paused = v; },
     /** 점검용: 애니메이션 시계와 일시정지 상태 */

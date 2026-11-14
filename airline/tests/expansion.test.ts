@@ -89,3 +89,11 @@ describe('돈 쓸 곳', () => {
     g.plane(pid)!.shop = 0; const cost0 = g.routeDay(r).cost; expect(g.investGreen().ok).toBe(true); expect(g.routeDay(r).cost).toBeLessThan(cost0);
   });
 });
+
+describe('월말 처리 금액이 보고에서 빠지지 않는다', () => {
+  it('대형 사업 납입(월말)이 다음 달 보고의 비용에 들어간다', () => {
+    const g = sb(); route(g, 'ICN', 'NRT'); g.advanceDays(30); expect(g.startMega('academy').ok).toBe(true);
+    const pay = g.state.mega!.cost! / 18; g.advanceDays(60);
+    expect(g.state.history.at(-1)!.cost).toBeGreaterThanOrEqual(pay - 1e-6);
+  });
+});
