@@ -452,7 +452,7 @@ export function startApp(): void {
     const s = game.state; if (!s.sandbox) return { top: '', bottom: '' };
     const sum = (a: number[]) => a.reduce((x, y) => x + y, 0), mine = sum(s.history.slice(-12).map((h) => h.revenue)), mp = game.monthsPassed;
     const sd = s.story ? game.storyDef() : undefined;
-    const story = sd && s.story ? `<h3>이야기 <small>(${leftTxt(s.story.expires - mp)} 안에 선택)</small></h3><div class="rowc"><div class="top"><div class="grow"><b>${esc(sd.title)}</b><small>${esc(sd.desc)}</small></div></div><div class="btnrow">${sd.choices.map((c, i) => `<button class="${i ? 'ghost' : ''}" data-act="story" data-i="${i}" ${no(!!c.cash && c.cash < 0 && s.cash < -c.cash, short(-(c.cash ?? 0)))}>${esc(c.label)}</button>`).join('')}</div></div>` : '';
+    const story = sd && s.story ? `<h3>이야기 <small>(${leftTxt(s.story.expires - mp)} 안에 선택)</small></h3><div class="rowc"><div class="top"><div class="grow"><b>${esc(sd.title)}</b><small>${esc(sd.desc)}</small></div></div><div class="btnrow">${sd.choices.map((c, i) => { const cash = game.storyCash(i); return `<button class="${i ? 'ghost' : ''}" data-act="story" data-i="${i}" ${no(cash < 0 && s.cash < -cash, short(-cash))}>${esc(c.label)}${sd.id.startsWith('saga') && cash ? ` ${money(-cash)}` : ''}</button>`; }).join('')}</div></div>` : '';
     const th = (s.threats ?? []).map((t) => ({ t, c: s.competitors.find((x) => x.id === t.comp) })).filter((x) => x.c);
     const threats = th.length ? `<h3>진출 예고 <small>${th.length}건</small></h3><div class="list">${th.map(({ t, c }) => `<div class="row"><div class="grow"><b>${esc(c!.name)} → ${esc(cityById(t.a).name)} ⇄ ${esc(cityById(t.b).name)}</b><small>${later(t.start - mp)} 진출 · 제휴를 맺거나 인수하면 막을 수 있습니다</small></div><button class="ghost small" data-act="ally" data-id="${c!.id}" ${no(s.ally === c!.id, '이미 제휴 중입니다')}>제휴 ${money(config.ally.fee)}/월</button></div>`).join('')}</div>` : '';
     const rv = s.competitors.find((c) => c.id === s.rivalId);
@@ -1079,7 +1079,7 @@ export function startApp(): void {
       game.advanceDay(); game.applyRules();
       if (game.state.status !== 'playing') { why = '게임이 끝났습니다'; break; }
       if (pending().some((p) => !keys.has(p.key))) { why = '결정할 일이 생겼습니다'; break; }
-      if (game.state.log.slice(l0).some((x) => IMPORTANT.test(x))) { why = '중요한 알림이 왔습니다'; break; }
+      if (game.state.log.slice(l0).some((x, k) => game.isAlert(l0 + k) ?? IMPORTANT.test(x))) { why = '중요한 알림이 왔습니다'; break; }
       if (game.monthsPassed !== m0) break;
     }
     lastHtml = ''; render(); toast(`${n + 1}일 건너뜀 — ${why}`, 3000); play('tap');
@@ -1092,7 +1092,7 @@ export function startApp(): void {
   let nightOn = (() => { try { return localStorage.getItem('the-air-night') !== 'off'; } catch { return true; } })();
   map.setNight(nightOn);
   /** 메뉴 글자를 저장된 설정과 맞춘다(새로 열 때 꺼 둔 설정이 '켜짐'으로 보이지 않게) */
-  const IMPORTANT = /파산|증자|영입|진출|경보|위기|고장|사고|파업|재난|태풍|화산|합병|인수|운임 전쟁|떠나|낙찰|대유행|폭등|조사|해지|중단/; // 띠·소리·자동 정지를 하는 중요한 알림
+  const IMPORTANT = /파산|증자|영입|진출|경보|위기|고장|사고|파업|재난|태풍|화산|합병|인수|운임 전쟁|떠나|낙찰|대유행|폭등|조사|해지|중단/; // 옛 저장(중요 표시 기록이 없음)에서만 쓰는 낱말 판단
   let alertsAll = (() => { try { return localStorage.getItem('the-air-alerts') === 'all'; } catch { return false; } })();
   const menuLabels = () => { const set = (m: string, t: string, v: boolean) => { menu.querySelector(`[data-m="${m}"]`)!.textContent = `${t}: ${v ? '켜짐' : '꺼짐'}`; }; set('hints', '힌트', hintsOn); set('autopause', '사건 때 멈춤', autoPause); menu.querySelector('[data-m="alerts"]')!.textContent = `알림 띠: ${alertsAll ? '전부' : '중요한 것만'}`; set('sound', '소리', soundOn()); set('night', '낮밤 표시', nightOn); set('music', '배경 음악', musicOn()); };
   addEventListener('pointerdown', () => { if (musicOn()) setMusic(true); }, { once: true }); // 음악은 첫 터치 뒤에 시작(브라우저 규칙)
@@ -1189,7 +1189,7 @@ export function startApp(): void {
           if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}${h.month % 12 === 0 ? ' · 올해의 성적표가 실린 연말 신문이 나왔습니다(보고 카드의 \'연말 신문 보기\')' : ''}`, h.month % 12 === 0 ? 5000 : 2600); } // 연말 신문은 저절로 열지 않는다(화면을 가리지 않게)
         const lg = game.state.log;
         if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다
-          const fresh = lg.slice(prevLog), imp = fresh.filter((x) => IMPORTANT.test(x)), msg = (imp.length ? imp : fresh)[(imp.length ? imp : fresh).length - 1];
+          const fresh = lg.slice(prevLog), imp = fresh.filter((x, k) => game.isAlert(prevLog + k) ?? IMPORTANT.test(x)), msg = (imp.length ? imp : fresh)[(imp.length ? imp : fresh).length - 1];
           if (imp.length || alertsAll) { toast(msg, 6000); play('alert'); if (autoPause && game.state.status === 'playing') { speed = 0; renderTop(); } } // 정보성 알림은 알림 탭에만(설정에서 전부 띄울 수 있음)
         }
         prevLog = lg.length;

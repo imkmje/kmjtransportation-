@@ -177,3 +177,12 @@ describe('대형 항공사와의 장기 대결', () => {
     expect(achieved(g)).toContain('giant');
   });
 });
+
+describe('중요한 알림 표시', () => {
+  it('진출 예고 같은 알림은 중요 표시가 붙고, 일반 알림은 붙지 않는다', () => {
+    const g = sb(); const n0 = g.state.log.length; g.state.log.push('일반 알림');
+    expect(g.isAlert(n0)).toBe(false);
+    (g as unknown as { alert(t: string): void }).alert('중요'); expect(g.isAlert(n0 + 1)).toBe(true);
+    const old = Game.fromJSON({ ...JSON.parse(JSON.stringify(g.toJSON())), alertsAt: undefined }); expect(old.isAlert(0)).toBeNull(); // 옛 저장은 화면이 낱말로 판단
+  });
+});

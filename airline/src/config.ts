@@ -66,8 +66,8 @@ export const config = {
       { id: 'subIndep', needSub: true, title: '자회사 경영진이 독립을 원합니다', desc: '지분을 넉넉한 값에 되사겠다고 제안합니다.', choices: [{ label: '지분 매각(웃돈 25%)', subSell: true, result: '지분을 웃돈을 받고 팔았습니다. 이제 독립한 경쟁사입니다.' }, { label: '거절', rep: -0.01, result: '경영진을 설득해 자회사로 남겼습니다(관계가 조금 서먹해졌습니다).' }] },
       { id: 'film', title: '영화 제작사가 기내 촬영을 요청합니다', desc: '개봉하면 홍보가 되지만 촬영 동안 한 편이 멈춥니다.', choices: [{ label: '허락(+$2M)', cash: 2, rep: 0.03, result: '영화에 우리 항공기가 나와 화제가 됐습니다.' }, { label: '거절', result: '정중히 거절했습니다.' }] },
       { id: 'vip', title: '유명 배우가 전용기 대신 우리 항공편을 타겠다고 합니다', desc: '특별 서비스를 준비하면 좋은 인상을 남깁니다.', choices: [{ label: '특별 준비 $1M', cash: -1, rep: 0.04, result: '배우의 칭찬 글이 퍼졌습니다.' }, { label: '평소대로', risk: { chance: 0.4, rep: -0.02, text: '불편했다는 후기가 퍼졌습니다.' }, result: '무난하게 지나갔습니다.' }] },
-      { id: 'saga1', chain: true, title: '글로벌 스카이가 우리 본사 공항의 슬롯을 사들이려 합니다', desc: '대형 항공사가 우리 안방 공항까지 노리기 시작했습니다. 이 다툼은 몇 년 동안 이어질 것입니다.', choices: [{ label: '맞서 슬롯 확보 $40M', cash: -40, slot: true, rep: 0.02, next: { id: 'saga2', months: 24 }, result: '먼저 슬롯을 확보해 안방을 지켰습니다.' }, { label: '양보한다', baseTaken: 4, next: { id: 'saga2', months: 24 }, result: '글로벌 스카이가 본사 공항 슬롯 4개를 가져갔습니다.' }] },
-      { id: 'saga2', chain: true, title: '글로벌 스카이가 본사 공항 운영권을 노립니다', desc: '공항 당국에 거액을 제시했다는 소문입니다. 운영권을 빼앗기면 슬롯이 더 줄어듭니다.', choices: [{ label: '방어 투자 $80M', cash: -80, rep: 0.04, next: { id: 'saga3', months: 24 }, result: '공항 당국과 장기 협약을 맺어 운영권 다툼을 막았습니다.' }, { label: '양보한다', baseTaken: 3, rep: -0.02, next: { id: 'saga3', months: 24 }, result: '운영권 일부를 내줘 슬롯 3개를 잃었습니다.' }] },
+      { id: 'saga1', chain: true, title: '글로벌 스카이가 우리 본사 공항의 슬롯을 사들이려 합니다', desc: '대형 항공사가 우리 안방 공항까지 노리기 시작했습니다. 이 다툼은 몇 년 동안 이어질 것입니다.', choices: [{ label: '맞서 슬롯 확보', cash: -40, slot: true, rep: 0.02, next: { id: 'saga2', months: 24 }, result: '먼저 슬롯을 확보해 안방을 지켰습니다.' }, { label: '양보한다', baseTaken: 4, next: { id: 'saga2', months: 24 }, result: '글로벌 스카이가 본사 공항 슬롯 4개를 가져갔습니다.' }] },
+      { id: 'saga2', chain: true, title: '글로벌 스카이가 본사 공항 운영권을 노립니다', desc: '공항 당국에 거액을 제시했다는 소문입니다. 운영권을 빼앗기면 슬롯이 더 줄어듭니다.', choices: [{ label: '방어 투자', cash: -80, rep: 0.04, next: { id: 'saga3', months: 24 }, result: '공항 당국과 장기 협약을 맺어 운영권 다툼을 막았습니다.' }, { label: '양보한다', baseTaken: 3, rep: -0.02, next: { id: 'saga3', months: 24 }, result: '운영권 일부를 내줘 슬롯 3개를 잃었습니다.' }] },
       { id: 'saga3', chain: true, title: '글로벌 스카이가 정면 대결을 선언합니다', desc: '"1년 뒤 매출로 누가 하늘의 주인인지 가리자." 받아들이면 12개월 동안 매출로 겨룹니다. 이기면 큰 보상, 지면 큰 손해입니다.', choices: [{ label: '대결을 받아들인다', duel: true, result: '12개월 매출 대결이 시작됐습니다. 현황 탭에서 진행을 볼 수 있습니다.' }, { label: '피한다', rep: -0.03, result: '대결을 피했습니다. 업계는 우리를 한 수 아래로 봅니다.' }] },
       { id: 'union2', chain: true, title: '작년 임금 합의가 만료돼 노조가 재협상을 요구합니다', desc: '지난번 수용한 조건을 이어 갈지 정해야 합니다.', choices: [{ label: '재계약 $5M', cash: -5, rep: 0.01, result: '노사 관계가 안정됐습니다.' }, { label: '동결', risk: { chance: 0.6, cash: -12, rep: -0.02, text: '파업이 일어나 $12M 손실을 입었습니다.' }, result: '노조가 동결을 받아들였습니다.' }] },
       { id: 'celeb2', chain: true, title: '그 인플루언서가 장기 홍보 계약을 제안합니다', desc: '지난 협찬 반응이 좋아 1년 계약을 원합니다.', choices: [{ label: '1년 계약 $6M', cash: -6, rep: 0.06, result: '꾸준한 홍보로 평판이 크게 올랐습니다.' }, { label: '거절', result: '한 번으로 충분하다고 판단했습니다.' }] },
@@ -79,7 +79,7 @@ export const config = {
   season: { start: 12, rewardMonths: 2.5, rewardMin: 5, rewardMax: 60, rep: 0.02 }, // 올해의 도전(자유 모드): 매년 하나, 보상은 월 이익의 rewardMonths배
   livery: ['#ffffff', '#ffd86b', '#ff9d6b', '#7cc4ff', '#8fdc9c', '#c9a6ff', '#ff8fb1'], // 도색(지도의 내 비행기 색) 고를 수 있는 색
   extra: { // 자유 모드 재미 요소(시나리오에는 적용하지 않는다)
-    loyalty: { names: ['없음', '기본', '풍성'], join: [0, 0.02, 0.035], churn: [0.1, 0.01, 0.005], costPerM: [0, 5, 11], maxBoost: [0, 0.06, 0.12],
+    loyalty: { names: ['없음', '기본', '풍성'], join: [0, 0.02, 0.035], churn: [0.1, 0.01, 0.005], costPerM: [0, 2.5, 6], maxBoost: [0, 0.06, 0.12], premium: [0, 0.03, 0.06], // premium: 단골 손님 운임 수입(회원이 월 탑승객의 3배일 때 최대)
       promote: [0.01, 0.03, 0.02], eliteChurn: 0.01, tierCost: [0.5, 2, 5], bizMax: [0, 0.1, 0.2], // 등급: 일반→실버 1%/월, 실버→골드 3%, 골드→플래티넘 2%. 등급 회원은 비용이 더 든다(일반 대비 +50%·+200%·+500%). (골드 + 2×플래티넘) ÷ 월 탑승객만큼 비즈니스 수요(기본 최대 +10%, 풍성 +20%)
       card: { fee: 3, perM: 4, join: 1.25 }, // 제휴 신용카드: 가입비 $3M, 회원 100만 명당 월 $4M 수입, 가입 1.25배
       promo: { base: 1.5, perM: 1.5, join: 3, boost: 0.04, months: 2, cool: 6 } }, // 마일 2배 프로모션: $3M + 회원 100만 명당 $1.5M, 2개월간 가입 3배·수요 +4%, 끝나고 6개월 뒤 다시 // 마일리지: 탑승객 중 가입 비율, 월 이탈, 회원 100만 명당 월 비용($M), 최대 수요 증가
@@ -96,17 +96,17 @@ export const config = {
       { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +12', cost: 120, months: 24 },
       { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 150, months: 30 },
       { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 완공 때 평판 +5%', cost: 90, months: 18 },
-      { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 300, months: 30 },
-      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '200석 단거리 고효율기. 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 400, months: 36 },
-      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '300석 중거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 600, months: 42 },
-      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '400석 장거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 800, months: 48 },
+      { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 200, months: 30 },
+      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '200석 단거리 고효율기. 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 250, months: 36 },
+      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '300석 중거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 380, months: 42 },
+      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '400석 장거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 500, months: 48 },
     ] },
     found: { capital: [40, 90, 180], planes: [2, 4, 8], cashShare: 0.35, max: 3, regionalKm: 1500, regionalSeat: 0.55, sizes: ['소', '중', '대'], kinds: { low: { name: '저가 항공사', desc: '운임이 싸고 운영비가 낮습니다', eff: 1.05 }, premium: { name: '프리미엄 항공사', desc: '운임이 비싸고 품질이 높습니다', eff: 0.97 }, regional: { name: '지역 항공사', desc: '1,500km 안 단거리만, 작은 기체로 자주 다닙니다', eff: 1 } } as Record<string, { name: string; desc: string; eff: number }> }, // 자회사 차리기: 자본금(고정) 중 35%는 운영 자금, 나머지로 항공기를 들인다
     cabin: { cost: [0.08, 0.14], rating: 0.3, biz: 0.08, premium: 0.08, shop: 5, names: ['기본', '개조', '최고급'] }, // 객실 개조: 새 기체 값의 8%·14%, 단계마다(노선 평균) 운임 수입 +8%·별점 +0.3·비즈니스 수요 +8%, 5일간 운항 못 함
     campaign: { national: { name: '전국 광고', cost: 10, rev: 0.1, rep: 0.03, boost: 0.03, premium: 0.04, months: 6 }, global: { name: '세계 광고', cost: 30, rev: 0.2, rep: 0.08, boost: 0.06, premium: 0.08, months: 6 } } as Record<string, { name: string; cost: number; rev: number; rep: number; boost: number; premium: number; months: number }>, // 대형 광고: 비용 = max(기본, 최근 월평균 매출 × rev). 바로 평판, 6개월간 운임 수입 +premium(브랜드 값)·수요 +boost
     green: { max: 5, cost: 15, rev: 0.12, ops: 0.03, carbon: 0.15 }, // 친환경 연료 투자: n단계 비용 = max($15M, 최근 월평균 매출 × 0.12) × n, 단계마다 운영비 −3%(연료 효율), 탄소세 시대 낡은 기체 부담 −15%
-    airport: { slots: 30, fee: 0.4 }, // 내 허브 공항: 슬롯 +30, 그 도시에 다니는 경쟁사 노선 1개마다 월 $0.4M
-    royalty: 0.03, // 자체 기종 하나마다 경쟁사(대형 포함) 항공기 1대당 월 $0.03M 기술료
+    airport: { slots: 30, fee: 0.6 }, // 내 허브 공항: 슬롯 +30, 그 도시에 다니는 경쟁사 노선 1개마다 월 $0.6M
+    royalty: 0.1, // 자체 기종 하나마다 경쟁사(대형 포함) 항공기 1대당 월 $0.1M 기술료
     dynasty: { months: 120, list: { world1: { name: '세계 1위 항공사', desc: '최근 12개월 매출 1위(대형 항공사 포함)' }, regions: { name: '전 지역 취항', desc: '모든 지역에 운항 중인 도시가 있다' }, group: { name: '그룹 연 매출 $3B', desc: '우리 + 자회사(51% 이상) 최근 12개월 매출 $3,000M' }, fleet: { name: '항공기 100대', desc: '내 항공기 100대(임대 포함)' } } as Record<string, { name: string; desc: string }> }, // 왕조 목표: 하나를 골라 10년 안에
     ipo: { minMonth: 36, share: 0.25, pe: 8, payout: 0.1, growth: 0.05, cashKeep: 30, keepRev: 1.5, repUp: 0.01, repDown: 0.03 }, // 배당은 현금을 max($30M, 월평균 매출 × 1.5) 남기는 만큼만 // 상장: 3년차부터, 회사 가치(장부가 + 최근 12개월 이익 × 8)의 25%를 받는다. 해마다 이익의 15% 배당, 이익 5% 이상 성장 목표
     quotes: { threat: { low: ['그 노선, 우리가 더 싸게 날겠습니다.', '손님은 결국 값을 따라옵니다.'], premium: ['그 노선의 진짜 서비스를 보여 드리죠.', '격이 다른 비행을 준비하고 있습니다.'] }, war: { low: ['가격으로 승부합시다. 버틸 수 있겠습니까?', '이번엔 끝까지 내립니다.'], premium: ['잠시 값을 낮출 뿐, 품질은 그대로입니다.', '이 노선은 양보할 수 없습니다.'] }, join: { low: ['함께라면 더 멀리 갑니다.', '좋은 조건이군요. 손잡겠습니다.'], premium: ['동맹의 품격을 높이겠습니다.', '오랜 협력이 되길 바랍니다.'] }, leave: { low: ['조건이 더 좋은 쪽을 택했습니다.', '사업은 사업입니다.'], premium: ['새로운 동반자를 찾았습니다.', '그동안 고마웠습니다.'] } } as Record<string, Record<string, string[]>>, // 경쟁사 대표 한마디(자유 모드)

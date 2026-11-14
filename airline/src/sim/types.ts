@@ -89,6 +89,7 @@ export interface GameState {
   ipo?: { month: number; price: number; base: number; hist: number[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
   subsidies?: { id: number; a: string; b: string; perMonth: number; months: number; expires: number; left?: number }[]; rightsSale?: { region: string; until: number } | null; nextSub?: number; // 정부 보조금 노선 제안·진행, 운수권 할인
   allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과
+  alertsAt?: number[]; // 중요한 알림의 순번(log 배열 번호)
   challenges?: string[]; // 자유 모드 도전 조건(debt·crowded·lowrep·small)
   sagaStarted?: boolean; duel?: { start: number; until: number } | null; duelWon?: boolean; duelDone?: boolean; // 대형 항공사와의 장기 대결: 시작 여부, 1년 매출 대결(시작·끝 개월), 결과
   rules?: { contracts?: boolean; auctions?: boolean; bids?: boolean; subsidy?: boolean; story?: boolean }; // 자동 처리: 계약 자동 수락, 경매·입찰 알림 끄기, 보조금 자동 수락, 이야기 자동 선택 // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
