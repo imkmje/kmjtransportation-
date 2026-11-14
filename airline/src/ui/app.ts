@@ -1226,7 +1226,8 @@ export function startApp(): void {
   $('#info-body').addEventListener('input', (e) => { const t = e.target as HTMLInputElement; if (t.id === 'v-sfx') { setVolumes({ sfx: Number(t.value) / 100 }); $('#v-sfx-n').textContent = `${t.value}%`; } else if (t.id === 'v-music') { setVolumes({ music: Number(t.value) / 100 }); $('#v-music-n').textContent = `${t.value}%`; } });
   $('#info-body').addEventListener('change', (e) => { if ((e.target as HTMLElement).id === 'v-sfx') play('ok'); }); // 효과음 크기는 손을 뗄 때 들려 준다
   ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false })); // 사파리의 두 손가락 화면 확대를 막는다(지도는 직접 처리)
-  $('#info-close').addEventListener('click', () => { $('#info').hidden = true; play('tap'); });
+  let paperResume = 0; // 연말 신문이 멈춘 배속(닫으면 되돌린다)
+  $('#info-close').addEventListener('click', () => { $('#info').hidden = true; play('tap'); if (paperResume && game.state.status === 'playing') { speed = paperResume; renderTop(); } paperResume = 0; });
   $('#end-new').addEventListener('click', () => openSetup());
   $('#end-continue').addEventListener('click', () => { const r = game.continuePlay(); if (r.ok) { lastHtml = ''; render(); toast('자유 모드로 계속합니다'); } });
 
@@ -1282,8 +1283,8 @@ export function startApp(): void {
       let n = 0;
       while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; const ar = game.applyRules(); if (ar.length) toast(ar[ar.length - 1], 3000); }
       if (n) {
-        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; window.setTimeout(save, 0); showReport(); // 저장은 다음 틈에(월말 처리와 한 프레임에 몰리지 않게) play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
-          if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h && h.month % 12 === 0) saveBackup(game); if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}${h.month % 12 === 0 ? ' · 올해의 성적표가 실린 연말 신문이 나왔습니다(보고 카드의 \'연말 신문 보기\')' : ''}`, h.month % 12 === 0 ? 5000 : 2600); } // 연말 신문은 저절로 열지 않는다(화면을 가리지 않게)
+        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; window.setTimeout(save, 0); showReport(); /* 저장은 다음 틈에(월말 처리와 한 프레임에 몰리지 않게) */ play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
+          if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h && h.month % 12 === 0) saveBackup(game); if (h && h.month % 12 === 0 && $('#info').hidden) { paperResume = speed; speed = 0; renderTop(); showPaper(h.month / 12); } else if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}`, 2600); } // 해가 바뀌면 연말 신문을 띄우고 잠깐 멈춘다(닫으면 원래 배속으로)(화면을 가리지 않게)
         const lg = game.state.log;
         if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다
           const fresh = lg.slice(prevLog), imp = fresh.filter((x, k) => game.isAlert(prevLog + k) ?? IMPORTANT.test(x)), msg = (imp.length ? imp : fresh)[(imp.length ? imp : fresh).length - 1];

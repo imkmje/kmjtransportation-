@@ -616,6 +616,12 @@ check('현황: 추천 노선에서 바로 열기 → 노선 탭', await page.eva
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 0 || g.monthsPassed < 48) g.advanceDays(30); window.__air.render(); window.__air.report(); });
 await page.evaluate(() => document.querySelector('#report button[data-act="paper"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 check('연말 신문에 올해의 성적표(작년 비교)', (await page.locator('#info').isVisible()) && (await page.locator('#info-body').innerText()).includes('올해의 성적표')); await page.click('#info-close').catch(() => undefined);
+// 2.27.1: 해가 바뀌면 연말 신문이 저절로 뜨고 잠깐 멈춘다, 닫으면 원래 배속
+await page.evaluate(() => { const g = window.__air.game; window.__air.setSpeed(0); while (!(g.monthsPassed % 12 === 11 && g.state.day % 30 === 29)) g.advanceDay(); window.__air.render(); window.__air.setSpeed(4); });
+await page.waitForFunction(() => !document.getElementById('info').hidden, null, { timeout: 8000 }).catch(() => undefined);
+check('해가 바뀌면 연말 신문이 저절로 뜨고 시간이 멈춤', (await page.locator('#info-title').innerText()).includes('연말 신문') && (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
+await page.click('#info-close');
+check('연말 신문을 닫으면 원래 배속(4×)으로', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '4'); await page.evaluate(() => window.__air.setSpeed(0));
 // 2.16.0: 점유율 순위표·최후의 대결
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="routesHome"]').click().catch(() => undefined);
 await page.evaluate(() => { window.__air.render(); }); const rkText = await page.locator('#panel').evaluate((e) => e.textContent ?? '');
@@ -657,14 +663,16 @@ await subMap('now');
 { const rid = await page.evaluate(() => { const g = window.__air.game; const r = g.state.routes.find((x) => x.open && g.planesOn(x.id).length); return r.id; });
   await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button[data-act="goRoute"][data-id="${rid}"]`).first().click();
   for (const sm of await page.locator('#panel .pside details:not([open]) > summary').all()) await sm.click().catch(() => {});
-  const y0 = await page.evaluate(() => { const e = document.querySelector('#panel .pside'); e.scrollTop = e.scrollHeight; return e.scrollTop; });
+  const y0 = await page.evaluate(() => { const e = document.querySelector('#panel .pside'); e.scrollTop = Math.floor((e.scrollHeight - e.clientHeight) * 0.6); return e.scrollTop; }); // 맨 끝이면 내용이 조금만 줄어도 위치가 당겨지므로 중간쯤에서 본다
   await page.waitForTimeout(1100); await page.evaluate(() => { window.__air.game.advanceDays(1); window.__air.render(true); }); await page.waitForTimeout(200);
   const y1 = await page.evaluate(() => document.querySelector('#panel .pside').scrollTop);
   check('노선 상세: 시간이 흘러 다시 그려도 스크롤 위치 유지', y0 > 100 && Math.abs(y1 - y0) < 5, `${y0} -> ${y1}`); }
+await page.evaluate(() => { window.__air.setSpeed(0); document.getElementById('info').hidden = true; }); // 그사이 해가 바뀌어 연말 신문이 떠 있을 수 있다
 // 2.20.0: 연말 백업·기능 끄기
 await page.click('#dsize button[data-h="min"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 11) g.advanceDays(30); while ((g.state.day + 1) % 30 !== 0) g.advanceDays(1); window.__air.setSpeed(4); }); // 연말 하루 전까지 넘기고 마지막 하루만 흘린다
 await page.waitForFunction(() => { if (window.__air.game.monthsPassed % 12 === 0) return true; window.__air.setSpeed(4); return false; }, null, { timeout: 60000, polling: 500 }).catch(() => undefined); // 자동 정지가 걸려도 다시 흘린다 await page.evaluate(() => window.__air.setSpeed(0));
+await page.click('#info-close').catch(() => undefined); await page.evaluate(() => window.__air.setSpeed(0)); // 연말이 지나 신문이 떠 있다
 await page.evaluate(() => { document.getElementById('menu').hidden = true; }); await page.click('#menubtn'); await page.click('#menu button[data-m="saves"]');
 check('저장 관리: 연말 자동 백업이 보임', (await page.locator('#info-body').innerText()).includes('자동 백업') && (await page.locator('#info-body button[data-act="backupLoad"]').count()) === 1); await page.click('#info-close');
 await page.evaluate(() => { document.getElementById('menu').hidden = true; }); await page.click('#menubtn'); await page.click('#menu button[data-m="new"]'); await page.click('#setup-scen button[data-sc="sandbox"]').catch(() => undefined);
