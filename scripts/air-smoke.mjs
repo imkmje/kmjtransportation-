@@ -387,6 +387,10 @@ await page.evaluate(() => { document.querySelectorAll('#panel details.more').for
 check('노선 일괄 편집: 서비스 등급 일괄', await page.evaluate(() => { const g = window.__air.game; return g.state.routes.filter((r) => r.open && g.planesOn(r.id).length).every((r) => r.svc === 1); }));
 await page.evaluate(() => { window.__air.game.state.planes[0].leased = true; window.__air.render(); }); await page.click('#tabs button[data-tab="fleet"]');
 check('보유 항공기: 임대 딱지와 소유·임대 합계', (await page.locator('#panel .otag.lease').count()) > 0 && (await page.locator('#panel .tfoot').first().innerText()).includes('임대'));
+await page.evaluate(() => { const g = window.__air.game; g.state.sandbox = true; g.state.cash = 900; window.__airYes = true; window.__air.setSpeed(0); for (const p of g.state.planes) p.shop = 0; window.__cab0 = g.state.planes.map((p) => p.cabin ?? 0); window.__air.render(); }); await page.locator('#panel button[data-act="refitAll"]').click();
+const rf = await page.evaluate(() => { const g = window.__air.game; return { up: g.state.planes.filter((p, i) => (p.cabin ?? 0) > window.__cab0[i]).length, shop: g.state.planes.filter((p) => p.shop > 0).length, q: (g.state.refitQ ?? []).length, n: g.state.planes.length }; });
+check('기단: 객실 일괄 개조는 한 대만 들어가고 나머지는 줄에 섬', rf.up === 1 && rf.shop === 1 && (await page.locator('#panel').innerText()).includes('지금 개조 중'), JSON.stringify(rf));
+await page.evaluate(() => { const g = window.__air.game; g.cancelRefitQueue(); for (const p of g.state.planes) p.shop = 0; window.__air.render(); });
 await pickComp();
 await page.evaluate(() => { const c = window.__air.game.state.competitors.find((x) => !x.major); c.revHist = [10, 12, 11, 9, 8, 7]; window.__air.render(); }); await pickComp();
 check('경쟁사 카드: 월 매출 추이와 변화율', (await page.locator('#panel').innerText()).includes('월 매출 추이') && (await page.locator('#panel').innerText()).includes('그 전 3개월보다'));

@@ -88,6 +88,16 @@ describe('돈 쓸 곳', () => {
     const rep = g.state.reputation; expect(g.startCampaign('national').ok).toBe(true); expect(g.state.reputation).toBeGreaterThan(rep); expect(g.startCampaign('global').ok).toBe(false);
     g.plane(pid)!.shop = 0; const cost0 = g.routeDay(r).cost; expect(g.investGreen().ok).toBe(true); expect(g.routeDay(r).cost).toBeLessThan(cost0);
   });
+  it('객실 일괄 개조는 한 대씩 차례로 들어가고, 돈이 모자라면 기다린다', () => {
+    const g = sb(); g.state.cash = 9999; route(g, 'ICN', 'NRT'); route(g, 'ICN', 'PEK'); route(g, 'ICN', 'HKG');
+    const own = g.state.planes.filter((p) => !p.leased && p.cabin === undefined); expect(own.length).toBeGreaterThanOrEqual(3);
+    const r = g.queueRefitAll(); expect(r.ok && r.n).toBe(own.length);
+    const inShop = () => g.state.planes.filter((p) => p.shop > 0).length;
+    for (let d = 0; d < 30; d++) { expect(inShop()).toBeLessThanOrEqual(1); g.advanceDays(1); }
+    expect(own.every((p) => p.cabin === 1)).toBe(true); expect(g.state.refitQ).toBeUndefined();
+    expect(g.queueRefitAll().ok).toBe(true); g.state.cash = 0; g.advanceDays(10); expect(g.state.refitQ!.length).toBeGreaterThan(0); // 돈이 없으면 멈춰 기다림
+    g.cancelRefitQueue(); expect(g.state.refitQ).toBeUndefined();
+  });
   it('객실을 개조하면 이름에 더 뉴 → 디 올 뉴가 붙고, 서비스 등급은 일괄로 바꿀 수 있다', () => {
     const g = sb(); g.state.cash = 9999; const { pid } = route(g, 'ICN', 'NRT'); const p = g.plane(pid)!, base = p.name ?? '';
     expect(g.refitCabin(pid).ok).toBe(true); expect(p.name).toMatch(/^더 뉴 /); p.shop = 0;

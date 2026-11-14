@@ -91,6 +91,7 @@ export interface GameState {
   allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과
   off?: string[]; // 자유 모드에서 끈 기능(crew·alliance·subsidiary·finance·crisis·saga·policy)
   pilots?: number; crewShort?: boolean; autoHire?: boolean; insurance?: number; bonds?: { amount: number; rate: number; until: number }[]; // 조종사 수·자동 채용(끄면 false), 보험 단계(0~2), 채권(원금·월 이율·만기 개월)
+  refitQ?: number[]; refitCur?: number; // 객실 일괄 개조: 기다리는 항공기 ID(앞에서부터 한 대씩), 지금 개조 중인 항공기
   ownNames?: Record<string, string>; // 자체 기종 이름(내가 지음)
   alertsAt?: number[]; // 중요한 알림의 순번(log 배열 번호)
   challenges?: string[]; // 자유 모드 도전 조건(debt·crowded·lowrep·small)
