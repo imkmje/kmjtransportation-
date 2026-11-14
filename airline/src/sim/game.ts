@@ -381,6 +381,7 @@ export class Game {
     if (this.state.status !== 'playing') return fail('게임이 끝났습니다');
     const i = this.state.planes.findIndex((p) => p.id === planeId);
     if (i < 0) return fail('없는 항공기입니다');
+    if (this.state.planes[i].charter !== undefined) return fail('전세 운항 중인 항공기는 전세가 끝난 뒤 팔 수 있습니다');
     const pl = this.state.planes[i], price = pl.leased ? (pl.deposit ?? 0) - this.leaseReturnFee(pl) : pl.book * config.sale.ratio; // 임대기는 반납: 보증금을 돌려받고 위약금을 낸다
     this.state.events = this.state.events.filter((e) => e.planeId !== planeId);
     this.state.planes.splice(i, 1);
@@ -742,7 +743,7 @@ export class Game {
       } else {
         const c = s.competitors.find((x) => x.id === w.who); if (c) c.cash -= w.amount;
         if (b.kind === 'concession') s.concessions = { ...(s.concessions ?? {}), [b.city]: { holder: w.who, until: mp + k.concessionMonths } };
-        else s.compSlots = { ...(s.compSlots ?? {}), [b.city]: (s.compSlots?.[b.city] ?? 0) + b.n };
+        else s.compLots = [...(s.compLots ?? []), { city: b.city, n: b.n, holder: w.who }];
         s.log.push(`${m + 1}개월차: ${c?.name ?? '경쟁사'}이(가) ${cityById(b.city).name} ${b.kind === 'concession' ? '공항 운영권' : `슬롯 ${b.n}개`}을(를) $${w.amount}M에 가져갔습니다.`);
       }
     }
@@ -864,10 +865,18 @@ export class Game {
 
   // ---------- 자유 모드 경쟁 강화 ----------
   /** 매달: 진출 예고·합병·라이벌·슬롯 선점·이야기 사건 */
+  /** 파산·합병·인수로 사라졌거나 자회사가 된 회사를 동맹 명단·운영권·낙찰 슬롯에서 정리한다 */
+  cleanGone(): void {
+    const s = this.state, ids = new Set(s.competitors.map((c) => c.id)), stake = new Set(s.competitors.filter((c) => c.stake).map((c) => c.id));
+    if (s.alliance) s.alliance = s.alliance.filter((id) => ids.has(id) && !stake.has(id));
+    if (s.rivalAlliance) s.rivalAlliance = s.rivalAlliance.filter((id) => ids.has(id));
+    if (s.concessions) for (const [city, c] of Object.entries(s.concessions)) if (c.holder !== 0 && !ids.has(c.holder)) { const nc: Record<string, { holder: number; until: number }> = { ...s.concessions }; delete nc[city]; s.concessions = nc; }
+    if (s.compLots) s.compLots = s.compLots.filter((l) => ids.has(l.holder));
+  }
   private rivalryStep(): void {
     const s = this.state; if (!s.sandbox) return;
     const m = this.monthsPassed;
-    this.threatStep(m); this.mergeStep(m); this.rivalPick(m); this.updateTaken(); this.storyStep(m);
+    this.threatStep(m); this.mergeStep(m); this.rivalPick(m); this.cleanGone(); this.updateTaken(); this.storyStep(m);
   }
   private sameRoute = (x: { a: string; b: string }, a: string, b: string) => (x.a === a && x.b === b) || (x.a === b && x.b === a);
   /** 일반 경쟁사가 내 이익 큰 노선에 진출을 예고하고(2개월 전), 때가 되면 들어온다. 제휴를 맺으면 막을 수 있다 */
@@ -937,9 +946,10 @@ export class Game {
   private updateTaken(): void {
     const s = this.state, cnt: Record<string, number> = {}, out: Record<string, number> = {};
     for (const c of s.competitors) for (const r of c.routes) for (const id of [r.a, r.b]) cnt[id] = (cnt[id] ?? 0) + 1;
+    for (const l of s.compLots ?? []) cnt[l.city] = cnt[l.city] ?? 0;
     for (const id of Object.keys(s.compSlots ?? {})) cnt[id] = cnt[id] ?? 0;
     for (const [id, n] of Object.entries(cnt)) {
-      const want = Math.floor(n * config.rivalry.slots.perRoute) + (s.compSlots?.[id] ?? 0) + (s.concessions?.[id] && s.concessions[id].holder !== 0 && s.concessions[id].until > this.monthsPassed ? config.extra.bid.concessionSlots : 0), free = Math.floor(this.slotCapacityRaw(id) - this.slotsUsed(id)), t = Math.min(want, Math.max(0, free));
+      const want = Math.floor(n * config.rivalry.slots.perRoute) + (s.compSlots?.[id] ?? 0) + (s.compLots ?? []).filter((l) => l.city === id).reduce((a, l) => a + l.n, 0) + (s.concessions?.[id] && s.concessions[id].holder !== 0 && s.concessions[id].until > this.monthsPassed ? config.extra.bid.concessionSlots : 0), free = Math.floor(this.slotCapacityRaw(id) - this.slotsUsed(id)), t = Math.min(want, Math.max(0, free));
       if (t > 0) out[id] = t;
     }
     s.taken = out;
@@ -1030,7 +1040,7 @@ export class Game {
     if ((c.stake ?? 0) >= pct) return fail('이미 그만큼 지분을 가지고 있습니다');
     const price = this.stakePrice(c, pct);
     if (s.cash < price) return fail('현금이 모자랍니다');
-    s.cash -= price; c.cash += price * 0.5; c.stake = pct; if (pct >= 0.51 && !c.dir) c.dir = 'grow'; // 낸 돈의 절반은 회사 운영 자금으로 들어간다
+    s.cash -= price; c.cash += price * 0.5; c.stake = pct; if (s.alliance?.includes(id)) s.alliance = s.alliance.filter((x) => x !== id); if (pct >= 0.51 && !c.dir) c.dir = 'grow'; // 낸 돈의 절반은 회사 운영 자금으로 들어간다
     if (s.ally === id) s.ally = null; // 자회사는 제휴보다 가까운 관계
     if (s.rivalId === id) { s.rivalId = null; this.note(this.monthsPassed + 1, 'rival', `라이벌 ${c.name}을(를) 자회사로`); }
     s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}의 지분 ${Math.round(pct * 100)}%를 $${price}M에 샀습니다. ${pct >= 0.51 ? '경영권을 가진 자회사가 되어 운영 방향을 정할 수 있습니다.' : '매달 이익의 일부를 배당으로 받습니다.'}`);
@@ -1076,6 +1086,7 @@ export class Game {
     if (!c || (c.stake ?? 0) < 0.51) return fail('경영권(51%)을 가진 자회사에만 빌려줄 수 있습니다');
     if (!p) return fail('없는 항공기입니다');
     if (p.routeId !== null || p.shop > 0) return fail('노선에 배정되지 않고 정비 중이 아닌 항공기만 빌려줄 수 있습니다');
+    if (p.charter !== undefined) return fail('전세 운항 중인 항공기입니다');
     if (p.leased) return fail('임대해 온 항공기는 다시 빌려줄 수 없습니다');
     if (typeById(p.type).seats <= 0) return fail('화물기는 빌려줄 수 없습니다');
     s.planes = s.planes.filter((x) => x.id !== planeId);
@@ -1160,7 +1171,7 @@ export class Game {
     if (s.cash < price) return fail('현금이 모자랍니다');
     const k = config.acquire, n = Math.min(k.maxPlanes, c.planes), m = this.monthsPassed + 1;
     s.cash -= price; this.returnLent(c); s.competitors = s.competitors.filter((x) => x.id !== id); if (s.ally === id) s.ally = null;
-    s.acquired = (s.acquired ?? 0) + 1; if (s.rivalId === id) s.rivalId = null;
+    s.acquired = (s.acquired ?? 0) + 1; if (s.rivalId === id) s.rivalId = null; this.cleanGone();
     s.rivalsGone = [...s.rivalsGone, { name: c.name, month: m, acq: true }].slice(-12);
     for (let i = 0; i < n; i++) this.addPlane('B737', typeById('B737').price * 0.5, { age: 48, cond: 0.7 });
     s.slots[c.hub] = (s.slots[c.hub] ?? 0) + k.slots; s.reputation = Math.min(1, s.reputation + k.rep);
