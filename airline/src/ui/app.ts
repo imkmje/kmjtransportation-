@@ -308,6 +308,7 @@ export function startApp(): void {
   }
   const leftTxt = (n: number) => (n <= 0 ? '이번 달' : `${n}개월`);
   /** 결정 대기 항목으로 이동: 경쟁사 증자는 그 회사, 나머지는 현황 탭의 해당 구역을 펼쳐 보여 준다 */
+  const pendTab = (p: { kind: string; comp?: unknown }): 'map' | 'rivals' | 'fleet' => (p.kind === '경보' ? 'fleet' : p.kind === '동맹' || p.comp !== undefined ? 'rivals' : 'map'); // goPend와 같은 목적지
   function goPend(k: string, comp: string | undefined) {
     if (k === '경보') { tab = 'fleet'; selCity = selRoute = null; }
     else if (k === '동맹') { tab = 'rivals'; rivalSub = 'alli'; selComp = null; selCity = selRoute = null; }
@@ -628,7 +629,7 @@ export function startApp(): void {
       <p class="hint">20%: 배당만(이익의 ${Math.round(K.payout.none * 100)}% × 20%). 51%: 경영권 — 운영 방향(확장·수익·공세)을 정합니다.</p></div>`;
     const dirs = st >= 0.51 ? `<div class="seg">${Object.entries(K.dirs).map(([d, v]) => `<button data-act="subDir" data-id="${k.id}" data-v="${d}" class="${k.dir === d ? 'on' : ''}">${v.name}</button>`).join('')}</div><p class="hint">${esc(K.dirs[k.dir ?? 'grow'].desc)} · 배당: 이익의 ${Math.round((K.payout[k.dir ?? 'grow'] ?? 0.4) * 100)}% × 지분 ${Math.round(st * 100)}%</p>` : `<p class="hint">배당: 이익의 ${Math.round(K.payout.none * 100)}% × 지분 20%. 51%로 올리면 운영 방향을 정할 수 있습니다.</p>`;
     return `<div class="goal"><div><b>${st >= 0.51 ? '자회사' : '지분 보유'} ${Math.round(st * 100)}%</b> <small>현금 ${money(k.cash)}</small></div><div class="kpi" style="grid-template-columns: repeat(2, minmax(0, 1fr))"><div><small>지난달 배당</small><b class="pos">${money(k.lastDiv ?? 0)}</b></div><div><small>누적 배당</small><b>${money(k.divTotal ?? 0)}</b></div></div>${subStats(k)}${call}${dirs}${st >= 0.51 ? subControls(k) : ''}
-      <div class="btnrow">${st < 0.51 ? `<button data-act="buyStake" data-id="${k.id}" data-v="0.51" ${no(s.cash < game.stakePrice(k, 0.51), short(game.stakePrice(k, 0.51)))}>51%로 ${money(game.stakePrice(k, 0.51))}</button>` : ''}<button class="ghost" data-act="sellStake" data-id="${k.id}">지분 매각 ${money(sell)}</button></div></div>`;
+      ${st >= 0.51 ? `<div><small>자본금 넣기</small></div><div class="btnrow">${[10, 50, 200].map((v) => `<button class="ghost" data-act="injectSub" data-id="${k.id}" data-v="${v}" ${no(s.cash < v, short(v))}>+${money(v)}</button>`).join('')}</div><p class="hint">자회사 현금이 늘어 항공기·노선 확장에 씁니다(운영 방향이 '확장'일 때 가장 빠름). 증자 요청이 있으면 그 금액 이상 넣을 때 해결됩니다. 넣은 돈은 돌려받지 않고 배당과 지분 가치로 돌아옵니다.</p>` : ''}<div class="btnrow">${st < 0.51 ? `<button data-act="buyStake" data-id="${k.id}" data-v="0.51" ${no(s.cash < game.stakePrice(k, 0.51), short(game.stakePrice(k, 0.51)))}>51%로 ${money(game.stakePrice(k, 0.51))}</button>` : ''}<button class="ghost" data-act="sellStake" data-id="${k.id}">지분 매각 ${money(sell)}</button></div></div>`;
   }
   /** 일반 경쟁사의 노선 목록 */
   function compRoutes(k: Competitor): string {
@@ -719,8 +720,8 @@ export function startApp(): void {
   }
   /** B3 자동 처리 규칙(현황 탭) */
   function rulesHtml(): string {
-    const r = game.state.rules ?? {}, items: [string, string, boolean][] = [['contracts', '계약 제안 자동 수락', !!r.contracts], ['subsidy', '보조금 제안 자동 수락', !!r.subsidy], ['story', '이야기는 돈이 덜 드는 쪽 자동 선택', !!r.story], ['auctions', '경매를 결정 대기·팝업에서 빼기', !!r.auctions], ['bids', '입찰을 결정 대기·팝업에서 빼기', !!r.bids]];
-    if (!game.state.sandbox) items.splice(1, 4, items[3]); // 시나리오: 계약·경매만
+    const r = game.state.rules ?? {}, sb = game.state.sandbox, all: [string, string, boolean, boolean][] = [['contracts', '계약 제안 자동 수락', !!r.contracts, true], ['subsidy', '보조금 제안 자동 수락', !!r.subsidy, sb], ['story', '이야기는 돈이 덜 드는 쪽 자동 선택', !!r.story, sb], ['call', '자회사 증자 요청 자동 동의(현금이 있을 때)', !!r.call, sb && game.on('subsidiary')], ['campaign', '광고 캠페인 자동(끝나면 다시, 현금이 광고비 3배 이상일 때)', !!r.campaign, sb], ['charter', '전세기 주문 자동 수락(맞는 노는 항공기가 있을 때)', !!r.charter, sb], ['agenda', '동맹 회의 안건 자동(공동 운임)', !!r.agenda, sb && game.on('alliance')], ['auctions', '경매를 결정 대기·팝업에서 빼기', !!r.auctions, true], ['bids', '입찰을 결정 대기·팝업에서 빼기', !!r.bids, sb]];
+    const items = all.filter((x) => x[3]); // 시나리오는 계약·경매만, 끈 기능은 숨김
     return `<h3>자동 처리 <small>${items.filter((x) => x[2]).length}개 켜짐</small></h3><div class="list">${items.map(([k, t, on]) => `<button class="rulerow${on ? ' on' : ''}" data-act="rule" data-v="${k}" aria-pressed="${on}"><span class="grow">${t}</span><b>${on ? '켜짐' : '꺼짐'}</b></button>`).join('')}</div><p class="hint">결정할 일이 많을 때 손이 덜 가게 합니다. 경매·입찰은 현황 탭 아래 구역에는 그대로 남습니다.</p>`;
   }
   /** 정부 정책(현황 탭): 보조금 노선, 운수권 할인 */
@@ -834,8 +835,13 @@ export function startApp(): void {
     const s = game.state, el = $('#era'), cur = game.eraNow, nxt = s.nextEra ? config.eras.list.find((x) => x.id === s.nextEra!.id) : null;
     el.hidden = !cur && !nxt;
     el.innerHTML = `${cur ? `<b>${esc(cur.name)}</b><small>${Math.max(0, s.era!.end - game.monthsPassed)}개월 남음</small>` : ''}${nxt ? `<small>예고: ${esc(nxt.name)} ${later(s.nextEra!.start - game.monthsPassed)}</small>` : ''}`;
-    const mapBtn = $('#tabs button[data-tab="map"]'), pd = pending(), n = pd.length, urgent = pd.some((p) => /^(경보|증자|동맹|진출 예고)$/.test(p.kind)); // 결정 대기 개수(증자 요청·파산 경보·동맹 영입 시도·진출 예고가 있으면 빨강)
-    if (n > 0 && tab !== 'map') { mapBtn.dataset.badge = n > 9 ? '9+' : String(n); mapBtn.classList.toggle('urgent', urgent); } else { delete mapBtn.dataset.badge; mapBtn.classList.remove('urgent'); }
+    // 결정 대기 배지: 그 일을 처리하는 탭(‘보러 가기’가 데려가는 탭)에 붙인다 — 증자·진출 예고·동맹은 경쟁사, 현금 경보는 기단, 나머지는 현황. 급한 것(경보·증자·동맹·진출 예고)이 있으면 빨강
+    const pd = pending();
+    for (const t of ['map', 'rivals', 'fleet'] as const) {
+      const btn = $(`#tabs button[data-tab="${t}"]`), mine = pd.filter((p) => pendTab(p) === t), n = mine.length;
+      btn.classList.add('pend');
+      if (n > 0 && tab !== t) { btn.dataset.badge = n > 9 ? '9+' : String(n); btn.classList.toggle('urgent', mine.some((p) => /^(경보|증자|동맹|진출 예고)$/.test(p.kind))); } else { delete btn.dataset.badge; btn.classList.remove('urgent'); }
+    }
   }
   function renderSum() {
     const s = game.state, open = s.routes.filter((r) => r.open && game.planesOn(r.id).length > 0), total = open.reduce((a, r) => { const d = game.routeDay(r); return a + (d.revenue - d.cost) * config.daysPerMonth; }, 0);
@@ -868,7 +874,7 @@ export function startApp(): void {
     if (tab === 'news') seenLog = game.state.log.length;
     const html = tab === 'map' ? viewMap() : tab === 'routes' ? viewRoutes() : tab === 'fleet' ? viewFleet() : tab === 'rivals' ? viewRivals() : tab === 'money' ? viewMoney() : viewNews();
     if (html !== lastHtml && auto && performance.now() - panelBusy < 900) { if (!renderLater) window.setTimeout(flushRender, 950); renderLater = true; } // 타이머로도 확실히 반영(화면 갱신 틱이 느려도)
-    else if (html !== lastHtml) { renderLater = false; const y = panel.scrollTop; panel.classList.toggle('hasLive', html.includes('id="live"')); panel.classList.toggle('hasSplit', html.startsWith('<div class="split')); const sc = new Map([...panel.querySelectorAll<HTMLElement>('[data-sc]')].map((e) => [e.dataset.sc, e.scrollTop])); panel.innerHTML = html; panel.scrollTop = y; panel.querySelectorAll<HTMLElement>('[data-sc]').forEach((e) => { const v = sc.get(e.dataset.sc); if (v) e.scrollTop = v; }); lastHtml = html; panel.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => { const o = detOpen.get(detKey(d)); if (o !== undefined) d.open = o; }); }
+    else if (html !== lastHtml) { renderLater = false; const y = panel.scrollTop; panel.classList.toggle('hasLive', html.includes('id="live"')); panel.classList.toggle('hasSplit', html.startsWith('<div class="split')); const sc = new Map([...panel.querySelectorAll<HTMLElement>('[data-sc]')].map((e) => [e.dataset.sc, e.scrollTop])); panel.innerHTML = html; panel.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => { const o = detOpen.get(detKey(d)); if (o !== undefined) d.open = o; }); panel.scrollTop = y; panel.querySelectorAll<HTMLElement>('[data-sc]').forEach((e) => { const v = sc.get(e.dataset.sc); if (v) e.scrollTop = v; }); lastHtml = html; } // 접이식 구역을 먼저 되살린 뒤 스크롤 위치를 되돌린다(순서가 반대면 짧아진 화면에 걸려 위로 튄다)
     renderEnd();
     renderHint();
   }
@@ -1077,6 +1083,7 @@ export function startApp(): void {
     else if (act === 'buyStake') { const k = game.state.competitors.find((x) => x.id === id); if (!k) return; const pct = Number(b.dataset.v); if (!await ask(`${k.name}의 지분 ${Math.round(pct * 100)}%를 ${money(game.stakePrice(k, pct))}에 살까요?\n회사는 그대로 운영되고 매달 배당을 받습니다.${pct >= 0.51 ? ' 경영권을 가져 운영 방향을 정할 수 있습니다.' : ''}`)) return; const r = game.buyStake(id, pct); if (!r.ok) return err(r.error); done(`${k.name} 지분 ${Math.round(pct * 100)}%를 샀습니다`); }
     else if (act === 'subDir') { const r = game.setSubDir(id, b.dataset.v as 'grow' | 'profit' | 'attack'); if (!r.ok) return err(r.error); done('운영 방향을 바꿨습니다'); }
     else if (act === 'sellStake') { const k = game.state.competitors.find((x) => x.id === id); if (!k || !await ask(`${k.name} 지분을 팔까요?`)) return; const r = game.sellStake(id); if (!r.ok) return err(r.error); done(`지분을 ${money(r.price)}에 팔았습니다`); }
+    else if (act === 'injectSub') { const v = Number(b.dataset.v); const r = game.injectSubsidiary(id, v); if (!r.ok) return err(r.error); done(`자회사에 ${money(v)}을 넣었습니다`); }
     else if (act === 'fundSub') { const r = game.fundSubsidiary(id); if (!r.ok) return err(r.error); done(`${money(r.price)}을 증자했습니다`); }
     else if (act === 'planeName') { const p = game.plane(id); if (!p) return; const v = window.prompt('항공기 이름 (12자까지, 비우면 지움)', p.name ?? ''); if (v === null) return; game.setPlaneName(id, v); done(); }
     else if (act === 'livery') { const r = game.setLivery(b.dataset.v ?? ''); if (!r.ok) return err(r.error); done('도색을 바꿨습니다'); }

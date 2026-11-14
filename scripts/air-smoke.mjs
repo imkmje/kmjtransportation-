@@ -462,7 +462,7 @@ check('패널을 스크롤하는 중에는 자동 갱신이 미뤄짐(화면이 
 await page.waitForFunction(() => document.querySelector('#panel').firstElementChild.dataset.mark !== 'x', null, { timeout: 5000 }).catch(() => undefined);
 check('멈추면 미룬 갱신이 반영됨', await page.evaluate(() => document.querySelector('#panel').firstElementChild.dataset.mark !== 'x'));
 // 1.4.0: 점유율 전략
-const sRid = await page.evaluate(() => { const g = window.__air.game; g.state.cash = 900; const rt = g.state.routes.find((r) => r.open && g.planesOn(r.id).length > 0); const k = g.state.competitors.find((c) => !c.major); k.routes = [{ a: rt.a, b: rt.b, seatsDay: 600, fareRatio: 0.8 }]; k.planes = 4; window.__air.render(); return rt.id; });
+const sRid = await page.evaluate(() => { const g = window.__air.game; window.__air.setSpeed(0); g.state.cash = 900; const rt = g.state.routes.find((r) => r.open && g.planesOn(r.id).length > 0); const k = g.state.competitors.find((c) => !c.major); k.routes = [{ a: rt.a, b: rt.b, seatsDay: 600, fareRatio: 0.8 }]; k.planes = 4; window.__air.render(); return rt.id; });
 await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button.trow[data-act="goRoute"][data-id="${sRid}"]`).click();
 await rtab('comp');
 await page.locator('#panel button[data-act="stance"]').click();
@@ -604,7 +604,7 @@ check('현황: 왕조 목표 도전', await page.evaluate(() => window.__air.gam
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed < 36) g.advanceDays(30); g.state.cash = 5000; g.state.mega = null; window.__air.render(); });
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
 await page.locator('#offerpop button[data-act="offerClose"]').click({ timeout: 1000 }).catch(() => undefined); // 펼침에서는 제안 팝업이 패널 위에 뜬다
-await page.locator('#panel button[data-act="ipo"]').click(); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
+await page.locator('#panel button[data-act="ipo"]').evaluate((el) => el.click()); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
 await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.selectOption('#ap-city', 'PUS'); await page.click('#info-body button[data-act="airportGo"]');
 check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.mega?.id === 'airport' && window.__air.game.state.mega?.city === 'PUS'));
 // 2.15.0: 자동 처리·추천 노선·성적표
@@ -643,6 +643,24 @@ const pil0 = await page.evaluate(() => window.__air.game.state.pilots ?? 0); awa
 await page.locator('#panel button[data-act="insurance"][data-v="1"]').click(); await openAll();
 check('재무: 조종사 급구 채용·보험', await page.evaluate((n) => (window.__air.game.state.pilots ?? 0) === n + 10 && window.__air.game.state.insurance === 1, pil0));
 await page.locator('#panel button[data-act="bond"][data-v="50"]').click(); check('재무: 채권 발행', await page.evaluate(() => (window.__air.game.state.bonds ?? []).length === 1));
+// 2.27.0: 결정 배지는 처리하는 탭에, 자회사 자본금, 자동 처리 추가, 스크롤 유지
+await page.evaluate(() => { const g = window.__air.game; g.state.sandbox = true; g.state.cash = 900; window.__air.setSpeed(0); const c = g.state.competitors.find((x) => !x.major); c.stake = 0.51; c.dir = 'grow'; c.call = { amount: 5, expires: g.monthsPassed + 3 }; window.__air.render(); });
+await page.click('#tabs button[data-tab="money"]');
+check('증자 요청 배지는 경쟁사 탭에 빨갛게', await page.evaluate(() => { const b = document.querySelector('#tabs button[data-tab="rivals"]'); return !!b.dataset.badge && b.classList.contains('urgent'); }));
+await pickComp();
+const cashI = await page.evaluate(() => window.__air.game.state.cash);
+await page.locator('#panel button[data-act="injectSub"][data-v="10"]').evaluate((el) => el.click());
+check('자회사에 자본금 넣기(+$10M)', Math.abs((await page.evaluate(() => window.__air.game.state.cash)) - (cashI - 10)) < 0.01);
+await page.click('#tabs button[data-tab="map"]'); await subMap('look'); await openAll();
+check('자동 처리에 증자·광고·전세기·동맹 안건 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
+await subMap('now');
+{ const rid = await page.evaluate(() => { const g = window.__air.game; const r = g.state.routes.find((x) => x.open && g.planesOn(x.id).length); return r.id; });
+  await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button[data-act="goRoute"][data-id="${rid}"]`).first().click();
+  for (const sm of await page.locator('#panel .pside details:not([open]) > summary').all()) await sm.click().catch(() => {});
+  const y0 = await page.evaluate(() => { const e = document.querySelector('#panel .pside'); e.scrollTop = e.scrollHeight; return e.scrollTop; });
+  await page.waitForTimeout(1100); await page.evaluate(() => { window.__air.game.advanceDays(1); window.__air.render(true); }); await page.waitForTimeout(200);
+  const y1 = await page.evaluate(() => document.querySelector('#panel .pside').scrollTop);
+  check('노선 상세: 시간이 흘러 다시 그려도 스크롤 위치 유지', y0 > 100 && Math.abs(y1 - y0) < 5, `${y0} -> ${y1}`); }
 // 2.20.0: 연말 백업·기능 끄기
 await page.click('#dsize button[data-h="min"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 11) g.advanceDays(30); while ((g.state.day + 1) % 30 !== 0) g.advanceDays(1); window.__air.setSpeed(4); }); // 연말 하루 전까지 넘기고 마지막 하루만 흘린다
