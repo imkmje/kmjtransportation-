@@ -632,7 +632,9 @@ export function startApp(): void {
   }
   /** 일반 경쟁사의 노선 목록 */
   function compRoutes(k: Competitor): string {
-    return `<h3>${esc(k.name)}의 노선 <small>${k.routes.length}개</small></h3><div class="list">${k.routes.map((r) => `<div class="row"><div class="grow"><b>${routeLabel(r.a, r.b)}</b><small>하루 ${num(r.seatsDay)}석 · 운임 ${pct(r.fareRatio)}${r.war ? ' · <span class="neg">운임 전쟁 중</span>' : ''}</small></div></div>`).join('') || '<p class="empty">아직 노선이 없습니다.</p>'}</div>`;
+    const mineOf = (r: { a: string; b: string }) => game.state.routes.find((m) => m.open && ((m.a === r.a && m.b === r.b) || (m.a === r.b && m.b === r.a))); // 같은 두 도시를 잇는 내 노선
+    const rs = [...k.routes].sort((x, y) => Number(!mineOf(x)) - Number(!mineOf(y))), nOver = rs.filter(mineOf).length; // 겹치는 노선을 위로
+    return `<h3>${esc(k.name)}의 노선 <small>${k.routes.length}개${nOver ? ` · 내 노선과 겹침 ${nOver}개` : ''}</small></h3><div class="list">${rs.map((r) => { const m = mineOf(r); return `<div class="row"><div class="grow"><b>${routeLabel(r.a, r.b)}${m ? ' <span class="badge">겹침</span>' : ''}</b><small>하루 ${num(r.seatsDay)}석 · 운임 ${pct(r.fareRatio)}${r.war ? ' · <span class="neg">운임 전쟁 중</span>' : ''}${m && game.planesOn(m.id).length ? ` · 내 점유율 ${pct(game.routeDay(m).share)}` : ''}</small></div>${m ? `<button class="ghost" data-act="goRoute" data-id="${m.id}">내 노선 보기</button>` : ''}</div>`; }).join('') || '<p class="empty">아직 노선이 없습니다.</p>'}</div>`;
   }
   /** 자회사 노선 표: 지난달 매출, 시장 몫(자회사·다른 경쟁사·우리), 공세 성과 */
   function subRoutes(k: Competitor): string {
