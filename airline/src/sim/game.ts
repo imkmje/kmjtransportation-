@@ -723,11 +723,13 @@ export class Game {
     if (s.cash < amount) return fail(`현금이 모자랍니다(낙찰되면 $${amount}M을 냅니다)`);
     b.best = { who: 0, amount }; return { ok: true, amount };
   }
+  /** 경쟁사가 매기는 입찰 가치. 경쟁사는 이 값의 0.8~1.4배까지 부른다 */
+  bidValue(b: NonNullable<GameState['bids']>[number]): number { return b.kind === 'concession' ? 14 + 2 * this.state.competitors.reduce((a, c) => a + c.routes.filter((r) => r.a === b.city || r.b === b.city).length, 0) : b.n * 4; }
   private bidStep(m: number): void {
     const s = this.state, k = config.extra.bid, mp = this.monthsPassed;
     for (const b of [...(s.bids ?? [])]) {
       if (mp < b.ends) { // 경쟁사가 값을 올린다
-        const value = b.kind === 'concession' ? 14 + 2 * s.competitors.reduce((a, c) => a + c.routes.filter((r) => r.a === b.city || r.b === b.city).length, 0) : b.n * 4;
+        const value = this.bidValue(b);
         const bidders = s.competitors.filter((c) => !this.isFriend(c) && c.cash > 20 && (c.hub === b.city || c.routes.some((r) => r.a === b.city || r.b === b.city) || c.major));
         const next = b.best ? b.best.amount + k.step : b.min;
         if (bidders.length && next <= value * (0.8 + this.rng.next() * 0.6) && b.best?.who !== bidders[0].id && this.rng.next() < 0.6) { const c = bidders[this.rng.int(bidders.length)]; b.best = { who: c.id, amount: next }; s.log.push(`${m + 1}개월차: ${c.name}이(가) ${cityById(b.city).name} ${b.kind === 'concession' ? '운영권' : '슬롯'} 입찰에서 $${next}M을 불렀습니다.`); }
@@ -815,7 +817,8 @@ export class Game {
     const comps = s.competitors.filter((c) => !c.major);
     const compOtp = (c: Competitor) => 0.8 + 0.15 * Math.min(1, Math.max(0, ((c.eff ?? 1) - 0.88) / 0.24)), compRating = (c: Competitor) => 2.4 + (this.quality(c) - 0.9) * 2;
     const compGrowth = (c: Competitor) => { const h = c.revHist ?? []; return h.length >= 12 ? h.slice(-3).reduce((a, b) => a + b, 0) / Math.max(0.01, h.slice(0, 3).reduce((a, b) => a + b, 0)) - 1 : 0; };
-    const cats: [string, number, (c: Competitor) => number][] = [['정시율상', this.avgOtp, compOtp], ['서비스상', myRating / 5, (c) => compRating(c) / 5], ['성장상', myGrowth, compGrowth]];
+    const jit = (c: Competitor, k: number) => ((((c.id * 7919 + y * 104729 + k * 31) % 1000) + 1000) % 1000 / 1000 - 0.5) * [0.06, 0.08, 0.2][k]; // 경쟁사 성적이 해마다 조금씩 흔들린다(같은 회사가 매년 받지 않게). 난수 대신 고정 계산이라 결정론 유지
+    const cats: [string, number, (c: Competitor) => number][] = [['정시율상', this.avgOtp, (c) => compOtp(c) + jit(c, 0)], ['서비스상', myRating / 5, (c) => compRating(c) / 5 + jit(c, 1)], ['성장상', myGrowth, (c) => compGrowth(c) + jit(c, 2)]];
     const won: string[] = [], winners: Record<string, string> = {};
     for (const [name, mine, f] of cats) {
       const best = [...comps].sort((a, b) => f(b) - f(a))[0];
@@ -1499,7 +1502,7 @@ export class Game {
     const kinds: Contract['kind'][] = ['cities', 'profit']; if (served.length) kinds.push('pax', 'otp');
     const kind = kinds[this.rng.int(kinds.length)], months = 3 + this.rng.int(4), m$ = (v: number) => `$${v}M`;
     let c: Omit<Contract, 'id' | 'reward' | 'status' | 'expires' | 'progress'>;
-    if (kind === 'pax') { const r = served[this.rng.int(served.length)], d = this.routeDay(r), goal = Math.max(3000, Math.round((d.pax * config.daysPerMonth * months * 1.15) / 500) * 500); c = { kind, goal, limit: months, a: r.a, b: r.b, title: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에서 ${months}개월 안에 승객 ${goal.toLocaleString('en-US')}명 수송` }; }
+    if (kind === 'pax') { const r = served[this.rng.int(served.length)], d = this.routeDay(r), goal = Math.max(3000, Math.round((d.pax * config.daysPerMonth * months * (1.15 - 0.05 * Math.min(3, this.competitorsOn(r.a, r.b).length))) / 500) * 500); c = { kind, goal, limit: months, a: r.a, b: r.b, title: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에서 ${months}개월 안에 승객 ${goal.toLocaleString('en-US')}명 수송` }; }
     else if (kind === 'otp') c = { kind, goal: months, limit: months + 2, title: `정시율 ${Math.round(k.otpTarget * 100)}% 이상을 ${months}개월 연속 유지(${months + 2}개월 안에)` };
     else if (kind === 'cities') { const n = 2 + this.rng.int(2); c = { kind, goal: n, limit: months + 3, startCities: served0, title: `${months + 3}개월 안에 새 도시 ${n}곳에 취항` }; }
     else { const goal = Math.max(8, Math.round(Math.max(3, avg) * months * 1.25)); c = { kind: 'profit', goal, limit: months, title: `${months}개월 동안 누적 이익 ${m$(goal)} 달성` }; }
