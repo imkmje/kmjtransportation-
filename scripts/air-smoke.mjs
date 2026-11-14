@@ -545,6 +545,12 @@ await page.click('#menubtn'); await page.click('#menu button[data-m="timelapse"]
 check('메뉴: 성장 타임랩스 재생(그동안 시간 정지)', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
 await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
 check('지도: 경쟁사 노선 보기 전환(전부→겹침만→…→전부)', cl1.includes('겹침만') && (await page.locator('#complayer').innerText()).includes('전부'), cl1);
+await page.click('#legendbtn'); check('지도: 범례 열기', await page.locator('#legend').isVisible()); await page.click('#legendbtn');
+await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="autoFreq"]').click();
+check('노선: 자동 증감편 켜기', await page.evaluate(() => window.__air.game.state.autoFreq === true));
+await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 99931, kind: 'cities', title: '바로 수락 시험', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 1, label: '현금 $1M' } }); g.state.auctions.push({ id: 99932, from: '시험', type: 'B737', price: 24, age: 60, cond: 0.75, expires: g.monthsPassed + 2 }); window.__air.render(); });
+await page.click('#tabs button[data-tab="map"]'); await openAll(); await page.locator('#panel details.sec[data-k="결정"] button[data-act="acceptContract"][data-id="99931"]').click();
+check('결정 대기에서 바로 계약 수락', await page.evaluate(() => window.__air.game.state.contracts.some((c) => c.id === 99931 && c.status === 'active')));
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
