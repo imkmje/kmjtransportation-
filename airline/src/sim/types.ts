@@ -86,9 +86,10 @@ export interface GameState {
   alli?: { name: string; xp: number; proj?: Record<string, number>; agenda?: { id: string; until: number } | null; meeting?: { expires: number } | null; poach?: { comp: number; expires: number; cost: number } | null }; // 우리 동맹: 이름·경험치·공동 사업(끝나는 개월, −1은 영구)·회의 안건·영입 시도
   campaign?: { kind: string; until: number } | null; green?: number;
   ownTypes?: string[]; myAirports?: string[]; dynasty?: { id: string; until: number } | null; dynastyDone?: string[]; // 자체 기종, 내 허브 공항, 왕조 목표(진행 중·달성)
-  ipo?: { month: number; price: number; base: number; hist: number[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
+  ipo?: { month: number; price: number; base: number; hist: number[]; res?: boolean[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
   subsidies?: { id: number; a: string; b: string; perMonth: number; months: number; expires: number; left?: number }[]; rightsSale?: { region: string; until: number } | null; nextSub?: number; // 정부 보조금 노선 제안·진행, 운수권 할인
   allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과
+  ownNames?: Record<string, string>; // 자체 기종 이름(내가 지음)
   alertsAt?: number[]; // 중요한 알림의 순번(log 배열 번호)
   challenges?: string[]; // 자유 모드 도전 조건(debt·crowded·lowrep·small)
   sagaStarted?: boolean; duel?: { start: number; until: number } | null; duelWon?: boolean; duelDone?: boolean; // 대형 항공사와의 장기 대결: 시작 여부, 1년 매출 대결(시작·끝 개월), 결과

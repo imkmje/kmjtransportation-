@@ -9,7 +9,7 @@ const pickPlane = async (fn) => { const id = await page.evaluate(fn); await page
 const pickComp = async () => { await page.click('#tabs button[data-tab="rivals"]'); const id = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major).id); await page.locator(`#panel button[data-act="selComp"][data-id="${id}"]`).click(); }; // 경쟁사 탭에서 일반 경쟁사를 골라 오른쪽 카드 열기
 const rtab = async () => { await page.evaluate(() => { document.querySelectorAll('#panel .pside details').forEach((d) => { d.open = true; }); }); }; // 노선 상세의 접이식 구역을 모두 펼침
 const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
-const openAll = () => page.evaluate(() => { document.querySelectorAll('#panel details.sec').forEach((d) => { d.open = true; }); }); // 지도 탭 구역은 접혀 있어 점검에서는 펼친다
+const openAll = () => page.evaluate(() => { document.querySelectorAll('#panel details.sec, #panel details.sec details.more').forEach((d) => { d.open = true; }); }); // 지도 탭 구역은 접혀 있어 점검에서는 펼친다
 await page.addInitScript(() => { window.__airYes = true; if (!sessionStorage.getItem('hintSet')) { localStorage.setItem('the-air-hints', 'on'); sessionStorage.setItem('hintSet', '1'); } }); // 힌트는 기본 꺼짐: 첫 5분 안내 점검을 위해 처음 한 번만 켠다 // 확인 창은 자동 수락(아래 인수 점검에서만 실제 창을 쓴다)
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -546,9 +546,9 @@ check('기단: 기종 도감', (await page.locator('#panel').innerText()).includ
 await page.evaluate(() => { const g = window.__air.game; g.state.netHist = [{ m: 0, routes: [['ICN', 'NRT']] }, { m: 6, routes: [['ICN', 'NRT'], ['ICN', 'PEK']] }]; });
 await page.click('#menubtn'); await page.click('#menu button[data-m="timelapse"]');
 check('메뉴: 성장 타임랩스 재생(그동안 시간 정지)', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
-await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
+await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
 check('지도: 경쟁사 노선 보기 전환(전부→겹침만→…→전부)', cl1.includes('겹침만') && (await page.locator('#complayer').innerText()).includes('전부'), cl1);
-await page.click('#legendbtn'); check('지도: 범례 열기', await page.locator('#legend').isVisible()); await page.click('#legendbtn');
+await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#legendbtn'); check('지도: 범례 열기', await page.locator('#legend').isVisible()); await page.click('#legendbtn');
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="autoFreq"]').click();
 check('노선: 자동 증감편 켜기', await page.evaluate(() => window.__air.game.state.autoFreq === true));
 await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 99931, kind: 'cities', title: '바로 수락 시험', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 1, label: '현금 $1M' } }); g.state.auctions.push({ id: 99932, from: '시험', type: 'B737', price: 24, age: 60, cond: 0.75, expires: g.monthsPassed + 2 }); window.__air.render(); });
@@ -569,7 +569,7 @@ check('재무: 마일 2배 프로모션', await page.evaluate(() => (window.__ai
 await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').click();
 check('경쟁사: 자회사·그룹 탭에 그룹 현황 표', (await page.locator('#panel').innerText()).includes('그룹 현황') && (await page.locator('#panel').innerText()).includes('시험항공'));
 await page.locator('#panel button[data-act="rivalSub"][data-v="comp"]').click();
-await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.click('#rcolor'); check('지도: 노선 색 바꾸기(이익→점유율)', (await page.locator('#rcolor').innerText()).includes('점유율')); for (let i = 0; i < 3; i++) await page.click('#rcolor');
+await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#rcolor'); check('지도: 노선 색 바꾸기(이익→점유율)', (await page.locator('#rcolor').innerText()).includes('점유율')); for (let i = 0; i < 3; i++) await page.click('#rcolor');
 const ffDay = await page.evaluate(() => window.__air.game.state.day); await page.click('#ffbtn');
 check('건너뛰기: 하루 이상 지나고 이유를 알려 줌', (await page.evaluate(() => window.__air.game.state.day)) > ffDay && (await page.locator('#toast').innerText()).includes('건너뜀'));
 await page.waitForTimeout(3300); check('알림 띠는 몇 초 뒤 사라짐', !(await page.locator('#toast.show').count()));
@@ -596,6 +596,12 @@ await page.evaluate(() => { window.__air.render(); }); const rkText = await page
 check('노선: 점유율 순위표(우리가 1위인 노선 수)', rkText.includes('점유율 순위표') && rkText.includes('우리가 1위인 노선'));
 await page.evaluate(() => { const g = window.__air.game; g.state.duel = { start: g.monthsPassed, until: g.monthsPassed + 12 }; window.__air.render(); }); await page.click('#tabs button[data-tab="map"]'); await openAll();
 check('현황: 최후의 대결 진행 막대', (await page.locator('#panel').innerText()).includes('최후의 대결'));
+// 2.17.0: 지도 설정 묶기·결정 대기 더 보기·왕조 진행
+await page.evaluate(() => { document.getElementById('mtpanel').hidden = true; }); await page.click('#mtbtn').catch(() => undefined);
+check('지도: 지도 설정 버튼을 누르면 노선 색·범례·경쟁사 노선이 펼쳐짐', await page.locator('#rcolor').isVisible()); await page.click('#mtbtn').catch(() => undefined);
+await page.evaluate(() => { const g = window.__air.game; for (let i = 0; i < 4; i++) g.state.contracts.push({ id: 99950 + i, kind: 'cities', title: `더 보기 시험 ${i}`, goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 1, label: '$1M' } }); g.state.rules = {}; window.__air.render(); });
+await page.click('#tabs button[data-tab="map"]'); await page.evaluate(() => document.querySelectorAll('#panel details.sec').forEach((d) => { d.open = true; }));
+check('결정 대기: 3건 넘으면 나머지는 더 보기로 접힘', await page.locator('#panel details.sec[data-k="결정"] details.more summary').first().isVisible());
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

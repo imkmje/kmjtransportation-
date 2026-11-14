@@ -16,4 +16,7 @@ export const OWN_TYPES: AircraftType[] = [
   { id: 'KX300', name: 'KX-300', cls: '자체 개발 중거리 광동체', seats: 300, speed: 880, range: 9800, runway: 2400, price: 115, hourly: 7.0, cargo: 12, own: true },
   { id: 'KX400', name: 'KX-400', cls: '자체 개발 장거리 광동체', seats: 400, speed: 910, range: 14800, runway: 3000, price: 175, hourly: 9.8, cargo: 22, own: true },
 ];
+/** 자체 기종 이름: 게임마다 다르게 지을 수 있어 처음 이름을 따로 둔다. shortcut: 기종 정보가 모듈 하나를 공유한다 — 두 게임을 동시에 띄우게 되면 이름을 게임 상태에서 찾도록 바꾼다 */
+export const OWN_DEFAULT_NAMES = Object.fromEntries(OWN_TYPES.map((t) => [t.id, t.name]));
+export const applyOwnNames = (names?: Record<string, string>) => { for (const t of OWN_TYPES) t.name = names?.[t.id] ?? OWN_DEFAULT_NAMES[t.id]; };
 export const typeById = (id: string): AircraftType => { const t = AIRCRAFT.find((x) => x.id === id) ?? OWN_TYPES.find((x) => x.id === id); if (!t) throw new Error(`없는 기종: ${id}`); return t; };
