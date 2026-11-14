@@ -44,7 +44,7 @@ export function startApp(): void {
   const tsort: Record<string, { k: string; d: number }> = { routes: { k: 'profit', d: -1 }, fleet: { k: 'cond', d: 1 }, rivals: { k: 'rev', d: -1 } }; // 표마다 정렬 열과 방향
   let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
   let toastTimer = 0, seenLog = 0, seenEvents = new Set<string>();
-  let hintsOn = (() => { try { return localStorage.getItem(HINT_KEY) !== 'off'; } catch { return true; } })();
+  let hintsOn = (() => { try { return localStorage.getItem(HINT_KEY) === 'on'; } catch { return false; } })();
   let autoPause = (() => { try { return localStorage.getItem('the-air-autopause') !== '0'; } catch { return true; } })();
 
   const panel = $('#panel'), top = { date: $('#date'), cash: $('#cash'), rep: $('#rep') };
@@ -203,7 +203,7 @@ export function startApp(): void {
   const detKey = (d: HTMLElement) => `${tab}|${selRoute ?? ''}|${selCity ?? ''}|${(d.querySelector('summary')?.textContent ?? '').replace(/[\d.,$%+\-]+/g, '').trim().slice(0, 24)}`;
   const secOpen = new Map<string, boolean>(); // 현황 탭 접이식 구역(사용자가 누른 것만 기억)
   /** <h3> 구역마다 접이식으로 바꾼다. 계약·경매처럼 바로 할 일이 있는 구역만 기본으로 펼친다 */
-  const fold = (html: string) => html.split('<h3>').filter(Boolean).map((chunk) => { const i = chunk.indexOf('</h3>'), head = chunk.slice(0, i), key = head.replace(/<[^>]*>/g, '').trim().split(' ')[0]; return `<details class="more sec" data-k="${key}" ${(secOpen.get(key) ?? /^(결정|계약|항공기|이야기|진출|라이벌|올해의|전세기|입찰)/.test(key)) ? 'open' : ''}><summary>${head}</summary>${chunk.slice(i + 5)}</details>`; }).join('');
+  const fold = (html: string) => html.split('<h3>').filter(Boolean).map((chunk) => { const i = chunk.indexOf('</h3>'), head = chunk.slice(0, i), key = head.replace(/<[^>]*>/g, '').trim().split(' ')[0]; return `<details class="more sec" data-k="${key}" ${(secOpen.get(key) ?? /^(결정|계약|항공기|이야기|진출|라이벌|올해의|전세기|입찰|대출|대형)/.test(key)) ? 'open' : ''}><summary>${head}</summary>${chunk.slice(i + 5)}</details>`; }).join('');
   /** 현황 탭 위쪽(자유 모드): 전세기 주문, 입찰 */
   function funTop(): string {
     const s = game.state; if (!s.sandbox) return '';
@@ -211,7 +211,7 @@ export function startApp(): void {
     const chs = s.charters ?? [], offers = chs.filter((c) => c.planeId === undefined), active = chs.filter((c) => c.planeId !== undefined);
     const cht = chs.length ? `<h3>전세기 주문 <small>${offers.length}건 제안 · ${active.length}건 운항 중</small></h3><div class="list">${active.map((c) => `<div class="row"><div class="grow"><b>${routeLabel(c.a, c.b)}</b><small>운항 중 · 남은 ${c.left}개월 · 월 ${money(c.perMonth)} · ${esc(typeById(game.plane(c.planeId!)?.type ?? 'B737').name)}</small></div></div>`).join('')}${offers.map((c) => { const km0 = distanceKm(cityById(c.a), cityById(c.b)), ok = idle.filter((p) => typeById(p.type).seats >= c.seats && typeById(p.type).range >= km0); return `<div class="rowc"><div class="top"><div class="grow"><b>${routeLabel(c.a, c.b)}</b><small>${km(km0)} · ${c.seats}석 이상 · ${c.months}개월 · 월 <b class="pos">${money(c.perMonth)}</b> · ${Math.max(0, c.expires - game.monthsPassed)}개월 안에 수락</small></div></div>${ok.length ? `<div class="btnrow">${ok.slice(0, 3).map((p) => `<button data-act="charter" data-id="${c.id}" data-p="${p.id}">${esc(p.name ?? typeById(p.type).name)} 보내기</button>`).join('')}</div>` : '<p class="hint">조건에 맞는 노는 항공기가 없습니다(좌석·항속).</p>'}</div>`; }).join('')}</div>` : '';
     const bids = (s.bids ?? []).map((b) => { const lead = b.best?.who === 0, who = b.best ? (b.best.who === 0 ? '우리' : s.competitors.find((c) => c.id === b.best!.who)?.name ?? '경쟁사') : '없음', next = b.best ? b.best.amount + config.extra.bid.step : b.min;
-      return `<div class="rowc"><div class="top"><div class="grow"><b>${esc(cityById(b.city).name)} ${b.kind === 'concession' ? '공항 운영권' : `신공항 슬롯 ${b.n}개`}</b><small>${b.kind === 'concession' ? `낙찰되면 5년간 슬롯 +${config.extra.bid.concessionSlots} · 착륙료 −30%` : `낙찰되면 이 공항 슬롯 +${b.n}`} · 최고가 ${b.best ? money(b.best.amount) : '-'}(${esc(who)}) · ${later(b.ends - game.monthsPassed)} 마감</small></div></div><div class="btnrow"><button data-act="bid" data-id="${b.id}" ${no(lead, '우리가 최고가입니다') + no(!lead && s.cash < next, short(next))}>${lead ? '우리가 최고가' : `${money(next)} 부르기`}</button></div></div>`; }).join('');
+      return `<div class="rowc"><div class="top"><div class="grow"><b>${esc(cityById(b.city).name)} ${b.kind === 'concession' ? '공항 운영권' : `신공항 슬롯 ${b.n}개`}</b><small>${b.kind === 'concession' ? `낙찰되면 5년간 슬롯 +${config.extra.bid.concessionSlots} · 착륙료 −30%` : `낙찰되면 이 공항 슬롯 +${b.n}`} · 최고가 ${b.best ? money(b.best.amount) : '-'}(${esc(who)}) · 경쟁사는 보통 ${money(game.bidValue(b) * 0.8)}~${money(game.bidValue(b) * 1.4)}까지 부릅니다 · ${later(b.ends - game.monthsPassed)} 마감</small></div></div><div class="btnrow"><button data-act="bid" data-id="${b.id}" ${no(lead, '우리가 최고가입니다') + no(!lead && s.cash < next, short(next))}>${lead ? '우리가 최고가' : `${money(next)} 부르기`}</button></div></div>`; }).join('');
     return cht + (bids ? `<h3>입찰 <small>돈은 낙찰될 때 냅니다</small></h3><div class="list">${bids}</div>` : '');
   }
   /** 현황 탭 오른쪽(자유 모드): 시상식 */
@@ -552,7 +552,8 @@ export function startApp(): void {
     const K = config.extra, l = s.loyalty ?? { level: 0, members: 0 };
     const loy = `<h3>마일리지 프로그램</h3><div class="seg">${K.loyalty.names.map((n, i) => `<button data-act="loyalty" data-v="${i}" class="${l.level === i ? 'on' : ''}">${n}</button>`).join('')}</div><p class="hint">회원 ${num(l.members)}명 · 수요 +${(game.loyaltyBoost * 100).toFixed(1)}% · 월 비용 ${money(game.loyaltyCost)}. 탑승객 일부가 회원이 되고, 회원이 많을수록 다시 타는 손님이 늘어 수요가 오릅니다(기본 최대 +6%, 풍성 최대 +12%). 혜택을 줄이면 회원 20%가 떠납니다.</p>`;
     const mg = s.mega, md = mg ? K.mega.list.find((x) => x.id === mg.id)! : null;
-    const mega = `<h3>대형 사업 <small>한 번에 하나</small></h3>${mg && md ? `<div class="goal"><div><b>${esc(md.name)}${mg.city ? ` · ${esc(cityById(mg.city).name)}` : ''}</b> <small>${mg.done}/${md.months}개월 · 매달 ${money(md.cost / md.months)}</small></div><div class="bar"><i style="width:${(mg.done / md.months) * 100}%"></i></div><small>${esc(md.desc)}</small><button class="ghost small" data-act="megaCancel">공사 중단(낸 돈은 돌려받지 못함)</button></div>` : `<div class="list">${K.mega.list.map((d) => { const done = (s.megaDone ?? []).includes(d.id) && d.id !== 'terminal'; return `<div class="row"><div class="grow"><b>${esc(d.name)}</b><small>${esc(d.desc)} · 총 ${money(d.cost)}(${d.months}개월 나눠 냄)${done ? ' · <b class="pos">완공</b>' : ''}</small></div>${done ? '' : `<button class="small" data-act="mega" data-v="${d.id}">착공</button>`}</div>`; }).join('')}</div>`}`;
+    const lp = s.history.at(-1)?.profit ?? 0;
+    const mega = `<h3>대형 사업 <small>한 번에 하나 · 지난달 이익 ${money(lp)}</small></h3>${mg && md ? `<div class="goal"><div><b>${esc(md.name)}${mg.city ? ` · ${esc(cityById(mg.city).name)}` : ''}</b> <small>${mg.done}/${md.months}개월 · 매달 ${money(md.cost / md.months)}</small></div><div class="bar"><i style="width:${(mg.done / md.months) * 100}%"></i></div><small>${esc(md.desc)}</small><button class="ghost small" data-act="megaCancel">공사 중단(낸 돈은 돌려받지 못함)</button></div>` : `<div class="list">${K.mega.list.map((d) => { const done = (s.megaDone ?? []).includes(d.id) && d.id !== 'terminal'; return `<div class="row"><div class="grow"><b>${esc(d.name)}</b><small>${esc(d.desc)} · 총 ${money(d.cost)}(${d.months}개월 나눠 냄) · 매달 <span class="${d.cost / d.months > lp ? 'neg' : ''}">${money(d.cost / d.months)}</span>${d.cost / d.months > lp ? '(지난달 이익보다 큼)' : ''}${done ? ' · <b class="pos">완공</b>' : ''}</small></div>${done ? '' : `<button class="small" data-act="mega" data-v="${d.id}">착공</button>`}</div>`; }).join('')}</div>`}`;
     return loy + mega;
   }
   function viewMoney(): string {
@@ -565,16 +566,15 @@ export function startApp(): void {
       ${divHtml()}
       <h3>월별 이익</h3>${h.length ? `<div class="chart">${bars}</div>` : '<p class="hint">첫 달이 끝나면 그래프가 나옵니다.</p>'}
       <h3>월말 정산</h3>${s.history.length ? `<div class="list">${[...s.history].reverse().slice(0, 12).map((m) => `<div class="row"><div class="grow"><b>${m.month}개월차</b><small>수익 ${money(m.revenue)}${m.dividend ? ` (배당 ${money(m.dividend)} 포함)` : ''} · 비용 ${money(m.cost + m.fixed)} · 탑승률 ${pct(m.loadFactor)}</small></div><div class="right ${m.profit >= 0 ? 'pos' : 'neg'}">${money(m.profit)}</div></div>`).join('')}</div>` : '<p class="hint">아직 정산한 달이 없습니다.</p>'}
-      <p class="hint">월 이익 = 수익 − 운영비 − 감가상각 − 고정비. 현금이 ${money(config.rules.bankruptCash)} 아래로 ${config.rules.bankruptMonths}개월 이어지면 파산입니다.</p></div><div>
-      <h3>회사 업그레이드 <small>(한 번 사면 계속 유지)</small></h3><div class="list">${config.upgrades.list.map((u) => { const lv = game.upgradeLevel(u.id), price = game.upgradePrice(u.id); return `<div class="row"><div class="grow"><b>${esc(u.name)}</b><span class="pips">${config.upgrades.prices.map((_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><small>단계마다 ${esc(u.desc)}</small></div>${price === null ? '<small class="pos">최고 단계</small>' : `<button data-act="upgrade" data-u="${u.id}" ${no(s.cash < price, short(price))}>${money(price)}</button>`}</div>`; }).join('')}</div>
+      <p class="hint">월 이익 = 수익 − 운영비 − 감가상각 − 고정비. 현금이 ${money(config.rules.bankruptCash)} 아래로 ${config.rules.bankruptMonths}개월 이어지면 파산입니다.</p></div><div>${fold(`<h3>회사 업그레이드 <small>(한 번 사면 계속 유지)</small></h3><div class="list">${config.upgrades.list.map((u) => { const lv = game.upgradeLevel(u.id), price = game.upgradePrice(u.id); return `<div class="row"><div class="grow"><b>${esc(u.name)}</b><span class="pips">${config.upgrades.prices.map((_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('')}</span><small>단계마다 ${esc(u.desc)}</small></div>${price === null ? '<small class="pos">최고 단계</small>' : `<button data-act="upgrade" data-u="${u.id}" ${no(s.cash < price, short(price))}>${money(price)}</button>`}</div>`; }).join('')}</div>
       <h3>정비</h3><button class="wide ${s.autoMaint ? '' : 'ghost'}" data-act="autoMaint">자동 정비: <b>${s.autoMaint ? '켜짐' : '꺼짐'}</b></button>
       <p class="hint">켜면 노선에 배정된 항공기의 정비 상태가 ${Math.round(config.maint.autoBelow * 100)}% 아래로 떨어질 때 월말에 알아서 점검합니다(항공기 가격의 2%, 7일간 운항 불가). 현금이 모자라면 건너뜁니다.</p>
       <h3>연료</h3><div class="kv"><div>연료 가격</div><div><b>${game.fuelLabel}</b> (${(s.fuel * 100).toFixed(0)}%)</div><div>연료 계약</div><div>${s.hedge ? `${(s.hedge.price * 100).toFixed(0)}%로 고정 · ${s.hedge.monthsLeft}개월 남음` : '없음'}</div></div>
       <div class="btnrow">${config.fuel.hedgeTiers.map((t) => `<button data-act="hedge" data-m="${t.months}" class="${t.months === config.fuel.hedgeMonths ? '' : 'ghost'}" ${no(!!s.hedge || s.cash < t.cost, s.hedge ? '이미 연료 계약 중입니다' : short(t.cost))}>${t.months}개월 고정 ${money(t.cost)}</button>`).join('')}</div>
       <p class="hint">${s.hedge ? '' : s.fuel < 0.9 ? '지금 가격이 싼 편입니다. 길게 고정하면 이득일 수 있습니다.' : s.fuel > 1.15 ? '지금 가격이 비쌉니다. 고정하면 가격이 내려도 비싸게 냅니다. 짧게(3개월) 고정하는 것이 안전합니다.' : '가격이 보통입니다. 오를지 내릴지 알 수 없으니 급하지 않으면 기다려도 됩니다.'}</p>
       <h3>대출</h3>${s.freeze > 0 ? `<p class="hint"><b class="neg">경기 악화로 은행이 새 대출을 중단했습니다 (${s.freeze}개월 남음)</b></p>` : ''}<div class="kv"><div>대출 잔액</div><div><b>${money(s.loan)}</b></div><div>한도</div><div>${money(game.loanLimit)}</div><div>월 이율</div><div>${(game.loanRate * 100).toFixed(1)}% <small>(한도를 많이 쓸수록 비쌈)</small></div><div>월 이자</div><div>${money(s.loan * game.loanRate)}</div></div>
-      <div class="two"><button data-act="borrow" ${no(s.loan + config.loan.step > game.loanLimit, `대출 한도를 넘습니다 (한도 ${money(game.loanLimit)}, 지금 잔액 ${money(s.loan)}). 항공기를 사면 한도가 늘어납니다.`)}>+${money(config.loan.step)} 대출</button><button class="ghost" data-act="repay" ${no(s.loan <= 0 || s.cash < Math.min(config.loan.step, s.loan), s.loan <= 0 ? '갚을 대출이 없습니다' : short(Math.min(config.loan.step, s.loan)))}>${money(Math.min(config.loan.step, s.loan || config.loan.step))} 상환</button></div>
-      ${funMoney()}</div></div>`;
+      <div class="btnrow half"><button data-act="borrow" ${no(s.loan + config.loan.step > game.loanLimit, `대출 한도를 넘습니다 (한도 ${money(game.loanLimit)}, 지금 잔액 ${money(s.loan)}). 항공기를 사면 한도가 늘어납니다.`)}>+${money(config.loan.step)} 대출</button><button class="ghost" data-act="repay" ${no(s.loan <= 0 || s.cash < Math.min(config.loan.step, s.loan), s.loan <= 0 ? '갚을 대출이 없습니다' : short(Math.min(config.loan.step, s.loan)))}>${money(Math.min(config.loan.step, s.loan || config.loan.step))} 상환</button></div>
+      ${funMoney()}`)}</div></div>`;
   }
 
   function recordsHtml(): string {
@@ -590,7 +590,8 @@ export function startApp(): void {
     const shown = log.filter((l) => newsFilter === 'all' || logKind(l) === newsFilter), cut = newsAll ? shown : shown.slice(0, 40);
     const chips = `<div class="chips">${kinds.map(([v, t]) => `<button data-act="newsFilter" data-v="${v}" class="${newsFilter === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
     const list = shown.length ? `<div class="list">${cut.map((l) => `<div class="row"><div class="grow">${esc(l)}</div></div>`).join('')}</div>${shown.length > cut.length ? `<button class="wide ghost" data-act="newsMore">이전 알림 ${shown.length - cut.length}개 더 보기</button>` : ''}` : (log.length ? '<p class="hint">이 종류의 알림이 없습니다.</p>' : '<p class="hint">아직 알림이 없습니다. 가끔 연료비·불황·폭설 같은 사건이 일어납니다.</p>');
-    return `<div class="cols2"><div><h2>알림 <small>${log.length}개</small></h2>${chips}${list}</div><div><h3>진행 중인 사건</h3>${ev || '<p class="hint">지금 진행 중인 사건이 없습니다.</p>'}</div></div>`;
+    const head = `<h2>알림 <small>${log.length}개</small></h2>${chips}${list}`;
+    return ev ? `<div class="cols2"><div>${head}</div><div><h3>진행 중인 사건</h3>${ev}</div></div>` : head;
   }
   
   /** 지도 오른쪽 위: 지금 시대와 예고된 다음 시대 */
@@ -886,7 +887,7 @@ export function startApp(): void {
   let nightOn = (() => { try { return localStorage.getItem('the-air-night') !== 'off'; } catch { return true; } })();
   map.setNight(nightOn);
   /** 메뉴 글자를 저장된 설정과 맞춘다(새로 열 때 꺼 둔 설정이 '켜짐'으로 보이지 않게) */
-  const menuLabels = () => { const set = (m: string, t: string, v: boolean) => { menu.querySelector(`[data-m="${m}"]`)!.textContent = `${t}: ${v ? '켜짐' : '꺼짐'}`; }; set('hints', '힌트', hintsOn); set('autopause', '사건 시 자동 정지', autoPause); set('sound', '소리', soundOn()); set('night', '낮밤 표시', nightOn); set('music', '배경 음악', musicOn()); };
+  const menuLabels = () => { const set = (m: string, t: string, v: boolean) => { menu.querySelector(`[data-m="${m}"]`)!.textContent = `${t}: ${v ? '켜짐' : '꺼짐'}`; }; set('hints', '힌트', hintsOn); set('autopause', '사건 때 멈춤', autoPause); set('sound', '소리', soundOn()); set('night', '낮밤 표시', nightOn); set('music', '배경 음악', musicOn()); };
   addEventListener('pointerdown', () => { if (musicOn()) setMusic(true); }, { once: true }); // 음악은 첫 터치 뒤에 시작(브라우저 규칙)
   $('#menubtn').addEventListener('click', () => { menuLabels(); menu.hidden = !menu.hidden; });
   menu.addEventListener('click', async (e) => {
@@ -896,7 +897,7 @@ export function startApp(): void {
     else if (m === 'load') { if (load()) { selCity = selRoute = null; syncMap(); lastHtml = ''; toast('불러왔습니다'); } else toast('저장된 게임이 없습니다'); }
     else if (m === 'new') { openSetup(); }
     else if (m === 'hints') { hintsOn = !hintsOn; try { localStorage.setItem(HINT_KEY, hintsOn ? 'on' : 'off'); } catch { /* 저장 불가 */ } b.textContent = `힌트: ${hintsOn ? '켜짐' : '꺼짐'}`; toast(hintsOn ? '힌트를 켰습니다' : '힌트를 껐습니다'); menu.hidden = false; render(); return; }
-    else if (m === 'autopause') { autoPause = !autoPause; try { localStorage.setItem('the-air-autopause', autoPause ? '1' : '0'); } catch { /* 저장 불가 */ } b.textContent = `사건 시 자동 정지: ${autoPause ? '켜짐' : '꺼짐'}`; toast(autoPause ? '사건이 생기면 시간이 멈춥니다' : '사건이 생겨도 시간이 계속 흐릅니다'); menu.hidden = false; render(); return; }
+    else if (m === 'autopause') { autoPause = !autoPause; try { localStorage.setItem('the-air-autopause', autoPause ? '1' : '0'); } catch { /* 저장 불가 */ } b.textContent = `사건 때 멈춤: ${autoPause ? '켜짐' : '꺼짐'}`; toast(autoPause ? '사건이 생기면 시간이 멈춥니다' : '사건이 생겨도 시간이 계속 흐릅니다'); menu.hidden = false; render(); return; }
     else if (m === 'sound') { setSound(!soundOn()); b.textContent = `소리: ${soundOn() ? '켜짐' : '꺼짐'}`; play('ok'); menu.hidden = false; return; }
     else if (m === 'volume') {
       const v = volumes();

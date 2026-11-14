@@ -723,11 +723,13 @@ export class Game {
     if (s.cash < amount) return fail(`현금이 모자랍니다(낙찰되면 $${amount}M을 냅니다)`);
     b.best = { who: 0, amount }; return { ok: true, amount };
   }
+  /** 경쟁사가 매기는 입찰 가치. 경쟁사는 이 값의 0.8~1.4배까지 부른다 */
+  bidValue(b: NonNullable<GameState['bids']>[number]): number { return b.kind === 'concession' ? 14 + 2 * this.state.competitors.reduce((a, c) => a + c.routes.filter((r) => r.a === b.city || r.b === b.city).length, 0) : b.n * 4; }
   private bidStep(m: number): void {
     const s = this.state, k = config.extra.bid, mp = this.monthsPassed;
     for (const b of [...(s.bids ?? [])]) {
       if (mp < b.ends) { // 경쟁사가 값을 올린다
-        const value = b.kind === 'concession' ? 14 + 2 * s.competitors.reduce((a, c) => a + c.routes.filter((r) => r.a === b.city || r.b === b.city).length, 0) : b.n * 4;
+        const value = this.bidValue(b);
         const bidders = s.competitors.filter((c) => !this.isFriend(c) && c.cash > 20 && (c.hub === b.city || c.routes.some((r) => r.a === b.city || r.b === b.city) || c.major));
         const next = b.best ? b.best.amount + k.step : b.min;
         if (bidders.length && next <= value * (0.8 + this.rng.next() * 0.6) && b.best?.who !== bidders[0].id && this.rng.next() < 0.6) { const c = bidders[this.rng.int(bidders.length)]; b.best = { who: c.id, amount: next }; s.log.push(`${m + 1}개월차: ${c.name}이(가) ${cityById(b.city).name} ${b.kind === 'concession' ? '운영권' : '슬롯'} 입찰에서 $${next}M을 불렀습니다.`); }
