@@ -551,6 +551,17 @@ check('노선: 자동 증감편 켜기', await page.evaluate(() => window.__air.
 await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 99931, kind: 'cities', title: '바로 수락 시험', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 1, label: '현금 $1M' } }); g.state.auctions.push({ id: 99932, from: '시험', type: 'B737', price: 24, age: 60, cond: 0.75, expires: g.monthsPassed + 2 }); window.__air.render(); });
 await page.click('#tabs button[data-tab="map"]'); await openAll(); await page.locator('#panel details.sec[data-k="결정"] button[data-act="acceptContract"][data-id="99931"]').click();
 check('결정 대기에서 바로 계약 수락', await page.evaluate(() => window.__air.game.state.contracts.some((c) => c.id === 99931 && c.status === 'active')));
+// 2.12.0: 자회사 차리기·동맹 이름·돈 쓸 곳·마일리지
+await page.evaluate(() => { window.__air.game.state.cash = 3000; window.__air.render(); });
+await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalsHome"]').click().catch(() => undefined);
+await page.locator('#panel button[data-act="foundOpen"]').click(); await page.fill('#f-name', '시험항공'); await page.check('input[name="f-kind"][value="regional"]'); await page.check('input[name="f-size"][value="1"]'); await page.click('#info-body button[data-act="foundGo"]');
+check('경쟁사: 자회사 차리기(이름·형태·자본금)', await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.name === '시험항공' && c.founded === 'regional' && c.stake === 1)) && !(await page.locator('#info').isVisible()));
+await page.locator('#panel button[data-act="rivalsHome"]').click().catch(() => undefined); await page.locator('#panel button[data-act="alName"]').click(); await page.fill('#al-name', '하늘 연합'); await page.click('#info-body button[data-act="alNameGo"]');
+check('경쟁사: 동맹 이름 바꾸기', await page.evaluate(() => window.__air.game.state.alli?.name === '하늘 연합') && (await page.locator('#panel').innerText()).includes('하늘 연합'));
+await page.click('#tabs button[data-tab="money"]'); await openAll(); await page.locator('#panel button[data-act="campaign"][data-v="national"]').click(); await openAll(); await page.locator('#panel button[data-act="green"]').click(); await openAll();
+check('재무: 광고 캠페인·친환경 연료 투자', await page.evaluate(() => !!window.__air.game.state.campaign && window.__air.game.state.green === 1));
+await page.locator('#panel button[data-act="promo"]').click();
+check('재무: 마일 2배 프로모션', await page.evaluate(() => (window.__air.game.state.loyalty?.promo ?? 0) > 0));
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
