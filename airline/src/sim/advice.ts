@@ -11,8 +11,9 @@ export function advise(g: Game): Advice[] {
   const idle = s.planes.filter((p) => p.routeId === null && p.shop <= 0 && p.charter === undefined);
   if (idle.length) out.push({ level: 'bad', text: `노는 항공기가 ${idle.length}대 있습니다. 노선에 배정해야 돈을 벌어요.`, tab: s.routes.some((r) => r.open) ? 'routes' : 'map' });
   for (const r of s.routes) if (r.open && g.planesOn(r.id).length === 0) out.push({ level: 'warn', text: `${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 배정된 항공기가 없습니다.`, tab: 'routes', routeId: r.id });
-  for (const p of s.planes) if (p.cond < 0.5 && p.shop <= 0) out.push({ level: p.cond < 0.3 ? 'bad' : 'warn', text: `${typeById(p.type).name}의 정비 상태가 ${Math.round(p.cond * 100)}%입니다. 고장 나기 전에 점검하세요.`, tab: 'fleet' });
-  for (const p of s.planes) if (g.needsReplacement(p)) out.push({ level: 'info', text: `${typeById(p.type).name}이(가) ${Math.floor(p.age / 12)}년 넘게 낡아 정비해도 ${Math.round(g.maxCond(p) * 100)}%까지만 회복됩니다. 팔고 새로 사는 편이 나을 수 있어요.`, tab: 'fleet' });
+  const who = (p: (typeof s.planes)[number]) => { const r = p.routeId !== null ? s.routes.find((x) => x.id === p.routeId) : undefined; return `${typeById(p.type).name}${p.name ? ` '${p.name}'` : ''}${r ? `(${cityById(r.a).name} ⇄ ${cityById(r.b).name})` : ''}`; }; // 같은 기종이 여러 대여도 어느 기체인지 알 수 있게
+  for (const p of s.planes) if (p.cond < 0.5 && p.shop <= 0) out.push({ level: p.cond < 0.3 ? 'bad' : 'warn', text: `${who(p)}의 정비 상태가 ${Math.round(p.cond * 100)}%입니다. 고장 나기 전에 점검하세요.`, tab: 'fleet' });
+  for (const p of s.planes) if (g.needsReplacement(p)) out.push({ level: 'info', text: `${who(p)}이(가) ${Math.floor(p.age / 12)}년 넘게 낡아 정비해도 ${Math.round(g.maxCond(p) * 100)}%까지만 회복됩니다. 팔고 새로 사는 편이 나을 수 있어요.`, tab: 'fleet' });
   if (s.competitors.length) { // 점유율이 낮은데 이익은 나는 노선: 점유율을 올려 볼 만하다
     const low = s.routes.filter((r) => r.open && g.planesOn(r.id).length).map((r) => ({ r, d: g.routeDay(r) })).filter((x) => x.d.share < 0.5 && x.d.revenue > x.d.cost).sort((a, b) => a.d.share - b.d.share)[0];
     if (low) out.push({ level: 'info', text: `${cityById(low.r.a).name} ⇄ ${cityById(low.r.b).name} 점유율이 ${Math.round(low.d.share * 100)}%입니다. 광고·서비스 등급·점유율 우선 운임·증편으로 올려 보세요.`, tab: 'routes', routeId: low.r.id });
