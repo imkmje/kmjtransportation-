@@ -93,11 +93,22 @@ export const config = {
       { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +12', cost: 120, months: 24 },
       { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 150, months: 30 },
       { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 완공 때 평판 +5%', cost: 90, months: 18 },
+      { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 300, months: 30 },
+      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '200석 단거리 고효율기. 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 400, months: 36 },
+      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '300석 중거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 600, months: 42 },
+      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '400석 장거리 광동체. 완성되면 나만 살 수 있고 기술료', cost: 800, months: 48 },
     ] },
     found: { capital: [40, 90, 180], planes: [2, 4, 8], cashShare: 0.35, max: 3, regionalKm: 1500, regionalSeat: 0.55, sizes: ['소', '중', '대'], kinds: { low: { name: '저가 항공사', desc: '운임이 싸고 운영비가 낮습니다', eff: 1.05 }, premium: { name: '프리미엄 항공사', desc: '운임이 비싸고 품질이 높습니다', eff: 0.97 }, regional: { name: '지역 항공사', desc: '1,500km 안 단거리만, 작은 기체로 자주 다닙니다', eff: 1 } } as Record<string, { name: string; desc: string; eff: number }> }, // 자회사 차리기: 자본금(고정) 중 35%는 운영 자금, 나머지로 항공기를 들인다
     cabin: { cost: [0.08, 0.14], rating: 0.3, biz: 0.08, premium: 0.08, shop: 5, names: ['기본', '개조', '최고급'] }, // 객실 개조: 새 기체 값의 8%·14%, 단계마다(노선 평균) 운임 수입 +8%·별점 +0.3·비즈니스 수요 +8%, 5일간 운항 못 함
     campaign: { national: { name: '전국 광고', cost: 10, rev: 0.1, rep: 0.03, boost: 0.03, premium: 0.04, months: 6 }, global: { name: '세계 광고', cost: 30, rev: 0.2, rep: 0.08, boost: 0.06, premium: 0.08, months: 6 } } as Record<string, { name: string; cost: number; rev: number; rep: number; boost: number; premium: number; months: number }>, // 대형 광고: 비용 = max(기본, 최근 월평균 매출 × rev). 바로 평판, 6개월간 운임 수입 +premium(브랜드 값)·수요 +boost
     green: { max: 5, cost: 15, rev: 0.12, ops: 0.03, carbon: 0.15 }, // 친환경 연료 투자: n단계 비용 = max($15M, 최근 월평균 매출 × 0.12) × n, 단계마다 운영비 −3%(연료 효율), 탄소세 시대 낡은 기체 부담 −15%
+    airport: { slots: 30, fee: 0.4 }, // 내 허브 공항: 슬롯 +30, 그 도시에 다니는 경쟁사 노선 1개마다 월 $0.4M
+    royalty: 0.03, // 자체 기종 하나마다 경쟁사(대형 포함) 항공기 1대당 월 $0.03M 기술료
+    dynasty: { months: 120, list: { world1: { name: '세계 1위 항공사', desc: '최근 12개월 매출 1위(대형 항공사 포함)' }, regions: { name: '전 지역 취항', desc: '모든 지역에 운항 중인 도시가 있다' }, group: { name: '그룹 연 매출 $3B', desc: '우리 + 자회사(51% 이상) 최근 12개월 매출 $3,000M' }, fleet: { name: '항공기 100대', desc: '내 항공기 100대(임대 포함)' } } as Record<string, { name: string; desc: string }> }, // 왕조 목표: 하나를 골라 10년 안에
+    ipo: { minMonth: 36, share: 0.25, pe: 8, payout: 0.15, growth: 0.05 }, // 상장: 3년차부터, 회사 가치(장부가 + 최근 12개월 이익 × 8)의 25%를 받는다. 해마다 이익의 15% 배당, 이익 5% 이상 성장 목표
+    quotes: { threat: { low: ['그 노선, 우리가 더 싸게 날겠습니다.', '손님은 결국 값을 따라옵니다.'], premium: ['그 노선의 진짜 서비스를 보여 드리죠.', '격이 다른 비행을 준비하고 있습니다.'] }, war: { low: ['가격으로 승부합시다. 버틸 수 있겠습니까?', '이번엔 끝까지 내립니다.'], premium: ['잠시 값을 낮출 뿐, 품질은 그대로입니다.', '이 노선은 양보할 수 없습니다.'] }, join: { low: ['함께라면 더 멀리 갑니다.', '좋은 조건이군요. 손잡겠습니다.'], premium: ['동맹의 품격을 높이겠습니다.', '오랜 협력이 되길 바랍니다.'] }, leave: { low: ['조건이 더 좋은 쪽을 택했습니다.', '사업은 사업입니다.'], premium: ['새로운 동반자를 찾았습니다.', '그동안 고마웠습니다.'] } } as Record<string, Record<string, string[]>>, // 경쟁사 대표 한마디(자유 모드)
+    policy: { subChance: 0.04, subMonths: 24, subExpire: 2, subMinMonth: 12, saleChance: 0.03, saleMonths: 6, saleCut: 0.5 }, // 정부 정책: 벽지 노선 보조금 제안(월 4%, 24개월), 운수권 할인(월 3%, 6개월간 반값)
+    allianceRace: { rep: 0.03, xp: 12 }, // 동맹 순위전(해마다 연말): 우리 동맹 매출이 스카이 동맹보다 크면 평판 +3%, 동맹 경험치 +12
     preorder: { deposit: 0.1, discount: 0.15, max: 3 }, // 신기종 선주문: 계약금 10%, 15% 할인, 최대 3대
     pioneer: { months: 6, boost: 0.15 }, // 첫 취항 보너스
   },

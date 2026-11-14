@@ -1,7 +1,7 @@
 export interface City { region: string; id: string; name: string; lat: number; lon: number; pop: number; income: number; runway: number; peak: { months: number[]; factor: number }; base?: boolean; label?: { dx: number; dy: number; align?: 'right' } }
-export interface AircraftType { id: string; name: string; cls: string; seats: number; speed: number; range: number; runway: number; price: number; hourly: number; cargo: number; from?: number } // cargo: 화물 적재량(톤)
+export interface AircraftType { id: string; name: string; cls: string; seats: number; speed: number; range: number; runway: number; price: number; hourly: number; cargo: number; from?: number; own?: boolean } // cargo: 화물 적재량(톤)
 export interface EventOption { label: string; cost: number; scale: number; text: string } // cost: 대응 비용(M), scale: 대응하면 효과가 이 배수로 줄어듦
-export interface EventDef { id: string; name: string; months: number; option?: EventOption; scheduled?: boolean; hosts?: string[]; effect: { cash?: number; cost?: number; demand?: number; cityCap?: number; routeDemand?: number; cap?: number; ground?: number }; text: string; snowCities?: string[]; season?: number[]; sandboxOnly?: boolean; boomCities?: string[] } // effect.cap: 전체 운항 증감, effect.ground: 항공기 한 대 운항 불가
+export interface EventDef { id: string; name: string; months: number; option?: EventOption; scheduled?: boolean; hosts?: string[]; effect: { cash?: number; cost?: number; demand?: number; cityCap?: number; routeDemand?: number; cap?: number; ground?: number }; text: string; snowCities?: string[]; season?: number[]; sandboxOnly?: boolean; boomCities?: string[]; minMonth?: number } // effect.cap: 전체 운항 증감, effect.ground: 항공기 한 대 운항 불가
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type Goal = { type: 'profit'; value: number } | { type: 'cities'; value: number } | { type: 'region'; value: number; cities: string[]; label?: string } | { type: 'survive'; months: number; minProfit: number } | { type: 'pax'; value: number } | { type: 'cargo'; value: number }; // cargo: 한 달 화물 수익(M)
@@ -84,7 +84,11 @@ export interface GameState {
   livery?: string; // 도색 색(지도의 내 비행기)
   loyalty?: { level: number; members: number; silver?: number; gold?: number; plat?: number; card?: boolean; cardInc?: number; promo?: number; promoNext?: number }; // 등급별 회원, 제휴 카드, 프로모션(남은 개월·다음 가능 개월)
   alli?: { name: string; xp: number; proj?: Record<string, number>; agenda?: { id: string; until: number } | null; meeting?: { expires: number } | null; poach?: { comp: number; expires: number; cost: number } | null }; // 우리 동맹: 이름·경험치·공동 사업(끝나는 개월, −1은 영구)·회의 안건·영입 시도
-  campaign?: { kind: string; until: number } | null; green?: number; // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
+  campaign?: { kind: string; until: number } | null; green?: number;
+  ownTypes?: string[]; myAirports?: string[]; dynasty?: { id: string; until: number } | null; dynastyDone?: string[]; // 자체 기종, 내 허브 공항, 왕조 목표(진행 중·달성)
+  ipo?: { month: number; price: number; base: number; hist: number[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
+  subsidies?: { id: number; a: string; b: string; perMonth: number; months: number; expires: number; left?: number }[]; rightsSale?: { region: string; until: number } | null; nextSub?: number; // 정부 보조금 노선 제안·진행, 운수권 할인
+  allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과 // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
   charters?: Charter[]; // 전세기 주문(제안·진행)
   alliance?: number[]; rivalAlliance?: number[]; // 우리 동맹 회원, 대형 항공사가 만든 동맹
   bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; compLots?: { city: string; n: number; holder: number }[]; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯

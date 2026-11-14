@@ -97,3 +97,47 @@ describe('월말 처리 금액이 보고에서 빠지지 않는다', () => {
     expect(g.state.history.at(-1)!.cost).toBeGreaterThanOrEqual(pay - 1e-6);
   });
 });
+
+describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·순위전', () => {
+  it('왕조 목표: 조건을 채우면 월말에 달성되고 업적에 들어간다', async () => {
+    const { achieved } = await import('../src/sim/achievements');
+    const g = sb(); expect(g.setDynasty('fleet').ok).toBe(true); expect(g.setDynasty('world1').ok).toBe(false);
+    for (let i = 0; i < 100; i++) g.buyPlane('E175');
+    g.advanceDays(30); expect(g.state.dynastyDone).toContain('fleet'); expect(g.state.dynasty).toBeNull();
+    expect(achieved(g)).toContain('dyn_fleet');
+  });
+  it('자체 기종: 개발 전에는 못 사고, 완성되면 구매 목록에 나오고 기술료가 들어온다', () => {
+    const g = sb(); expect(g.buyPlane('KX200').ok).toBe(false); expect(g.shopTypes().some((t) => t.id === 'KX200')).toBe(false);
+    g.state.mega = { id: 'own_KX200', done: 35, cost: 36 }; g.advanceDays(30);
+    expect(g.state.ownTypes).toContain('KX200'); expect(g.shopTypes().some((t) => t.id === 'KX200')).toBe(true); expect(g.buyPlane('KX200').ok).toBe(true);
+    const c0 = g.state.cash, n = g.state.competitors.reduce((a, c) => a + c.planes, 0); (g as unknown as { lateStep(m: number): void }).lateStep(g.monthsPassed);
+    expect(g.state.cash - c0).toBeCloseTo(Math.round(config.extra.royalty * n * 100) / 100);
+  });
+  it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
+    const g = sb(); expect(g.startMega('airport').ok).toBe(false);
+    const cap = g.slotCapacity('PUS'); expect(g.startMega('airport', 'PUS').ok).toBe(true);
+    g.state.mega!.done = 29; g.advanceDays(30); expect(g.state.myAirports).toContain('PUS'); expect(g.slotCapacity('PUS')).toBe(cap + 30);
+  });
+  it('상장: 3년차 전에는 못 하고, 상장하면 현금, 1년 뒤 주주 총회에서 배당', () => {
+    const g = sb(); route(g, 'ICN', 'NRT'); expect(g.goPublic().ok).toBe(false);
+    g.advanceDays(30 * 36); const v = g.companyValue, c0 = g.state.cash; const r = g.goPublic(); expect(r.ok).toBe(true);
+    expect(g.state.cash).toBeCloseTo(c0 + Math.round(v * config.extra.ipo.share)); expect(g.goPublic().ok).toBe(false);
+    g.advanceDays(30 * 12); expect(g.state.ipo!.hist.length).toBe(2); expect(g.state.log.some((l) => l.includes('주주 총회'))).toBe(true);
+  });
+  it('보조금: 수락하고 그 노선을 운항하면 매달 받는다', () => {
+    const g = sb(); g.state.subsidies = [{ id: 1, a: 'ICN', b: 'CJU', perMonth: 2, months: 24, expires: g.monthsPassed + 2 }];
+    expect(g.acceptSubsidy(1).ok).toBe(true); route(g, 'ICN', 'CJU'); g.advanceDays(60);
+    expect(g.state.subsidies![0].left).toBeLessThan(24);
+  });
+  it('운수권 할인: 기간 동안 반값', () => {
+    const g = new Game(3, undefined, { sandbox: true, rights: true }); const region = Object.keys(config.rights.regions).find((r) => !g.state.rights!.includes(r))!;
+    const p = g.rightsPrice(region); g.state.rightsSale = { region, until: g.monthsPassed + 3 }; expect(g.rightsPrice(region)).toBe(Math.round(p * 0.5));
+  });
+  it('경쟁사 대사: 동맹에 들어오면 대표가 한마디', () => {
+    const g = sb(); const c = g.state.competitors.find((x) => !x.major)!; g.joinAlliance(c.id);
+    expect(g.state.log.some((l) => l.includes(`${c.name} 대표`))).toBe(true);
+  });
+  it('위기 사건은 5년차 전에는 생기지 않는다', async () => {
+    const { EVENTS } = await import('../src/data'); expect(EVENTS.filter((e) => e.minMonth).map((e) => e.id).sort()).toEqual(['oilshock', 'pandemic', 'probe']);
+  });
+});
