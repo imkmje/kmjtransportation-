@@ -328,7 +328,7 @@ export class Game {
   private addPlane(type: string, price: number, extra: Partial<Plane> = {}): Plane {
     const p: Plane = { id: this.state.nextId++, type, book: price, routeId: null, weekly: 0, age: 0, bizShare: 0, cond: 1, shop: 0, ...extra };
     this.state.planes.push(p); this.touch();
-    if (!(this.state.typesFlown ?? []).includes(type)) { this.state.typesFlown = [...(this.state.typesFlown ?? []), type]; if (this.state.typesFlown.length === AIRCRAFT.length) this.note(this.monthsPassed + 1, 'record', '기종 도감 완성'); }
+    if (!typeById(type).own && !(this.state.typesFlown ?? []).includes(type)) { /* 도감은 시중 기종만 */ this.state.typesFlown = [...(this.state.typesFlown ?? []), type]; if (this.state.typesFlown.length === AIRCRAFT.length) this.note(this.monthsPassed + 1, 'record', '기종 도감 완성'); }
     return p;
   }
   // ---- 지역 운수권 ----
@@ -1892,25 +1892,27 @@ export class Game {
   cabinCost(p: Plane): number | null { const lv = p.cabin ?? 0; return lv >= 2 ? null : Math.round(typeById(p.type).price * config.extra.cabin.cost[lv] * 10) / 10; }
   /** 개조할 수 있는 내 여객기(임대·최고급 제외) */
   private canRefit(p: Plane): boolean { return !p.leased && typeById(p.type).seats > 0 && this.cabinCost(p) !== null; }
-  /** 객실 일괄 개조: 한꺼번에 빠지면 운항이 멈추므로 한 대씩 차례로 한 단계씩. 노는 항공기부터 */
+  /** 객실 일괄 개조: 한 단계씩. 노는 항공기는 한꺼번에, 운항 중인 항공기는 노선마다 한 대씩 동시에(같은 노선의 나머지는 계속 뜬다) */
   queueRefitAll(): Result<{ n: number; cost: number }> {
     const s = this.state; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
-    const q = new Set(s.refitQ ?? []), add = s.planes.filter((p) => this.canRefit(p) && !q.has(p.id) && p.id !== s.refitCur).sort((a, b) => Number(a.routeId !== null) - Number(b.routeId !== null) || a.id - b.id);
+    const q = new Set(s.refitQ ?? []), add = s.planes.filter((p) => this.canRefit(p) && !q.has(p.id) && !(s.refitNow ?? []).includes(p.id)).sort((a, b) => Number(a.routeId !== null) - Number(b.routeId !== null) || a.id - b.id);
     if (!add.length) return fail('개조할 항공기가 없습니다');
     s.refitQ = [...(s.refitQ ?? []), ...add.map((p) => p.id)]; this.refitStep();
     return { ok: true, n: add.length, cost: Math.round(add.reduce((a, p) => a + this.cabinCost(p)!, 0) * 10) / 10 };
   }
   cancelRefitQueue(): void { delete this.state.refitQ; }
-  /** 매일: 개조 중인 항공기가 정비를 마쳤으면 다음 항공기를 들여보낸다(현금이 모자라면 기다린다) */
+  /** 매일: 줄에서 들어갈 수 있는 항공기를 모두 들여보낸다 — 노는 항공기는 바로, 운항 중이면 같은 노선에 정비 중인 항공기가 없을 때만. 현금은 한 달 고정비만큼 남긴다 */
   private refitStep(): void {
-    const s = this.state; if (!s.refitQ?.length) return;
-    const cur = s.refitCur !== undefined ? this.plane(s.refitCur) : undefined; if (cur && cur.shop > 0) return;
-    while (s.refitQ.length) {
-      const p = this.plane(s.refitQ[0]); if (!p || !this.canRefit(p)) { s.refitQ.shift(); continue; } // 팔았거나 이미 최고급이면 건너뛴다
-      if (p.shop > 0 || s.cash < this.cabinCost(p)!) return; // 정비 중이거나 돈이 모자라면 기다린다
-      s.refitQ.shift(); this.refitCabin(p.id); s.refitCur = p.id; break;
+    const s = this.state;
+    if (s.refitNow) { s.refitNow = s.refitNow.filter((id) => (this.plane(id)?.shop ?? 0) > 0); if (!s.refitNow.length) delete s.refitNow; }
+    if (!s.refitQ?.length) return;
+    const busy = new Set(s.planes.filter((p) => p.shop > 0 && p.routeId !== null).map((p) => p.routeId)), keep: number[] = [], reserve = this.fixedMonthly;
+    for (const id of s.refitQ) {
+      const p = this.plane(id); if (!p || !this.canRefit(p)) continue; // 팔았거나 이미 최고급이면 뺀다
+      if (p.shop > 0 || s.cash - this.cabinCost(p)! < reserve || (p.routeId !== null && busy.has(p.routeId))) { keep.push(id); continue; } // 정비 중·돈 부족·같은 노선이 정비 중이면 기다린다
+      if (this.refitCabin(p.id).ok) { s.refitNow = [...(s.refitNow ?? []), p.id]; if (p.routeId !== null) busy.add(p.routeId); } else keep.push(id);
     }
-    if (!s.refitQ.length) delete s.refitQ;
+    if (keep.length) s.refitQ = keep; else delete s.refitQ;
   }
   refitCabin(planeId: number): Result {
     const s = this.state, p = this.plane(planeId); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
