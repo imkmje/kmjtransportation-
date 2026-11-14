@@ -10,12 +10,16 @@ import { subsolar, terminatorLat } from '../sim/report';
 export interface MapEvents { onCity(id: string | null): void; onRoute(id: number): void }
 
 const LAT_MIN = -60, LAT_MAX = 80;
+/** 위에서 본 비행기 모양(오른쪽이 앞) */
+const PLANE: [number, number][] = [[7, 0], [5.5, 0.9], [1.2, 1.1], [-1.5, 5.8], [-3, 5.8], [-1.6, 1.1], [-5, 1], [-6.6, 3], [-7.6, 3], [-6.8, 0], [-7.6, -3], [-6.6, -3], [-5, -1], [-1.6, -1.1], [-3, -5.8], [-1.5, -5.8], [1.2, -1.1], [5.5, -0.9]];
 
 export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev: MapEvents) {
   const ctx = canvas.getContext('2d')!;
   let W = 0, H = 0, dpr = 1, resized = false;
   let scale = 3, cx = 100, cy = 25; // scale: 화면 px/도, (cx, cy): 화면 가운데의 경도·위도
   let selCity: string | null = null, selRoute: number | null = null, pulseCity: string | null = null, focusComp: number | null = null, overlay: [string, string][] | null = null, overlayLabel = '', overlayNew = new Set<string>();
+  let dark = false; // C1 어두운 화면
+  const marketRank = (() => { const v = CITIES.map((c) => marketSize(c)).sort((a, b) => b - a); return { big: v[Math.floor(v.length / 4)], mid: v[Math.floor(v.length / 2)] }; })(); // B3 도시 크기 3단계 기준(상위 1/4, 1/2)
   let routeMode: 'profit' | 'share' | 'rating' | 'lf' = 'profit'; // 노선 색: 이익(초록·빨강) 또는 점유율·별점·탑승률(빨강→노랑→초록)
   let compMode: 'all' | 'mine' | 'subs' | 'off' = 'all'; // 경쟁사 노선 보기: 전부 / 내 노선과 겹치는 것만 / 자회사만 / 끔(경쟁사 탭에서 고른 회사는 늘 보임)
   const widths = new Map<string, number>();
@@ -47,13 +51,13 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   function draw(now: number, real: number) { // now: 일시정지하면 멈추는 애니메이션 시계, real: 항상 흐르는 시계(안내용 원)
     const g = getGame();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const grd = ctx.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, '#cfe6f5'); grd.addColorStop(1, '#a9d0ea');
+    const grd = ctx.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, dark ? '#13283c' : '#cfe6f5'); grd.addColorStop(1, dark ? '#0d1d2c' : '#a9d0ea');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.beginPath();
     for (let lon = -360; lon <= 360; lon += 30) { const x = toX(lon); ctx.moveTo(x, 0); ctx.lineTo(x, H); }
     for (let lat = -60; lat <= 80; lat += 30) { const y = toY(lat); ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
-    ctx.fillStyle = '#e9f0d6'; ctx.strokeStyle = '#b9c9a0'; ctx.lineWidth = 1;
+    ctx.fillStyle = dark ? '#24362c' : '#e9f0d6'; ctx.strokeStyle = dark ? '#36503f' : '#b9c9a0'; ctx.lineWidth = 1;
     for (const shift of [-360, 0, 360]) {
       for (const ring of land as number[][][]) {
         ctx.beginPath();
@@ -85,13 +89,14 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
       const A = cityOf(r.a), B = cityOf(r.b), d = g.routeDay(r), profit = d.revenue - d.cost, onR = g.planesOn(r.id), planes = onR.length, served = planes > 0;
       const scale = (v: number) => `hsl(${Math.round(Math.max(0, Math.min(1, v)) * 125)}, 62%, 44%)`; // 0 빨강 → 0.5 노랑 → 1 초록
       const color = !served ? '#8a96a3' : routeMode === 'share' ? scale(d.share) : routeMode === 'rating' ? scale((g.routeRating(r) - 1) / 4) : routeMode === 'lf' ? scale(d.seats > 0 ? (d.pax / d.seats - 0.5) / 0.5 : 0) : profit >= 0 ? '#2f9e5b' : '#d64545';
-      ctx.strokeStyle = color; ctx.lineWidth = r.id === selRoute ? 5 : served ? 2 + Math.min(5, Math.abs(profit) * config.daysPerMonth / 1.2) : 1.5; // 굵기 = 월 이익(손실)의 크기
+      ctx.strokeStyle = color; ctx.lineWidth = r.id === selRoute ? 5 : served ? 2 + Math.min(2.5, Math.abs(profit) * config.daysPerMonth / 2) : 1.5; ctx.lineCap = 'round'; // 큰 노선이 지도를 덮지 않게 상한을 낮춤 // 굵기 = 월 이익(손실)의 크기
       ctx.setLineDash(served ? [] : [6, 5]);
       for (const [x1, y1, x2, y2] of arcSegments(A, B)) {
         const [mx, my] = ctrl(x1, y1, x2, y2);
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
       }
       ctx.setLineDash([]);
+      if (served && g.warOn(r)) { ctx.save(); ctx.strokeStyle = `rgba(214,69,69,${0.45 + 0.45 * Math.sin(now / 250)})`; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); for (const [x1, y1, x2, y2] of arcSegments(A, B)) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } ctx.restore(); } // 운임 전쟁 중
       if (served && d.share < 0.2) { ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 5]); for (const [x1, y1, x2, y2] of arcSegments(A, B)) { const [mx, my] = ctrl(x1, y1, x2, y2); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); } ctx.restore(); }
       if (served && r.id === selRoute) { // 선택한 노선: 곡선 가운데의 월 이익 표시는 도시 이름을 다 그린 뒤 겹치지 않는 자리에 그린다
         const [x1, y1, x2, y2] = arcSegments(A, B)[0], [mx, my] = ctrl(x1, y1, x2, y2);
@@ -104,7 +109,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
           const tx = 2 * u * (mx - x1) + 2 * t * (x2 - mx), ty = 2 * u * (my - y1) + 2 * t * (y2 - my), ang = Math.atan2(ty, tx); // 진행 방향
           if (t < 0.07) { const ph = t / 0.07; ctx.save(); ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - ph)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x1, y1, 4 + ph * 14, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } // 이륙 고리
           const seats = typeById(onR[k].type).seats, sz = seats <= 150 ? 0.8 : seats <= 300 ? 1 : 1.35; ctx.save(); ctx.translate(px, py); ctx.rotate(ang); ctx.scale(sz, sz); ctx.fillStyle = g.state.livery ?? '#ffffff'; ctx.strokeStyle = '#2b3a49'; ctx.lineWidth = 1.2;
-          ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, 3.6); ctx.lineTo(-2, 0); ctx.lineTo(-4, -3.6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+          ctx.beginPath(); for (const [x, y] of PLANE) ctx.lineTo(x, y); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); // 위에서 본 비행기(날개·꼬리)
         }
       }
     }
@@ -122,17 +127,18 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     const t = real / 1000;
     for (const it of items) {
       const id = it.id.split('@')[0], c = cityOf(id), sel = id === selCity, connected = connectedOf(id);
+      if ((g.state.pioneer?.[id] ?? -1) > g.monthsPassed) { const ph = ((now / 1800) + it.x / 97) % 1; ctx.strokeStyle = `rgba(242,183,5,${0.8 * (1 - ph)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(it.x, it.y, 8 + ph * 16, 0, Math.PI * 2); ctx.stroke(); } // 첫 취항 보너스 중인 도시
       if (id === pulseCity) { const ph = (t % 1.4) / 1.4; ctx.strokeStyle = `rgba(31, 122, 224, ${1 - ph})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + ph * 22, 0, Math.PI * 2); ctx.stroke(); }
       const locked = !g.cityOpen(id); // 운수권이 없는 지역
       ctx.fillStyle = connected ? '#ffd86b' : locked ? '#cfd8e2' : '#ffffff'; ctx.strokeStyle = sel ? '#165fb3' : locked ? '#8b99a8' : '#2b3a49'; ctx.lineWidth = sel ? 4 : 2;
-      ctx.beginPath(); ctx.arc(it.x, it.y, c.id === g.state.base ? 8 : 4 + Math.min(3.5, Math.sqrt(marketSize(c)) * 0.55), 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 시장이 큰 도시일수록 점이 크다
+      const ms = marketSize(c); ctx.beginPath(); ctx.arc(it.x, it.y, c.id === g.state.base ? 8 : ms >= marketRank.big ? 7 : ms >= marketRank.mid ? 5.5 : 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 대도시·중도시·소도시 3단계 // 시장이 큰 도시일수록 점이 크다
       if (g.state.myAirports?.includes(id)) { ctx.save(); ctx.strokeStyle = '#1f7ae0'; ctx.lineWidth = 2.5; ctx.strokeRect(it.x - 11, it.y - 11, 22, 22); ctx.restore(); } // 내 허브 공항: 파란 네모
       const links = g.linksAt(id); // 허브: 연결 노선이 3개 이상이면 금빛 고리, 5개 이상이면 두 겹
       if (links >= 3) { ctx.save(); ctx.strokeStyle = 'rgba(214,160,30,0.85)'; ctx.lineWidth = 1.6; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(it.x, it.y, 12 + Math.sin(now / 600) * 0.8, 0, Math.PI * 2); ctx.stroke(); if (links >= 5) { ctx.beginPath(); ctx.arc(it.x, it.y, 16, 0, Math.PI * 2); ctx.stroke(); } ctx.restore(); }
       if (seasonOf(c, g.month) >= 1.15 && !locked) { const a = 0.55 + 0.45 * Math.sin(now / 350 + it.x), sx = it.x + 8, sy = it.y - 9; ctx.save(); ctx.fillStyle = `rgba(255,190,40,${a})`; ctx.beginPath(); ctx.moveTo(sx, sy - 4); ctx.lineTo(sx + 1.2, sy - 1.2); ctx.lineTo(sx + 4, sy); ctx.lineTo(sx + 1.2, sy + 1.2); ctx.lineTo(sx, sy + 4); ctx.lineTo(sx - 1.2, sy + 1.2); ctx.lineTo(sx - 4, sy); ctx.lineTo(sx - 1.2, sy - 1.2); ctx.closePath(); ctx.fill(); ctx.restore(); } // 성수기 반짝임
       const p = placed.get(it.id);
       if (!p) continue;
-      ctx.fillStyle = locked && !sel ? '#6b7a89' : '#16212c'; ctx.shadowColor = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
+      ctx.fillStyle = locked && !sel ? (dark ? '#7f90a0' : '#6b7a89') : (dark ? '#e6edf4' : '#16212c'); ctx.shadowColor = dark ? 'rgba(10,20,30,0.95)' : 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4;
       ctx.textAlign = p.align; ctx.fillText(c.name, p.x, p.y); ctx.textAlign = 'left'; ctx.shadowBlur = 0;
     }
     // 행사 표시: 예고되었거나 열려 있는 행사의 도시에 고리와 이름표
@@ -227,6 +233,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     setOverlay(routes: [string, string][] | null, label: string, fresh: string[] = []) { overlay = routes; overlayLabel = label; overlayNew = new Set(fresh); },
     setCompMode(m: 'all' | 'mine' | 'subs' | 'off') { compMode = m; },
     setRouteMode(m: 'profit' | 'share' | 'rating' | 'lf') { routeMode = m; },
+    setDark(v: boolean) { dark = v; },
     /** 일시정지 중이면 애니메이션을 멈춘다 */
     setPaused(v: boolean) { paused = v; },
     /** 점검용: 애니메이션 시계와 일시정지 상태 */
