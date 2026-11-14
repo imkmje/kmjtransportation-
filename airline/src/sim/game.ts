@@ -1531,6 +1531,7 @@ export class Game {
       r.daily.push(st); if (r.daily.length > 60) r.daily.shift();
     }
     for (const p of s.planes) if (p.shop > 0) p.shop--;
+    this.refitStep();
     s.day++;
     if (s.day % config.daysPerMonth === 0) this.endMonth();
     s.rng = this.rng.getState();
@@ -1864,6 +1865,28 @@ export class Game {
   premium(r: Route): number { const s = this.state; if (!s.sandbox) return 1; const cp = s.campaign && s.campaign.until > this.monthsPassed ? config.extra.campaign[s.campaign.kind]?.premium ?? 0 : 0; const l = s.loyalty, lk = config.extra.loyalty, loy = l && l.level ? lk.premium[l.level] * Math.min(1, l.members / Math.max(1, (s.history.at(-1)?.pax ?? 0) * 3)) : 0; return 1 + cp + loy + this.cabinOf(r) * config.extra.cabin.premium; } // loy: 마일리지 단골 손님
   cabinOf(r: Route): number { const ps = this.planesOn(r.id); return ps.length ? ps.reduce((a, p) => a + (p.cabin ?? 0), 0) / ps.length : 0; }
   cabinCost(p: Plane): number | null { const lv = p.cabin ?? 0; return lv >= 2 ? null : Math.round(typeById(p.type).price * config.extra.cabin.cost[lv] * 10) / 10; }
+  /** 개조할 수 있는 내 여객기(임대·최고급 제외) */
+  private canRefit(p: Plane): boolean { return !p.leased && typeById(p.type).seats > 0 && this.cabinCost(p) !== null; }
+  /** 객실 일괄 개조: 한꺼번에 빠지면 운항이 멈추므로 한 대씩 차례로 한 단계씩. 노는 항공기부터 */
+  queueRefitAll(): Result<{ n: number; cost: number }> {
+    const s = this.state; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    const q = new Set(s.refitQ ?? []), add = s.planes.filter((p) => this.canRefit(p) && !q.has(p.id) && p.id !== s.refitCur).sort((a, b) => Number(a.routeId !== null) - Number(b.routeId !== null) || a.id - b.id);
+    if (!add.length) return fail('개조할 항공기가 없습니다');
+    s.refitQ = [...(s.refitQ ?? []), ...add.map((p) => p.id)]; this.refitStep();
+    return { ok: true, n: add.length, cost: Math.round(add.reduce((a, p) => a + this.cabinCost(p)!, 0) * 10) / 10 };
+  }
+  cancelRefitQueue(): void { delete this.state.refitQ; }
+  /** 매일: 개조 중인 항공기가 정비를 마쳤으면 다음 항공기를 들여보낸다(현금이 모자라면 기다린다) */
+  private refitStep(): void {
+    const s = this.state; if (!s.refitQ?.length) return;
+    const cur = s.refitCur !== undefined ? this.plane(s.refitCur) : undefined; if (cur && cur.shop > 0) return;
+    while (s.refitQ.length) {
+      const p = this.plane(s.refitQ[0]); if (!p || !this.canRefit(p)) { s.refitQ.shift(); continue; } // 팔았거나 이미 최고급이면 건너뛴다
+      if (p.shop > 0 || s.cash < this.cabinCost(p)!) return; // 정비 중이거나 돈이 모자라면 기다린다
+      s.refitQ.shift(); this.refitCabin(p.id); s.refitCur = p.id; break;
+    }
+    if (!s.refitQ.length) delete s.refitQ;
+  }
   refitCabin(planeId: number): Result {
     const s = this.state, p = this.plane(planeId); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!p) return fail('없는 항공기입니다'); if (p.leased) return fail('임대기는 개조할 수 없습니다');
