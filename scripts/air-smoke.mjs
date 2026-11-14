@@ -181,7 +181,7 @@ await page.click('#panel button[data-act="autoMaint"]'); await openAll();
 check('재무 탭: 자동 정비 켜기', (await page.evaluate(() => window.__air.game.state.autoMaint)) === true && (await page.locator('#panel').innerText()).includes('자동 정비: 켜짐'));
 // 0.17.0: 도움말·기록·자동 운임·소리 렌더링
 await page.click('#menubtn'); await page.click('#menu button[data-m="help"]');
-check('도움말 화면이 열림', await page.locator('#info').isVisible() && (await page.locator('#info-body').innerText()).includes('운임 전쟁'));
+check('도움말 화면이 열림', await page.locator('#info').isVisible() && (await page.locator('#info-body').evaluate((e) => e.textContent ?? '')).includes('운임 전쟁'));
 await page.click('#info-close');
 await page.click('#menubtn'); await page.click('#menu button[data-m="records"]');
 check('기록 화면: 시나리오 7개 제목', (await page.locator('#info-body h4').count()) === 7);
@@ -498,7 +498,7 @@ if (repId !== null) { await pickPlane(() => window.__air.game.state.planes.find(
 check('항공기 카드: 교체 추천과 교체 버튼', repId !== null && (await page.locator('#panel button[data-act="replace"]').count()) > 0);
 if (repId !== null) { const n0 = await page.evaluate(() => window.__air.game.state.planes.length); await page.locator('#panel button[data-act="replace"]').first().click(); check('교체하면 항공기 수는 그대로, 옛 기체는 사라짐', await page.evaluate(([n, id]) => window.__air.game.state.planes.length === n && !window.__air.game.plane(id), [n0, repId])); }
 await page.click('#menubtn'); await page.click('#menu button[data-m="help"]');
-const helpText = await page.locator('#info').innerText(); await page.click('#info-close');
+const helpText = await page.locator('#info-body').evaluate((e) => e.textContent ?? ''); // 구역이 접혀 있어도 내용은 있다 await page.click('#info-close');
 check('도움말에 화면·점유율·자회사·기단 관리 설명', ['서랍', '점유율 우선 운임', '자회사', '교체 추천'].every((w) => helpText.includes(w)));
 // 2.4.1: 계약 제안 팝업
 await page.click('#dsize button[data-h="half"]').catch(() => undefined);
