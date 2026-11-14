@@ -265,10 +265,10 @@ export class Game {
     const eco = s.economy ?? 1;
     const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice; // 계약 중이면 계약 가격
     d0 *= eco; cg0 *= Math.pow(eco, c.economy.cargoPow);
-    let capMult = 1, costMult = (1 - this.up('ops')) * (1 - c.extra.green.ops * (s.green ?? 0)); // 친환경 연료: 운영비 절감
+    let capMult = this.crewFactor, costMult = (1 - this.up('ops')) * (1 - c.extra.green.ops * (s.green ?? 0)); // 친환경 연료: 운영비 절감
     d0 *= 1 + this.up('marketing');
     for (const e of s.events) {
-      const def = EVENTS.find((x) => x.id === e.def)!, k = e.handled && def.option ? def.option.scale : 1; // 대응하면 효과가 줄어든다
+      const def = EVENTS.find((x) => x.id === e.def)!, k = (e.handled && def.option ? def.option.scale : 1) * (1 - this.insCut); // 대응하면, 보험이 있으면 효과가 줄어든다
       if (def.effect.demand) { d0 *= 1 + def.effect.demand * k; cg0 *= 1 + def.effect.demand * k; }
       if (def.effect.cost) costMult *= 1 + def.effect.cost * k;
       if (def.effect.routeDemand && e.city && (r.a === e.city || r.b === e.city)) d0 *= 1 + def.effect.routeDemand * k;
@@ -1058,7 +1058,7 @@ export class Game {
   /** 월말: 자유 모드 재미 요소를 한꺼번에 돌린다 */
   private extraMonth(): void {
     const s = this.state, m = this.monthsPassed; if (!s.sandbox) return;
-    this.loyaltyStep(); this.alliStep(m); this.lateStep(m);
+    this.loyaltyStep(); this.alliStep(m); this.lateStep(m); this.crewStep(); this.financeStep(m);
     this.charterStep(m); this.bidStep(m); this.megaStep(m); this.awardsStep(m); this.recordsStep(m); this.pioneerStep(m); this.rivalAllianceStep(m);
     if (m % 6 === 0) s.netHist = [...(s.netHist ?? []), { m, routes: s.routes.filter((r) => r.open && this.planesOn(r.id).length).map((r) => [r.a, r.b] as [string, string]) }].slice(-60);
     for (const id of Object.keys(s.concessions ?? {})) if (s.concessions![id].until <= m) { const c = { ...s.concessions! }; delete c[id]; s.concessions = c; }
@@ -1707,8 +1707,49 @@ export class Game {
   }
   // ---- 후반: 왕조 목표·자체 기종 기술료·내 공항 사용료·상장·정부 정책·동맹 순위전·경쟁사 대사 ----
   private quote(c: Competitor, kind: string): void {
-    if (!this.state.sandbox) return; const q = config.extra.quotes[kind]?.[c.style]; if (!q?.length) return;
-    this.state.log.push(`${this.monthsPassed + 1}개월차: ${c.name} 대표 — "${q[(c.id + this.monthsPassed) % q.length]}"`);
+    if (!this.state.sandbox) return; const q = (c.trait ? config.extra.traitQuotes[kind]?.[c.trait] : undefined) ?? config.extra.quotes[kind]?.[c.style]; if (!q?.length) return;
+    this.state.log.push(`${this.monthsPassed + 1}개월차: ${c.name} ${this.ceoOf(c)} 대표 — "${q[(c.id + this.monthsPassed) % q.length]}"`);
+  }
+  ceoOf(c: Competitor): string { const n = config.extra.ceos; return c.major ? (c.name === config.competitors.major2.name ? '에드워드 크라운' : '빅터 스카이') : n[(c.id * 7 + c.hub.charCodeAt(1)) % n.length]; }
+  // ---- 조종사(자유 모드) ----
+  get pilotsNeed(): number { return this.state.planes.filter((p) => p.routeId !== null || p.charter !== undefined).length * config.extra.crew.perPlane; }
+  /** 조종사가 모자라면 그 비율만큼 좌석 공급이 줄어든다(기록이 없는 옛 저장·시나리오는 1) */
+  get crewFactor(): number { const s = this.state; if (!s.sandbox || s.pilots === undefined) return 1; const need = this.pilotsNeed; return need > 0 ? Math.min(1, s.pilots / need) : 1; }
+  get hirePerMonth(): number { const k = config.extra.crew; return k.hire + (this.state.megaDone?.includes('academy') ? k.academyHire : 0); }
+  rushHire(): Result<{ n: number; cost: number }> {
+    const s = this.state, k = config.extra.crew; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    const cost = Math.round(k.rushN * k.rushCost * 10) / 10; if (s.cash < cost) return fail('현금이 모자랍니다');
+    s.cash -= cost; s.cur.cost += cost; s.pilots = (s.pilots ?? this.pilotsNeed) + k.rushN; return { ok: true, n: k.rushN, cost };
+  }
+  setAutoHire(on: boolean): void { this.state.autoHire = on; }
+  private crewStep(): void {
+    const s = this.state, k = config.extra.crew; if (!s.sandbox) return;
+    if (s.pilots === undefined) { s.pilots = this.pilotsNeed + k.spare; return; }
+    const want = s.planes.length * k.perPlane + k.spare; // 대기 중인 항공기까지 채운다
+    if (s.autoHire !== false && s.pilots < want) { const n = Math.min(this.hirePerMonth, want - s.pilots), cost = Math.round(n * k.hireCost * 100) / 100; if (s.cash >= cost) { s.cash -= cost; s.cur.cost += cost; s.pilots += n; } }
+    if (s.pilots < this.pilotsNeed) this.alert(`${this.monthsPassed}개월차: 조종사가 ${this.pilotsNeed - s.pilots}명 모자라 운항이 ${Math.round((1 - this.crewFactor) * 100)}% 줄었습니다. 재무 탭에서 급구 채용을 하거나 항공기를 천천히 늘리세요.`);
+  }
+  // ---- 보험·채권(자유 모드) ----
+  get insCut(): number { const s = this.state; return s.sandbox ? config.extra.insurance.cut[s.insurance ?? 0] ?? 0 : 0; }
+  get insPremium(): number { const s = this.state; return s.sandbox ? Math.round(s.planes.reduce((a, p) => a + p.book, 0) * (config.extra.insurance.rate[s.insurance ?? 0] ?? 0) * 100) / 100 : 0; }
+  setInsurance(level: number): Result { if (!this.state.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (![0, 1, 2].includes(level)) return fail('없는 단계입니다'); this.state.insurance = level; return { ok: true }; }
+  /** 신용 등급: 최근 12개월 흑자이고 평판 60% 이상이면 A, 평판 40% 이상이거나 흑자면 B, 아니면 C */
+  get creditGrade(): 'A' | 'B' | 'C' { const s = this.state, p12 = s.history.slice(-12).reduce((a, h) => a + h.profit, 0); return p12 > 0 && s.reputation >= 0.6 ? 'A' : p12 > 0 || s.reputation >= 0.4 ? 'B' : 'C'; }
+  get bondLimit(): number { const g = this.creditGrade; return Math.round(Math.max(50, this.monthlyRev * 12 * config.extra.bond.limit[g])); }
+  get bondOut(): number { return (this.state.bonds ?? []).reduce((a, b) => a + b.amount, 0); }
+  issueBond(amount: number): Result<{ rate: number }> {
+    const s = this.state, k = config.extra.bond; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    if (!k.sizes.includes(amount)) return fail('발행할 수 없는 금액입니다'); if (this.bondOut + amount > this.bondLimit) return fail(`발행 한도를 넘습니다(${this.creditGrade}등급 한도 $${this.bondLimit}M, 남은 채권 $${this.bondOut}M)`);
+    const rate = k.rate[this.creditGrade]; s.cash += amount; s.bonds = [...(s.bonds ?? []), { amount, rate, until: this.monthsPassed + k.months }];
+    s.log.push(`${this.monthsPassed + 1}개월차: ${this.creditGrade}등급으로 채권 $${amount}M을 발행했습니다(월 이율 ${(rate * 100).toFixed(1)}%, ${k.months / 12}년 뒤 원금 상환).`); return { ok: true, rate };
+  }
+  private financeStep(m: number): void {
+    const s = this.state; if (!s.sandbox) return;
+    const prem = this.insPremium; if (prem > 0) { s.cash -= prem; s.cur.cost += prem; }
+    for (const b of [...(s.bonds ?? [])]) {
+      const int = Math.round(b.amount * b.rate * 100) / 100; s.cash -= int; s.cur.cost += int;
+      if (m >= b.until) { s.cash -= b.amount; s.bonds = s.bonds!.filter((x) => x !== b); this.alert(`${m}개월차: 채권 원금 $${b.amount}M을 갚았습니다${s.cash < 0 ? '(현금이 바닥났습니다!)' : ''}.`); }
+    }
   }
   /** 왕조 목표 달성 여부(지금 상태 기준) */
   dynastyMet(id: string): boolean {

@@ -135,7 +135,7 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
   });
   it('경쟁사 대사: 동맹에 들어오면 대표가 한마디', () => {
     const g = sb(); const c = g.state.competitors.find((x) => !x.major)!; g.joinAlliance(c.id);
-    expect(g.state.log.some((l) => l.includes(`${c.name} 대표`))).toBe(true);
+    expect(g.state.log.some((l) => l.includes(`${c.name} ${g.ceoOf(c)} 대표`))).toBe(true);
   });
   it('위기 사건은 5년차 전에는 생기지 않는다', async () => {
     const { EVENTS } = await import('../src/data'); expect(EVENTS.filter((e) => e.minMonth).map((e) => e.id).sort()).toEqual(['oilshock', 'pandemic', 'probe']);
@@ -204,5 +204,22 @@ describe('두 번째 대형 항공사', () => {
     const g = sb(); for (let i = 0; i < 75; i++) { if (g.state.story) g.chooseStory(g.storyDef()!.choices.length - 1); g.advanceDays(30); }
     expect(g.state.competitors.filter((c) => c.major).map((c) => c.name)).toEqual(['글로벌 스카이', '퍼시픽 크라운']);
     const sc = new Game(3, undefined, { scenario: 'europe' }); for (let i = 0; i < 26; i++) sc.advanceDays(30); expect(sc.state.competitors.filter((c) => c.major).length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('조종사·보험·채권', () => {
+  it('조종사가 모자라면 좌석 공급이 그만큼 줄고, 급구 채용으로 채운다', () => {
+    const g = sb(); const { rid } = route(g, 'ICN', 'NRT'); g.advanceDays(30); expect(g.state.pilots).toBeGreaterThanOrEqual(g.pilotsNeed);
+    const seats = g.routeDay(g.route(rid)!).seats; g.state.pilots = Math.floor(g.pilotsNeed / 2);
+    expect(g.crewFactor).toBeCloseTo(g.state.pilots / g.pilotsNeed); expect(g.routeDay(g.route(rid)!).seats).toBeLessThan(seats);
+    expect(g.rushHire().ok).toBe(true); expect(g.state.pilots).toBe(Math.floor(g.pilotsNeed / 2) + config.extra.crew.rushN);
+  });
+  it('보험은 사건 피해를 줄이고 매달 보험료를 낸다', () => {
+    const g = sb(); route(g, 'ICN', 'NRT'); expect(g.insCut).toBe(0); expect(g.setInsurance(2).ok).toBe(true); expect(g.insCut).toBe(0.5); expect(g.insPremium).toBeGreaterThan(0);
+  });
+  it('채권: 등급별 한도 안에서 발행하고, 만기에 원금을 갚는다', () => {
+    const g = sb(); route(g, 'ICN', 'NRT'); const c0 = g.state.cash; expect(g.issueBond(50).ok).toBe(true); expect(g.state.cash).toBe(c0 + 50);
+    expect(g.issueBond(500).ok).toBe(false); // 한도 초과
+    g.state.bonds![0].until = g.monthsPassed + 1; g.advanceDays(30); expect(g.state.bonds!.length).toBe(0);
   });
 });
