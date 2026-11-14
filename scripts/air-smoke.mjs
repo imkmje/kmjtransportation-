@@ -589,6 +589,7 @@ check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() =
 // 2.15.0: 자동 처리·추천 노선·성적표
 await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll(); await subMap('look'); await openAll(); await page.locator('#panel button[data-act="rule"][data-v="contracts"]').click();
 check('현황: 자동 처리 규칙 켜기(계약 자동 수락)', await page.evaluate(() => window.__air.game.state.rules?.contracts === true));
+await openAll(); const ruleCol = await page.locator('#panel button[data-act="rule"][data-v="contracts"]').evaluate((e) => { const c = getComputedStyle(e); return [c.color, c.backgroundColor]; }); check('자동 처리: 켠 줄도 글자가 보임(글자색 ≠ 바탕색)', ruleCol[0] !== ruleCol[1], ruleCol.join(' / '));
 await openAll(); await subMap('look'); await openAll(); const recoN = await page.evaluate(() => window.__air.game.state.routes.length); await page.locator('#panel button[data-act="recoOpen"]').first().click();
 check('현황: 추천 노선에서 바로 열기 → 노선 탭', await page.evaluate((n) => window.__air.game.state.routes.length === n + 1, recoN) && (await page.locator('#tabs button[data-tab="routes"]').getAttribute('class'))?.includes('on'));
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 0 || g.monthsPassed < 48) g.advanceDays(30); window.__air.render(); window.__air.report(); });

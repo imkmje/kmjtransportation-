@@ -719,7 +719,7 @@ export function startApp(): void {
   function rulesHtml(): string {
     const r = game.state.rules ?? {}, items: [string, string, boolean][] = [['contracts', '계약 제안 자동 수락', !!r.contracts], ['subsidy', '보조금 제안 자동 수락', !!r.subsidy], ['story', '이야기는 돈이 덜 드는 쪽 자동 선택', !!r.story], ['auctions', '경매를 결정 대기·팝업에서 빼기', !!r.auctions], ['bids', '입찰을 결정 대기·팝업에서 빼기', !!r.bids]];
     if (!game.state.sandbox) items.splice(1, 4, items[3]); // 시나리오: 계약·경매만
-    return `<h3>자동 처리 <small>${items.filter((x) => x[2]).length}개 켜짐</small></h3><div class="list">${items.map(([k, t, on]) => `<button class="row ${on ? '' : 'ghost'}" data-act="rule" data-v="${k}" aria-pressed="${on}"><span class="grow">${t}</span><b>${on ? '켜짐' : '꺼짐'}</b></button>`).join('')}</div><p class="hint">결정할 일이 많을 때 손이 덜 가게 합니다. 경매·입찰은 현황 탭 아래 구역에는 그대로 남습니다.</p>`;
+    return `<h3>자동 처리 <small>${items.filter((x) => x[2]).length}개 켜짐</small></h3><div class="list">${items.map(([k, t, on]) => `<button class="rulerow${on ? ' on' : ''}" data-act="rule" data-v="${k}" aria-pressed="${on}"><span class="grow">${t}</span><b>${on ? '켜짐' : '꺼짐'}</b></button>`).join('')}</div><p class="hint">결정할 일이 많을 때 손이 덜 가게 합니다. 경매·입찰은 현황 탭 아래 구역에는 그대로 남습니다.</p>`;
   }
   /** 정부 정책(현황 탭): 보조금 노선, 운수권 할인 */
   function policyHtml(): string {
