@@ -41,7 +41,7 @@ export function startApp(): void {
   let mapSub: 'now' | 'look' = 'now', moneySub: 'ops' | 'invest' | 'cust' = 'ops', rivalSub: 'comp' | 'alli' | 'subs' = 'comp'; // 재무·경쟁사 탭 안쪽 탭
   let reportMonth = -1;
   let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null, reportOpen = false, alertsOpen = false;
-  let drawer: 'min' | 'half' | 'full' = 'half', lastSpeed = 1, resumeAfterFull = false; // 아래 서랍 높이, 마지막으로 고른 배속(크게 펼쳤다 닫으면 이 배속으로 다시 시작)
+  let drawer: 'min' | 'full' = 'full'; // 아래 서랍: 접기·펼침
   const tsort: Record<string, { k: string; d: number }> = { routes: { k: 'profit', d: -1 }, fleet: { k: 'cond', d: 1 }, rivals: { k: 'rev', d: -1 } }; // 표마다 정렬 열과 방향
   let speed = 0, acc = 0, last = performance.now(), lastMonth = 0, prevLog = 0;
   let toastTimer = 0, seenLog = 0, seenEvents = new Set<string>();
@@ -61,8 +61,8 @@ export function startApp(): void {
   };
 
   const map = createMapView($<HTMLCanvasElement>('#map'), () => game, {
-    onCity: (id) => { selCity = id; selRoute = null; if (id) { tab = 'map'; if (drawer === 'min') setDrawer('half'); } syncMap(); render(); },
-    onRoute: (id) => { selRoute = id; selCity = null; tab = 'routes'; if (drawer === 'min') setDrawer('half'); syncMap(); render(); },
+    onCity: (id) => { selCity = id; selRoute = null; if (id) { tab = 'map'; if (drawer === 'min') setDrawer('full'); } syncMap(); render(); },
+    onRoute: (id) => { selRoute = id; selCity = null; tab = 'routes'; if (drawer === 'min') setDrawer('full'); syncMap(); render(); },
   });
   const CL: Record<string, string> = { all: '전부', mine: '겹침만', subs: '자회사만', off: '끔' }, CL_KEY = 'the-air-complayer';
   let compLayer = (() => { try { const v = localStorage.getItem(CL_KEY); return v && CL[v] ? v : 'all'; } catch { return 'all'; } })();
@@ -107,7 +107,7 @@ export function startApp(): void {
     if (el.innerHTML !== out) { el.innerHTML = out; el.querySelectorAll<HTMLElement>('.chip').forEach((c) => seenEvents.add(c.dataset.key!)); }
   }
   $('#alerts').addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).closest('[data-act="alertsToggle"]')) { alertsOpen = !alertsOpen; renderAlerts(); return; }
+    if ((e.target as HTMLElement).closest('[data-act="alertsToggle"]')) { alertsOpen = !alertsOpen; if (alertsOpen && drawer === 'full') setDrawer('min'); renderAlerts(); return; } // 펼침에서는 목록이 패널을 가리므로 지도로 내려서 연다
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (!b) return;
     if (b.dataset.act === 'goNews') { tab = 'news'; seenLog = game.state.log.length; lastHtml = ''; render(); }
     else if (b.dataset.act === 'respond') { const r = game.respondEvent(Number(b.dataset.id)); if (!r.ok) return err(r.error); toast('사건에 대응했습니다'); lastHtml = ''; render(); }
@@ -313,7 +313,7 @@ export function startApp(): void {
     else if (k === '동맹') { tab = 'rivals'; rivalSub = 'alli'; selComp = null; selCity = selRoute = null; }
     else if (comp) { tab = 'rivals'; selComp = Number(comp); selCity = selRoute = null; }
     else { tab = 'map'; mapSub = 'now'; selCity = selRoute = null; secOpen.set(k, true); }
-    if (drawer === 'min') setDrawer('half'); syncMap(); lastHtml = ''; render();
+    if (drawer === 'min') setDrawer('full'); syncMap(); lastHtml = ''; render();
     if (!comp && k !== '경보' && k !== '동맹') document.querySelector(`#panel details.sec[data-k="${k}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
   function viewMap(): string {
@@ -1121,16 +1121,16 @@ export function startApp(): void {
   panel.addEventListener('change', (e) => { if (['fare', 'fareBiz', 'cargoRatio'].includes((e.target as HTMLElement).id)) { lastHtml = ''; render(); } });
 
   // ---- 탭·속도·메뉴 ----
-  $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; if (drawer === 'min') setDrawer('half'); selCity = selRoute = null; selPlane = selComp = null; syncMap(); panel.scrollTop = 0; lastHtml = ''; render(); }); // 탭을 누르면 항상 그 탭의 첫 화면
-  $('#fold').addEventListener('click', () => setDrawer(drawer === 'min' ? 'half' : 'min'));
-  { // 서랍 윗부분(손잡이·탭 줄의 빈 곳)을 위아래로 끌면 높이가 바뀌고, 놓으면 가까운 단계(접기·절반·크게)로 맞춘다
+  $('#tabs').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]'); if (!b) return; tab = b.dataset.tab as Tab; if (drawer === 'min') setDrawer('full'); selCity = selRoute = null; selPlane = selComp = null; syncMap(); panel.scrollTop = 0; lastHtml = ''; render(); }); // 탭을 누르면 항상 그 탭의 첫 화면
+  $('#fold').addEventListener('click', () => setDrawer(drawer === 'min' ? 'full' : 'min'));
+  { // 서랍 윗부분(손잡이·탭 줄의 빈 곳)을 위아래로 끌면 높이가 바뀌고, 놓으면 가까운 단계(접기·펼침)로 맞춘다
     const st = $('#stage'), grip = $('#dgrip'); let startY = 0, startH = 0, dragging = false;
     const begin = (e: PointerEvent) => { if ((e.target as HTMLElement).closest('button')) return; dragging = true; startY = e.clientY; startH = $('#drawer').getBoundingClientRect().height; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
     const move = (e: PointerEvent) => { if (!dragging) return; const H = st.getBoundingClientRect().height, h = Math.max(56, Math.min(H - 40, startH + (startY - e.clientY))); st.style.setProperty('--dh', `${h}px`); };
-    const end = () => { if (!dragging) return; dragging = false; const H = st.getBoundingClientRect().height, h = $('#drawer').getBoundingClientRect().height; st.style.removeProperty('--dh'); const r = h / H; setDrawer(r < 0.25 ? 'min' : r < 0.7 ? 'half' : 'full'); lastHtml = ''; render(); };
+    const end = () => { if (!dragging) return; dragging = false; const H = st.getBoundingClientRect().height, h = $('#drawer').getBoundingClientRect().height; st.style.removeProperty('--dh'); const r = h / H; setDrawer(r < 0.4 ? 'min' : 'full'); lastHtml = ''; render(); };
     for (const el of [grip, $('#dsum')]) { el.addEventListener('pointerdown', begin as EventListener); el.addEventListener('pointermove', move as EventListener); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); }
   }
-  $('#mapback').addEventListener('click', () => setDrawer('half'));
+  $('#mapback').addEventListener('click', () => setDrawer('min'));
   $('#offerpop').addEventListener('pointerdown', () => { clearTimeout(offerTimer); offerTimer = window.setTimeout(popNext, OFFER_MS); }); // 만지면 시간을 다시 센다
   $('#offerpop').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (!b) return;
@@ -1141,16 +1141,15 @@ export function startApp(): void {
     if (!r.ok) return err(r.error);
     popNext(); toast(act === 'acceptContract' ? '계약을 수락했습니다' : '계약을 거절했습니다'); play(act === 'acceptContract' ? 'ok' : 'tap'); lastHtml = ''; render();
   });
-  $('#mapwrap').addEventListener('click', (e) => { if (drawer === 'full' && !(e.target as HTMLElement).closest('button')) setDrawer('min'); }); // 크게 상태에서 지도 띠를 누르면 서랍을 접는다
+  let fullAtDown = false; $('#mapwrap').addEventListener('pointerdown', () => { fullAtDown = drawer === 'full'; }, true); // 누르기 시작할 때 이미 펼침이었을 때만 접는다(도시를 눌러 펼친 직후 다시 접히지 않게)
+  $('#mapwrap').addEventListener('click', (e) => { if (fullAtDown && drawer === 'full' && !(e.target as HTMLElement).closest('button')) setDrawer('min'); }); // 크게 상태에서 지도 띠를 누르면 서랍을 접는다
   $('#dsize').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-h]'); if (b) { setDrawer(b.dataset.h as typeof drawer); play('tap'); } });
-  /** 서랍 높이: 크게 펼치면 시간이 멈추고, 크게에서 내려오면 마지막으로 고른 배속으로 다시 흐른다 */
+  /** 서랍: 접기(지도) · 펼침(패널). 펼쳐도 시간은 그대로 흐른다(사용자 요청 2026-11-14, 예전 '절반'은 없앰) */
   function setDrawer(h: typeof drawer) {
     if (h === drawer) return;
-    const was = drawer; drawer = h;
-    $('#stage').classList.remove('d-min', 'd-half', 'd-full'); $('#stage').classList.add(`d-${h}`);
+    drawer = h; if (h === 'full' && alertsOpen) { alertsOpen = false; renderAlerts(); }
+    $('#stage').classList.remove('d-min', 'd-full'); $('#stage').classList.add(`d-${h}`);
     document.querySelectorAll<HTMLElement>('#dsize button').forEach((x) => x.classList.toggle('on', x.dataset.h === h));
-    if (h === 'full' && was !== 'full') { resumeAfterFull = speed > 0; if (speed > 0) lastSpeed = speed; speed = 0; } // 원래 멈춰 있었으면 내려와도 멈춘 그대로
-    else if (was === 'full' && resumeAfterFull && speed === 0 && game.state.status === 'playing' && $('#title').hidden) speed = lastSpeed;
     renderTop(); renderHint(); lastHtml = ''; render();
   }
   /** D4: 다음 결정거리가 생기거나, 중요한 알림이 오거나, 달이 바뀔 때까지 한 번에 건너뛴다(최대 31일) */
@@ -1166,7 +1165,7 @@ export function startApp(): void {
     }
     lastHtml = ''; render(); toast(`${n + 1}일 건너뜀 — ${why}`, 3000); play('tap');
   });
-  $('#speeds').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-speed]'); if (!b) return; speed = Number(b.dataset.speed); if (speed > 0) lastSpeed = speed; renderTop(); renderHint(); });
+  $('#speeds').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-speed]'); if (!b) return; speed = Number(b.dataset.speed); renderTop(); renderHint(); });
   // 고정 화면의 아이콘 채우기: 하단 탭, 일시정지, 패널 접기
   document.querySelectorAll<HTMLElement>('#tabs button[data-tab]').forEach((b) => { b.innerHTML = icon(b.dataset.tab === 'rivals' ? 'war' : b.dataset.tab!, 18) + b.textContent; });
   document.querySelectorAll<HTMLElement>('[data-ic]').forEach((b) => { b.innerHTML = icon(b.dataset.ic!, 18); });
@@ -1214,7 +1213,7 @@ export function startApp(): void {
   addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName)) return;
     if (e.key === ' ' && (e.target as HTMLElement).tagName !== 'BUTTON') { e.preventDefault(); speed = speed === 0 ? 1 : 0; renderTop(); renderHint(); }
-    else if (e.key === '1' || e.key === '2' || e.key === '3') { speed = e.key === '3' ? 4 : Number(e.key); lastSpeed = speed; renderTop(); renderHint(); }
+    else if (e.key === '1' || e.key === '2' || e.key === '3') { speed = e.key === '3' ? 4 : Number(e.key); renderTop(); renderHint(); }
     else if (e.key === 'Escape') { selCity = selRoute = null; menu.hidden = true; syncMap(); lastHtml = ''; render(); }
   });
   $('#info-body').addEventListener('input', (e) => { const t = e.target as HTMLInputElement; if (t.id === 'v-sfx') { setVolumes({ sfx: Number(t.value) / 100 }); $('#v-sfx-n').textContent = `${t.value}%`; } else if (t.id === 'v-music') { setVolumes({ music: Number(t.value) / 100 }); $('#v-music-n').textContent = `${t.value}%`; } });
@@ -1224,7 +1223,7 @@ export function startApp(): void {
   $('#end-new').addEventListener('click', () => openSetup());
   $('#end-continue').addEventListener('click', () => { const r = game.continuePlay(); if (r.ok) { lastHtml = ''; render(); toast('자유 모드로 계속합니다'); } });
 
-  function newGame(opts: GameOptions = {}) { recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); if (opts.sandbox) game.state.cash += startBonus(); /* 평생 업적 보너스(자유 모드만) */ seenLog = 0; seenEvents = new Set(); achSeen = new Set(); msSeen = new Set(reachedSteps(game)); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.state.sandbox ? '자유 모드' : game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
+  function newGame(opts: GameOptions = {}) { recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); if (opts.sandbox) game.state.cash += startBonus(); /* 평생 업적 보너스(자유 모드만) */ seenLog = 0; seenEvents = new Set(); achSeen = new Set(); msSeen = new Set(reachedSteps(game)); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; setDrawer('min'); map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.state.sandbox ? '자유 모드' : game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
 
   // ---- 새 게임 설정(시나리오·시작 도시·난이도) ----
   let setupScen = 'sandbox', setupDiff: Difficulty = 'normal', setupBase = 'ICN', setupRights = true; const setupCh = new Set<string>(), setupOff = new Set<string>(); // 기본은 목표 없는 자유 모드
