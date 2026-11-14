@@ -88,13 +88,17 @@ describe('돈 쓸 곳', () => {
     const rep = g.state.reputation; expect(g.startCampaign('national').ok).toBe(true); expect(g.state.reputation).toBeGreaterThan(rep); expect(g.startCampaign('global').ok).toBe(false);
     g.plane(pid)!.shop = 0; const cost0 = g.routeDay(r).cost; expect(g.investGreen().ok).toBe(true); expect(g.routeDay(r).cost).toBeLessThan(cost0);
   });
-  it('객실 일괄 개조는 한 대씩 차례로 들어가고, 돈이 모자라면 기다린다', () => {
-    const g = sb(); g.state.cash = 9999; route(g, 'ICN', 'NRT'); route(g, 'ICN', 'PEK'); route(g, 'ICN', 'HKG');
-    const own = g.state.planes.filter((p) => !p.leased && p.cabin === undefined); expect(own.length).toBeGreaterThanOrEqual(3);
+  it('객실 일괄 개조: 노는 항공기는 한꺼번에, 운항 중이면 노선마다 한 대씩 동시에, 돈이 모자라면 기다린다', () => {
+    const g = sb(); g.state.cash = 9999;
+    for (const b of ['NRT', 'PEK', 'HKG']) { const { rid } = route(g, 'ICN', b); const p = g.buyPlane('B737'); if (!p.ok) throw new Error(p.error); expect(g.assign(p.planeId, rid, 7).ok).toBe(true); } // 노선 3개 × 2대
+    g.buyPlane('B737'); g.buyPlane('A220'); // 노는 항공기 2대
+    for (const p of g.state.planes) p.shop = 0;
+    const own = g.state.planes.filter((p) => !p.leased && p.cabin === undefined); const idle = own.filter((p) => p.routeId === null).length; expect(idle).toBeGreaterThanOrEqual(2);
     const r = g.queueRefitAll(); expect(r.ok && r.n).toBe(own.length);
-    const inShop = () => g.state.planes.filter((p) => p.shop > 0).length;
-    for (let d = 0; d < 30; d++) { expect(inShop()).toBeLessThanOrEqual(1); g.advanceDays(1); }
-    expect(own.every((p) => p.cabin === 1)).toBe(true); expect(g.state.refitQ).toBeUndefined();
+    const shopOn = (rid: number | null) => g.state.planes.filter((p) => p.shop > 0 && p.routeId === rid).length;
+    expect(shopOn(null)).toBe(idle); for (const rt of g.state.routes) expect(shopOn(rt.id)).toBe(1); // 첫날: 노는 항공기 전부 + 노선마다 1대
+    for (let d = 0; d < 12; d++) { for (const rt of g.state.routes) expect(shopOn(rt.id)).toBeLessThanOrEqual(1); g.advanceDays(1); }
+    expect(own.every((p) => p.cabin === 1)).toBe(true); expect(g.state.refitQ).toBeUndefined(); // 한 대씩이면 45일, 이제 약 10일
     expect(g.queueRefitAll().ok).toBe(true); g.state.cash = 0; g.advanceDays(10); expect(g.state.refitQ!.length).toBeGreaterThan(0); // 돈이 없으면 멈춰 기다림
     g.cancelRefitQueue(); expect(g.state.refitQ).toBeUndefined();
   });
@@ -137,6 +141,10 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     expect(run('KX200')).toBeGreaterThan(run('A321N'));
     const g = sb(); const { rid, pid } = route(g, 'ICN', 'HKG'); expect(g.routeOptions(rid).some((x) => x.type === 'KX200')).toBe(false);
     g.state.ownTypes = ['KX200']; expect(g.routeOptions(rid).some((x) => x.type === 'KX200')).toBe(true); expect(g.replaceOptions(pid).some((x) => x.type === 'KX200')).toBe(true); // 노선 '항공기 추가'·교체 추천에도 자체 기종
+  });
+  it('자체 기종은 기종 도감(시중 기종 수)에 세지 않는다', () => {
+    const g = sb(); g.state.ownTypes = ['KX200']; const o = g.openRoute('ICN', 'HKG'); if (!o.ok) throw new Error(o.error); const p = g.buyPlane('KX200'); if (!p.ok) throw new Error(p.error);
+    expect(g.assign(p.planeId, o.routeId, 7).ok).toBe(true); expect(g.state.typesFlown ?? []).not.toContain('KX200');
   });
   it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
     const g = sb(); expect(g.startMega('airport').ok).toBe(false);
