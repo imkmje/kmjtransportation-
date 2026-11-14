@@ -197,6 +197,7 @@
       @keyframes tfly { from { left: -8%; } to { left: 108%; } } @media (prefers-reduced-motion: reduce) { .tp { animation: none; display: none; } } #title .card2 { position: relative; }
       .reviews { margin: 6px 0; } .reviews small { color: var(--ink2); } .rv { margin: 4px 0; padding: 6px 10px; border-left: 3px solid var(--line); background: var(--soft4); border-radius: 0 10px 10px 0; font-size: 13px; } .rv.pos { border-left-color: var(--pos); } .rv.neg { border-left-color: var(--neg); } .rv.warn { border-left-color: var(--warn); }
       #setup-off, #setup-ch { flex-wrap: wrap; overflow: visible; } /* 설정 화면 칩은 여러 줄로(잘리지 않게) */
+      /* 자동 처리 줄: 버튼 기본색(흰 글자)을 쓰지 않고 카드처럼, 켜지면 파란 테두리·옅은 파랑 바탕 */ .rulerow { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; font-weight: 500; min-height: 44px; } .rulerow .grow { flex: 1; } .rulerow b { color: var(--ink2); flex: none; } .rulerow.on { background: var(--soft2); border-color: var(--accent); } .rulerow.on b { color: var(--accent2); }
 </style>
   </head>
   <body>
