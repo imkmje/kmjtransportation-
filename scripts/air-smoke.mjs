@@ -498,7 +498,7 @@ if (repId !== null) { await pickPlane(() => window.__air.game.state.planes.find(
 check('항공기 카드: 교체 추천과 교체 버튼', repId !== null && (await page.locator('#panel button[data-act="replace"]').count()) > 0);
 if (repId !== null) { const n0 = await page.evaluate(() => window.__air.game.state.planes.length); await page.locator('#panel button[data-act="replace"]').first().click(); check('교체하면 항공기 수는 그대로, 옛 기체는 사라짐', await page.evaluate(([n, id]) => window.__air.game.state.planes.length === n && !window.__air.game.plane(id), [n0, repId])); }
 await page.click('#menubtn'); await page.click('#menu button[data-m="help"]');
-const helpText = await page.locator('#info-body').evaluate((e) => e.textContent ?? ''); // 구역이 접혀 있어도 내용은 있다 await page.click('#info-close');
+const helpText = await page.locator('#info-body').evaluate((e) => e.textContent ?? ''); await page.click('#info-close'); // 구역이 접혀 있어도 내용은 있다
 check('도움말에 화면·점유율·자회사·기단 관리 설명', ['서랍', '점유율 우선 운임', '자회사', '교체 추천'].every((w) => helpText.includes(w)));
 // 2.4.1: 계약 제안 팝업
 await page.click('#dsize button[data-h="half"]').catch(() => undefined);
@@ -579,6 +579,14 @@ await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel b
 await page.locator('#panel button[data-act="ipo"]').click(); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
 await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.selectOption('#ap-city', 'PUS'); await page.click('#info-body button[data-act="airportGo"]');
 check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.mega?.id === 'airport' && window.__air.game.state.mega?.city === 'PUS'));
+// 2.15.0: 자동 처리·추천 노선·성적표
+await page.click('#tabs button[data-tab="map"]'); await openAll(); await page.locator('#panel button[data-act="rule"][data-v="contracts"]').click();
+check('현황: 자동 처리 규칙 켜기(계약 자동 수락)', await page.evaluate(() => window.__air.game.state.rules?.contracts === true));
+await openAll(); const recoN = await page.evaluate(() => window.__air.game.state.routes.length); await page.locator('#panel button[data-act="recoOpen"]').first().click();
+check('현황: 추천 노선에서 바로 열기 → 노선 탭', await page.evaluate((n) => window.__air.game.state.routes.length === n + 1, recoN) && (await page.locator('#tabs button[data-tab="routes"]').getAttribute('class'))?.includes('on'));
+await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 0 || g.monthsPassed < 48) g.advanceDays(30); window.__air.render(); window.__air.report(); });
+await page.evaluate(() => document.querySelector('#report button[data-act="paper"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+check('연말 신문에 올해의 성적표(작년 비교)', (await page.locator('#info').isVisible()) && (await page.locator('#info-body').innerText()).includes('올해의 성적표')); await page.click('#info-close').catch(() => undefined);
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
