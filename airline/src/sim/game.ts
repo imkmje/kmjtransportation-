@@ -1955,6 +1955,12 @@ export class Game {
       this.note(m, 'rival', `${c.name} 파산`);
       this.alert(`${m}개월차: ${c.name}이(가) 파산했습니다. 노선 ${c.routes.length}개가 사라졌고${lots ? `, 항공기 ${lots}대가 ${config.auction.months}개월간 경매에 나왔습니다(현황 탭).` : '.'}`);
     }
+    if (s.sandbox && s.competitors.filter((c) => c.major).length === 1 && m > k.major2.startMonth && !s.competitors.some((c) => c.name === k.major2.name)) { // 두 번째 대형 항공사(자유 모드)
+      const used = new Set(s.competitors.map((c) => c.hub)), hub = k.major2.hubs.find((h) => h !== s.base && !used.has(h)) ?? k.major2.hubs[0];
+      s.competitors.push({ id: s.nextRival++, name: k.major2.name, style: 'premium', hub, cash: 200, planes: 0, routes: [], born: this.monthsPassed, eff: k.major.eff, low: 0, major: true });
+      this.note(m, 'major', `두 번째 대형 항공사 ${k.major2.name} 출범(${cityById(hub).name} 거점)`);
+      this.alert(`${m}개월차: 두 번째 대형 항공사 ${k.major2.name}이(가) ${cityById(hub).name}을(를) 거점으로 진출했습니다. 글로벌 스카이와 우리, 세 회사의 경쟁이 시작됩니다.`);
+    }
     if (!s.competitors.some((c) => c.major) && m > k.major.startMonth) { // 대형 항공사 출범
       const used = new Set(s.competitors.map((c) => c.hub)), hub = k.major.hubs.find((h) => h !== s.base && !used.has(h)) ?? k.major.hubs[0];
       s.competitors.push({ id: s.nextRival++, name: k.major.name, style: 'premium', hub, cash: 200, planes: 0, routes: [], born: this.monthsPassed, eff: k.major.eff, low: 0, major: true });

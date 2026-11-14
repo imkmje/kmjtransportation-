@@ -602,6 +602,10 @@ check('지도: 지도 설정 버튼을 누르면 노선 색·범례·경쟁사 �
 await page.evaluate(() => { const g = window.__air.game; for (let i = 0; i < 4; i++) g.state.contracts.push({ id: 99950 + i, kind: 'cities', title: `더 보기 시험 ${i}`, goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 1, label: '$1M' } }); g.state.rules = {}; window.__air.render(); });
 await page.click('#tabs button[data-tab="map"]'); await page.evaluate(() => document.querySelectorAll('#panel details.sec').forEach((d) => { d.open = true; }));
 check('결정 대기: 3건 넘으면 나머지는 더 보기로 접힘', await page.locator('#panel details.sec[data-k="결정"] details.more summary').first().isVisible());
+// 2.18.0: 회사 역사 그림
+const hcDl = page.waitForEvent('download', { timeout: 30000 }).catch(() => null); await page.click('#menubtn'); await page.click('#menu button[data-m="histcard"]');
+const dlf = await hcDl; check('메뉴: 회사 역사 그림(PNG) 내려받기', !!dlf && dlf.suggestedFilename().endsWith('.png'), dlf?.suggestedFilename() ?? `toast=${await page.locator('#toast').innerText()} menu=${await page.locator('#menu').isVisible()} info=${await page.locator('#info').isVisible()}`); if (dlf) await dlf.saveAs((process.env.HISTPNG ?? '/tmp/air-history.png'));
+await page.click('#menubtn').catch(() => undefined);
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

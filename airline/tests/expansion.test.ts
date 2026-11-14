@@ -198,3 +198,11 @@ describe('화면 다듬기용 계산', () => {
     const g = sb(); expect(g.dynastyProgress('fleet')).toMatchObject({ v: 1, t: 100 }); expect(g.dynastyProgress('regions').t).toBe(Object.keys(config.rights.regions).length);
   });
 });
+
+describe('두 번째 대형 항공사', () => {
+  it('자유 모드 6년차 뒤 퍼시픽 크라운이 나오고, 시나리오에는 없다', () => {
+    const g = sb(); for (let i = 0; i < 75; i++) { if (g.state.story) g.chooseStory(g.storyDef()!.choices.length - 1); g.advanceDays(30); }
+    expect(g.state.competitors.filter((c) => c.major).map((c) => c.name)).toEqual(['글로벌 스카이', '퍼시픽 크라운']);
+    const sc = new Game(3, undefined, { scenario: 'europe' }); for (let i = 0; i < 26; i++) sc.advanceDays(30); expect(sc.state.competitors.filter((c) => c.major).length).toBeLessThanOrEqual(1);
+  });
+});
