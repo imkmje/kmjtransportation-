@@ -158,6 +158,7 @@ export const config = {
   cargo: { K: 240, distExp: 0.6, base: 300, perKm: 0.45, elasticity: 1.5 }, // 화물 수요(톤/월), 운임($/톤) = base + perKm × km
   growth: { perMonth: 0.003, decay: 0.02, max: 1.8 }, // 운항 중인 도시는 매달 시장이 자란다
   competitors: { major: { name: '글로벌 스카이', hubs: ['DXB', 'FRA', 'JFK', 'SIN'], startMonth: 9, base: 3, perMonth: 0.12, perPlayerPlane: 0.8, cap: 45, eff: 0.97, addPerMonth: 1, bidChance: 0.3, invadeChance: 0.15, warMult: 2, seatMult: 2 }, // 대형 항공사: 파산하지 않고, 시장(내 항공기 수·시간)에 맞춰 커지며, 내 노선에 들어오고, 경매에도 입찰한다
+    major2: { name: '퍼시픽 크라운', hubs: ['SYD', 'LAX', 'GRU', 'JNB'], startMonth: 72 }, // 자유 모드: 6년차부터 두 번째 대형 항공사(성장 방식은 글로벌 스카이와 같다)
     start: 2, max: 6, sandboxMax: 12, maxGrowMonths: 24, entryChance: 0.1, entryMinMonth: 4, entryCash: 0.6, bankruptMonths: 3, effSpread: 0.12, shockChance: 0.012, shockMin: 10, shockMax: 40, // start: 처음에 있는 경쟁사 수, max: 동시에 있을 수 있는 최대 수, entryChance: 한 달에 신생 항공사가 생길 확률, bankruptMonths: 현금이 마이너스인 채 이만큼 지나면 파산, effSpread: 항공사마다 운영 효율이 ±12% 다르다
     startCash: 120, maxPlanesBase: 2, maxPlanesPerMonth: 0.35, maxPlanesCap: 10, sandboxCap: 24, capGrowMonths: 12, crowd: 0.8, maxOnRoute: 2, // 자유 모드: 상한이 12개월마다 1대씩 올라 최대 24대, crowd: 다른 회사가 많은 노선은 덜 고른다(회사 하나마다 점수 ÷ (1 + crowd×수)), maxOnRoute: 내 노선 하나에 진출해 오는 경쟁사는 2곳까지
      costRatio: 0.62, planeFixed: 0.4, profitScale: 1.4, buyRatio: 0.65 }, // 자유 모드에서만: profitScale: 경쟁사 이익 배수(시나리오는 목표 균형 때문에 1배), buyRatio: 항공기 한 대를 살 때 실제로 현금에서 나가는 비율(나머지는 할부)
