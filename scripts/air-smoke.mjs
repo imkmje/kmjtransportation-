@@ -398,6 +398,10 @@ await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors
 await page.locator('#panel button[data-act="goRoute"]').first().click();
 check('경쟁사 노선 목록: 겹치는 노선에서 내 노선으로 바로 이동', await page.evaluate(() => document.querySelector('#tabs button.on')?.dataset.tab === 'routes'));
 await page.evaluate(() => { if (window.__fakeR) window.__air.game.state.competitors.find((x) => !x.major).routes.pop(); window.__air.render(); }); await pickComp();
+const toOpen = await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors.find((x) => !x.major), has = (a, b) => g.state.routes.some((m) => (m.a === a && m.b === b) || (m.a === b && m.b === a));
+  const b = ['NRT', 'PEK', 'HKG', 'PVG', 'KIX', 'TPE', 'CJU', 'BKK', 'SIN', 'MNL'].find((x) => !has('ICN', x) && g.cityOpen(x)); if (!b) return null; c.routes.push({ ...c.routes[0], a: 'ICN', b, war: 0 }); window.__air.render(); return ['ICN', b]; }); // 내가 없는 경쟁사 노선을 하나 만든다
+if (toOpen) { await pickComp(); await page.locator(`#panel button[data-act="open"][data-a="${toOpen[0]}"][data-b="${toOpen[1]}"]`).click(); check('경쟁사 노선 목록: 내가 없는 노선은 [열기]로 바로 엶', await page.evaluate(([a, b]) => window.__air.game.state.routes.some((m) => m.open && ((m.a === a && m.b === b) || (m.a === b && m.b === a))), toOpen));
+  await page.evaluate(([a, b]) => { const g = window.__air.game, r = g.state.routes.find((m) => m.open && ((m.a === a && m.b === b) || (m.a === b && m.b === a))); if (r) g.closeRoute(r.id); g.state.competitors.find((x) => !x.major).routes.pop(); window.__air.render(); }, toOpen); await pickComp(); } else check('경쟁사 노선 목록: 열 수 있는 경쟁사 노선이 있음(점검 준비)', false);
 const acq = await page.locator('#panel button[data-act="acquire"]').first();
 const nComp = await page.evaluate(() => window.__air.game.state.competitors.length);
 await page.evaluate(() => { window.__airYes = false; });
