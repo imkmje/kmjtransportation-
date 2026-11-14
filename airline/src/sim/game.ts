@@ -1360,6 +1360,15 @@ export class Game {
     const others = s.competitors.filter((c) => (c.stake ?? 0) < 0.51).map((c) => sum(c.revHist ?? []));
     return { rank: 1 + others.filter((v) => v > group).length, total: others.length + 1, revenue: group };
   }
+  /** 자회사(51% 이상)에 자본금을 더 넣는다: 회사 현금이 늘어 확장에 쓰고, 증자 요청이 있으면 그만큼 채운다 */
+  injectSubsidiary(id: number, amount: number): Result {
+    const s = this.state, c = s.competitors.find((x) => x.id === id);
+    if (!c || (c.stake ?? 0) < 0.51) return fail('자회사(지분 51% 이상)에만 넣을 수 있습니다');
+    if (!(amount > 0)) return fail('금액이 잘못됐습니다'); if (s.cash < amount) return fail('현금이 모자랍니다');
+    s.cash -= amount; c.cash += amount; c.low = 0; // 다른 주주는 따라 넣지 않는다(내 돈만 들어간다)
+    if (c.call && amount >= c.call.amount) delete c.call;
+    s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}에 자본금 $${amount}M을 넣었습니다.`); return { ok: true };
+  }
   /** 증자 요청에 응한다 */
   fundSubsidiary(id: number): Result<{ price: number }> {
     const s = this.state, c = s.competitors.find((x) => x.id === id);
@@ -1934,9 +1943,18 @@ export class Game {
     if (r.contracts) for (const c of s.contracts.filter((x) => x.status === 'offer')) if (this.acceptContract(c.id).ok) out.push(`계약 자동 수락: ${c.title}`);
     if (r.subsidy) for (const x of s.subsidies ?? []) if (x.left === undefined && this.acceptSubsidy(x.id).ok) out.push(`보조금 자동 수락: ${cityById(x.a).name} ⇄ ${cityById(x.b).name}`);
     if (r.story && s.story) { const d = this.storyDef(); if (d) { const i = d.choices.reduce((best, c, k) => ((c.cash ?? 0) >= (d.choices[best].cash ?? 0) ? k : best), d.choices.length - 1); if (this.chooseStory(i).ok) out.push(`이야기 자동 선택: ${d.title} → ${d.choices[i].label}`); } }
+    if (r.call) for (const c of s.competitors) if (c.call && s.cash >= c.call.amount) { const amt = c.call.amount; if (this.fundSubsidiary(c.id).ok) out.push(`증자 자동 동의: ${c.name} $${amt}M`); }
+    if (r.campaign && s.sandbox && !(s.campaign && s.campaign.until > this.monthsPassed)) { // 광고가 끝나 있으면 다시: 현금이 값의 3배 이상일 때만(세계 광고 우선)
+      const kind = ['global', 'national'].find((x) => s.cash >= this.campaignCost(x) * 3); if (kind && this.startCampaign(kind).ok) out.push(`광고 자동 시작: ${config.extra.campaign[kind].name}`);
+    }
+    if (r.charter) for (const ch of s.charters ?? []) if (ch.planeId === undefined) { // 노는 항공기 중 조건에 맞는 가장 작은 기체를 보낸다
+      const km = distanceKm(cityById(ch.a), cityById(ch.b)), p = s.planes.filter((x) => x.routeId === null && x.shop <= 0 && x.charter === undefined && typeById(x.type).seats >= ch.seats && typeById(x.type).range >= km).sort((a, b) => typeById(a.type).seats - typeById(b.type).seats || a.id - b.id)[0];
+      if (p && this.acceptCharter(ch.id, p.id).ok) out.push(`전세기 자동 수락: ${cityById(ch.a).name} ⇄ ${cityById(ch.b).name}`);
+    }
+    if (r.agenda && s.alli?.meeting && this.chooseAgenda('fare').ok) out.push('동맹 회의 안건 자동: 공동 운임');
     return out;
   }
-  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
+  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
   /** 지금 열면 좋을 노선: 내가 다니는 도시(또는 본사)에서 아직 안 연 도시로, 수요 × 기준 운임 ÷ (경쟁사 수·거리) 점수 상위 */
   recommendRoutes(n = 3): { a: string; b: string; demand: number; comps: number; km: number }[] {
     const s = this.state, from = new Set([s.base, ...this.servedCities()]), range = Math.max(0, ...s.planes.map((p) => typeById(p.type).range), typeById('B737').range), out: { a: string; b: string; demand: number; comps: number; km: number; sc: number }[] = [];

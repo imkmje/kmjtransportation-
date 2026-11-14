@@ -35,6 +35,27 @@ describe('자회사', () => {
     const amt = k.call!.amount, c0 = g.state.cash; expect(g.fundSubsidiary(90).ok).toBe(true);
     expect(g.state.cash).toBeCloseTo(c0 - amt, 6); expect(k.call).toBeUndefined();
   });
+  it('자회사에 자본금을 더 넣을 수 있고(51% 이상만), 증자 요청 이상 넣으면 요청이 해결된다', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.2); const k = g.state.competitors[0];
+    expect(g.injectSubsidiary(90, 10).ok).toBe(false); // 20%는 안 됨
+    g.buyStake(90, 0.51); const c0 = g.state.cash, k0 = k.cash; expect(g.injectSubsidiary(90, 50).ok).toBe(true);
+    expect(g.state.cash).toBeCloseTo(c0 - 50, 6); expect(k.cash).toBeCloseTo(k0 + 50, 6);
+    k.call = { amount: 30, expires: g.monthsPassed + 3 }; expect(g.injectSubsidiary(90, 10).ok).toBe(true); expect(k.call).toBeTruthy();
+    expect(g.injectSubsidiary(90, 50).ok).toBe(true); expect(k.call).toBeUndefined();
+    g.state.cash = 5; expect(g.injectSubsidiary(90, 10).ok).toBe(false);
+  });
+  it('자동 처리: 증자 자동 동의·광고 자동·전세기 자동 수락·동맹 안건 자동', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0]; k.call = { amount: 12, expires: g.monthsPassed + 3 };
+    expect(g.applyRules()).toEqual([]); expect(k.call).toBeTruthy(); // 꺼져 있으면 그대로
+    g.setRule('call', true); g.setRule('campaign', true); g.setRule('charter', true); g.setRule('agenda', true);
+    g.state.charters = [{ id: 7, a: 'ICN', b: 'NRT', months: 2, seats: 100, perMonth: 1, expires: g.monthsPassed + 2 }]; g.buyPlane('B737');
+    (g.state as { alli?: unknown }).alli = { name: '시험 동맹', meeting: { expires: g.monthsPassed + 2 } };
+    const out = g.applyRules();
+    expect(k.call).toBeUndefined(); expect(g.state.campaign).toBeTruthy(); expect(g.state.charters![0].planeId).toBeDefined(); expect(g.state.alli!.meeting).toBeNull();
+    expect(out.length).toBe(4);
+    expect(g.applyRules()).toEqual([]); // 이미 처리됨, 광고는 진행 중
+    g.state.cash = 1; g.state.campaign = undefined; expect(g.applyRules()).toEqual([]); // 현금이 광고비 3배가 안 되면 안 함
+  });
   it('자회사가 파산하면 평판이 떨어진다', () => {
     const g = sandbox(); comp(g); g.buyStake(90, 0.2); const k = g.state.competitors[0]; g.state.reputation = 0.5;
     k.cash = -999; k.low = config.competitors.bankruptMonths; g.advanceDays(31);
