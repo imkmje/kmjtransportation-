@@ -147,7 +147,7 @@ export function startApp(): void {
 <h4>기록</h4><ul><li><b>연대기</b>와 <b>연말 신문</b>(메뉴)에 회사의 역사가 쌓입니다. <b>통계</b>에서 손익과 노선별 성적을 봅니다.</li><li><b>저장 관리</b>(메뉴): 저장 칸 3개와 파일 내보내기. 사파리는 일주일 넘게 안 쓰면 저장이 지워질 수 있으니, 가끔 파일로 내보내거나 홈 화면에 추가해 두세요.</li><li>업적을 모으면 <b>칭호</b>가 오르고, 자유 모드 시작 자금 보너스와 도전 출발지가 열립니다.</li></ul>
 <h4>조작</h4><ul><li>스페이스: 정지/재생 · 1·2·3: 배속 · Esc: 선택 해제</li><li>지도: 두 손가락으로 확대·이동. 아래 서랍은 접기·절반·크게로 높이를 바꿉니다(크게 펼치면 시간이 멈추고, 흐르던 중이었다면 내려올 때 그 배속으로 다시 흐름). 오른쪽 아래 화살표 버튼으로 패널 접기</li><li>하단 탭을 누르면 그 탭의 첫 화면으로 돌아갑니다. 누를 수 없는 버튼은 눌러 보면 이유를 알려 줍니다.</li></ul><h4>화면</h4><ul><li>지도 아래 <b>서랍</b>에 탭(현황·노선·기단·경쟁사·재무·알림)이 있습니다. 오른쪽 위 <b>접기·절반·크게</b>나 가운데 손잡이를 끌어 높이를 바꿉니다.</li><li><b>크게</b>를 누르면 시간이 멈추고, 흐르던 중이었다면 내려올 때 그 배속으로 다시 흐릅니다. 크게 상태에서 위쪽 지도 띠를 누르면 접힙니다.</li><li>노선·기단·경쟁사는 <b>표</b>입니다. 열 제목을 누르면 정렬, 줄을 누르면 오른쪽에 상세가 열립니다. 아무것도 안 골랐을 때 오른쪽에는 요약(할 일·상위·하위)이 나옵니다.</li></ul>
 <h4>점유율과 경쟁 대응</h4><ul><li>노선 표의 점유율 막대는 우리(파랑)와 경쟁사별 몫입니다. ▲▼는 지난달 대비 변화입니다.</li><li>노선 상세의 <b>경쟁 대응</b>: 상대 운임에 맞추기, 맞대응 광고(3개월), 점유율 우선 운임(경쟁사 최저가보다 5% 싸게, 매주), 서비스 등급(고급·최고급, 항공기당 월 비용).</li><li>노선 상세 맨 아래 <b>상세 지표</b>에 최근 12개월 이익·점유율 추이가 있습니다.</li></ul>
-<h4>후반 경영(자유 모드)</h4><ul><li><b>왕조 목표</b>(현황 탭): 세계 1위·전 지역 취항·그룹 연 매출 $3B·항공기 100대 중 하나를 10년 안에. 이루면 평생 업적.</li><li><b>자체 기종·허브 공항</b>(재무 > 투자 > 대형 사업): 개발한 기종은 나만 사고 기술료가 들어옵니다. 내 공항은 슬롯 +30·착륙료 면제·경쟁사 사용료.</li><li><b>주식 상장</b>(재무 > 투자, 3년차부터): 지분 25%를 팔아 큰돈을 받는 대신, 해마다 배당과 이익 성장 압박.</li><li><b>정부 정책</b>: 벽지 노선 보조금(수락하고 운항하면 매달), 운수권 반값 기간.</li><li><b>위기 사건</b>(5년차부터): 대유행·유가 폭등·대형 사고 조사. 돈을 내고 대응하면 피해가 줄어듭니다.</li><li><b>마일리지</b>(재무 탭): 회원이 실버·골드·플래티넘으로 오르며 비즈니스석 손님이 늘지만 비용도 큽니다. 제휴 신용카드는 회원 수에 비례해 매달 수입, 마일 2배 프로모션은 2개월간 가입 3배.</li><li><b>우리 동맹</b>(경쟁사 탭): 이름을 짓고, 매달 회원 수만큼 경험치가 쌓여 5등급까지 오릅니다. 공동 사업, 해마다 7월 동맹 회의(안건 하나), 스카이 동맹과 회원 쟁탈전.</li><li><b>자회사 차리기</b>(경쟁사 탭): 이름·거점·형태(저가·프리미엄·지역)·자본금을 정해 지분 100% 항공사를 세웁니다(3곳까지).</li><li><b>돈 쓸 곳</b>: 대형 사업(회사가 클수록 비쌈), 광고 캠페인·친환경 연료(재무 탭), 객실 개조(기단 탭).</li></ul><h4>운영 도구</h4><ul><li><b>자동 증감편</b>(노선 탭): 매주 손님이 넘치는 노선은 주 1회 늘리고, 탑승률 70% 미만이면 1회 줄입니다.</li><li><b>세일 앤 리스백</b>(기단 탭): 항공기를 장부가의 95%에 팔고 그대로 빌려 씁니다. 현금이 급할 때 쓰며, 판 값의 월 3.5%를 임대료로 냅니다.</li><li><b>파산 경보</b>: 최근 3개월이 적자라 6개월 안에 현금이 바닥날 것 같으면 결정 대기 맨 위에 뜹니다.</li><li><b>슬롯 거래</b>(도시 화면): 사서 늘린 슬롯 중 남는 것을 팔거나, 경쟁사가 가진 슬롯을 웃돈을 주고 사 옵니다.</li><li><b>범례</b>(지도 오른쪽 아래): 선과 점의 색이 무슨 뜻인지 보여 줍니다.</li></ul><h4>자회사</h4><ul><li>경쟁사 탭에서 회사를 고르면 <b>지분 20%</b>(배당만)나 <b>자회사 51%</b>(운영 방향: 확장·수익·공세)를 살 수 있습니다(자유 모드).</li><li>지분을 가진 회사는 내 노선에서 손님을 덜 빼앗고 운임 전쟁을 걸지 않습니다. 자금난이면 증자를 요청하고, 무시해 파산하면 평판이 떨어집니다.</li><li>배당은 재무 탭 <b>배당 내역</b>과 월말 정산에서 봅니다. 지분 매각·완전 흡수도 할 수 있습니다.</li></ul>
+<h4>후반 경영(자유 모드)</h4><ul><li><b>도전 조건</b>(새 게임 설정, 자유 모드): 빚더미 출발·치열한 시장·평판 바닥·작은 출발. 2개 이상으로 5년 버티면 업적 '고난의 길'.</li><li><b>자동 처리</b>(현황 탭): 계약·보조금 자동 수락, 이야기 자동 선택, 경매·입찰을 결정 대기에서 빼기.</li><li><b>추천 노선</b>(현황 탭): 수요·경쟁사 수·거리로 고른 노선 3개를 바로 열 수 있습니다.</li><li><b>연말 신문</b>: 올해의 성적표(작년 비교, 최고 노선, 생기고 사라진 경쟁사)가 실립니다.</li><li><b>왕조 목표</b>(현황 탭): 세계 1위·전 지역 취항·그룹 연 매출 $3B·항공기 100대 중 하나를 10년 안에. 이루면 평생 업적.</li><li><b>자체 기종·허브 공항</b>(재무 > 투자 > 대형 사업): 개발한 기종은 나만 사고 기술료가 들어옵니다. 내 공항은 슬롯 +30·착륙료 면제·경쟁사 사용료.</li><li><b>주식 상장</b>(재무 > 투자, 3년차부터): 지분 25%를 팔아 큰돈을 받는 대신, 해마다 배당과 이익 성장 압박.</li><li><b>정부 정책</b>: 벽지 노선 보조금(수락하고 운항하면 매달), 운수권 반값 기간.</li><li><b>위기 사건</b>(5년차부터): 대유행·유가 폭등·대형 사고 조사. 돈을 내고 대응하면 피해가 줄어듭니다.</li><li><b>마일리지</b>(재무 탭): 회원이 실버·골드·플래티넘으로 오르며 비즈니스석 손님이 늘지만 비용도 큽니다. 제휴 신용카드는 회원 수에 비례해 매달 수입, 마일 2배 프로모션은 2개월간 가입 3배.</li><li><b>우리 동맹</b>(경쟁사 탭): 이름을 짓고, 매달 회원 수만큼 경험치가 쌓여 5등급까지 오릅니다. 공동 사업, 해마다 7월 동맹 회의(안건 하나), 스카이 동맹과 회원 쟁탈전.</li><li><b>자회사 차리기</b>(경쟁사 탭): 이름·거점·형태(저가·프리미엄·지역)·자본금을 정해 지분 100% 항공사를 세웁니다(3곳까지).</li><li><b>돈 쓸 곳</b>: 대형 사업(회사가 클수록 비쌈), 광고 캠페인·친환경 연료(재무 탭), 객실 개조(기단 탭).</li></ul><h4>운영 도구</h4><ul><li><b>자동 증감편</b>(노선 탭): 매주 손님이 넘치는 노선은 주 1회 늘리고, 탑승률 70% 미만이면 1회 줄입니다.</li><li><b>세일 앤 리스백</b>(기단 탭): 항공기를 장부가의 95%에 팔고 그대로 빌려 씁니다. 현금이 급할 때 쓰며, 판 값의 월 3.5%를 임대료로 냅니다.</li><li><b>파산 경보</b>: 최근 3개월이 적자라 6개월 안에 현금이 바닥날 것 같으면 결정 대기 맨 위에 뜹니다.</li><li><b>슬롯 거래</b>(도시 화면): 사서 늘린 슬롯 중 남는 것을 팔거나, 경쟁사가 가진 슬롯을 웃돈을 주고 사 옵니다.</li><li><b>범례</b>(지도 오른쪽 아래): 선과 점의 색이 무슨 뜻인지 보여 줍니다.</li></ul><h4>자회사</h4><ul><li>경쟁사 탭에서 회사를 고르면 <b>지분 20%</b>(배당만)나 <b>자회사 51%</b>(운영 방향: 확장·수익·공세)를 살 수 있습니다(자유 모드).</li><li>지분을 가진 회사는 내 노선에서 손님을 덜 빼앗고 운임 전쟁을 걸지 않습니다. 자금난이면 증자를 요청하고, 무시해 파산하면 평판이 떨어집니다.</li><li>배당은 재무 탭 <b>배당 내역</b>과 월말 정산에서 봅니다. 지분 매각·완전 흡수도 할 수 있습니다.</li></ul>
 <h4>기단 관리</h4><ul><li>항공기 카드의 <b>교체 추천</b>: 같은 노선에서 새 기종으로 바꾸면 월 이익이 얼마 늘고 몇 달 만에 본전인지 보여 주고, 한 번에 교체합니다(지금 기체는 매각·반납).</li><li>항공기에 <b>이름</b>을 붙이고, 기단 탭 위쪽에서 <b>도색</b>(지도의 내 비행기 색)을 고릅니다.</li></ul>
 <h4>자유 모드의 즐길 거리</h4><ul><li><b>전세기 주문</b>(현황 탭): 노는 항공기를 몇 달 보내고 매달 돈을 받습니다. <b>입찰</b>: 공항 운영권(5년간 슬롯·착륙료 혜택)과 신공항 슬롯을 경쟁사와 값을 불러 다툽니다.</li><li><b>마일리지</b>·<b>대형 사업</b>(전용 터미널·정비 단지·항공 학교)은 재무 탭, <b>동맹</b>(3곳까지)은 경쟁사 탭, <b>선주문</b>·<b>기종 도감</b>은 기단 탭에 있습니다.</li><li>노선마다 <b>고객 별점</b>이 있고 수요에 영향을 줍니다. 경쟁사가 없는 도시에 처음 취항하면 6개월간 <b>첫 취항 보너스</b>. 해마다 <b>항공 시상식</b>이 열리고, 통계에 <b>개인 기록</b>이 쌓입니다. 메뉴의 <b>성장 타임랩스</b>로 노선망이 커 온 모습을 봅니다.</li><li>태풍·화산재 같은 재난, 영화 촬영·유명인 탑승, 이어지는 이야기(노조 재협상 등)도 생깁니다.</li></ul><h4>자유 모드의 경쟁과 이야기</h4><ul><li>경쟁사마다 <b>성격</b>(공세형·확장형·서비스형·안정형)이 있고, 매출이 비슷한 곳이 <b>라이벌</b>로 정해집니다(직접 바꿀 수 있어요).</li><li>내 이익이 큰 노선에 경쟁사가 <b>진출을 예고</b>합니다. 제휴를 맺거나 인수하면 막을 수 있어요. 경쟁사끼리 합병하기도 하고, 노선이 많은 도시의 빈 슬롯은 경쟁사가 먼저 차지합니다.</li><li>경쟁사가 있는 노선에서는 노선 화면에서 상대 운임에 맞추거나 <b>맞대응 광고</b>를 낼 수 있습니다.</li><li>가끔 <b>이야기 사건</b>이 생깁니다. 두 선택지 중 하나를 고르면 결과가 갈립니다. 매년 <b>올해의 도전</b>도 하나씩 나옵니다.</li></ul>`;
   function showInfo(title: string, html: string) { $('#info-title').textContent = title; $('#info-body').innerHTML = html; $('#info').hidden = false; }
@@ -195,10 +195,20 @@ export function startApp(): void {
     showInfo('통계', `<h4>손익표</h4>${pnl}<h4>노선별 성적</h4>${rts}<h4>기종별 현황</h4>${fl}<h4>이번 판 기록</h4><table class="brk"><tr><td>운항 기간</td><td>${game.monthsPassed}개월</td></tr><tr><td>누적 이익</td><td>${fm(s.cumProfit)}</td></tr><tr><td>수송한 승객</td><td>${num(Math.round(s.history.reduce((a, m) => a + m.pax, 0)))}명</td></tr><tr><td>취항 도시</td><td>${game.servedCities().size}곳</td></tr><tr><td>매출 순위</td><td>${game.rank()}위 / ${game.state.competitors.length + 1}곳</td></tr></table>${recordsHtml()}`);
   }
   /** 연말 신문 1면 */
+  /** B1 올해의 성적표: 작년과 비교, 올해 최고 노선, 생기고 사라진 경쟁사, 왕조 목표 */
+  function yearCard(year: number): string {
+    const s = game.state, c = s.chronicle, cur = c.find((e) => e.kind === 'year' && e.m === year * 12)?.d, prev = c.find((e) => e.kind === 'year' && e.m === (year - 1) * 12)?.d; if (!cur) return '';
+    const row = (name: string, k: string, fmt: (v: number) => string, lowBetter = false) => { const v = cur[k] ?? 0, p = prev?.[k]; const up = p === undefined ? '' : v > p ? (lowBetter ? '<small class="neg">▼</small>' : '<small class="pos">▲</small>') : v < p ? (lowBetter ? '<small class="pos">▲</small>' : '<small class="neg">▼</small>') : ''; return `<tr><td>${name}</td><td><small>${p === undefined ? '-' : fmt(p)}</small></td><td>${up} ${fmt(v)}</td></tr>`; };
+    const lo = (year - 1) * 12, hi = year * 12, born = s.competitors.filter((k) => (k.born ?? 0) > lo && (k.born ?? 0) <= hi).map((k) => k.name), gone = s.rivalsGone.filter((g) => g.month > lo && g.month <= hi).map((g) => g.name);
+    const best = year * 12 === game.monthsPassed ? [...s.routes].filter((r) => r.monthly?.length).map((r) => ({ r, p: (r.monthly ?? []).slice(-12).reduce((a, x) => a + x.p, 0) })).sort((a, b) => b.p - a.p)[0] : undefined;
+    const dyn = s.dynasty ? `${config.extra.dynasty.list[s.dynasty.id].name} — ${Math.max(0, s.dynasty.until - game.monthsPassed)}개월 남음` : '';
+    return `<h4>올해의 성적표</h4><table class="brk"><tr><td></td><td><small>작년</small></td><td>올해</td></tr>${row('매출', 'revenue', money)}${row('이익', 'profit', money)}${row('탑승객', 'pax', (v) => `${num(Math.round(v))}명`)}${row('항공기', 'planes', (v) => `${v}대`)}${row('취항 도시', 'cities', (v) => `${v}곳`)}${row('매출 순위', 'rank', (v) => `${v}위`, true)}</table>
+      ${best ? `<p class="hint">올해 최고 노선: <b>${routeLabel(best.r.a, best.r.b)}</b> ${money(best.p)}</p>` : ''}${born.length || gone.length ? `<p class="hint">${born.length ? `새로 생긴 경쟁사: ${born.map(esc).join(', ')}` : ''}${born.length && gone.length ? ' · ' : ''}${gone.length ? `사라진 경쟁사: ${gone.map(esc).join(', ')}` : ''}</p>` : ''}${dyn ? `<p class="hint">왕조 목표: ${esc(dyn)}</p>` : ''}`;
+  }
   function showPaper(year: number) {
     const p = newspaper(game, year);
     if (!p) return toast('이 해의 신문이 없습니다');
-    showInfo(`${year}년차 연말 신문`, `<div class="paper"><div class="mast">The Air 일보</div><div class="dateline">${year}년차 말 · 연말 특집호</div><h2 class="hl">${esc(p.headline)}</h2>${p.subs.length ? `<ul>${p.subs.map((x) => `<li><small>${x.m}개월차</small> ${esc(x.text)}</li>`).join('')}</ul>` : ''}<div class="nums">${p.numbers.map(([k, v]) => `<span>${esc(k)}<b>${esc(v)}</b></span>`).join('')}</div><p class="quote">${esc(p.quote)}</p></div>`);
+    showInfo(`${year}년차 연말 신문`, `<div class="paper"><div class="mast">The Air 일보</div><div class="dateline">${year}년차 말 · 연말 특집호</div><h2 class="hl">${esc(p.headline)}</h2>${p.subs.length ? `<ul>${p.subs.map((x) => `<li><small>${x.m}개월차</small> ${esc(x.text)}</li>`).join('')}</ul>` : ''}<div class="nums">${p.numbers.map(([k, v]) => `<span>${esc(k)}<b>${esc(v)}</b></span>`).join('')}</div><p class="quote">${esc(p.quote)}</p></div>${yearCard(year)}`);
   }
   /** 연대기: 회사의 주요 사건을 해마다 묶어 보여 준다 */
   /** 성장 타임랩스: 6개월마다 남긴 노선망을 지도에 차례로 보여 준다(재생하는 동안 시간은 멈춤) */
@@ -224,7 +234,7 @@ export function startApp(): void {
   const detKey = (d: HTMLElement) => `${tab}|${selRoute ?? ''}|${selCity ?? ''}|${(d.querySelector('summary')?.textContent ?? '').replace(/[\d.,$%+\-]+/g, '').trim().slice(0, 24)}`;
   const secOpen = new Map<string, boolean>(); // 현황 탭 접이식 구역(사용자가 누른 것만 기억)
   /** <h3> 구역마다 접이식으로 바꾼다. 계약·경매처럼 바로 할 일이 있는 구역만 기본으로 펼친다 */
-  const fold = (html: string) => html.split('<h3>').filter(Boolean).map((chunk) => { const i = chunk.indexOf('</h3>'), head = chunk.slice(0, i), key = head.replace(/<[^>]*>/g, '').trim().split(' ')[0]; return `<details class="more sec" data-k="${key}" ${(secOpen.get(key) ?? /^(결정|계약|항공기|이야기|진출|라이벌|올해의|전세기|입찰|대출|대형|왕조|정부|주식)/.test(key)) ? 'open' : ''}><summary>${head}</summary>${chunk.slice(i + 5)}</details>`; }).join('');
+  const fold = (html: string) => html.split('<h3>').filter(Boolean).map((chunk) => { const i = chunk.indexOf('</h3>'), head = chunk.slice(0, i), key = head.replace(/<[^>]*>/g, '').trim().split(' ')[0]; return `<details class="more sec" data-k="${key}" ${(secOpen.get(key) ?? /^(결정|추천|계약|항공기|이야기|진출|라이벌|올해의|전세기|입찰|대출|대형|왕조|정부|주식)/.test(key)) ? 'open' : ''}><summary>${head}</summary>${chunk.slice(i + 5)}</details>`; }).join('');
   /** 현황 탭 위쪽(자유 모드): 전세기 주문, 입찰 */
   function funTop(): string {
     const s = game.state; if (!s.sandbox) return '';
@@ -247,8 +257,8 @@ export function startApp(): void {
     if (sd && s.story) L.push({ key: `s${s.story.id}:${s.story.expires}`, kind: '이야기', sec: '이야기', title: sd.title, left: s.story.expires - mp });
     for (const c of s.contracts) if (c.status === 'offer') L.push({ key: `c${c.id}`, kind: '계약', sec: '계약', title: c.title, left: c.expires - mp, cid: c.id });
     for (const c of s.charters ?? []) if (c.planeId === undefined) L.push({ key: `h${c.id}`, kind: '전세기', sec: '전세기', title: routeLabel(c.a, c.b), left: c.expires - mp });
-    for (const b of s.bids ?? []) if (b.best?.who !== 0) L.push({ id: b.id, key: `b${b.id}`, kind: '입찰', sec: '입찰', title: `${cityById(b.city).name} ${b.kind === 'concession' ? '공항 운영권' : `신공항 슬롯 ${b.n}개`}`, left: b.ends - mp });
-    for (const a of s.auctions) L.push({ id: a.id, key: `a${a.id}`, kind: '경매', sec: '항공기', title: typeById(a.type).name, left: a.expires - mp });
+    if (!s.rules?.bids) for (const b of s.bids ?? []) if (b.best?.who !== 0) L.push({ id: b.id, key: `b${b.id}`, kind: '입찰', sec: '입찰', title: `${cityById(b.city).name} ${b.kind === 'concession' ? '공항 운영권' : `신공항 슬롯 ${b.n}개`}`, left: b.ends - mp });
+    if (!s.rules?.auctions) for (const a of s.auctions) L.push({ id: a.id, key: `a${a.id}`, kind: '경매', sec: '항공기', title: typeById(a.type).name, left: a.expires - mp });
     for (const t of s.threats ?? []) { const c = s.competitors.find((x) => x.id === t.comp); if (c) L.push({ key: `t${t.comp}:${t.a}:${t.b}`, kind: '진출 예고', sec: '진출', title: `${c.name} → ${routeLabel(t.a, t.b)}`, left: t.start - mp }); }
     for (const x of s.subsidies ?? []) if (x.left === undefined) L.push({ id: x.id, key: `g${x.id}`, kind: '정책', sec: '정부', title: `${routeLabel(x.a, x.b)} 보조금 월 ${money(x.perMonth)}`, left: x.expires - mp });
     if (s.alli?.poach) { const c = s.competitors.find((x) => x.id === s.alli!.poach!.comp); L.push({ key: `p${s.alli.poach.comp}:${s.alli.poach.expires}`, kind: '동맹', sec: '동맹', title: `${c?.name ?? '회원사'} 스카이 동맹 영입 시도`, left: s.alli.poach.expires - mp }); }
@@ -295,10 +305,11 @@ export function startApp(): void {
       const auc = s.auctions.length ? `<h3>항공기 경매 <small>(파산한 경쟁사)</small></h3><div class="list">${s.auctions.map((a) => `<div class="row"><div class="grow"><b>${esc(typeById(a.type).name)}</b><small>${esc(a.from)} · ${Math.floor(a.age / 12)}년 사용 · 정비 ${Math.round(a.cond * 100)}% · ${a.expires - game.monthsPassed}개월 남음</small></div><button data-act="auction" data-id="${a.id}" ${no(s.cash < a.price, short(a.price))}>낙찰 ${money(a.price)}</button></div>`).join('')}</div><p class="hint">새 기체 값의 ${Math.round(config.auction.price * 100)}%입니다. 임대 한도와 상관없이 내 항공기가 됩니다.</p>` : '';
       const rv = rivalryHtml();
       const pd = pending(), pendHtml = pd.length > 1 || pd.some((p) => p.comp !== undefined) ? `<h3>결정 대기 <small>${pd.length}건 · 마감 빠른 순</small></h3><div class="list">${pd.map((p) => `<div class="card prow${p.kind === '경보' ? ' alarm' : ''}"><button class="plink" data-act="pend" data-k="${p.sec}" data-id="${p.comp ?? ''}"><span class="ptag">${p.kind}</span> ${esc(p.title)} <small>${p.kind === '경보' ? '기단 탭에서 대응' : leftTxt(p.left)}</small></button>${pendActs(p)}</div>`).join('')}</div>` : '';
-      const compTop = fold(`${pendHtml}${rv.top}${funTop()}${conHtml}${auc}`), compRest = fold(`${dynastyHtml()}${policyHtml()}${eraHtml}${rightsHtml}${fest}${rv.bottom}${funRest()}`);
+      const reco = game.recommendRoutes(3), recoHtml = reco.length ? `<h3>추천 노선 <small>수요·경쟁·거리 기준</small></h3><div class="list">${reco.map((x) => `<div class="row"><div class="grow"><b>${routeLabel(x.a, x.b)}</b><small>월 수요 ${num(Math.round(x.demand))}명 · ${km(x.km)} · 경쟁사 ${x.comps ? `${x.comps}곳` : '없음'}</small></div><button class="small" data-act="recoOpen" data-a="${x.a}" data-b="${x.b}">열기</button></div>`).join('')}</div>` : '';
+      const compTop = fold(`${pendHtml}${recoHtml}${rv.top}${funTop()}${conHtml}${auc}`), compRest = fold(`${dynastyHtml()}${policyHtml()}${rulesHtml()}${eraHtml}${rightsHtml}${fest}${rv.bottom}${funRest()}`);
       if (s.sandbox) {
         const ms = nextSteps(game).map(({ ladder: l, value, next, prev }) => { const fmt = (n: number) => (l.unit === 'M' ? money(n) : `${num(n)}${l.unit}`); return `<div class="ms"><small>${esc(l.name)} ${fmt(value)}${next === null ? ' · 최고 단계 달성' : ` → 다음 이정표 ${fmt(next)}`}</small><div class="bar"><i style="width:${next === null ? 100 : Math.min(100, Math.max(0, ((value - prev) / (next - prev)) * 100))}%"></i></div></div>`; }).join('');
-        return `<div class="cols2"><div><h2>현황</h2><p class="hint"><b>자유 모드</b> · ${esc(cityById(s.base).name)} 시작 · 난이도 ${DIFF_NAME[s.difficulty ?? 'normal']}<br>목표와 기한 없이 마음껏 키워 보세요. 파산만 조심하세요.</p>${todo}${compTop}</div><div>${fold(`<h3>이정표</h3>${ms}`)}${compRest}</div></div>`;
+        return `<div class="cols2"><div><h2>현황</h2><p class="hint"><b>자유 모드</b> · ${esc(cityById(s.base).name)} 시작 · 난이도 ${DIFF_NAME[s.difficulty ?? 'normal']}${s.challenges?.length ? ` · 도전: ${s.challenges.map((k) => esc(config.extra.challenges[k]?.name ?? k)).join(', ')}` : ''}<br>목표와 기한 없이 마음껏 키워 보세요. 파산만 조심하세요.</p>${todo}${compTop}</div><div>${fold(`<h3>이정표</h3>${ms}`)}${compRest}</div></div>`;
       }
       return `<div class="cols2"><div><h2>현황</h2>
         <p class="hint"><b>${esc(game.scenario.name)}</b> · ${esc(cityById(s.base).name)} 시작 · 난이도 ${DIFF_NAME[s.difficulty ?? 'normal']}<br>${esc(game.scenario.desc)}</p>
@@ -636,6 +647,12 @@ export function startApp(): void {
     const s = game.state, k = config.extra.dynasty; if (!s.sandbox) return '';
     const cur = s.dynasty ? k.list[s.dynasty.id] : null;
     return `<h3>왕조 목표 <small>${cur ? `${Math.max(0, s.dynasty!.until - game.monthsPassed)}개월 남음` : `이룬 목표 ${(s.dynastyDone ?? []).length}/${Object.keys(k.list).length}`}</small></h3>${cur ? `<div class="goal"><div><b>${esc(cur.name)}</b> ${game.dynastyMet(s.dynasty!.id) ? '<b class="pos">조건 충족 — 이번 달 말 달성</b>' : ''}</div><small>${esc(cur.desc)}</small><button class="ghost small" data-act="dynastyQuit">포기</button></div>` : `<div class="list">${Object.entries(k.list).map(([id, d]) => { const done = s.dynastyDone?.includes(id); return `<div class="row"><div class="grow"><b>${esc(d.name)}</b><small>${esc(d.desc)}${done ? ' · <b class="pos">이룸</b>' : ''}</small></div>${done ? '' : `<button class="small" data-act="dynasty" data-v="${id}">도전</button>`}</div>`; }).join('')}</div><p class="hint">하나를 골라 ${k.months / 12}년 안에 이루면 평생 업적(칭호·다음 판 시작 보너스)에 기록됩니다.</p>`}`;
+  }
+  /** B3 자동 처리 규칙(현황 탭) */
+  function rulesHtml(): string {
+    const r = game.state.rules ?? {}, items: [string, string, boolean][] = [['contracts', '계약 제안 자동 수락', !!r.contracts], ['subsidy', '보조금 제안 자동 수락', !!r.subsidy], ['story', '이야기는 돈이 덜 드는 쪽 자동 선택', !!r.story], ['auctions', '경매를 결정 대기·팝업에서 빼기', !!r.auctions], ['bids', '입찰을 결정 대기·팝업에서 빼기', !!r.bids]];
+    if (!game.state.sandbox) items.splice(1, 4, items[3]); // 시나리오: 계약·경매만
+    return `<h3>자동 처리 <small>${items.filter((x) => x[2]).length}개 켜짐</small></h3><div class="list">${items.map(([k, t, on]) => `<button class="row ${on ? '' : 'ghost'}" data-act="rule" data-v="${k}" aria-pressed="${on}"><span class="grow">${t}</span><b>${on ? '켜짐' : '꺼짐'}</b></button>`).join('')}</div><p class="hint">결정할 일이 많을 때 손이 덜 가게 합니다. 경매·입찰은 현황 탭 아래 구역에는 그대로 남습니다.</p>`;
   }
   /** 정부 정책(현황 탭): 보조금 노선, 운수권 할인 */
   function policyHtml(): string {
@@ -983,6 +1000,8 @@ export function startApp(): void {
     else if (act === 'loyalty') { const r = game.setLoyalty(Number(b.dataset.v)); if (!r.ok) return err(r.error); done('마일리지 혜택을 바꿨습니다'); }
     else if (act === 'mega' && b.dataset.v === 'airport') { showAirportPick(); }
     else if (act === 'ipo') { if (!await ask(`주식 시장에 상장할까요?\n지분 ${Math.round(config.extra.ipo.share * 100)}%를 팔아 ${money(game.companyValue * config.extra.ipo.share)}을 받습니다. 대신 해마다 이익의 ${Math.round(config.extra.ipo.payout * 100)}%를 배당하고, 이익이 ${Math.round(config.extra.ipo.growth * 100)}% 이상 늘지 않으면 주가와 평판이 떨어집니다.`)) return; const r = game.goPublic(); if (!r.ok) return err(r.error); done(`상장했습니다(+${money(r.cash)})`); }
+    else if (act === 'rule') { const k = b.dataset.v as 'contracts'; game.setRule(k, !game.state.rules?.[k]); done(); }
+    else if (act === 'recoOpen') { const r = game.openRoute(b.dataset.a!, b.dataset.b!); if (!r.ok) return err(r.error); selRoute = r.routeId; selCity = null; tab = 'routes'; syncMap(); done('노선을 열었습니다. 항공기를 배정하세요.'); }
     else if (act === 'dynasty') { const r = game.setDynasty(b.dataset.v!); if (!r.ok) return err(r.error); done('왕조 목표에 도전합니다'); }
     else if (act === 'dynastyQuit') { if (!await ask('지금 왕조 목표를 포기할까요?')) return; const r = game.giveUpDynasty(); if (!r.ok) return err(r.error); done('목표를 포기했습니다'); }
     else if (act === 'subsidy') { const r = game.acceptSubsidy(id); if (!r.ok) return err(r.error); done('보조금을 받기로 했습니다. 그 노선을 운항하세요'); }
@@ -1042,7 +1061,7 @@ export function startApp(): void {
     if (game.state.status !== 'playing') return;
     const keys = new Set(pending().map((p) => p.key)), m0 = game.monthsPassed, l0 = game.state.log.length; let n = 0, why = '한 달이 지났습니다';
     for (; n < 31; n++) {
-      game.advanceDay();
+      game.advanceDay(); game.applyRules();
       if (game.state.status !== 'playing') { why = '게임이 끝났습니다'; break; }
       if (pending().some((p) => !keys.has(p.key))) { why = '결정할 일이 생겼습니다'; break; }
       if (game.state.log.slice(l0).some((x) => IMPORTANT.test(x))) { why = '중요한 알림이 왔습니다'; break; }
@@ -1105,7 +1124,7 @@ export function startApp(): void {
   function newGame(opts: GameOptions = {}) { recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); if (opts.sandbox) game.state.cash += startBonus(); /* 평생 업적 보너스(자유 모드만) */ seenLog = 0; seenEvents = new Set(); achSeen = new Set(); msSeen = new Set(reachedSteps(game)); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.state.sandbox ? '자유 모드' : game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
 
   // ---- 새 게임 설정(시나리오·시작 도시·난이도) ----
-  let setupScen = 'sandbox', setupDiff: Difficulty = 'normal', setupBase = 'ICN', setupRights = true; // 기본은 목표 없는 자유 모드
+  let setupScen = 'sandbox', setupDiff: Difficulty = 'normal', setupBase = 'ICN', setupRights = true; const setupCh = new Set<string>(); // 기본은 목표 없는 자유 모드
   const SANDBOX = { id: 'sandbox', name: '자유 모드', desc: '목표와 기한 없이 마음껏 키우세요. 처음이라면 이 모드를 권합니다. (점수 기록 없음)' };
   function renderSetup() {
     const sc = scenarioById(setupScen === 'sandbox' ? 'free' : setupScen);
@@ -1114,6 +1133,7 @@ export function startApp(): void {
     sel.innerHTML = CITIES.map((c) => `<option value="${c.id}" ${isLocked(c.id) ? 'disabled' : ''}>${esc(c.name)}${isLocked(c.id) ? ' (잠김)' : ''}</option>`).join(''); if (isLocked(setupBase)) setupBase = 'ICN';
     const n = lifetime().length; $('#setup-meta').textContent = `칭호 ${titleOf(n)} · 평생 업적 ${n}/${ACHIEVEMENTS.length} · 자유 모드 시작 자금 보너스 +$${startBonus(n)}M(업적 3개마다 +$1M, 최대 $6M)${unlocked ? '' : ` · 도전 출발지 12곳(아프리카·중남미·오세아니아)은 업적 ${UNLOCK_NEED}개를 달성하면 열립니다`}`;
     sel.value = sc.lockBase && sc.base ? sc.base : setupBase; sel.disabled = sc.lockBase; $('#setup-baselock').textContent = sc.lockBase ? '이 시나리오는 시작 도시가 정해져 있습니다.' : '어느 도시에서 시작해도 됩니다. 시장이 큰 도시일수록 슬롯과 수요가 유리합니다.';
+    $('#setup-chrow').hidden = setupScen !== 'sandbox'; $('#setup-ch').innerHTML = Object.entries(config.extra.challenges).map(([k, c]) => `<button data-ch="${k}" class="${setupCh.has(k) ? 'on' : ''}" title="${esc(c.desc)}">${esc(c.name)}</button>`).join(''); $('#setup-chnote').textContent = setupCh.size ? [...setupCh].map((k) => config.extra.challenges[k].desc).join(' · ') : '고르지 않으면 보통 자유 모드입니다.';
     $('#setup-rightsrow').hidden = setupScen !== 'sandbox'; // 시나리오는 목표가 정해져 있어 제한 없이 모두 열려 있다
     document.querySelectorAll<HTMLElement>('#setup-rights button').forEach((b) => b.classList.toggle('on', (b.dataset.r === 'on') === setupRights));
     $('#setup-rightsnote').textContent = setupRights ? '처음에는 출발 도시가 속한 지역만 열려 있고, 돈과 누적 이익을 갖추면 다른 지역의 운수권을 살 수 있습니다.' : '처음부터 모든 도시에 노선을 열 수 있습니다.';
@@ -1122,10 +1142,11 @@ export function startApp(): void {
   }
   function openSetup() { $('#setup').hidden = false; $('#end').hidden = true; renderSetup(); }
   $('#setup-scen').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-sc]'); if (!b) return; setupScen = b.dataset.sc!; renderSetup(); });
+  $('#setup-ch').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ch]'); if (!b) return; const k = b.dataset.ch!; if (setupCh.has(k)) setupCh.delete(k); else setupCh.add(k); renderSetup(); });
   $('#setup-rights').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-r]'); if (!b) return; setupRights = b.dataset.r === 'on'; renderSetup(); });
   $('#setup-diff').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-d]'); if (!b) return; setupDiff = b.dataset.d as Difficulty; renderSetup(); });
   $('#setup-base').addEventListener('change', (e) => { setupBase = (e.target as HTMLSelectElement).value; });
-  $('#setup-go').addEventListener('click', () => newGame({ scenario: setupScen === 'sandbox' ? 'free' : setupScen, sandbox: setupScen === 'sandbox', rights: setupScen === 'sandbox' && setupRights, difficulty: setupDiff, base: $<HTMLSelectElement>('#setup-base').value }));
+  $('#setup-go').addEventListener('click', () => newGame({ scenario: setupScen === 'sandbox' ? 'free' : setupScen, sandbox: setupScen === 'sandbox', rights: setupScen === 'sandbox' && setupRights, challenges: setupScen === 'sandbox' ? [...setupCh] : [], difficulty: setupDiff, base: $<HTMLSelectElement>('#setup-base').value }));
   $('#setup-cancel').addEventListener('click', () => { $('#setup').hidden = true; render(); });
 
   // ---- 시작 화면 ----
@@ -1147,10 +1168,10 @@ export function startApp(): void {
     if (speed > 0 && game.state.status === 'playing' && document.visibilityState === 'visible') {
       acc += dt * speed;
       let n = 0;
-      while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; }
+      while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; const ar = game.applyRules(); if (ar.length) toast(ar[ar.length - 1], 3000); }
       if (n) {
         if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; save(); showReport(); play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
-          if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}${h.month % 12 === 0 ? ' · 연말 신문이 나왔습니다(보고서의 \'연말 신문 보기\')' : ''}`, h.month % 12 === 0 ? 5000 : 2600); }
+          if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}${h.month % 12 === 0 ? ' · 올해의 성적표가 실린 연말 신문이 나왔습니다(보고 카드의 \'연말 신문 보기\')' : ''}`, h.month % 12 === 0 ? 5000 : 2600); } // 연말 신문은 저절로 열지 않는다(화면을 가리지 않게)
         const lg = game.state.log;
         if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다
           const fresh = lg.slice(prevLog), imp = fresh.filter((x) => IMPORTANT.test(x)), msg = (imp.length ? imp : fresh)[(imp.length ? imp : fresh).length - 1];

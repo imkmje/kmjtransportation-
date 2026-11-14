@@ -10,7 +10,7 @@ type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean;
 export type StoryDef = { id: string; title: string; desc: string; needSub?: boolean; chain?: boolean; choices: StoryChoice[] };
 const TRAIT_IDS = ['aggro', 'expander', 'quality', 'steady'];
 export const FORMAT_VERSION = 13; // 12 → 13: 연대기·허브 투자 / 11 → 12: 대형 항공사·시대·계약 / 10 → 11: 경매·예고된 행사 / 9 → 10: 경쟁사가 생기고 파산한다(경쟁사 ID 카운터·파산 기록) / 8 → 9: 경쟁사 수 증가 / 7 → 8: 임대기·제휴 / // 1 → 2: 대출·샌드박스·항공기 나이·사건 대응 / 2 → 3: 슬롯·허브·일일 기록·비즈니스석·화물·경쟁사·도시 성장 / 3 → 4: 경기 지수 / 4 → 5: 시작 도시·난이도·시나리오 / 5 → 6: 연료·정비·대출 중단 / 6 → 7: 노선 우선순위
-export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean; rights?: boolean } // rights: 자유 모드에서 지역 운수권 제한을 켠다 // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
+export interface GameOptions { base?: string; difficulty?: Difficulty; scenario?: string; sandbox?: boolean; rights?: boolean; challenges?: string[] } // rights: 자유 모드에서 지역 운수권 제한을 켠다 // sandbox: 목표·기한 없는 자유 모드로 시작(시작 자금·기체는 '자유 경영' 시나리오와 같다)
 export interface RouteOption { shareBefore: number; shareAfter: number; type: string; weekly: number; price: number; profit: number; payback: number | null; slotCost: number; slotNeeds: { city: string; n: number }[]; recommended: boolean } // profit: 이 기종 한 대를 더 넣었을 때 늘어나는 월 이익(고정비·슬롯 임대료 반영), payback: 새 기체 값 ÷ profit(개월)
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
@@ -47,11 +47,20 @@ export class Game {
       base, difficulty: diff, scenario: sc.id,
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [],
     };
-    this.addPlane(sc.plane, typeById(sc.plane).price); // 시작 항공기는 무료로 받지만 장부가·감가상각은 같다
+    const ch = opts.sandbox ? (opts.challenges ?? []).filter((x) => config.extra.challenges[x]) : [];
+    if (ch.length) { // 도전 조건(자유 모드)
+      const s = this.state; s.challenges = ch;
+      if (ch.includes('debt')) s.loan += 100;
+      if (ch.includes('lowrep')) s.reputation = 0.05;
+      if (ch.includes('small')) s.cash = Math.round(s.cash * 5) / 10;
+      if (ch.includes('crowded')) { s.competitors = Game.initCompetitors(dm.rival, 6); s.nextRival = 7; }
+    }
+    const startPlane = ch.includes('small') ? [...AIRCRAFT].filter((t) => t.seats > 0 && !t.from).sort((a, b) => a.seats - b.seats)[0].id : sc.plane;
+    this.addPlane(startPlane, typeById(startPlane).price); // 시작 항공기는 무료로 받지만 장부가·감가상각은 같다
   }
 
-  static initCompetitors(rival = 1): Competitor[] {
-    return COMP_NAMES.slice(0, config.competitors.start).map(([name, style, hub], i) => ({ id: i + 1, name, style, hub, cash: Math.round(config.competitors.startCash * rival), planes: 0, routes: [] }));
+  static initCompetitors(rival = 1, n = config.competitors.start): Competitor[] {
+    return COMP_NAMES.slice(0, n).map(([name, style, hub], i) => ({ id: i + 1, name, style, hub, cash: Math.round(config.competitors.startCash * rival), planes: 0, routes: [] }));
   }
 
   // ---------- 조회 ----------
@@ -1790,6 +1799,26 @@ export class Game {
     s.cash -= cost; s.cur.cost += cost; s.green = (s.green ?? 0) + 1;
     s.log.push(`${this.monthsPassed + 1}개월차: 친환경 연료 ${s.green}단계 투자($${cost}M). 운영비 −${Math.round(config.extra.green.ops * s.green * 100)}%.`); return { ok: true };
   }
+  /** 자동 처리 규칙을 적용한다(화면이 하루마다 부른다). 돌려주는 값: 처리한 일 설명 */
+  applyRules(): string[] {
+    const s = this.state, r = s.rules, out: string[] = []; if (!r || s.status !== 'playing') return out;
+    if (r.contracts) for (const c of s.contracts.filter((x) => x.status === 'offer')) if (this.acceptContract(c.id).ok) out.push(`계약 자동 수락: ${c.title}`);
+    if (r.subsidy) for (const x of s.subsidies ?? []) if (x.left === undefined && this.acceptSubsidy(x.id).ok) out.push(`보조금 자동 수락: ${cityById(x.a).name} ⇄ ${cityById(x.b).name}`);
+    if (r.story && s.story) { const d = this.storyDef(); if (d) { const i = d.choices.reduce((best, c, k) => ((c.cash ?? 0) >= (d.choices[best].cash ?? 0) ? k : best), d.choices.length - 1); if (this.chooseStory(i).ok) out.push(`이야기 자동 선택: ${d.title} → ${d.choices[i].label}`); } }
+    return out;
+  }
+  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
+  /** 지금 열면 좋을 노선: 내가 다니는 도시(또는 본사)에서 아직 안 연 도시로, 수요 × 기준 운임 ÷ (경쟁사 수·거리) 점수 상위 */
+  recommendRoutes(n = 3): { a: string; b: string; demand: number; comps: number; km: number }[] {
+    const s = this.state, from = new Set([s.base, ...this.servedCities()]), range = Math.max(0, ...s.planes.map((p) => typeById(p.type).range), typeById('B737').range), out: { a: string; b: string; demand: number; comps: number; km: number; sc: number }[] = [];
+    for (const a of [...from].sort()) for (const B of CITIES) {
+      if (B.id === a || !this.cityOpen(a) || !this.cityOpen(B.id) || s.routes.some((r) => r.open && this.sameRoute(r, a, B.id)) || out.some((x) => this.sameRoute(x, a, B.id))) continue;
+      const A = cityById(a), km = distanceKm(A, B); if (km > range * 0.95) continue;
+      const demand = rawMonthlyDemand(A, B, this.month, this.growthOf(a), this.growthOf(B.id)), comps = this.competitorsOn(a, B.id).length;
+      out.push({ a, b: B.id, demand, comps, km, sc: (demand * baseFare(km)) / (1 + 0.7 * comps) / (1 + km / 8000) });
+    }
+    return out.sort((x, y) => y.sc - x.sc || (x.a + x.b < y.a + y.b ? -1 : 1)).slice(0, n).map(({ sc: _sc, ...x }) => x);
+  }
   /** 경쟁사 움직임 예보: 다음 항공기를 사면 새 노선을 여는지(아니면 증편), 어디로, 살 돈이 얼마 남았는지 */
   forecastOf(c: Competitor): { b: string | null; newRoute: boolean; need: number } {
     const k = config.competitors, tr = this.traitOf(c), need = typeById('B737').price * (this.state.sandbox ? k.buyRatio : 1) * (tr?.buy ?? 1) * (c.dir === 'grow' ? 0.7 : c.dir === 'profit' ? 1.5 : 1);
@@ -1901,7 +1930,7 @@ export class Game {
     const maxNow = s.sandbox ? Math.min(k.sandboxMax, k.max + Math.floor(this.monthsPassed / k.maxGrowMonths)) : k.max; // 자유 모드: 2년마다 1곳씩 더 생길 수 있다(최대 12곳)
     if (m < k.entryMinMonth || regular >= maxNow) return;
     const eco = s.economy ?? 1, open = maxNow - regular;
-    const chance = k.entryChance * (this.eraNow?.entry ?? 1) * this.mods.rival * (eco >= 1 ? 1.2 : 0.5) * (1 + 0.2 * (open - 1)) * (s.sandbox ? 1 + this.monthsPassed / 48 : 1); // 호황이면 더 잘 생기고, 빈자리가 많을수록 더 잘 생긴다. 자유 모드는 시장이 커질수록 신생 항공사가 더 자주 생긴다
+    const chance = k.entryChance * (this.eraNow?.entry ?? 1) * this.mods.rival * (eco >= 1 ? 1.2 : 0.5) * (1 + 0.2 * (open - 1)) * (s.sandbox ? 1 + this.monthsPassed / 48 : 1) * (s.challenges?.includes('crowded') ? 2 : 1); // 호황이면 더 잘 생기고, 빈자리가 많을수록 더 잘 생긴다. 자유 모드는 시장이 커질수록 신생 항공사가 더 자주 생긴다
     if (this.rng.next() >= chance) return;
     const used = new Set([...s.competitors.map((c) => c.name), ...s.rivalsGone.filter((g) => m - g.month < 36).map((g) => g.name)]), hubs = new Set(s.competitors.map((c) => c.hub));
     const pool = (s.sandbox ? [...COMP_NAMES, ...COMP_NAMES_MORE] : COMP_NAMES).filter(([name, , hub]) => !used.has(name) && !hubs.has(hub));

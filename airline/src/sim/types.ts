@@ -88,7 +88,9 @@ export interface GameState {
   ownTypes?: string[]; myAirports?: string[]; dynasty?: { id: string; until: number } | null; dynastyDone?: string[]; // 자체 기종, 내 허브 공항, 왕조 목표(진행 중·달성)
   ipo?: { month: number; price: number; base: number; hist: number[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
   subsidies?: { id: number; a: string; b: string; perMonth: number; months: number; expires: number; left?: number }[]; rightsSale?: { region: string; until: number } | null; nextSub?: number; // 정부 보조금 노선 제안·진행, 운수권 할인
-  allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과 // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
+  allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과
+  challenges?: string[]; // 자유 모드 도전 조건(debt·crowded·lowrep·small)
+  rules?: { contracts?: boolean; auctions?: boolean; bids?: boolean; subsidy?: boolean; story?: boolean }; // 자동 처리: 계약 자동 수락, 경매·입찰 알림 끄기, 보조금 자동 수락, 이야기 자동 선택 // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
   charters?: Charter[]; // 전세기 주문(제안·진행)
   alliance?: number[]; rivalAlliance?: number[]; // 우리 동맹 회원, 대형 항공사가 만든 동맹
   bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; compLots?: { city: string; n: number; holder: number }[]; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯

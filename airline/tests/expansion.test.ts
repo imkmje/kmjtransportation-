@@ -141,3 +141,21 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     const { EVENTS } = await import('../src/data'); expect(EVENTS.filter((e) => e.minMonth).map((e) => e.id).sort()).toEqual(['oilshock', 'pandemic', 'probe']);
   });
 });
+
+describe('플레이 감각: 도전 조건·자동 처리·추천 노선', () => {
+  it('도전 조건대로 시작한다(빚·경쟁사 6곳·평판·작은 기종)', () => {
+    const g = new Game(3, undefined, { sandbox: true, challenges: ['debt', 'crowded', 'lowrep', 'small'] }), b = new Game(3, undefined, { sandbox: true });
+    expect(g.state.loan).toBe(b.state.loan + 100); expect(g.state.competitors.length).toBe(6); expect(g.state.reputation).toBe(0.05);
+    expect(g.state.cash).toBeCloseTo(b.state.cash / 2); expect(typeById(g.state.planes[0].type).seats).toBeLessThan(typeById(b.state.planes[0].type).seats);
+    expect(new Game(3, undefined, { scenario: 'europe', challenges: ['debt'] }).state.challenges).toBeUndefined(); // 시나리오에는 적용하지 않는다
+  });
+  it('자동 처리: 켜 둔 것만 처리한다', () => {
+    const g = sb(); g.state.contracts.push({ id: 77, kind: 'cities', title: '시험', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 1, label: '$1M' } });
+    expect(g.applyRules()).toEqual([]); g.setRule('contracts', true); expect(g.applyRules().length).toBe(1);
+    expect(g.state.contracts.find((c) => c.id === 77)!.status).toBe('active');
+  });
+  it('추천 노선은 아직 안 연 노선이고, 열면 목록에서 빠진다', () => {
+    const g = sb(); const r = g.recommendRoutes(3); expect(r.length).toBe(3);
+    expect(g.openRoute(r[0].a, r[0].b).ok).toBe(true); expect(g.recommendRoutes(3).some((x) => (x.a === r[0].a && x.b === r[0].b) || (x.a === r[0].b && x.b === r[0].a))).toBe(false);
+  });
+});

@@ -109,6 +109,7 @@ export const config = {
     quotes: { threat: { low: ['그 노선, 우리가 더 싸게 날겠습니다.', '손님은 결국 값을 따라옵니다.'], premium: ['그 노선의 진짜 서비스를 보여 드리죠.', '격이 다른 비행을 준비하고 있습니다.'] }, war: { low: ['가격으로 승부합시다. 버틸 수 있겠습니까?', '이번엔 끝까지 내립니다.'], premium: ['잠시 값을 낮출 뿐, 품질은 그대로입니다.', '이 노선은 양보할 수 없습니다.'] }, join: { low: ['함께라면 더 멀리 갑니다.', '좋은 조건이군요. 손잡겠습니다.'], premium: ['동맹의 품격을 높이겠습니다.', '오랜 협력이 되길 바랍니다.'] }, leave: { low: ['조건이 더 좋은 쪽을 택했습니다.', '사업은 사업입니다.'], premium: ['새로운 동반자를 찾았습니다.', '그동안 고마웠습니다.'] } } as Record<string, Record<string, string[]>>, // 경쟁사 대표 한마디(자유 모드)
     policy: { subChance: 0.04, subMonths: 24, subExpire: 2, subMinMonth: 12, saleChance: 0.03, saleMonths: 6, saleCut: 0.5 }, // 정부 정책: 벽지 노선 보조금 제안(월 4%, 24개월), 운수권 할인(월 3%, 6개월간 반값)
     allianceRace: { rep: 0.03, xp: 12 }, // 동맹 순위전(해마다 연말): 우리 동맹 매출이 스카이 동맹보다 크면 평판 +3%, 동맹 경험치 +12
+    challenges: { debt: { name: '빚더미 출발', desc: '대출 $100M을 안고 시작' }, crowded: { name: '치열한 시장', desc: '경쟁사 6곳으로 시작, 신생 항공사 2배' }, lowrep: { name: '평판 바닥', desc: '평판 5%로 시작' }, small: { name: '작은 출발', desc: '가장 작은 기종 한 대와 현금 절반' } } as Record<string, { name: string; desc: string }>, // 자유 모드 도전 조건
     preorder: { deposit: 0.1, discount: 0.15, max: 3 }, // 신기종 선주문: 계약금 10%, 15% 할인, 최대 3대
     pioneer: { months: 6, boost: 0.15 }, // 첫 취항 보너스
   },
