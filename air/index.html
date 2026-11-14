@@ -170,6 +170,10 @@
       #menu .mh { grid-column: 1 / -1; margin: 6px 2px 0; font-size: 12px; color: var(--ink2); font-weight: 700; } #menu .mh:first-child { margin-top: 0; }
       .btnrow.half { display: flex; gap: 8px; } .btnrow.half > button { flex: 1; }
       #complayer { position: absolute; right: 58px; bottom: 14px; z-index: 5; min-height: 40px; padding: 4px 12px; font-size: 13px; border-radius: 12px; box-shadow: 0 4px 12px #0002; background: #ffffffee; }
+      /* GFX-2: 버튼 높이는 두 가지로만 — 큰 버튼 44px, 작은 버튼 36px (표의 줄 버튼 .trow, 접이식 제목은 제외) */
+      button, #speeds button, #menubtn, #menu button, #tabs button, #stage.d-full #tabs button, .btnrow2 button, .rowc .btnrow button, .goal .btnrow button, .opt .btnrow button, button.todo, #fold, #complayer { min-height: 44px; }
+      button.small, button.back, #report h4 button, #alerts .chip button, #hint button, .chips button, .slot button, #dsize button, .thead button, .rtabs button, .toolbar button, #mapback, #offerpop .ophead button, #offerpop .btnrow button { min-height: 36px; }
+      #fold { width: 44px; } .livery button { width: 36px; height: 36px; min-height: 36px; }
 </style>
   </head>
   <body>
