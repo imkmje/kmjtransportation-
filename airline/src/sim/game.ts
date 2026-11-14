@@ -1863,7 +1863,7 @@ export class Game {
   // ---- 돈 쓸 곳: 객실 개조·광고 캠페인·친환경 연료 ----
   /** 운임 수입 배수: 광고 캠페인 중이면 브랜드 값, 객실을 개조한 기체가 다니면 그만큼 */
   premium(r: Route): number { const s = this.state; if (!s.sandbox) return 1; const cp = s.campaign && s.campaign.until > this.monthsPassed ? config.extra.campaign[s.campaign.kind]?.premium ?? 0 : 0; const l = s.loyalty, lk = config.extra.loyalty, loy = l && l.level ? lk.premium[l.level] * Math.min(1, l.members / Math.max(1, (s.history.at(-1)?.pax ?? 0) * 3)) : 0; return 1 + cp + loy + this.cabinOf(r) * config.extra.cabin.premium; } // loy: 마일리지 단골 손님
-  cabinOf(r: Route): number { const ps = this.planesOn(r.id); return ps.length ? ps.reduce((a, p) => a + (p.cabin ?? 0), 0) / ps.length : 0; }
+  cabinOf(r: Route): number { const ps = this.planesOn(r.id); return ps.length ? ps.reduce((a, p) => a + (p.cabin ?? 0) + (typeById(p.type).own ? 1 : 0), 0) / ps.length : 0; } // 자체 기종은 새 객실이라 개조 1단계만큼 더 쳐 준다
   cabinCost(p: Plane): number | null { const lv = p.cabin ?? 0; return lv >= 2 ? null : Math.round(typeById(p.type).price * config.extra.cabin.cost[lv] * 10) / 10; }
   /** 개조할 수 있는 내 여객기(임대·최고급 제외) */
   private canRefit(p: Plane): boolean { return !p.leased && typeById(p.type).seats > 0 && this.cabinCost(p) !== null; }
