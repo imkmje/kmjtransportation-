@@ -223,3 +223,20 @@ describe('조종사·보험·채권', () => {
     g.state.bonds![0].until = g.monthsPassed + 1; g.advanceDays(30); expect(g.state.bonds!.length).toBe(0);
   });
 });
+
+describe('기능 끄기·연말 백업', () => {
+  it('끈 기능은 쓸 수 없고 조종사 제약도 없다', () => {
+    const g = new Game(3, undefined, { sandbox: true, off: ['alliance', 'finance', 'crew', 'subsidiary'] }); g.state.cash = 5000;
+    const c = g.state.competitors.find((x) => !x.major)!;
+    expect(g.joinAlliance(c.id).ok).toBe(false); expect(g.buyStake(c.id, 0.2).ok).toBe(false); expect(g.issueBond(50).ok).toBe(false);
+    g.advanceDays(30); expect(g.state.pilots).toBeUndefined(); expect(g.crewFactor).toBe(1);
+    const back = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON()))); expect(back.on('alliance')).toBe(false); expect(back.on('saga')).toBe(true);
+    expect(new Game(3, undefined, { scenario: 'europe', off: ['crew'] }).state.off).toBeUndefined(); // 시나리오에는 적용하지 않는다
+  });
+  it('연말 백업은 저장 칸과 따로 저장되고 불러온다', async () => {
+    const { saveBackup, backupInfo, loadBackup, slotInfos } = await import('../src/ui/saves');
+    const mem = new Map<string, string>(), st = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, v); }, removeItem: (k: string) => { mem.delete(k); } } as unknown as Storage;
+    const g = sb(); g.advanceDays(30); expect(backupInfo(st)).toBeNull(); expect(saveBackup(g, st)).toBe(true);
+    expect(backupInfo(st)!.summary).toContain('항공기'); expect(loadBackup(st)!.state.day).toBe(g.state.day); expect(slotInfos(st).every((x) => x.empty)).toBe(true);
+  });
+});

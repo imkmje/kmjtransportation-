@@ -197,7 +197,7 @@ await page.click('#panel button[data-act="autoFare"]');
 check('노선 탭: 자동 운임 켜기', (await page.evaluate(() => window.__air.game.state.autoFare)) === true);
 const peaks = await page.evaluate(() => window.__air.soundPeaks());
 const bad = Object.entries(peaks).filter(([, v]) => !(v > 0.005 && v < 1));
-check('소리 13종(효과음 11·음악·전부 동시)이 무음도 깨짐도 아님', Object.keys(peaks).length === 13 && bad.length === 0, JSON.stringify(Object.fromEntries(Object.entries(peaks).map(([k, v]) => [k, +v.toFixed(3)]))));
+check('소리 14종(효과음 12·음악·전부 동시)이 무음도 깨짐도 아님', Object.keys(peaks).length === 14 && bad.length === 0, JSON.stringify(Object.fromEntries(Object.entries(peaks).map(([k, v]) => [k, +v.toFixed(3)]))));
 // 0.18.0: 업그레이드, 늘 보이는 예상 이익
 await page.evaluate(() => { window.__air.game.state.cash = 200; window.__air.render(); });
 await page.click('#tabs button[data-tab="money"]'); await openAll();
@@ -620,6 +620,15 @@ const pil0 = await page.evaluate(() => window.__air.game.state.pilots ?? 0); awa
 await page.locator('#panel button[data-act="insurance"][data-v="1"]').click(); await openAll();
 check('재무: 조종사 급구 채용·보험', await page.evaluate((n) => (window.__air.game.state.pilots ?? 0) === n + 10 && window.__air.game.state.insurance === 1, pil0));
 await page.locator('#panel button[data-act="bond"][data-v="50"]').click(); check('재무: 채권 발행', await page.evaluate(() => (window.__air.game.state.bonds ?? []).length === 1));
+// 2.20.0: 연말 백업·기능 끄기
+await page.click('#dsize button[data-h="half"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다
+await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 11) g.advanceDays(30); while ((g.state.day + 1) % 30 !== 0) g.advanceDays(1); window.__air.setSpeed(4); }); // 연말 하루 전까지 넘기고 마지막 하루만 흘린다
+await page.waitForFunction(() => { if (window.__air.game.monthsPassed % 12 === 0) return true; window.__air.setSpeed(4); return false; }, null, { timeout: 60000, polling: 500 }).catch(() => undefined); // 자동 정지가 걸려도 다시 흘린다 await page.evaluate(() => window.__air.setSpeed(0));
+await page.evaluate(() => { document.getElementById('menu').hidden = true; }); await page.click('#menubtn'); await page.click('#menu button[data-m="saves"]');
+check('저장 관리: 연말 자동 백업이 보임', (await page.locator('#info-body').innerText()).includes('자동 백업') && (await page.locator('#info-body button[data-act="backupLoad"]').count()) === 1); await page.click('#info-close');
+await page.evaluate(() => { document.getElementById('menu').hidden = true; }); await page.click('#menubtn'); await page.click('#menu button[data-m="new"]'); await page.click('#setup-scen button[data-sc="sandbox"]').catch(() => undefined);
+await page.click('#setup-off button[data-off="crew"]'); await page.click('#setup-off button[data-off="finance"]'); await page.click('#setup-go');
+check('새 게임 설정: 기능 끄기(조종사·상장·채권)', await page.evaluate(() => { const g = window.__air.game; return g.on('crew') === false && g.on('finance') === false && g.on('alliance') === true; }));
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

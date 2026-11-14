@@ -89,7 +89,8 @@ export interface GameState {
   ipo?: { month: number; price: number; base: number; hist: number[]; res?: boolean[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
   subsidies?: { id: number; a: string; b: string; perMonth: number; months: number; expires: number; left?: number }[]; rightsSale?: { region: string; until: number } | null; nextSub?: number; // 정부 보조금 노선 제안·진행, 운수권 할인
   allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과
-  pilots?: number; autoHire?: boolean; insurance?: number; bonds?: { amount: number; rate: number; until: number }[]; // 조종사 수·자동 채용(끄면 false), 보험 단계(0~2), 채권(원금·월 이율·만기 개월)
+  off?: string[]; // 자유 모드에서 끈 기능(crew·alliance·subsidiary·finance·crisis·saga·policy)
+  pilots?: number; crewShort?: boolean; autoHire?: boolean; insurance?: number; bonds?: { amount: number; rate: number; until: number }[]; // 조종사 수·자동 채용(끄면 false), 보험 단계(0~2), 채권(원금·월 이율·만기 개월)
   ownNames?: Record<string, string>; // 자체 기종 이름(내가 지음)
   alertsAt?: number[]; // 중요한 알림의 순번(log 배열 번호)
   challenges?: string[]; // 자유 모드 도전 조건(debt·crowded·lowrep·small)
