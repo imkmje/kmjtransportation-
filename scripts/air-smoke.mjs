@@ -531,9 +531,9 @@ check('현황: 전세기 주문에 노는 항공기를 보내면 전세 운항',
 await openAll(); await page.locator('#panel button[data-act="bid"]').first().click();
 check('현황: 입찰에서 값을 부르면 우리가 최고가', await page.evaluate(() => window.__air.game.state.bids[0].best?.who === 0));
 await page.click('#tabs button[data-tab="money"]'); await openAll();
-await page.locator('#panel button[data-act="loyalty"][data-v="1"]').click();
+await page.locator('#panel button[data-act="moneySub"][data-v="cust"]').click(); await openAll(); await page.locator('#panel button[data-act="loyalty"][data-v="1"]').click();
 check('재무: 마일리지 기본 단계', await page.evaluate(() => window.__air.game.state.loyalty?.level === 1));
-await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
+await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
 check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
 const alId = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major && !c.stake)?.id); await page.click('#tabs button[data-tab="rivals"]'); if (alId !== undefined) await page.locator(`#panel button[data-act="selComp"][data-id="${alId}"]`).click(); const alBtn = page.locator('#panel button[data-act="joinAlliance"]'); // 자회사가 아닌 일반 경쟁사를 고른다
 if (await alBtn.count()) { await alBtn.first().click(); }
@@ -554,14 +554,22 @@ check('결정 대기에서 바로 계약 수락', await page.evaluate(() => wind
 // 2.12.0: 자회사 차리기·동맹 이름·돈 쓸 곳·마일리지
 await page.evaluate(() => { window.__air.game.state.cash = 3000; window.__air.render(); });
 await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalsHome"]').click().catch(() => undefined);
-await page.locator('#panel button[data-act="foundOpen"]').click(); await page.fill('#f-name', '시험항공'); await page.check('input[name="f-kind"][value="regional"]'); await page.check('input[name="f-size"][value="1"]'); await page.click('#info-body button[data-act="foundGo"]');
+await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').click(); await page.locator('#panel button[data-act="foundOpen"]').click(); await page.fill('#f-name', '시험항공'); await page.check('input[name="f-kind"][value="regional"]'); await page.check('input[name="f-size"][value="1"]'); await page.click('#info-body button[data-act="foundGo"]');
 check('경쟁사: 자회사 차리기(이름·형태·자본금)', await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.name === '시험항공' && c.founded === 'regional' && c.stake === 1)) && !(await page.locator('#info').isVisible()));
-await page.locator('#panel button[data-act="rivalsHome"]').click().catch(() => undefined); await page.locator('#panel button[data-act="alName"]').click(); await page.fill('#al-name', '하늘 연합'); await page.click('#info-body button[data-act="alNameGo"]');
+await page.locator('#panel button[data-act="rivalSub"][data-v="alli"]').click(); await page.locator('#panel button[data-act="alName"]').click(); await page.fill('#al-name', '하늘 연합'); await page.click('#info-body button[data-act="alNameGo"]');
 check('경쟁사: 동맹 이름 바꾸기', await page.evaluate(() => window.__air.game.state.alli?.name === '하늘 연합') && (await page.locator('#panel').innerText()).includes('하늘 연합'));
-await page.click('#tabs button[data-tab="money"]'); await openAll(); await page.locator('#panel button[data-act="campaign"][data-v="national"]').click(); await openAll(); await page.locator('#panel button[data-act="green"]').click(); await openAll();
+await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="campaign"][data-v="national"]').click(); await openAll(); await page.locator('#panel button[data-act="green"]').click(); await openAll();
 check('재무: 광고 캠페인·친환경 연료 투자', await page.evaluate(() => !!window.__air.game.state.campaign && window.__air.game.state.green === 1));
-await page.locator('#panel button[data-act="promo"]').click();
+await page.locator('#panel button[data-act="moneySub"][data-v="cust"]').click(); await openAll(); await page.locator('#panel button[data-act="promo"]').click();
 check('재무: 마일 2배 프로모션', await page.evaluate(() => (window.__air.game.state.loyalty?.promo ?? 0) > 0));
+// 2.13.0: 탭 나누기·그룹 현황·노선 색·건너뛰기·알림 띠
+await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').click();
+check('경쟁사: 자회사·그룹 탭에 그룹 현황 표', (await page.locator('#panel').innerText()).includes('그룹 현황') && (await page.locator('#panel').innerText()).includes('시험항공'));
+await page.locator('#panel button[data-act="rivalSub"][data-v="comp"]').click();
+await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.click('#rcolor'); check('지도: 노선 색 바꾸기(이익→점유율)', (await page.locator('#rcolor').innerText()).includes('점유율')); for (let i = 0; i < 3; i++) await page.click('#rcolor');
+const ffDay = await page.evaluate(() => window.__air.game.state.day); await page.click('#ffbtn');
+check('건너뛰기: 하루 이상 지나고 이유를 알려 줌', (await page.evaluate(() => window.__air.game.state.day)) > ffDay && (await page.locator('#toast').innerText()).includes('건너뜀'));
+await page.waitForTimeout(3300); check('알림 띠는 몇 초 뒤 사라짐', !(await page.locator('#toast.show').count()));
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();

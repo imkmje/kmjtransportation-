@@ -253,9 +253,9 @@ export class Game {
     let d0 = (rawMonthlyDemand(A, B, this.month, this.growthOf(r.a), this.growthOf(r.b)) * hub + transfer) * (1 + c.demand.repBoost * s.reputation) * this.extraDemand(r);
     let cg0 = rawCargoDemand(A, B, this.growthOf(r.a), this.growthOf(r.b)) * hub * (1 + c.demand.repBoost * s.reputation);
     const eco = s.economy ?? 1;
-    const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice * (1 - c.extra.green.fuel * (s.green ?? 0)); // 계약 중이면 계약 가격
+    const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice; // 계약 중이면 계약 가격
     d0 *= eco; cg0 *= Math.pow(eco, c.economy.cargoPow);
-    let capMult = 1, costMult = 1 - this.up('ops');
+    let capMult = 1, costMult = (1 - this.up('ops')) * (1 - c.extra.green.ops * (s.green ?? 0)); // 친환경 연료: 운영비 절감
     d0 *= 1 + this.up('marketing');
     for (const e of s.events) {
       const def = EVENTS.find((x) => x.id === e.def)!, k = e.handled && def.option ? def.option.scale : 1; // 대응하면 효과가 줄어든다
@@ -292,11 +292,11 @@ export class Game {
     const paxB = Math.min(demB, seatsB), paxE = Math.min(demE, seatsE), pax = paxE + paxB;
     const cgDem = (cg0 * priceFactor(r.cargoRatio, 1, c.cargo.elasticity) * share) / c.daysPerMonth, cargoT = Math.min(cgDem, cargoCap);
     const cargoRevenue = (cargoT * cargoRate(km) * r.cargoRatio) / 1e6;
-    const revenue = (paxE * r.fare + paxB * r.fareBiz) / 1e6 + cargoRevenue;
+    const prem = this.premium(r), revenue = ((paxE * r.fare + paxB * r.fareBiz) / 1e6) * prem + cargoRevenue; // prem: 광고·객실 개조로 붙는 운임 프리미엄
     const compensation = revenue * (1 - otp) * c.delay.compensation; // 지연 보상금
     const svcDaily = (this.planesOn(r.id).length * c.strategy.svcCost[r.svc ?? 0]) / c.daysPerMonth; // 노선 서비스 등급 비용(항공기 1대당 월 비용)
     const lfee = this.landingFactor(r), cost = (hours + (legs * c.cost.landingFeeK * lfee) / 1000 + (pax * c.cost.perPaxFee) / 1e6) * costMult + compensation + svcDaily;
-    const revenuePax = (paxE * r.fare + paxB * r.fareBiz) / 1e6, costOps = hours * costMult + svcDaily, costLanding = ((legs * c.cost.landingFeeK * lfee) / 1000) * costMult, costPax = ((pax * c.cost.perPaxFee) / 1e6) * costMult;
+    const revenuePax = ((paxE * r.fare + paxB * r.fareBiz) / 1e6) * prem, costOps = hours * costMult + svcDaily, costLanding = ((legs * c.cost.landingFeeK * lfee) / 1000) * costMult, costPax = ((pax * c.cost.perPaxFee) / 1e6) * costMult;
     return { revenuePax, costOps, costLanding, costPax, demand: demE + demB, seats: seatsE + seatsB, pax, revenue, cost, legs, paxE, paxB, seatsE, seatsB, demandE: demE, demandB: demB, cargoT, cargoCap, cargoDemand: cgDem, cargoRevenue, share, transfer, otp, compensation };
   }
 
@@ -1680,6 +1680,8 @@ export class Game {
     return { ok: true, id: c.id };
   }
   // ---- 돈 쓸 곳: 객실 개조·광고 캠페인·친환경 연료 ----
+  /** 운임 수입 배수: 광고 캠페인 중이면 브랜드 값, 객실을 개조한 기체가 다니면 그만큼 */
+  premium(r: Route): number { const s = this.state; if (!s.sandbox) return 1; const cp = s.campaign && s.campaign.until > this.monthsPassed ? config.extra.campaign[s.campaign.kind]?.premium ?? 0 : 0; return 1 + cp + this.cabinOf(r) * config.extra.cabin.premium; }
   cabinOf(r: Route): number { const ps = this.planesOn(r.id); return ps.length ? ps.reduce((a, p) => a + (p.cabin ?? 0), 0) / ps.length : 0; }
   cabinCost(p: Plane): number | null { const lv = p.cabin ?? 0; return lv >= 2 ? null : Math.round(typeById(p.type).price * config.extra.cabin.cost[lv] * 10) / 10; }
   refitCabin(planeId: number): Result {
@@ -1696,14 +1698,14 @@ export class Game {
     if (!k) return fail('없는 캠페인입니다'); if (s.campaign && s.campaign.until > mp) return fail('이미 캠페인 중입니다');
     const cost = this.campaignCost(kind); if (s.cash < cost) return fail('현금이 모자랍니다');
     s.cash -= cost; s.cur.cost += cost; s.reputation = Math.min(1, s.reputation + k.rep); s.campaign = { kind, until: mp + k.months };
-    s.log.push(`${mp + 1}개월차: ${k.name}을 시작했습니다($${cost}M). 평판 +${Math.round(k.rep * 100)}%, ${k.months}개월간 수요 +${Math.round(k.boost * 100)}%.`); return { ok: true };
+    s.log.push(`${mp + 1}개월차: ${k.name}을 시작했습니다($${cost}M). 평판 +${Math.round(k.rep * 100)}%, ${k.months}개월간 운임 수입 +${Math.round(k.premium * 100)}%·수요 +${Math.round(k.boost * 100)}%.`); return { ok: true };
   }
   greenCost(): number | null { const g = this.state.green ?? 0, k = config.extra.green; return g >= k.max ? null : Math.round(Math.max(k.cost, this.monthlyRev * k.rev) * (g + 1)); }
   investGreen(): Result {
     const s = this.state; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     const cost = this.greenCost(); if (cost === null) return fail('최고 단계입니다'); if (s.cash < cost) return fail('현금이 모자랍니다');
     s.cash -= cost; s.cur.cost += cost; s.green = (s.green ?? 0) + 1;
-    s.log.push(`${this.monthsPassed + 1}개월차: 친환경 연료 ${s.green}단계 투자($${cost}M). 연료비 −${Math.round(config.extra.green.fuel * s.green * 100)}%.`); return { ok: true };
+    s.log.push(`${this.monthsPassed + 1}개월차: 친환경 연료 ${s.green}단계 투자($${cost}M). 운영비 −${Math.round(config.extra.green.ops * s.green * 100)}%.`); return { ok: true };
   }
   /** 경쟁사 움직임 예보: 다음 항공기를 사면 새 노선을 여는지(아니면 증편), 어디로, 살 돈이 얼마 남았는지 */
   forecastOf(c: Competitor): { b: string | null; newRoute: boolean; need: number } {
@@ -1870,7 +1872,7 @@ export class Game {
       const target = (1 - w) * lfTarget + w * this.avgOtp; // 탑승률(좌석 채움)과 정시율이 평판을 정한다
       s.reputation += (target - s.reputation) * 0.1;
     }
-    s.cur = { revenue: 0, cost: 0, pax: 0, seats: 0 };
+    s.cur = { revenue: s.cur.revenue - rep.revenue, cost: s.cur.cost - rep.cost, pax: 0, seats: 0 }; // 보고를 만든 뒤 월말에 생긴 수입·지출(전세기·카드·대형 사업 등)은 다음 달 보고로 넘긴다
     // 도시 성장: 우리 항공기가 취항하는 도시는 시장이 조금씩 커지고, 아니면 기본값으로 천천히 돌아간다
     const recession = s.events.some((e) => e.def === 'recession');
     for (const city of CITIES) {
