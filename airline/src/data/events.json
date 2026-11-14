@@ -1,248 +1,299 @@
 [
- {
-  "id": "fuel",
-  "name": "연료비 급등",
-  "months": 3,
-  "effect": {
-   "cost": 0.25
+  {
+    "id": "fuel",
+    "name": "연료비 급등",
+    "months": 3,
+    "effect": {
+      "cost": 0.25
+    },
+    "text": "국제 유가가 급등해 3개월간 운영비가 25% 늘어납니다.",
+    "option": {
+      "label": "연료 계약 체결",
+      "cost": 2.0,
+      "scale": 0,
+      "text": "연료 가격을 고정해 남은 기간의 비용 상승을 막습니다."
+    }
   },
-  "text": "국제 유가가 급등해 3개월간 운영비가 25% 늘어납니다.",
-  "option": {
-   "label": "연료 계약 체결",
-   "cost": 2.0,
-   "scale": 0,
-   "text": "연료 가격을 고정해 남은 기간의 비용 상승을 막습니다."
+  {
+    "id": "recession",
+    "name": "불황",
+    "months": 3,
+    "effect": {
+      "demand": -0.15
+    },
+    "text": "경기가 나빠져 3개월간 전체 수요가 15% 줄어듭니다.",
+    "option": {
+      "label": "마케팅 캠페인",
+      "cost": 3.0,
+      "scale": 0.5,
+      "text": "할인 캠페인으로 수요 감소를 절반으로 줄입니다."
+    }
+  },
+  {
+    "id": "snow",
+    "name": "폭설",
+    "months": 1,
+    "effect": {
+      "cityCap": -0.3
+    },
+    "text": "폭설로 한 공항의 운항이 1개월간 30% 줄어듭니다.",
+    "snowCities": [
+      "LHR",
+      "JFK",
+      "NRT",
+      "ICN"
+    ],
+    "option": {
+      "label": "임시 편성",
+      "cost": 1.0,
+      "scale": 0.5,
+      "text": "우회 편성으로 운항 감소를 절반으로 줄입니다."
+    }
+  },
+  {
+    "id": "boom",
+    "name": "관광 붐",
+    "months": 2,
+    "effect": {
+      "routeDemand": 0.25
+    },
+    "text": "관광 붐으로 한 지역 노선의 수요가 2개월간 25% 늘어납니다.",
+    "boomCities": [
+      "CJU",
+      "BKK"
+    ]
+  },
+  {
+    "id": "pandemic",
+    "name": "감염병 확산",
+    "months": 4,
+    "effect": {
+      "demand": -0.35
+    },
+    "text": "감염병이 퍼져 4개월간 전체 수요가 35% 줄어듭니다.",
+    "option": {
+      "label": "방역·특가 캠페인",
+      "cost": 4.0,
+      "scale": 0.6,
+      "text": "방역 홍보와 특가로 수요 감소를 40% 줄입니다."
+    }
+  },
+  {
+    "id": "strike",
+    "name": "노조 파업",
+    "months": 2,
+    "effect": {
+      "cost": 0.2,
+      "cap": -0.2
+    },
+    "text": "노조가 파업해 2개월간 운영비가 20% 늘고 운항이 20% 줄어듭니다.",
+    "option": {
+      "label": "노사 협상",
+      "cost": 3.0,
+      "scale": 0.5,
+      "text": "협상으로 피해를 절반으로 줄입니다."
+    }
+  },
+  {
+    "id": "engine",
+    "name": "엔진 결함",
+    "months": 2,
+    "effect": {
+      "ground": 1
+    },
+    "text": "항공기 한 대에서 엔진 결함이 발견되어 2개월간 운항할 수 없습니다.",
+    "option": {
+      "label": "긴급 수리",
+      "cost": 2.0,
+      "scale": 0.5,
+      "text": "긴급 수리로 절반의 운항을 유지합니다."
+    }
+  },
+  {
+    "id": "subsidy",
+    "name": "정부 지원금",
+    "months": 1,
+    "effect": {
+      "cash": 4
+    },
+    "text": "지역 항공 진흥 정책으로 지원금 $4M을 받았습니다."
+  },
+  {
+    "id": "expo",
+    "name": "국제 박람회",
+    "months": 2,
+    "effect": {
+      "routeDemand": 0.3
+    },
+    "text": "국제 박람회가 열려 한 도시를 오가는 노선의 수요가 2개월간 30% 늘어납니다.",
+    "boomCities": [
+      "SIN",
+      "LHR",
+      "DXB",
+      "JFK"
+    ]
+  },
+  {
+    "id": "olympic",
+    "name": "올림픽",
+    "months": 2,
+    "scheduled": true,
+    "hosts": [
+      "LHR",
+      "CDG",
+      "LAX",
+      "SYD",
+      "NRT",
+      "ICN",
+      "PEK"
+    ],
+    "effect": {
+      "routeDemand": 0.4
+    },
+    "text": "올림픽이 열려 개최 도시를 오가는 노선의 수요가 2개월간 40% 늘어납니다."
+  },
+  {
+    "id": "worldcup",
+    "name": "월드컵",
+    "months": 2,
+    "scheduled": true,
+    "hosts": [
+      "JFK",
+      "LAX",
+      "MEX",
+      "GRU",
+      "FRA",
+      "SVO",
+      "DXB"
+    ],
+    "effect": {
+      "routeDemand": 0.35
+    },
+    "text": "월드컵이 열려 개최 도시를 오가는 노선의 수요가 2개월간 35% 늘어납니다."
+  },
+  {
+    "id": "festival",
+    "name": "대형 축제",
+    "months": 1,
+    "scheduled": true,
+    "hosts": [
+      "BKK",
+      "CJU",
+      "KIX",
+      "MNL",
+      "SGN",
+      "IST",
+      "CAI"
+    ],
+    "effect": {
+      "routeDemand": 0.3
+    },
+    "text": "대형 축제가 열려 개최 도시를 오가는 노선의 수요가 한 달간 30% 늘어납니다."
+  },
+  {
+    "id": "typhoon",
+    "name": "태풍",
+    "months": 1,
+    "effect": {
+      "cityCap": -0.5
+    },
+    "text": "태풍이 와서 한 공항의 운항이 1개월간 절반으로 줄어듭니다.",
+    "snowCities": [
+      "NRT",
+      "TPE",
+      "HKG",
+      "MNL",
+      "PVG",
+      "ICN",
+      "KIX",
+      "CJU"
+    ],
+    "season": [
+      7,
+      8,
+      9
+    ],
+    "sandboxOnly": true,
+    "option": {
+      "label": "사전 대비",
+      "cost": 1.5,
+      "scale": 0.4,
+      "text": "항공기를 미리 옮기고 일정을 조정해 피해를 줄입니다."
+    }
+  },
+  {
+    "id": "ash",
+    "name": "화산재",
+    "months": 1,
+    "effect": {
+      "cityCap": -0.7
+    },
+    "text": "화산 폭발로 화산재가 퍼져 한 공항의 운항이 크게 줄어듭니다.",
+    "snowCities": [
+      "CGK",
+      "NRT",
+      "MEX",
+      "SCL",
+      "AKL",
+      "MNL"
+    ],
+    "sandboxOnly": true,
+    "option": {
+      "label": "우회 항로",
+      "cost": 2.0,
+      "scale": 0.5,
+      "text": "우회 항로를 잡아 운항 감소를 절반으로 줄입니다."
+    }
+  },
+  {
+    "id": "pandemic",
+    "name": "감염병 대유행",
+    "months": 6,
+    "effect": {
+      "demand": -0.45
+    },
+    "text": "세계적인 감염병 대유행으로 6개월간 여객 수요가 크게 줄어듭니다.",
+    "sandboxOnly": true,
+    "minMonth": 60,
+    "option": {
+      "label": "방역·화물 전환",
+      "cost": 8.0,
+      "scale": 0.6,
+      "text": "방역 체계와 화물 전환으로 수요 감소를 40% 줄입니다."
+    }
+  },
+  {
+    "id": "oilshock",
+    "name": "유가 폭등",
+    "months": 6,
+    "effect": {
+      "cost": 0.4
+    },
+    "text": "중동 위기로 유가가 폭등해 6개월간 운영비가 40% 늘어납니다.",
+    "sandboxOnly": true,
+    "minMonth": 60,
+    "option": {
+      "label": "긴급 연료 계약",
+      "cost": 6.0,
+      "scale": 0.3,
+      "text": "긴급 연료 계약으로 비용 상승을 70% 막습니다."
+    }
+  },
+  {
+    "id": "probe",
+    "name": "대형 사고 조사",
+    "months": 4,
+    "effect": {
+      "demand": -0.15
+    },
+    "text": "업계 대형 사고로 정부 조사가 시작되어 4개월간 승객이 항공 여행을 꺼립니다.",
+    "sandboxOnly": true,
+    "minMonth": 60,
+    "option": {
+      "label": "투명 공개·안전 투자",
+      "cost": 10.0,
+      "scale": 0.2,
+      "text": "안전 점검 결과를 공개하고 투자해 수요 감소를 80% 줄입니다."
+    }
   }
- },
- {
-  "id": "recession",
-  "name": "불황",
-  "months": 3,
-  "effect": {
-   "demand": -0.15
-  },
-  "text": "경기가 나빠져 3개월간 전체 수요가 15% 줄어듭니다.",
-  "option": {
-   "label": "마케팅 캠페인",
-   "cost": 3.0,
-   "scale": 0.5,
-   "text": "할인 캠페인으로 수요 감소를 절반으로 줄입니다."
-  }
- },
- {
-  "id": "snow",
-  "name": "폭설",
-  "months": 1,
-  "effect": {
-   "cityCap": -0.3
-  },
-  "text": "폭설로 한 공항의 운항이 1개월간 30% 줄어듭니다.",
-  "snowCities": [
-   "LHR",
-   "JFK",
-   "NRT",
-   "ICN"
-  ],
-  "option": {
-   "label": "임시 편성",
-   "cost": 1.0,
-   "scale": 0.5,
-   "text": "우회 편성으로 운항 감소를 절반으로 줄입니다."
-  }
- },
- {
-  "id": "boom",
-  "name": "관광 붐",
-  "months": 2,
-  "effect": {
-   "routeDemand": 0.25
-  },
-  "text": "관광 붐으로 한 지역 노선의 수요가 2개월간 25% 늘어납니다.",
-  "boomCities": [
-   "CJU",
-   "BKK"
-  ]
- },
- {
-  "id": "pandemic",
-  "name": "감염병 확산",
-  "months": 4,
-  "effect": {
-   "demand": -0.35
-  },
-  "text": "감염병이 퍼져 4개월간 전체 수요가 35% 줄어듭니다.",
-  "option": {
-   "label": "방역·특가 캠페인",
-   "cost": 4.0,
-   "scale": 0.6,
-   "text": "방역 홍보와 특가로 수요 감소를 40% 줄입니다."
-  }
- },
- {
-  "id": "strike",
-  "name": "노조 파업",
-  "months": 2,
-  "effect": {
-   "cost": 0.2,
-   "cap": -0.2
-  },
-  "text": "노조가 파업해 2개월간 운영비가 20% 늘고 운항이 20% 줄어듭니다.",
-  "option": {
-   "label": "노사 협상",
-   "cost": 3.0,
-   "scale": 0.5,
-   "text": "협상으로 피해를 절반으로 줄입니다."
-  }
- },
- {
-  "id": "engine",
-  "name": "엔진 결함",
-  "months": 2,
-  "effect": {
-   "ground": 1
-  },
-  "text": "항공기 한 대에서 엔진 결함이 발견되어 2개월간 운항할 수 없습니다.",
-  "option": {
-   "label": "긴급 수리",
-   "cost": 2.0,
-   "scale": 0.5,
-   "text": "긴급 수리로 절반의 운항을 유지합니다."
-  }
- },
- {
-  "id": "subsidy",
-  "name": "정부 지원금",
-  "months": 1,
-  "effect": {
-   "cash": 4
-  },
-  "text": "지역 항공 진흥 정책으로 지원금 $4M을 받았습니다."
- },
- {
-  "id": "expo",
-  "name": "국제 박람회",
-  "months": 2,
-  "effect": {
-   "routeDemand": 0.3
-  },
-  "text": "국제 박람회가 열려 한 도시를 오가는 노선의 수요가 2개월간 30% 늘어납니다.",
-  "boomCities": [
-   "SIN",
-   "LHR",
-   "DXB",
-   "JFK"
-  ]
- },
- {
-  "id": "olympic",
-  "name": "올림픽",
-  "months": 2,
-  "scheduled": true,
-  "hosts": [
-   "LHR",
-   "CDG",
-   "LAX",
-   "SYD",
-   "NRT",
-   "ICN",
-   "PEK"
-  ],
-  "effect": {
-   "routeDemand": 0.4
-  },
-  "text": "올림픽이 열려 개최 도시를 오가는 노선의 수요가 2개월간 40% 늘어납니다."
- },
- {
-  "id": "worldcup",
-  "name": "월드컵",
-  "months": 2,
-  "scheduled": true,
-  "hosts": [
-   "JFK",
-   "LAX",
-   "MEX",
-   "GRU",
-   "FRA",
-   "SVO",
-   "DXB"
-  ],
-  "effect": {
-   "routeDemand": 0.35
-  },
-  "text": "월드컵이 열려 개최 도시를 오가는 노선의 수요가 2개월간 35% 늘어납니다."
- },
- {
-  "id": "festival",
-  "name": "대형 축제",
-  "months": 1,
-  "scheduled": true,
-  "hosts": [
-   "BKK",
-   "CJU",
-   "KIX",
-   "MNL",
-   "SGN",
-   "IST",
-   "CAI"
-  ],
-  "effect": {
-   "routeDemand": 0.3
-  },
-  "text": "대형 축제가 열려 개최 도시를 오가는 노선의 수요가 한 달간 30% 늘어납니다."
- },
- {
-  "id": "typhoon",
-  "name": "태풍",
-  "months": 1,
-  "effect": {
-   "cityCap": -0.5
-  },
-  "text": "태풍이 와서 한 공항의 운항이 1개월간 절반으로 줄어듭니다.",
-  "snowCities": [
-   "NRT",
-   "TPE",
-   "HKG",
-   "MNL",
-   "PVG",
-   "ICN",
-   "KIX",
-   "CJU"
-  ],
-  "season": [
-   7,
-   8,
-   9
-  ],
-  "sandboxOnly": true,
-  "option": {
-   "label": "사전 대비",
-   "cost": 1.5,
-   "scale": 0.4,
-   "text": "항공기를 미리 옮기고 일정을 조정해 피해를 줄입니다."
-  }
- },
- {
-  "id": "ash",
-  "name": "화산재",
-  "months": 1,
-  "effect": {
-   "cityCap": -0.7
-  },
-  "text": "화산 폭발로 화산재가 퍼져 한 공항의 운항이 크게 줄어듭니다.",
-  "snowCities": [
-   "CGK",
-   "NRT",
-   "MEX",
-   "SCL",
-   "AKL",
-   "MNL"
-  ],
-  "sandboxOnly": true,
-  "option": {
-   "label": "우회 항로",
-   "cost": 2.0,
-   "scale": 0.5,
-   "text": "우회 항로를 잡아 운항 감소를 절반으로 줄입니다."
-  }
- }
 ]

@@ -9,6 +9,7 @@ export interface Achievement { id: string; name: string; desc: string; test: (g:
 const servedRoutes = (g: Game) => g.state.routes.filter((r) => r.open && g.planesOn(r.id).length > 0);
 
 export const ACHIEVEMENTS: Achievement[] = [
+  ...Object.entries(config.extra.dynasty.list).map(([id, d]) => ({ id: `dyn_${id}`, name: `왕조: ${d.name}`, desc: `왕조 목표 '${d.name}'을(를) 기한 안에 이룬다(자유 모드)`, test: (g: Game) => !!g.state.dynastyDone?.includes(id) })),
   { id: 'first', name: '첫 비행', desc: '항공기가 달리는 노선이 생긴다', test: (g) => servedRoutes(g).length >= 1 },
   { id: 'routes5', name: '노선 개척자', desc: '운항 노선 5개', test: (g) => servedRoutes(g).length >= 5 },
   { id: 'hub', name: '진짜 허브', desc: '한 도시에 노선 5개 이상', test: (g) => CITIES.some((c) => g.linksAt(c.id) >= 5) },

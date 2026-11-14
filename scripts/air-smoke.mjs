@@ -570,6 +570,15 @@ await page.click('#dsize button[data-h="half"]').catch(() => undefined); await p
 const ffDay = await page.evaluate(() => window.__air.game.state.day); await page.click('#ffbtn');
 check('건너뛰기: 하루 이상 지나고 이유를 알려 줌', (await page.evaluate(() => window.__air.game.state.day)) > ffDay && (await page.locator('#toast').innerText()).includes('건너뜀'));
 await page.waitForTimeout(3300); check('알림 띠는 몇 초 뒤 사라짐', !(await page.locator('#toast.show').count()));
+// 2.14.0: 왕조 목표·상장·허브 공항
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 5000; g.state.mega = null; window.__air.render(); });
+await page.click('#tabs button[data-tab="map"]'); await openAll(); await page.locator('#panel button[data-act="dynasty"][data-v="fleet"]').click();
+check('현황: 왕조 목표 도전', await page.evaluate(() => window.__air.game.state.dynasty?.id === 'fleet'));
+await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed < 36) g.advanceDays(30); g.state.cash = 5000; g.state.mega = null; window.__air.render(); });
+await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
+await page.locator('#panel button[data-act="ipo"]').click(); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
+await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.selectOption('#ap-city', 'PUS'); await page.click('#info-body button[data-act="airportGo"]');
+check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.mega?.id === 'airport' && window.__air.game.state.mega?.city === 'PUS'));
 await page.waitForTimeout(2200);
 check('콘솔 오류 0건', errors.length === 0, errors.join(' | '));
 await browser.close();
