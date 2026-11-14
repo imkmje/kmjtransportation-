@@ -18,7 +18,7 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 const fails = [];
 let checks = 0; // 점검 항목 수(중간에 멈추면 몇 번째에서 멈췄는지 알 수 있게)
-const halt = (e) => { console.log(`FAIL 점검이 중간에 멈춤(${checks}번째 항목 뒤): ${String(e?.message ?? e).split('\n')[0]}`); process.exit(1); };
+const halt = (e) => { console.log(`FAIL 점검이 중간에 멈춤(${checks}번째 항목 뒤): ${String(e?.message ?? e).split('\n').filter((l) => /intercepts|visible|resolved|Error/.test(l)).slice(0, 4).join(' | ')}`); process.exit(1); };
 process.on('uncaughtException', halt); process.on('unhandledRejection', halt);
 const check = (name, ok, detail = '') => { checks++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
 // 스크린샷은 경로를 줬을 때만 찍는다(움직이는 지도 캡처가 한 장에 수 초~20초 걸려 점검 시간 대부분을 차지)
@@ -42,7 +42,8 @@ check('새 게임: 시작 화면이 닫히고 현금 $20.0M', !(await page.locat
 
 check('첫 5분 안내: 새 게임에서 힌트 띠가 서울을 누르라고 안내함', (await page.locator('#hint').isVisible()) && (await page.locator('#hint-text').innerText()).includes('서울'), await page.locator('#hint-text').innerText());
 check('경기 칩이 위쪽 바에 보임', (await page.locator('#eco').innerText()).startsWith('경기'));
-const tapCity = async (id) => { const p = await page.evaluate((i) => window.__air.screenOf(i), id); await page.mouse.click(p.x, p.y); };
+const mapOnly = async () => { if (await page.evaluate(() => document.getElementById('stage').classList.contains('d-full'))) { await page.evaluate(() => document.querySelector('#dsize button[data-h="min"]')?.click()); await page.waitForTimeout(500); } }; // 펼침이면 지도가 가려지므로 접고 누른다
+const tapCity = async (id) => { await mapOnly(); await page.waitForTimeout(100); const p = await page.evaluate((i) => window.__air.screenOf(i), id); await page.mouse.click(p.x, p.y); };
 await tapCity('ICN');
 check('힌트가 ②단계(열기)로 바뀌고 해당 버튼이 반짝임', (await page.locator('#hint-text').innerText()).includes('②') && (await page.locator('#panel button[data-act="open"].pulse').count()) === 1, await page.locator('#hint-text').innerText());
 check('도시 정보에 공항 슬롯 칸이 있음', (await page.locator('#panel').innerText()).includes('공항 슬롯'));
@@ -105,8 +106,10 @@ if (grouped) await page.locator('#alerts [data-act="alertsToggle"]').first().cli
 check('알림 띠: 알림 탭에 들어가지 않아도 지도 위에 진행 중 사건과 대응 버튼이 보임', (await page.locator('#alerts .chip').count()) >= 1 && (await page.locator('#alerts button[data-act="respond"]').count()) >= 1 && (await page.locator('#tabs button[data-tab="news"]').getAttribute('data-badge')) !== null);
 await page.locator('#alerts button[data-act="respond"]').last().click(); // 방금 넣은 연료비 사건은 마지막
 check('알림 탭: 사건 대응 버튼이 동작', await page.evaluate(() => window.__air.game.state.events.at(-1).handled === true));
+await mapOnly(); await page.waitForTimeout(150);
 // 두 손가락: 같은 간격으로 함께 움직이면 이동, 벌리면 확대 — 확대한 채로도 이동되어야 한다(사용자 보고)
 const touch = (type, id, x, y) => page.evaluate(([t, i, px, py]) => { const c = document.querySelector('#map'); const r = c.getBoundingClientRect(); c.dispatchEvent(new PointerEvent(t, { pointerId: i, pointerType: 'touch', isPrimary: i === 1, clientX: r.left + px, clientY: r.top + py, bubbles: true })); }, [type, id, x, y]);
+{ const mb = await page.locator('#map').boundingBox(); await page.mouse.move(mb.x + mb.width / 2, mb.y + mb.height / 2); await page.mouse.wheel(0, -400); await page.waitForTimeout(200); } // 가장 작게 줄인 상태면 최소 배율에 걸리므로 조금 확대하고 시작
 const v0 = await page.evaluate(() => window.__air.mapView());
 await touch('pointerdown', 1, 300, 300); await touch('pointerdown', 2, 400, 300);
 for (let i = 1; i <= 10; i++) { await touch('pointermove', 1, 300 + 6 * i, 300 + 3 * i); await touch('pointermove', 2, 400 + 6 * i, 300 + 3 * i); } // 간격 그대로 오른쪽 아래로 이동(손가락은 번갈아 조금씩 움직인다)
@@ -152,7 +155,7 @@ check('메뉴: 소리 끄기', (await page.locator('#menu button[data-m="sound"]
 await page.click('#menu button[data-m="night"]');
 check('메뉴: 낮밤 표시 끄기', (await page.locator('#menu button[data-m="night"]').innerText()).includes('꺼짐') && (await page.evaluate(() => localStorage.getItem('the-air-night'))) === 'off');
 await page.click('#menubtn');
-await page.evaluate(() => window.__air.setSpeed(0)); await page.locator('#map').focus().catch(() => {}); await page.keyboard.press('2');
+await page.evaluate(() => { window.__air.setSpeed(0); document.activeElement?.blur(); }); await page.keyboard.press('2');
 check('단축키 2: 2배속', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
 await page.evaluate(() => window.__air.setSpeed(0));
 // 0.15.0: 탭 초기화·패널 접기·임대·제휴
@@ -163,8 +166,8 @@ await rtab('sum');
 const inDetail = (await page.locator('#panel button[data-act="close"]').count()) === 1;
 await page.click('#tabs button[data-tab="routes"]');
 check('하단 탭을 다시 누르면 그 탭의 첫 화면(노선 목록)으로 돌아감', inDetail && (await page.locator('#panel button[data-act="close"]').count()) === 0 && (await page.locator('#panel h2').innerText()).startsWith('노선'));
-const w0 = (await page.locator('#map').boundingBox()).width + (await page.locator('#map').boundingBox()).height;
-await page.click('#fold');
+const w0 = (await page.locator('#map').boundingBox()).width + (await page.locator('#map').boundingBox()).height; // 펼침 상태
+await mapOnly();
 await page.waitForTimeout(200);
 const w1 = (await page.locator('#map').boundingBox()).width + (await page.locator('#map').boundingBox()).height;
 check('패널 접기: 패널이 숨고 지도가 커짐', !(await page.locator('#panel').isVisible()) && w1 > w0, `${w0} -> ${w1}`);
@@ -251,7 +254,7 @@ await rtab('planes');
 await page.evaluate(() => { for (const d of document.querySelectorAll('details.rbuy')) d.open = true; });
 const planesBefore = await page.evaluate(() => window.__air.game.state.planes.length);
 check('돈이 모자라면 구매 버튼이 꺼져 있지 않고 회색(이유 포함)으로 보임', (await page.locator('#panel button[data-act="rbuy"][disabled]').count()) === 0 && (await page.locator('#panel button[data-act="rbuy"][data-why]').count()) >= 3);
-await page.locator('#panel button[data-act="rbuy"][data-how="lease"]').first().click({ force: true });
+await page.locator('#panel button[data-act="rbuy"][data-how="lease"]').first().evaluate((el) => el.click()); // 화면 위치와 무관하게 그 버튼을 누른다
 const why = await page.locator('#toast').innerText();
 check('임대 버튼을 누르면 이유가 나오고 항공기는 늘지 않음', (why.includes('현금이 모자랍니다') || why.includes('임대는')) && (await page.evaluate(() => window.__air.game.state.planes.length)) === planesBefore, why);
 await page.evaluate(() => { window.__air.game.state.cash = 500; window.__air.render(); });
@@ -363,6 +366,7 @@ await page.click('#panel .chips button[data-v="rival"]');
 check('알림 필터: 경쟁만 보면 줄이 줄어들고 선택 표시가 바뀜', (await page.locator('#panel .chips button.on').getAttribute('data-v')) === 'rival' && (await page.locator('#panel .list .row').count()) <= rowsAll);
 await page.click('#panel .chips button[data-v="all"]');
 await page.evaluate(() => { const g = window.__air.game; g.state.era = { id: 'carbon', start: g.monthsPassed, end: g.monthsPassed + 12 }; window.__air.render(); });
+await mapOnly();
 check('지도 위 시대 표시(탄소세)', (await page.locator('#era').isVisible()) && (await page.locator('#era').innerText()).includes('탄소세 시대'));
 await page.evaluate(() => { const g = window.__air.game; g.state.contracts.push({ id: 424242, kind: 'profit', title: '시험', goal: 9, progress: 0, limit: 3, status: 'offer', expires: g.monthsPassed + 3, reward: { type: 'cash', value: 30, label: '현금 $30M' } }); window.__air.render(); });
 check('지도 탭에 새 계약·경매 개수 배지', (await page.locator('#tabs button[data-tab="map"]').getAttribute('data-badge')) !== null);
@@ -421,7 +425,7 @@ check('기단: 대기 중 항공기를 누르면 배정 추천 노선이 뜸', (
 await page.locator('#panel .rowc details.more[open] button[data-act="assignTo"]').first().click();
 check('추천 노선에 바로 배정됨', await page.evaluate(() => window.__air.game.state.planes.some((p) => p.routeId !== null && p.id === window.__air.game.state.planes.at(-1).id)));
 await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll();
-const sc2 = await page.evaluate(() => window.__air.screenOf('ICN')); await page.mouse.click(sc2.x, sc2.y); await page.waitForTimeout(150);
+await mapOnly(); await page.waitForTimeout(100); const sc2 = await page.evaluate(() => window.__air.screenOf('ICN')); await page.mouse.click(sc2.x, sc2.y); await page.waitForTimeout(150);
 await page.locator('#panel details.more > summary', { hasText: '나머지 도시' }).click();
 await page.evaluate(() => { window.__air.game.state.cash = 3; window.__air.render(); });
 check('나머지 도시 보기: 화면이 다시 그려져도 펼친 상태가 유지됨', await page.locator('#panel details.more[open] > summary', { hasText: '나머지 도시' }).count() === 1);
@@ -467,19 +471,16 @@ check('노선 화면: 점유율 우선 운임을 켜면 운임이 경쟁사보�
 await rtab();
 await page.locator('#panel button[data-act="svc"][data-v="1"]').click();
 check('서비스 등급을 고급으로 바꿈', await page.evaluate((id) => window.__air.game.route(id).svc === 1, sRid));
-// 2.0.0: 아래 서랍 — 크게 펼치면 일시정지, 내려오면 마지막 배속으로 다시
+// 2.26.0: 아래 서랍 — 접기·펼침 두 단계, 펼쳐도 시간은 흐른다
 await page.click('#speeds button[data-speed="2"]');
-await page.click('#dsize button[data-h="full"]');
-check('서랍 크게: 화면 대부분을 덮고 시간이 멈춤', (await page.locator('#stage').getAttribute('class')).includes('d-full') && (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
-await page.click('#dsize button[data-h="half"]');
-check('크게에서 내려오면 마지막으로 고른 배속(2×)으로 다시 흐름', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
+await page.click('#dsize button[data-h="min"]'); await page.click('#dsize button[data-h="full"]');
+check('서랍 펼침: 화면 대부분을 덮고 시간은 그대로 흐름', (await page.locator('#stage').getAttribute('class')).includes('d-full') && (await page.locator('#speeds button.on').getAttribute('data-speed')) === '2');
+check('서랍 단계는 접기·펼침 두 개', (await page.locator('#dsize button').count()) === 2);
 await page.click('#speeds button[data-speed="0"]');
-await page.click('#dsize button[data-h="full"]'); await page.click('#dsize button[data-h="half"]');
-check('원래 멈춰 있었으면 크게에서 내려와도 멈춘 그대로', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
 await page.click('#dsize button[data-h="min"]');
 check('서랍 접기: 표가 숨고 탭·요약 줄만 남음', !(await page.locator('#panel').isVisible()) && (await page.locator('#dsum').innerText()).includes('노선'));
 await page.click('#tabs button[data-tab="routes"]');
-check('접힌 상태에서 탭을 누르면 절반으로 열림', (await page.locator('#stage').getAttribute('class')).includes('d-half') && await page.locator('#panel').isVisible());
+check('접힌 상태에서 탭을 누르면 펼쳐짐', (await page.locator('#stage').getAttribute('class')).includes('d-full') && await page.locator('#panel').isVisible());
 // 2.1.0: 화면 다듬기
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button.trow[data-act="goRoute"]').first().click();
 check('노선 상세: 탭 없이 한 화면(핵심 숫자 4칸 → 운임 슬라이더 → 항공기)', (await page.locator('#panel .kpi > div').count()) === 4 && (await page.locator('#fare').isVisible()) && (await page.locator('#panel .pside h3', { hasText: '배정된 항공기' }).count()) === 1);
@@ -488,17 +489,17 @@ await page.click('#tabs button[data-tab="money"]'); await openAll();
 check('재무 탭: 두 칸(왼쪽 손익, 오른쪽 업그레이드·연료·대출)', (await page.locator('#panel .cols2 > div').count()) === 2);
 await page.evaluate(() => { window.__air.game.advanceDays(31); window.__air.report(); });
 check('월간 보고는 한 줄로 시작(펼치기 버튼)', await page.locator('#report').evaluate((el) => el.classList.contains('collapsed') || el.textContent.includes('결산')) && (await page.locator('#report button[data-act="toggleReport"]').count()) === 1);
-const gb = await page.locator('#dgrip').boundingBox();
+await page.click('#dsize button[data-h="min"]'); const gb = await page.locator('#dgrip').boundingBox();
 await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2); await page.mouse.down(); await page.mouse.move(gb.x + gb.width / 2, 70, { steps: 6 }); await page.mouse.up();
-check('서랍 손잡이를 위로 끌면 크게로 맞춰짐', (await page.locator('#stage').getAttribute('class')).includes('d-full'));
-check('크게 상태: 지도 띠에 "지도 보기" 버튼', await page.locator('#mapback').isVisible());
+check('서랍 손잡이를 위로 끌면 펼침으로 맞춰짐', (await page.locator('#stage').getAttribute('class')).includes('d-full'));
+check('펼침 상태: 지도 띠에 "지도 보기" 버튼', await page.locator('#mapback').isVisible());
 await page.click('#mapback');
-check('"지도 보기"를 누르면 절반으로', (await page.locator('#stage').getAttribute('class')).includes('d-half'));
+check('"지도 보기"를 누르면 접힘(지도)', (await page.locator('#stage').getAttribute('class')).includes('d-min'));
 // 2.2.1: 크게 상태에서 지도를 누르면 접기
 await page.click('#dsize button[data-h="full"]');
 { const mb = await page.locator('#mapwrap').boundingBox(); await page.mouse.click(mb.x + 40, mb.y + mb.height / 2); }
-check('크게 상태에서 지도 띠를 누르면 서랍이 접힘', (await page.locator('#stage').getAttribute('class')).includes('d-min'));
-await page.click('#dsize button[data-h="half"]');
+check('펼침 상태에서 지도 띠를 누르면 서랍이 접힘', (await page.locator('#stage').getAttribute('class')).includes('d-min'));
+await page.click('#dsize button[data-h="min"]');
 // 2.3.0: 자회사
 await page.evaluate(() => { window.__airYes = true; const g = window.__air.game; g.state.sandbox = true; g.state.cash = 5000; window.__air.render(); });
 await pickComp();
@@ -527,7 +528,7 @@ await page.click('#menubtn'); await page.click('#menu button[data-m="help"]');
 const helpText = await page.locator('#info-body').evaluate((e) => e.textContent ?? ''); await page.click('#info-close'); // 구역이 접혀 있어도 내용은 있다
 check('도움말에 화면·점유율·자회사·기단 관리 설명', ['서랍', '점유율 우선 운임', '자회사', '교체 추천'].every((w) => helpText.includes(w)));
 // 2.4.1: 계약 제안 팝업
-await page.click('#dsize button[data-h="half"]').catch(() => undefined);
+await page.click('#dsize button[data-h="min"]').catch(() => undefined);
 await page.locator('#offerpop button[data-act="offerClose"]').click({ timeout: 1000 }).catch(() => undefined); // 앞에서 쌓인 알림 줄 비우기
 await page.evaluate(() => { const g = window.__air.game; g.state.contracts = g.state.contracts.filter((c) => c.status !== 'offer'); g.state.contracts.push({ id: 99901, kind: 'cities', title: '시험 계약: 새 도시 2곳', goal: 2, progress: 0, limit: 6, status: 'offer', expires: g.monthsPassed + 3, startCities: 0, reward: { type: 'cash', value: 10, label: '현금 $10M' } }); window.__air.render(); });
 check('새 계약 제안이 오면 지도 구석에 작은 팝업', await page.locator('#offerpop').isVisible() && (await page.locator('#offerpop').innerText()).includes('시험 계약'), await page.locator('#offerpop').innerText().catch(() => 'hidden'));
@@ -550,7 +551,7 @@ const seatsOrder = await page.evaluate(() => [...document.querySelectorAll('#sho
 check('구매 목록: 좌석 많은 순 정렬', seatsOrder.length >= 3 && seatsOrder.every((v, i) => i === 0 || v <= seatsOrder[i - 1]), seatsOrder.join(','));
 // 2.6.0: 자유 모드 즐길 거리
 await page.evaluate(() => { window.__airYes = true; const g = window.__air.game; g.state.sandbox = true; g.state.cash = 5000; g.buyPlane('B737'); g.state.charters = [{ id: 88801, a: 'ICN', b: 'BKK', months: 2, seats: 120, perMonth: 1.5, expires: g.monthsPassed + 2 }]; g.state.bids = [{ id: 88802, kind: 'concession', city: 'NRT', n: 0, ends: g.monthsPassed + 2, best: null, min: 10 }]; window.__air.render(); });
-await page.click('#dsize button[data-h="half"]').catch(() => undefined);
+await page.click('#dsize button[data-h="min"]').catch(() => undefined);
 await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll();
 await page.locator('#panel button[data-act="charter"]').first().click();
 check('현황: 전세기 주문에 노는 항공기를 보내면 전세 운항', await page.evaluate(() => window.__air.game.state.charters.some((c) => c.planeId !== undefined)));
@@ -569,7 +570,7 @@ check('기단: 기종 도감', (await page.locator('#panel').innerText()).includ
 await page.evaluate(() => { const g = window.__air.game; g.state.netHist = [{ m: 0, routes: [['ICN', 'NRT']] }, { m: 6, routes: [['ICN', 'NRT'], ['ICN', 'PEK']] }]; });
 await page.click('#menubtn'); await page.click('#menu button[data-m="timelapse"]');
 check('메뉴: 성장 타임랩스 재생(그동안 시간 정지)', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
-await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
+await page.click('#dsize button[data-h="min"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
 check('지도: 경쟁사 노선 보기 전환(전부→겹침만→…→전부)', cl1.includes('겹침만') && (await page.locator('#complayer').innerText()).includes('전부'), cl1);
 await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#legendbtn'); check('지도: 범례 열기', await page.locator('#legend').isVisible()); await page.click('#legendbtn');
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="autoFreq"]').click();
@@ -592,7 +593,7 @@ check('재무: 마일 2배 프로모션', await page.evaluate(() => (window.__ai
 await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').click();
 check('경쟁사: 자회사·그룹 탭에 그룹 현황 표', (await page.locator('#panel').innerText()).includes('그룹 현황') && (await page.locator('#panel').innerText()).includes('시험항공'));
 await page.locator('#panel button[data-act="rivalSub"][data-v="comp"]').click();
-await page.click('#dsize button[data-h="half"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#rcolor'); check('지도: 노선 색 바꾸기(이익→점유율)', (await page.locator('#rcolor').innerText()).includes('점유율')); for (let i = 0; i < 3; i++) await page.click('#rcolor');
+await page.click('#dsize button[data-h="min"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#rcolor'); check('지도: 노선 색 바꾸기(이익→점유율)', (await page.locator('#rcolor').innerText()).includes('점유율')); for (let i = 0; i < 3; i++) await page.click('#rcolor');
 const ffDay = await page.evaluate(() => window.__air.game.state.day); await page.click('#ffbtn');
 check('건너뛰기: 하루 이상 지나고 이유를 알려 줌', (await page.evaluate(() => window.__air.game.state.day)) > ffDay && (await page.locator('#toast').innerText()).includes('건너뜀'));
 await page.waitForTimeout(3300); check('알림 띠는 몇 초 뒤 사라짐', !(await page.locator('#toast.show').count()));
@@ -602,6 +603,7 @@ await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await ope
 check('현황: 왕조 목표 도전', await page.evaluate(() => window.__air.game.state.dynasty?.id === 'fleet'));
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed < 36) g.advanceDays(30); g.state.cash = 5000; g.state.mega = null; window.__air.render(); });
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
+await page.locator('#offerpop button[data-act="offerClose"]').click({ timeout: 1000 }).catch(() => undefined); // 펼침에서는 제안 팝업이 패널 위에 뜬다
 await page.locator('#panel button[data-act="ipo"]').click(); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
 await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.selectOption('#ap-city', 'PUS'); await page.click('#info-body button[data-act="airportGo"]');
 check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.mega?.id === 'airport' && window.__air.game.state.mega?.city === 'PUS'));
@@ -620,6 +622,7 @@ await page.evaluate(() => { window.__air.render(); }); const rkText = await page
 check('노선: 점유율 순위표(우리가 1위인 노선 수)', rkText.includes('점유율 순위표') && rkText.includes('우리가 1위인 노선'));
 await page.evaluate(() => { const g = window.__air.game; g.state.duel = { start: g.monthsPassed, until: g.monthsPassed + 12 }; window.__air.render(); }); await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll();
 check('현황: 최후의 대결 진행 막대', (await page.locator('#panel').innerText()).includes('최후의 대결'));
+await mapOnly(); await page.waitForTimeout(150);
 // 2.17.0: 지도 설정 묶기·결정 대기 더 보기·왕조 진행
 await page.evaluate(() => { document.getElementById('mtpanel').hidden = true; }); await page.click('#mtbtn').catch(() => undefined);
 check('지도: 지도 설정 버튼을 누르면 노선 색·범례·경쟁사 노선이 펼쳐짐', await page.locator('#rcolor').isVisible()); await page.click('#mtbtn').catch(() => undefined);
@@ -641,7 +644,7 @@ await page.locator('#panel button[data-act="insurance"][data-v="1"]').click(); a
 check('재무: 조종사 급구 채용·보험', await page.evaluate((n) => (window.__air.game.state.pilots ?? 0) === n + 10 && window.__air.game.state.insurance === 1, pil0));
 await page.locator('#panel button[data-act="bond"][data-v="50"]').click(); check('재무: 채권 발행', await page.evaluate(() => (window.__air.game.state.bonds ?? []).length === 1));
 // 2.20.0: 연말 백업·기능 끄기
-await page.click('#dsize button[data-h="half"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다
+await page.click('#dsize button[data-h="min"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 11) g.advanceDays(30); while ((g.state.day + 1) % 30 !== 0) g.advanceDays(1); window.__air.setSpeed(4); }); // 연말 하루 전까지 넘기고 마지막 하루만 흘린다
 await page.waitForFunction(() => { if (window.__air.game.monthsPassed % 12 === 0) return true; window.__air.setSpeed(4); return false; }, null, { timeout: 60000, polling: 500 }).catch(() => undefined); // 자동 정지가 걸려도 다시 흘린다 await page.evaluate(() => window.__air.setSpeed(0));
 await page.evaluate(() => { document.getElementById('menu').hidden = true; }); await page.click('#menubtn'); await page.click('#menu button[data-m="saves"]');
