@@ -383,7 +383,13 @@ const fare0 = await page.evaluate(() => window.__air.game.state.routes.filter((r
 await page.locator('#panel button[data-act="bulk"][data-v="fareUp"]').click();
 const fare1 = await page.evaluate(() => window.__air.game.state.routes.filter((r) => r.open).map((r) => r.fare));
 check('노선 일괄 편집: 운임 +5%가 모든 열린 노선에 적용됨', fare0.length >= 2 && fare1.every((f, i) => f > fare0[i]), JSON.stringify([fare0, fare1]));
+await page.evaluate(() => { document.querySelectorAll('#panel details.more').forEach((d) => { d.open = true; }); }); await page.locator('#panel button[data-act="bulkSvc"][data-v="1"]').click();
+check('노선 일괄 편집: 서비스 등급 일괄', await page.evaluate(() => { const g = window.__air.game; return g.state.routes.filter((r) => r.open && g.planesOn(r.id).length).every((r) => r.svc === 1); }));
+await page.evaluate(() => { window.__air.game.state.planes[0].leased = true; window.__air.render(); }); await page.click('#tabs button[data-tab="fleet"]');
+check('보유 항공기: 임대 딱지와 소유·임대 합계', (await page.locator('#panel .otag.lease').count()) > 0 && (await page.locator('#panel .tfoot').first().innerText()).includes('임대'));
 await pickComp();
+await page.evaluate(() => { const c = window.__air.game.state.competitors.find((x) => !x.major); c.revHist = [10, 12, 11, 9, 8, 7]; window.__air.render(); }); await pickComp();
+check('경쟁사 카드: 월 매출 추이와 변화율', (await page.locator('#panel').innerText()).includes('월 매출 추이') && (await page.locator('#panel').innerText()).includes('그 전 3개월보다'));
 const acq = await page.locator('#panel button[data-act="acquire"]').first();
 const nComp = await page.evaluate(() => window.__air.game.state.competitors.length);
 await page.evaluate(() => { window.__airYes = false; });

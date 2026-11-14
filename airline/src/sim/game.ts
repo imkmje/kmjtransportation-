@@ -510,6 +510,8 @@ export class Game {
     return { ok: true };
   }
   /** 노선 서비스 등급(0 기본·1 고급·2 최고급): 경쟁사와 나누는 몫이 커지고, 항공기 1대당 월 비용이 든다 */
+  /** 운항 중인 모든 노선의 서비스 등급을 한 번에 바꾼다 */
+  setServiceAll(level: number): Result<{ n: number }> { let n = 0; for (const r of this.state.routes) if (r.open && this.planesOn(r.id).length && this.setService(r.id, level).ok) n++; return n ? { ok: true, n } : fail('바꿀 노선이 없습니다'); }
   setService(routeId: number, level: number): Result {
     const r = this.route(routeId); if (!r || !r.open) return fail('열려 있는 노선이 아닙니다');
     if (!Number.isInteger(level) || level < 0 || level >= config.strategy.svcWeight.length) return fail('없는 등급입니다');
@@ -1867,8 +1869,10 @@ export class Game {
     if (!p) return fail('없는 항공기입니다'); if (p.leased) return fail('임대기는 개조할 수 없습니다');
     if (typeById(p.type).seats === 0) return fail('화물기는 객실이 없습니다');
     const cost = this.cabinCost(p); if (cost === null) return fail('이미 최고급입니다'); if (s.cash < cost) return fail('현금이 모자랍니다');
+    const base = (p.name ?? typeById(p.type).name).replace(/^(디 올 뉴|더 뉴) /, '');
     s.cash -= cost; s.cur.cost += cost; p.cabin = (p.cabin ?? 0) + 1; p.shop = Math.max(p.shop, config.extra.cabin.shop); p.book += cost;
-    s.log.push(`${this.monthsPassed + 1}개월차: ${p.name ?? typeById(p.type).name} 객실을 '${config.extra.cabin.names[p.cabin]}'으로 개조합니다($${cost}M, ${config.extra.cabin.shop}일).`); return { ok: true };
+    p.name = `${p.cabin >= 2 ? '디 올 뉴' : '더 뉴'} ${base}`; // 개조하면 이름이 바뀐다(1단계 '더 뉴', 2단계 '디 올 뉴')
+    s.log.push(`${this.monthsPassed + 1}개월차: ${base} 객실을 '${config.extra.cabin.names[p.cabin]}'으로 개조합니다($${cost}M, ${config.extra.cabin.shop}일). 이제 '${p.name}'입니다.`); return { ok: true };
   }
   campaignCost(kind: string): number { const k = config.extra.campaign[kind]; return k ? Math.round(Math.max(k.cost, this.monthlyRev * k.rev)) : 0; }
   startCampaign(kind: string): Result {

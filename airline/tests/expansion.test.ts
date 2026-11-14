@@ -88,6 +88,13 @@ describe('돈 쓸 곳', () => {
     const rep = g.state.reputation; expect(g.startCampaign('national').ok).toBe(true); expect(g.state.reputation).toBeGreaterThan(rep); expect(g.startCampaign('global').ok).toBe(false);
     g.plane(pid)!.shop = 0; const cost0 = g.routeDay(r).cost; expect(g.investGreen().ok).toBe(true); expect(g.routeDay(r).cost).toBeLessThan(cost0);
   });
+  it('객실을 개조하면 이름에 더 뉴 → 디 올 뉴가 붙고, 서비스 등급은 일괄로 바꿀 수 있다', () => {
+    const g = sb(); g.state.cash = 9999; const { pid } = route(g, 'ICN', 'NRT'); const p = g.plane(pid)!, base = p.name ?? '';
+    expect(g.refitCabin(pid).ok).toBe(true); expect(p.name).toMatch(/^더 뉴 /); p.shop = 0;
+    expect(g.refitCabin(pid).ok).toBe(true); expect(p.name).toMatch(/^디 올 뉴 /); expect(p.name).not.toContain('더 뉴');
+    if (base) expect(p.name).toBe(`디 올 뉴 ${base}`);
+    route(g, 'ICN', 'PEK'); const r = g.setServiceAll(2); expect(r.ok && r.n).toBe(2); expect(g.state.routes.filter((x) => x.open).every((x) => x.svc === 2)).toBe(true);
+  });
 });
 
 describe('월말 처리 금액이 보고에서 빠지지 않는다', () => {
