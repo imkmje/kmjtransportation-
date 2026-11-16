@@ -557,7 +557,7 @@ export function startApp(): void {
       <h3>최근 ${r.daily.length}일</h3><div class="chartlabel"><small>일 이익(${money(r.daily.at(-1)?.profit ?? 0)})</small></div>${spark(r.daily.map((x) => x.profit), '#1f9d57', { zero: true })}
       <div class="chartlabel"><small>탑승률(${pct(r.daily.at(-1) && r.daily.at(-1)!.seats ? r.daily.at(-1)!.pax / r.daily.at(-1)!.seats : 0)})</small></div>${spark(r.daily.map((x) => (x.seats ? x.pax / x.seats : 0)), '#1f7ae0', { min: 0, max: 1 })}
       </details>
-      ${game.groupSubs.length ? `<h3>자회사에 넘기기</h3><div class="btnrow">${game.groupSubs.map((c) => `<button class="ghost" data-act="handRoute" data-id="${c.id}">${esc(c.name)}에 넘기기</button>`).join('')}</div><p class="hint">이 노선과 내 소유 항공기를 자회사에 넘깁니다(임대기는 대기로). 저가 자회사에 넘겨 운임 전쟁을 맡기고 본사는 다른 노선에 집중하는 식으로 씁니다. 자회사 카드의 노선 표에서 다시 가져올 수 있습니다.</p>` : ''}
+      ${game.groupSubs.length ? `<h3>자회사에 넘기기</h3><div class="btnrow">${game.groupSubs.map((c) => `<button class="ghost" data-act="handRoute" data-id="${c.id}">${esc(c.name)}에 넘기기</button>`).join('')}</div><p class="hint">이 노선과 내 소유 항공기를 자회사에 넘깁니다(임대기는 대기로). 저가 자회사에 넘겨 운임 전쟁을 맡기고 본사는 다른 노선에 집중하는 식으로 씁니다. 자회사 카드의 노선 표에서 다시 가져오면 넘긴 항공기가 그대로 돌아옵니다.</p>` : ''}
       <button class="wide danger" data-act="close">노선 닫기</button>
       <div class="live" id="live">${liveHtml(rId)}</div>`;
   }
@@ -1111,7 +1111,7 @@ export function startApp(): void {
     else if (act === 'majorSell') { const r = game.sellMajorStake(id); if (!r.ok) return err(r.error); done(`지분을 팔았습니다(+${money(r.price)})`); }
     else if (act === 'antitrust') { const k = game.state.competitors.find((c) => c.id === id); if (!k || !await ask(`${k.name}을(를) 반독점 혐의로 제소할까요?\n${money(game.majorSuitCost(k))}이 들고, ${config.majorCheck.freeze}개월간 이 회사의 확장·진출·운임 전쟁·경매 입찰이 멈춥니다.`)) return; const r = game.antitrust(id); if (!r.ok) return err(r.error); done('반독점 제소를 했습니다'); }
     else if (act === 'handRoute' && selRoute !== null) { const c = game.state.competitors.find((x) => x.id === id), r0 = game.route(selRoute)!; if (!c || !await ask(`${routeLabel(r0.a, r0.b)} 노선을 ${c.name}에 넘길까요?\n내 소유 항공기는 자회사로 가고, 임대기는 대기 상태가 됩니다.`)) return; const r = game.handRouteToSub(selRoute, id); if (!r.ok) return err(r.error); selRoute = null; done(`${c.name}에 노선을 넘겼습니다(항공기 ${r.planes}대)`); }
-    else if (act === 'takeRoute') { const r = game.takeRouteFromSub(id, b.dataset.a!, b.dataset.b!); if (!r.ok) return err(r.error); done(`노선을 가져왔습니다(B7-37 ${r.planes}대)`); }
+    else if (act === 'takeRoute') { const r = game.takeRouteFromSub(id, b.dataset.a!, b.dataset.b!); if (!r.ok) return err(r.error); done(`노선을 가져왔습니다(항공기 ${r.planes}대)`); }
     else if (act === 'spinOff') { const c = game.state.competitors.find((x) => x.id === id); if (!c || !await ask(`${c.name}을(를) 상장할까요?\n51%를 넘는 지분을 시장에 팔아 돈을 마련합니다. 경영권은 유지되지만 배당이 줄고, 앞으로 실적이 평판에 드러납니다(적자인 달 평판 −).`)) return; const r = game.spinOff(id); if (!r.ok) return err(r.error); done(`상장으로 ${money(r.cash)}을 마련했습니다(지분 ${Math.round(r.sold * 100)}% 매각)`); }
     else if (act === 'injectSub') { const v = Number(b.dataset.v); const r = game.injectSubsidiary(id, v); if (!r.ok) return err(r.error); done(`자회사에 ${money(v)}을 넣었습니다`); }
     else if (act === 'fundSub') { const r = game.fundSubsidiary(id); if (!r.ok) return err(r.error); done(`${money(r.price)}을 증자했습니다`); }
