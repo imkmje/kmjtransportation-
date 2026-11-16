@@ -789,7 +789,7 @@ export class Game {
   private extraDemand(r: Route): number {
     const s = this.state; if (!s.sandbox) return 1;
     const mp = this.monthsPassed, pio = [r.a, r.b].some((id) => (s.pioneer?.[id] ?? -1) > mp) ? config.extra.pioneer.boost : 0;
-    return (1 + this.loyaltyBoost) * (1 + pio) * (1 + config.extra.rating.weight * (this.routeRating(r) - 3)) * this.alliDemand(r) * (s.campaign && s.campaign.until > mp ? 1 + (config.extra.campaign[s.campaign.kind]?.boost ?? 0) : 1);
+    return (1 + this.loyaltyBoost) * (1 + pio) * (1 + config.extra.rating.weight * (this.routeRating(r) - 3)) * this.alliDemand(r) * (s.campaign && s.campaign.until > mp ? 1 + (config.extra.campaign[s.campaign.kind]?.boost ?? 0) : 1) * (1 + this.hotelBoost(r));
   }
   /** 착륙료 배율: 우리가 운영권을 가진 공항이면 싸다 */
   private landingFactor(r: Route): number {
@@ -1086,7 +1086,7 @@ export class Game {
   /** 월말: 자유 모드 재미 요소를 한꺼번에 돌린다 */
   private extraMonth(): void {
     const s = this.state, m = this.monthsPassed; if (!s.sandbox) return;
-    this.loyaltyStep(); this.alliStep(m); this.lateStep(m); this.crewStep(); this.financeStep(m); this.majorDividends();
+    this.loyaltyStep(); this.alliStep(m); this.lateStep(m); this.crewStep(); this.financeStep(m); this.majorDividends(); this.bizStep();
     this.charterStep(m); this.bidStep(m); this.megaStep(m); this.awardsStep(m); this.recordsStep(m); this.pioneerStep(m); this.rivalAllianceStep(m);
     if (m % 6 === 0) s.netHist = [...(s.netHist ?? []), { m, routes: s.routes.filter((r) => r.open && this.planesOn(r.id).length).map((r) => [r.a, r.b] as [string, string]) }].slice(-60);
     for (const id of Object.keys(s.concessions ?? {})) if (s.concessions![id].until <= m) { const c = { ...s.concessions! }; delete c[id]; s.concessions = c; }
@@ -1421,6 +1421,57 @@ export class Game {
   private majorDividends(): void {
     const s = this.state; if (!s.majorHold) return;
     for (const [id, h] of Object.entries(s.majorHold)) { const c = s.competitors.find((x) => x.id === Number(id)); const last = c?.revHist?.at(-1) ?? 0; const d = Math.round(last * config.majorCheck.margin * h * 100) / 100; if (d > 0) { s.cash += d; s.cur.revenue += d; } }
+  }
+  // ---- 그룹 사업(자유 모드): 호텔, 리스 회사 ----
+  hotelLevel(city: string): number { return this.state.biz?.hotels?.[city] ?? 0; }
+  /** 다음 단계 호텔 값($M): 큰 도시일수록 비싸다. 최고 단계면 null */
+  hotelCost(city: string): number | null { const k = config.biz.hotel, lv = this.hotelLevel(city); if (lv >= k.cost.length) return null; return Math.round(k.cost[lv] * (0.5 + cityById(city).pop / 40) * 10) / 10; }
+  /** 호텔 한 달: 객실 점유율(기본 + 내 노선 수, 경기), 매출·순이익($M) */
+  hotelInfo(city: string, lv = this.hotelLevel(city)): { occ: number; rev: number; net: number } {
+    const k = config.biz.hotel; if (!lv) return { occ: 0, rev: 0, net: 0 };
+    const n = this.state.routes.filter((r) => r.open && (r.a === city || r.b === city) && this.planesOn(r.id).length).length;
+    const occ = Math.min(k.occMax, (k.baseOcc + k.perRoute * n) * (this.state.economy ?? 1)), rev = (k.rooms[lv - 1] * config.daysPerMonth * occ * k.rate * cityById(city).income) / 1e6;
+    return { occ, rev: Math.round(rev * 100) / 100, net: Math.round(rev * (1 - k.opex) * 100) / 100 };
+  }
+  /** 호텔이 있는 도시를 오가는 내 노선 수요 증가(두 끝 합) */
+  hotelBoost(r: Route): number { const h = this.state.biz?.hotels; if (!h) return 0; const b = config.biz.hotel.boost; return [r.a, r.b].reduce((a, c) => a + (h[c] ? b[h[c] - 1] : 0), 0); }
+  buildHotel(city: string): Result<{ cost: number; level: number }> {
+    const s = this.state; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    if (!CITIES.some((c) => c.id === city)) return fail('없는 도시입니다'); if (!this.cityOpen(city)) return fail('운수권이 없는 지역입니다');
+    const cost = this.hotelCost(city); if (cost === null) return fail('이미 최고 단계입니다'); if (s.cash < cost) return fail('현금이 모자랍니다');
+    const lv = this.hotelLevel(city) + 1; s.cash -= cost; s.biz = { ...(s.biz ?? {}), hotels: { ...(s.biz?.hotels ?? {}), [city]: lv } };
+    s.log.push(`${this.monthsPassed + 1}개월차: ${cityById(city).name} 호텔을 ${lv === 1 ? '열었습니다' : `${lv}단계로 키웠습니다`}($${cost}M, 객실 ${config.biz.hotel.rooms[lv - 1]}실).`); return { ok: true, cost, level: lv };
+  }
+  /** 리스 수요: 경쟁사(내 51% 자회사 제외)마다 기단의 20%까지 */
+  leaseDemand(): Map<number, number> { const k = config.biz.lessor, m = new Map<number, number>(); for (const c of this.state.competitors) if ((c.stake ?? 0) < 0.51) m.set(c.id, Math.round(c.planes * k.share)); return m; } // 반올림: 작은 회사(3대)도 1대는 빌린다
+  /** 지금 새로 사면 바로 빌려 줄 수 있는 자리 수(수요 − 이미 가진 리스기) */
+  get leaseFree(): number { return [...this.leaseDemand().values()].reduce((a, b) => a + b, 0) - (this.state.biz?.lessor?.length ?? 0); }
+  leasePrice(type: string): number { return typeById(type).price; }
+  buyLeasePlane(type: string): Result<{ price: number }> {
+    const s = this.state, k = config.biz.lessor; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    if (!k.types.includes(type)) return fail('리스용으로 살 수 없는 기종입니다'); if (!this.isAvailable(type)) return this.notReleased(type);
+    const price = Math.round(this.leasePrice(type) * (1 - this.synergyBuy) * 10) / 10; if (s.cash < price) return fail('현금이 모자랍니다');
+    s.cash -= price; s.biz = { ...(s.biz ?? {}), lessor: [...(s.biz?.lessor ?? []), { id: s.nextId++, type, book: price, age: 0 }] }; this.leaseAssign();
+    return { ok: true, price };
+  }
+  sellLeasePlane(id: number): Result<{ price: number }> {
+    const s = this.state, p = s.biz?.lessor?.find((x) => x.id === id); if (!p) return fail('없는 리스 항공기입니다');
+    const price = Math.round(p.book * config.biz.lessor.sell * 10) / 10; s.cash += price; s.biz = { ...s.biz, lessor: s.biz!.lessor!.filter((x) => x !== p) };
+    s.log.push(`${this.monthsPassed + 1}개월차: 리스 회사가 ${typeById(p.type).name}을(를) 팔았습니다(+$${price}M).`); return { ok: true, price };
+  }
+  /** 노는 리스기를 빌려 줄 자리가 남은 경쟁사에 맡긴다(남은 자리 많은 순, 같으면 ID 순). 망한 회사가 빌려 간 기체는 돌아온다 */
+  private leaseAssign(): void {
+    const L = this.state.biz?.lessor; if (!L?.length) return; const dem = this.leaseDemand();
+    for (const p of L) if (p.lessee !== undefined) { if (!dem.has(p.lessee)) { this.state.log.push(`${this.monthsPassed + 1}개월차: 리스 항공기 ${typeById(p.type).name}이(가) 돌아왔습니다(빌려 간 회사가 없어짐).`); delete p.lessee; } else dem.set(p.lessee, dem.get(p.lessee)! - 1); }
+    for (const p of L) if (p.lessee === undefined) { const best = [...dem].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]; if (!best) break; p.lessee = best[0]; dem.set(best[0], best[1] - 1); }
+  }
+  rentOf(type: string): number { return Math.round(typeById(type).price * config.biz.lessor.rent * 100) / 100; }
+  /** 그룹 사업 한 달: 호텔 순이익, 리스 월세, 리스기 감가 */
+  private bizStep(): void {
+    const s = this.state; if (!s.sandbox || !s.biz) return;
+    const hotel = Object.keys(s.biz.hotels ?? {}).reduce((a, c) => a + this.hotelInfo(c).net, 0);
+    this.leaseAssign(); let lease = 0; for (const p of s.biz.lessor ?? []) { if (p.lessee !== undefined) lease += this.rentOf(p.type); p.book = Math.round(p.book * (1 - config.biz.lessor.depr) * 100) / 100; p.age++; }
+    const tot = Math.round((hotel + lease) * 100) / 100; s.cash += tot; s.cur.revenue += tot; s.biz.last = { hotel: Math.round(hotel * 100) / 100, lease: Math.round(lease * 100) / 100 };
   }
   // ---- 그룹 경영(자유 모드) ----
   get groupSubs(): Competitor[] { return this.state.sandbox ? this.state.competitors.filter((c) => (c.stake ?? 0) >= 0.51) : []; }
