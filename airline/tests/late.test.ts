@@ -20,8 +20,17 @@ describe('대형 항공사', () => {
     months(g, 24); expect(g.state.competitors.filter((c) => c.major).length).toBe(1);
     const home = new Game(3, undefined, { sandbox: true, base: 'DXB' }); home.state.cash = 99999; months(home, 11); expect(major(home)!.hub).toBe('FRA'); // 내 출발 도시(두바이)는 피한다
   });
-  it('파산하지 않고, 시간과 내 항공기 수에 맞춰 커지며 상한이 있다', () => {
-    const g = sandbox(); months(g, 12); const m = major(g)!; m.cash = -9999; m.low = 99; months(g, 2);
+  it('자유 모드: 대형도 적자가 오래가면 법정관리로 대형 지위를 잃고, 같은 이름으로 다시 출범하지 않는다', () => {
+    const g = sandbox(); months(g, 12); const m = major(g)!, n0 = m.planes; m.cash = -9999; m.low = config.competitors.major.failMonths; months(g, 1);
+    expect(m.major).toBe(false); expect(m.planes).toBe(n0 - Math.floor(n0 / 2)); expect(g.state.fallen).toContain(m.name); expect(g.state.log.some((l) => l.includes('법정관리'))).toBe(true);
+    expect(m.cash).toBeGreaterThan(0); months(g, 6); expect(g.state.competitors.filter((c) => c.name === m.name && c.major).length).toBe(0); // 같은 이름 대형이 다시 생기지 않는다
+  });
+  it('자유 모드: 일반 항공사가 항공기 40대에 이르면 대형 항공사가 된다', () => {
+    const g = sandbox(); months(g, 12); const c = g.state.competitors.find((x) => !x.major && !x.stake && !x.founded)!; c.planes = config.competitors.major.promotePlanes; c.cash = 100; months(g, 1);
+    expect(c.major).toBe(true); expect(c.hubs?.[0]).toBe(c.hub); expect(g.majorHubs(c)).toEqual(c.hubs); expect(g.state.log.some((l) => l.includes(c.name) && l.includes('대형 항공사가 됐습니다'))).toBe(true);
+  });
+  it('시나리오: 파산하지 않고, 시간과 내 항공기 수에 맞춰 커지며 상한이 있다', () => {
+    const g = new Game(3); g.state.cash = 99999; months(g, 12); const m = major(g)!; m.cash = -9999; m.low = 99; months(g, 2);
     expect(major(g)).toBeDefined(); expect(g.state.log.some((l) => l.includes(m.name) && l.includes('파산'))).toBe(false);
     const before = major(g)!.planes; for (let i = 0; i < 10; i++) g.buyPlane('T72'); months(g, 12);
     expect(major(g)!.planes).toBeGreaterThan(before);
