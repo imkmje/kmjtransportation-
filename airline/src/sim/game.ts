@@ -1541,7 +1541,7 @@ export class Game {
     if (!c.call && c.cash < 0) {
       const amount = Math.round(Math.min(k.callMax, -c.cash + 10) * c.stake! * 10) / 10;
       c.call = { amount, expires: m + k.callMonths };
-      this.alert(`${m + 1}개월차: 자회사 ${c.name}이(가) 자금난으로 $${amount}M 증자를 요청했습니다(${k.callMonths}개월 안에, 경쟁사 탭).`);
+      this.alert(`${m + 1}개월차: 자회사 ${c.name}이(가) 자금난으로 $${amount}M 증자를 요청했습니다(${k.callMonths}개월 안에, 그룹 탭).`);
     }
   }
   /** 경쟁사 인수 가격(자금난이면 싸다) */
