@@ -142,10 +142,13 @@ describe('경쟁사 항공기 상한(자유 모드)', () => {
     expect(g.handRouteToSub(o.routeId, 90).ok).toBe(true);
     expect(g.state.planes.length).toBe(n0 - 2); expect(k.planes).toBe(p0 + 2); expect(k.routes.length).toBe(r0 + 1); expect(g.route(o.routeId)!.open).toBe(false);
     expect(g.handRouteToSub(o.routeId, 90).ok).toBe(false); // 이미 닫힘
+    expect(g.handedRoutes().map((x) => `${x.route.a}-${x.route.b}`)).toEqual(['ICN-PEK']); // 노선 탭 '자회사에 넘긴 노선'
+    g.state.rights = undefined; expect(g.recommendRoutes(50).some((x) => (x.a === 'ICN' && x.b === 'PEK') || (x.a === 'PEK' && x.b === 'ICN'))).toBe(false); // 넘긴 노선은 추천하지 않는다
     const kept = k.routes.find((r) => r.a === 'ICN' && r.b === 'PEK')!; expect(kept.fleet!.map((f) => f.type)).toEqual(['B737', 'B737']); kept.fleet![0].type = 'A321N'; kept.fleet![0].name = '하늘 1호'; g.advanceDays(60); // 기종을 바꿔 두고 시간이 지나면
     const c0 = g.state.cash; const t = g.takeRouteFromSub(90, 'ICN', 'PEK'); expect(t.ok).toBe(true);
     expect(g.route(o.routeId)!.open).toBe(true); expect(g.planesOn(o.routeId).length).toBeGreaterThanOrEqual(1); expect(g.state.cash).toBe(c0); // 넘겼다 가져오면 재개 비용 없음
     expect(k.routes.some((r) => (r.a === 'ICN' && r.b === 'PEK') || (r.a === 'PEK' && r.b === 'ICN'))).toBe(false);
+    expect(g.handedRoutes().length).toBe(0);
     const back = g.planesOn(o.routeId); expect(back.map((p) => p.type).sort()).toEqual(['A321N', 'B737']); expect(back.find((p) => p.type === 'A321N')!.name).toBe('하늘 1호'); expect(back.every((p) => p.age >= 2)).toBe(true); // 넘긴 항공기가 그대로(나이는 먹음)
     expect(g.takeRouteFromSub(90, 'ICN', 'CJU').ok).toBe(false); // 자회사가 운항하지 않는 노선
   });

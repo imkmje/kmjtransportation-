@@ -3,7 +3,7 @@ import { AIRCRAFT, EVENTS, CITIES, OWN_TYPES, applyOwnNames, typeById, cityById,
 import { Rng } from './rng';
 import { marketSize, baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
 import { ACHIEVEMENTS, LADDERS } from './achievements';
-import type { Charter, ChronEntry, Competitor, Season, Threat, Contract, ContractReward, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route } from './types';
+import type { Charter, ChronEntry, Competitor, Season, Threat, Contract, ContractReward, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route, CompRoute } from './types';
 
 type Trait = { name: string; desc: string; war?: number; buy?: number; planes?: number; q?: number; shock?: number };
 type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean; baseTaken?: number; duel?: boolean; subSell?: boolean; next?: { id: string; months: number }; result: string; risk?: { chance: number; cash?: number; rep?: number; subCash?: number; text: string } };
@@ -1481,6 +1481,8 @@ export class Game {
   get synergyFix(): number { const k = config.subsidiary.synergy; return Math.min(k.fixMax, this.groupSubs.length * k.fixCut); }
   /** 그룹 관리비(월): 자회사가 늘수록 더 빨리 커진다 */
   get groupUpkeep(): number { const k = config.subsidiary.synergy, n = this.groupSubs.length; return n ? Math.round(n * k.upkeep * (1 + k.upkeepGrow * (n - 1)) * 100) / 100 : 0; }
+  /** 내가 자회사(51% 이상)에 넘긴 노선 목록(노선 탭 표시용) */
+  handedRoutes(): { comp: Competitor; route: CompRoute }[] { const out: { comp: Competitor; route: CompRoute }[] = []; for (const c of this.groupSubs) for (const r of c.routes) if (r.fleet?.length) out.push({ comp: c, route: r }); return out; }
   /** 내 노선을 자회사(51% 이상)에 넘긴다: 내 소유 항공기는 자회사로 가고(임대기는 대기), 노선은 자회사가 운항한다 */
   handRouteToSub(routeId: number, id: number): Result<{ planes: number }> {
     const s = this.state, r = this.route(routeId), c = s.competitors.find((x) => x.id === id); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
@@ -2135,7 +2137,7 @@ export class Game {
   recommendRoutes(n = 3): { a: string; b: string; demand: number; comps: number; km: number }[] {
     const s = this.state, from = new Set([s.base, ...this.servedCities()]), range = Math.max(0, ...s.planes.map((p) => typeById(p.type).range), typeById('B737').range), out: { a: string; b: string; demand: number; comps: number; km: number; sc: number }[] = [];
     for (const a of [...from].sort()) for (const B of CITIES) {
-      if (B.id === a || !this.cityOpen(a) || !this.cityOpen(B.id) || s.routes.some((r) => r.open && this.sameRoute(r, a, B.id)) || out.some((x) => this.sameRoute(x, a, B.id))) continue;
+      if (B.id === a || !this.cityOpen(a) || !this.cityOpen(B.id) || s.routes.some((r) => r.open && this.sameRoute(r, a, B.id)) || this.groupSubs.some((c) => c.routes.some((r) => this.sameRoute(r, a, B.id))) || out.some((x) => this.sameRoute(x, a, B.id))) continue;
       const A = cityById(a), km = distanceKm(A, B); if (km > range * 0.95) continue;
       const demand = rawMonthlyDemand(A, B, this.month, this.growthOf(a), this.growthOf(B.id)), comps = this.competitorsOn(a, B.id).length;
       out.push({ a, b: B.id, demand, comps, km, sc: (demand * baseFare(km)) / (1 + 0.7 * comps) / (1 + km / 8000) });
