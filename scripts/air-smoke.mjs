@@ -256,6 +256,9 @@ await rtab('planes');
 await page.evaluate(() => { for (const d of document.querySelectorAll('details.rbuy')) d.open = true; });
 const planesBefore = await page.evaluate(() => window.__air.game.state.planes.length);
 check('돈이 모자라면 구매 버튼이 꺼져 있지 않고 회색(이유 포함)으로 보임', (await page.locator('#panel button[data-act="rbuy"][disabled]').count()) === 0 && (await page.locator('#panel button[data-act="rbuy"][data-why]').count()) >= 3);
+await page.locator('#panel button[data-act="buySort"][data-v="profit"]').evaluate((el) => el.click()); await page.evaluate(() => { for (const d of document.querySelectorAll('details.rbuy, details.rbuymore')) d.open = true; });
+check('항공기 추가 정렬: 예상 이익 큰 순', await page.evaluate(() => { const v = [...document.querySelectorAll('#panel details.rbuy .opt .right b')].map((b) => parseFloat(b.textContent.replace(/[^0-9.-]/g, ''))); return v.length >= 2 && v.every((x, i) => i === 0 || v[i - 1] >= x - 1e-9); }));
+await page.locator('#panel button[data-act="buySort"][data-v="pay"]').evaluate((el) => el.click()); await page.evaluate(() => { for (const d of document.querySelectorAll('details.rbuy')) d.open = true; });
 await page.locator('#panel button[data-act="rbuy"][data-how="lease"]').first().evaluate((el) => el.click()); // 화면 위치와 무관하게 그 버튼을 누른다
 const why = await page.locator('#toast').innerText();
 check('임대 버튼을 누르면 이유가 나오고 항공기는 늘지 않음', (why.includes('현금이 모자랍니다') || why.includes('임대는')) && (await page.evaluate(() => window.__air.game.state.planes.length)) === planesBefore, why);
