@@ -6,7 +6,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const server = await preview({ preview: { port: 4190, strictPort: true } });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const pickPlane = async (fn) => { const id = await page.evaluate(fn); await page.locator(`#panel button.trow[data-act="selPlane"][data-id="${id}"]`).click(); }; // 기단 표에서 항공기를 골라 오른쪽 카드 열기
-const pickComp = async () => { await page.click('#tabs button[data-tab="rivals"]'); const id = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major).id); await page.locator(`#panel button[data-act="selComp"][data-id="${id}"]`).click(); }; // 경쟁사 탭에서 일반 경쟁사를 골라 오른쪽 카드 열기
+const pickComp = async () => { await page.click('#tabs button[data-tab="rivals"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="rivalSub"][data-v="comp"]')?.click()); const id = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major).id); await page.locator(`#panel button[data-act="selComp"][data-id="${id}"]`).click(); }; // 경쟁사 탭에서 일반 경쟁사를 골라 오른쪽 카드 열기
 const rtab = async () => { await page.evaluate(() => { document.querySelectorAll('#panel .pside details').forEach((d) => { d.open = true; }); }); }; // 노선 상세의 접이식 구역을 모두 펼침
 const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
 const subMap = (v) => page.evaluate((x) => { document.querySelector(`#panel button[data-act="mapSub"][data-v="${x}"]`)?.click(); }, v); // 현황 탭 안쪽 탭(가려져 있어도 확실히 누른다)
@@ -27,6 +27,7 @@ const shot = (n) => !process.argv[2] ? Promise.resolve() : page.screenshot({ pat
 await page.goto('http://localhost:4190/air/');
 await page.waitForSelector('canvas');
 check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
+check('탭 개편: 현황·노선·기단·경쟁·그룹·재무·고객·알림 8개', (await page.locator('#tabs button[data-tab]').count()) === 8 && (await page.locator('#tabs').innerText()).includes('그룹') && (await page.locator('#tabs').innerText()).includes('고객'));
 check('시작 화면: 나의 기록(플레이한 판·평생 업적)과 기기 옮기기', (await page.locator('#t-prof').innerText()).includes('플레이한 판') && (await page.locator('#t-prof button[data-tact="exportAll"]').count()) === 1);
 check('제목 화면: 버전 표시(vN.N.N)', /^v\d+\.\d+\.\d+$/.test(await page.locator('#t-version').innerText()), await page.locator('#t-version').innerText());
 await shot('title');
@@ -285,7 +286,7 @@ await page.evaluate(() => { const g = window.__air.game; g.state.upcoming.push({
 await page.click('#tabs button[data-tab="routes"]'); await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll();
 const fest = await mapAll();
 check('지도 탭: 예고된 행사(올림픽·런던)가 보임', fest.includes('예고된 행사') && fest.includes('올림픽') && fest.includes('런던'));
-check('아이콘: 탭 6개에 직접 그린 아이콘이 있고, 화면에 이모지가 없음', (await page.locator('#tabs button svg.ic').count()) === 6 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(await page.locator('#app').innerText()));
+check('아이콘: 탭 8개에 직접 그린 아이콘이 있고, 화면에 이모지가 없음', (await page.locator('#tabs button svg.ic').count()) === 8 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(await page.locator('#app').innerText()));
 await page.click('#tabs button[data-tab="news"]'); await shot('icons');
 // 0.22.0: 지역 운수권(새 자유 모드 게임)
 await page.click('#menubtn'); await page.click('#menu button[data-m="new"]');
@@ -562,9 +563,9 @@ check('현황: 전세기 주문에 노는 항공기를 보내면 전세 운항',
 await openAll(); await page.locator('#panel button[data-act="bid"]').first().click();
 check('현황: 입찰에서 값을 부르면 우리가 최고가', await page.evaluate(() => window.__air.game.state.bids[0].best?.who === 0));
 await page.click('#tabs button[data-tab="money"]'); await openAll();
-await page.locator('#panel button[data-act="moneySub"][data-v="cust"]').click(); await openAll(); await page.locator('#panel button[data-act="loyalty"][data-v="1"]').click();
+await page.click('#tabs button[data-tab="cust"]'); await openAll(); await page.locator('#panel button[data-act="loyalty"][data-v="1"]').click();
 check('재무: 마일리지 기본 단계', await page.evaluate(() => window.__air.game.state.loyalty?.level === 1));
-await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
+await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
 check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
 const alId = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major && !c.stake)?.id); await page.click('#tabs button[data-tab="rivals"]'); if (alId !== undefined) await page.locator(`#panel button[data-act="selComp"][data-id="${alId}"]`).click(); const alBtn = page.locator('#panel button[data-act="joinAlliance"]'); // 자회사가 아닌 일반 경쟁사를 고른다
 if (await alBtn.count()) { await alBtn.first().click(); }
@@ -585,18 +586,18 @@ check('결정 대기에서 바로 계약 수락', await page.evaluate(() => wind
 // 2.12.0: 자회사 차리기·동맹 이름·돈 쓸 곳·마일리지
 await page.evaluate(() => { window.__air.game.state.cash = 3000; window.__air.render(); });
 await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalsHome"]').click().catch(() => undefined);
-await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').click(); await page.locator('#panel button[data-act="foundOpen"]').click(); await page.fill('#f-name', '시험항공'); await page.check('input[name="f-kind"][value="regional"]'); await page.check('input[name="f-size"][value="1"]'); await page.click('#info-body button[data-act="foundGo"]');
+await page.click('#tabs button[data-tab="group"]'); await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').click().catch(() => undefined); await page.locator('#panel button[data-act="foundOpen"]').click(); await page.fill('#f-name', '시험항공'); await page.check('input[name="f-kind"][value="regional"]'); await page.check('input[name="f-size"][value="1"]'); await page.click('#info-body button[data-act="foundGo"]');
 check('경쟁사: 자회사 차리기(이름·형태·자본금)', await page.evaluate(() => window.__air.game.state.competitors.some((c) => c.name === '시험항공' && c.founded === 'regional' && c.stake === 1)) && !(await page.locator('#info').isVisible()));
-await page.locator('#panel button[data-act="rivalSub"][data-v="alli"]').click(); await page.locator('#panel button[data-act="alName"]').click(); await page.fill('#al-name', '하늘 연합'); await page.click('#info-body button[data-act="alNameGo"]');
+await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="alli"]').click(); await page.locator('#panel button[data-act="alName"]').click(); await page.fill('#al-name', '하늘 연합'); await page.click('#info-body button[data-act="alNameGo"]');
 check('경쟁사: 동맹 이름 바꾸기', await page.evaluate(() => window.__air.game.state.alli?.name === '하늘 연합') && (await page.locator('#panel').innerText()).includes('하늘 연합'));
-await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="campaign"][data-v="national"]').click(); await openAll(); await page.locator('#panel button[data-act="green"]').click(); await openAll();
+await page.click('#tabs button[data-tab="cust"]'); await openAll(); await page.locator('#panel button[data-act="campaign"][data-v="national"]').click(); await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="green"]').click(); await openAll();
 check('재무: 광고 캠페인·친환경 연료 투자', await page.evaluate(() => !!window.__air.game.state.campaign && window.__air.game.state.green === 1));
-await page.locator('#panel button[data-act="moneySub"][data-v="cust"]').click(); await openAll(); await page.locator('#panel button[data-act="promo"]').click();
+await page.click('#tabs button[data-tab="cust"]'); await openAll(); await page.locator('#panel button[data-act="promo"]').click();
 check('재무: 마일 2배 프로모션', await page.evaluate(() => (window.__air.game.state.loyalty?.promo ?? 0) > 0));
 // 2.13.0: 탭 나누기·그룹 현황·노선 색·건너뛰기·알림 띠
-await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').click();
+await page.click('#tabs button[data-tab="group"]'); await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').click().catch(() => undefined);
 check('경쟁사: 자회사·그룹 탭에 그룹 현황 표', (await page.locator('#panel').innerText()).includes('그룹 현황') && (await page.locator('#panel').innerText()).includes('시험항공'));
-await page.locator('#panel button[data-act="rivalSub"][data-v="comp"]').click();
+await page.click('#tabs button[data-tab="rivals"]');
 await page.click('#dsize button[data-h="min"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#rcolor'); check('지도: 노선 색 바꾸기(이익→점유율)', (await page.locator('#rcolor').innerText()).includes('점유율')); for (let i = 0; i < 3; i++) await page.click('#rcolor');
 const ffDay = await page.evaluate(() => window.__air.game.state.day); await page.click('#ffbtn');
 check('건너뛰기: 하루 이상 지나고 이유를 알려 줌', (await page.evaluate(() => window.__air.game.state.day)) > ffDay && (await page.locator('#toast').innerText()).includes('건너뜀'));
@@ -656,7 +657,7 @@ await page.locator('#panel button[data-act="bond"][data-v="50"]').click(); check
 // 2.27.0: 결정 배지는 처리하는 탭에, 자회사 자본금, 자동 처리 추가, 스크롤 유지
 await page.evaluate(() => { const g = window.__air.game; g.state.sandbox = true; g.state.cash = 900; window.__air.setSpeed(0); const c = g.state.competitors.find((x) => !x.major); c.stake = 0.51; c.dir = 'grow'; c.call = { amount: 5, expires: g.monthsPassed + 3 }; window.__air.render(); });
 await page.click('#tabs button[data-tab="money"]');
-check('증자 요청 배지는 경쟁사 탭에 빨갛게', await page.evaluate(() => { const b = document.querySelector('#tabs button[data-tab="rivals"]'); return !!b.dataset.badge && b.classList.contains('urgent'); }));
+check('증자 요청 배지는 그룹 탭에 빨갛게', await page.evaluate(() => { const b = document.querySelector('#tabs button[data-tab="group"]'); return !!b.dataset.badge && b.classList.contains('urgent'); }));
 await pickComp();
 const cashI = await page.evaluate(() => window.__air.game.state.cash);
 await page.locator('#panel button[data-act="injectSub"][data-v="10"]').evaluate((el) => el.click());
@@ -671,20 +672,20 @@ await page.evaluate(() => { const g = window.__air.game, o = g.openRoute('ICN', 
   await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button.trow[data-act="goRoute"][data-id="${rid}"]`).click();
   await page.locator('#panel button[data-act="handRoute"]').first().evaluate((el) => el.click());
   check('노선 상세: 자회사에 넘기기', await page.evaluate((id) => !window.__air.game.route(id).open && window.__air.game.state.competitors.some((c) => c.stake >= 0.51 && c.routes.some((r) => (r.a === 'ICN' && r.b === 'TPE') || (r.a === 'TPE' && r.b === 'ICN'))), rid)); }
-await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
+await page.click('#tabs button[data-tab="group"]'); await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
 check('자회사·그룹: 그룹 시너지(구매 할인·고정비 할인·관리비)', (await page.locator('#panel').innerText()).includes('그룹 시너지') && (await page.locator('#panel').innerText()).includes('그룹 관리비'));
-await page.locator('#panel button[data-act="rivalSub"][data-v="comp"]').evaluate((el) => el.click()).catch(() => undefined); // 다음 점검을 위해 경쟁사 목록으로
+await page.click('#tabs button[data-tab="rivals"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="rivalSub"][data-v="comp"]')?.click()); // 다음 점검을 위해 경쟁사 목록으로
 // 3.0.0: 그룹 사업(호텔·리스 회사)
 await page.evaluate(() => { const g = window.__air.game; g.state.cash = 5000; const c = g.state.competitors.find((x) => !x.major && (x.stake ?? 0) < 0.51); if (c) c.planes = Math.max(c.planes, 10); window.__air.setSpeed(0); window.__air.render(); });
-await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="biz"]').evaluate((el) => el.click()); await openAll();
-check('재무 > 그룹 사업: 호텔·리스 회사', (await page.locator('#panel').innerText()).includes('호텔') && (await page.locator('#panel').innerText()).includes('리스 회사') && (await page.locator('#panel button[data-act="hotel"]').count()) > 0);
+await page.click('#tabs button[data-tab="group"]'); await page.locator('#panel button[data-act="groupSub"][data-v="biz"]').evaluate((el) => el.click()); await openAll();
+check('그룹 > 그룹 사업: 호텔·리스 회사', (await page.locator('#panel').innerText()).includes('호텔') && (await page.locator('#panel').innerText()).includes('리스 회사') && (await page.locator('#panel button[data-act="hotel"]').count()) > 0);
 await page.locator('#panel button[data-act="hotel"]').first().evaluate((el) => el.click());
 check('호텔 열기', await page.evaluate(() => Object.keys(window.__air.game.state.biz?.hotels ?? {}).length >= 1));
 await page.evaluate(() => { document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
 await page.locator('#panel button[data-act="leaseBuy"]').first().evaluate((el) => el.click());
 check('리스 회사: 항공기 사기', await page.evaluate(() => (window.__air.game.state.biz?.lessor ?? []).length === 1));
-await page.locator('#panel button[data-act="moneySub"][data-v="ops"]').evaluate((el) => el.click()).catch(() => undefined);
-await page.click('#tabs button[data-tab="rivals"]'); // 다음 점검(경쟁사 탭)을 위해
+await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
+await page.click('#tabs button[data-tab="rivals"]'); // 다음 점검(경쟁 탭)을 위해
 await page.click('#tabs button[data-tab="map"]'); await subMap('look'); await openAll();
 check('자동 처리에 증자·광고·전세기·동맹 안건 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
 await subMap('now');

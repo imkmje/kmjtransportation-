@@ -18,6 +18,8 @@ const P: Record<string, string> = {
   routes: '<circle cx="5" cy="17.5" r="2"/><circle cx="19" cy="6.5" r="2"/><path d="M6.4 15.9C8.5 9.5 13 7.4 17 6.8"/>',
   fleet: '<path d="M12 3c1.1 0 1.8 1.2 1.8 2.8V9l7.2 4.6v2.2l-7.2-2.3v4.3l2.4 1.9V21L12 20l-4.2 1v-1.3l2.4-1.9v-4.3L3 15.8v-2.2L10.2 9V5.8C10.2 4.2 10.9 3 12 3z"/>',
   money: '<circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M15 9.6c-.6-1-1.7-1.6-3-1.6-1.7 0-3 .9-3 2.1 0 2.8 6 1.2 6 4 0 1.200-1.300 2.100-3 2.100-1.400 0-2.600-.600-3.100-1.600"/>',
+  group: '<rect x="3.5" y="10" width="6" height="10.5" rx="1"/><rect x="14.5" y="10" width="6" height="10.5" rx="1"/><rect x="9" y="3.5" width="6" height="6" rx="1"/><path d="M12 9.5V13M6.5 10V13h11v-3"/>',
+  cust: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/>',
   news: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.500 2.500h-15L6 16zM10 21h4"/>',
 };
 export type IconName = keyof typeof P;
