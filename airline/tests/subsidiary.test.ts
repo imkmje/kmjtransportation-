@@ -44,6 +44,12 @@ describe('자회사', () => {
     expect(g.injectSubsidiary(90, 50).ok).toBe(true); expect(k.call).toBeUndefined();
     g.state.cash = 5; expect(g.injectSubsidiary(90, 10).ok).toBe(false);
   });
+  it('자동 처리: 스카이 동맹의 회원 빼 가기를 자동으로 붙잡는다(현금이 있을 때만)', () => {
+    const g = sandbox(); comp(g); (g.state as { alli?: unknown }).alli = { name: '시험 동맹', xp: 0, poach: { comp: 90, expires: g.monthsPassed + 2, cost: 12 } }; g.state.alliance = [90];
+    expect(g.applyRules()).toEqual([]); expect(g.state.alli!.poach).toBeTruthy(); // 꺼져 있으면 그대로
+    g.setRule('keep', true); g.state.cash = 5; expect(g.applyRules()).toEqual([]); expect(g.state.alli!.poach).toBeTruthy(); // 돈이 모자라면 그대로
+    g.state.cash = 100; const out = g.applyRules(); expect(out.length).toBe(1); expect(g.state.alli!.poach).toBeNull(); expect(g.state.cash).toBe(88); expect(g.state.alliance).toContain(90);
+  });
   it('자동 처리: 증자 자동 동의·광고 자동·전세기 자동 수락·동맹 안건 자동', () => {
     const g = sandbox(); comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0]; k.call = { amount: 12, expires: g.monthsPassed + 3 };
     expect(g.applyRules()).toEqual([]); expect(k.call).toBeTruthy(); // 꺼져 있으면 그대로
