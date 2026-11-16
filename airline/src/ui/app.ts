@@ -897,7 +897,7 @@ export function startApp(): void {
   function flushRender() { if (!renderLater) return; if (performance.now() - panelBusy < 900) window.setTimeout(flushRender, 300); else render(true); }
   /** auto: 시간이 흘러 저절로 다시 그리는 경우. 사용자가 패널을 스크롤·터치 중이면 잠시 미룬다(화면이 지 혼자 움직이는 느낌 방지) */
   /** 새로 생긴 결정거리(계약·이야기·전세기·입찰·증자): 지도 오른쪽 아래 구석 작은 팝업에 하나씩 줄 세운다. 실제 시간 12초 뒤 다음 것으로, 닫기는 줄 전체를 비운다 */
-  const OFFER_MS = 12000, POP_HEAD: Record<string, string> = { 경보: '파산 경보', 동맹: '동맹 소식', 정책: '정부 제안', 계약: '새 계약 제안', 이야기: '이야기', 전세기: '전세기 주문', 입찰: '입찰', 증자: '자회사 증자 요청' };
+  const OFFER_MS = 10000, POP_HEAD: Record<string, string> = { 경보: '파산 경보', 동맹: '동맹 소식', 정책: '정부 제안', 계약: '새 계약 제안', 이야기: '이야기', 전세기: '전세기 주문', 입찰: '입찰', 증자: '자회사 증자 요청' };
   let popSeen = new Set<string>(), popQ: string[] = [], popHead: string | null = null, offerTimer = 0;
   function popNext() { popQ.shift(); renderOffer(); }
   function popClear() { popQ = []; renderOffer(); }
@@ -906,7 +906,7 @@ export function startApp(): void {
     const fresh = pd.filter((p) => !popSeen.has(p.key));
     if (fresh.length) { for (const p of fresh) { popSeen.add(p.key); popQ.push(p.key); } play('alert'); }
     popQ = popQ.filter((k) => keys.has(k)); // 이미 처리됐거나 마감된 것은 줄에서 뺀다
-    if ((popQ[0] ?? null) !== popHead) { popHead = popQ[0] ?? null; clearTimeout(offerTimer); if (popHead) offerTimer = window.setTimeout(popNext, OFFER_MS); }
+    if ((popQ[0] ?? null) !== popHead) { popHead = popQ[0] ?? null; clearTimeout(offerTimer); if (popHead) offerTimer = window.setTimeout(popClear, OFFER_MS); } // 안 건드리면 줄 전체를 닫는다(현황 '결정 대기'와 배지에는 남는다)
     const p = pd.find((x) => x.key === popHead), c = p?.cid !== undefined ? game.state.contracts.find((x) => x.id === p.cid) : undefined;
     if (!p || !$('#title').hidden) { el.hidden = true; return; }
     const html = `<div class="ophead"><b>${icon('report', 16)} ${POP_HEAD[p.kind]}</b>${popQ.length > 1 ? `<small>외 ${popQ.length - 1}건</small>` : ''}<button class="ghost" data-act="offerClose" aria-label="닫기">닫기</button></div><div class="optitle">${esc(p.title)}</div><small>${c ? `보상: ${esc(c.reward.label)}` : `${leftTxt(p.left)} 안에 결정`}</small><div class="btnrow">${c ? `<button data-act="acceptContract" data-id="${c.id}">수락</button><button class="ghost" data-act="declineContract" data-id="${c.id}">거절</button>` : ''}<button class="ghost" data-act="offerMore" data-k="${p.sec}" data-id="${p.comp ?? ''}">${c ? '자세히' : '보러 가기'}</button></div>`;
@@ -964,6 +964,7 @@ export function startApp(): void {
   // ---- 월간 보고서: 월말마다 지도 위에 요약 카드(닫기 또는 다음 달에 갱신) ----
   let prevComp = '';
   function goAdvice(i: number): boolean { const a = advList[i]; if (!a) return false; selRoute = a.routeId ?? null; selCity = a.routeId === undefined ? a.cityId ?? null : null; tab = a.tab ?? 'map'; syncMap(); if (a.cityId) map.focusCity(a.cityId); return true; }
+  const REPORT_MS = 10000; let reportTimer = 0, reportTouched = false; // 월 보고: 펼치거나 만지면 남는다
   function showReport() {
     const s = game.state, h = s.history.at(-1), hp = s.history.at(-2), el = $('#report');
     const ar = (c: number, p: number | undefined, eps: number) => (p === undefined ? '' : c > p + eps ? ' <small class="pos">▲</small>' : c < p - eps ? ' <small class="neg">▼</small>' : ''); // 지난달 대비
@@ -981,7 +982,7 @@ export function startApp(): void {
     const compNote = prevComp && prevComp !== comp ? `<div class="rl"><span>경쟁사 변화</span><span>${esc(comp)}</span></div>` : '';
     prevComp = comp;
     el.hidden = false;
-    if (h.month !== reportMonth) { reportMonth = h.month; reportOpen = false; } // 새 보고는 한 줄로 시작(지도를 가리지 않게, 누르면 펼침)
+    if (h.month !== reportMonth) { reportMonth = h.month; reportOpen = false; reportTouched = false; clearTimeout(reportTimer); reportTimer = window.setTimeout(() => { if (!reportOpen && !reportTouched) $('#report').hidden = true; }, REPORT_MS); } // 안 읽으면 저절로 닫힌다 // 새 보고는 한 줄로 시작(지도를 가리지 않게, 누르면 펼침)
     el.classList.toggle('collapsed', !reportOpen);
     el.innerHTML = `<h4><span>${icon('report')}${h.month}개월차 보고 <small class="${h.profit >= 0 ? 'pos' : 'neg'}">${money(h.profit)}</small></span><span class="rbtns"><button class="ghost" data-act="toggleReport">${reportOpen ? '접기' : '펼치기'}</button><button class="ghost" data-act="closeReport">닫기</button></span></h4>
       <div class="rl"><span>월 이익</span><span class="${h.profit >= 0 ? 'pos' : 'neg'}">${money(h.profit)}${ar(h.profit, hp?.profit, 0.05)}</span></div>
@@ -993,6 +994,7 @@ export function startApp(): void {
       <div class="rl"><span>경기 · 연료</span><span>${game.economyLabel} · ${game.fuelLabel}</span></div>
       ${bars}${year}${compNote}${subLine}${evs.map((e) => `<small>• ${esc(e)}</small><br>`).join('')}</details>`;
   }
+  $('#report').addEventListener('pointerdown', () => { reportTouched = true; clearTimeout(reportTimer); });
   $('#report').addEventListener('click', (e) => { const t = e.target as HTMLElement; if (t.closest('[data-act="closeReport"]')) $('#report').hidden = true; if (t.closest('[data-act="toggleReport"]')) { reportOpen = !reportOpen; showReport(); return; } const ad = t.closest<HTMLElement>('[data-act="advice"]'); if (ad && goAdvice(Number(ad.dataset.i))) { $('#report').hidden = true; play('tap'); lastHtml = ''; render(); } const pb = t.closest<HTMLElement>('[data-act="paper"]'); if (pb) showPaper(Number(pb.dataset.y)); });
   $('#info-body').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (b) void infoAct(b); });
 
@@ -1196,7 +1198,7 @@ export function startApp(): void {
     for (const el of [grip, $('#dsum')]) { el.addEventListener('pointerdown', begin as EventListener); el.addEventListener('pointermove', move as EventListener); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); }
   }
   $('#mapback').addEventListener('click', () => setDrawer('min'));
-  $('#offerpop').addEventListener('pointerdown', () => { clearTimeout(offerTimer); offerTimer = window.setTimeout(popNext, OFFER_MS); }); // 만지면 시간을 다시 센다
+  $('#offerpop').addEventListener('pointerdown', () => { clearTimeout(offerTimer); offerTimer = window.setTimeout(popClear, OFFER_MS); }); // 만지면 시간을 다시 센다
   $('#offerpop').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]'); if (!b) return;
     const act = b.dataset.act, id = Number(b.dataset.id);
