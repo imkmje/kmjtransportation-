@@ -51,3 +51,36 @@ export function parseImport(text: string): { ok: true; game: Game; ach: string[]
     return { ok: true, game, ach };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : '불러오지 못했습니다' }; }
 }
+
+/** 기기 옮기기: 이 기기의 The Air 기록 전부(이어하기·저장 칸·연말 백업·평생 업적·통계·시나리오 기록·설정)를 파일 하나로 */
+type AllStore = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>;
+const allStore = (s?: AllStore): AllStore | null => { try { return s ?? localStorage; } catch { return null; } };
+export function exportAll(s?: AllStore): string {
+  const st = allStore(s), data: Record<string, string> = {};
+  if (st) for (let i = 0; i < st.length; i++) { const k = st.key(i); if (k && k.startsWith('the-air')) { const v = st.getItem(k); if (v !== null) data[k] = v; } }
+  return JSON.stringify({ 'the-air-all': 1, exportedAt: new Date().toISOString(), data });
+}
+/** 기기 옮기기 파일을 읽어 이 기기에 넣는다. 평생 업적·통계·시나리오 기록은 합치고(어느 기기 것도 잃지 않게), 게임 저장·설정은 파일 것으로 바꾼다 */
+export function importAll(text: string, s?: AllStore): { ok: true; n: number } | { ok: false; error: string } {
+  let v: unknown; try { v = JSON.parse(text); } catch { return { ok: false, error: '파일이 올바른 형식이 아닙니다(JSON이 아님)' }; }
+  const o = v as { 'the-air-all'?: number; data?: unknown } | null;
+  if (!o || typeof o !== 'object' || !o['the-air-all'] || !o.data || typeof o.data !== 'object') return { ok: false, error: '기기 옮기기 파일이 아닙니다(게임 하나만 담긴 파일은 "파일에서 가져오기"를 쓰세요)' };
+  const st = allStore(s); if (!st) return { ok: false, error: '이 브라우저에 저장할 수 없습니다' };
+  const data = o.data as Record<string, unknown>; let n = 0;
+  const j = (x: string | null) => { try { return x ? JSON.parse(x) : null; } catch { return null; } };
+  for (const [k, raw] of Object.entries(data)) {
+    if (!k.startsWith('the-air') || typeof raw !== 'string') continue;
+    let val = raw;
+    if (k === 'the-air-profile') { // 업적은 합치고, 통계는 항목마다 큰 값
+      const a = j(raw) ?? {}, b = j(st.getItem(k)) ?? {}, ach = [...new Set([...(Array.isArray(a.ach) ? a.ach : []), ...(Array.isArray(b.ach) ? b.ach : [])])].filter((x) => typeof x === 'string');
+      const sa = a.stats ?? {}, sb = b.stats ?? {}, stx: Record<string, number> = {}; for (const key of new Set([...Object.keys(sa), ...Object.keys(sb)])) stx[key] = Math.max(Number(sa[key]) || 0, Number(sb[key]) || 0);
+      val = JSON.stringify({ ...b, ...a, ach, stats: stx });
+    } else if (k === 'the-air-records') { // 시나리오 기록: 합쳐서 점수 높은 5개
+      const a = j(raw) ?? {}, b = j(st.getItem(k)) ?? {}, out: Record<string, unknown[]> = {};
+      for (const id of new Set([...Object.keys(a), ...Object.keys(b)])) { const seen = new Set<string>(); out[id] = [...(a[id] ?? []), ...(b[id] ?? [])].filter((r) => { const key = JSON.stringify(r); if (seen.has(key)) return false; seen.add(key); return true; }).sort((x: { score?: number }, y: { score?: number }) => (y.score ?? 0) - (x.score ?? 0)).slice(0, 5); }
+      val = JSON.stringify(out);
+    }
+    try { st.setItem(k, val); n++; } catch { return { ok: false, error: '저장 공간이 모자랍니다' }; }
+  }
+  return n ? { ok: true, n } : { ok: false, error: '파일에 옮길 기록이 없습니다' };
+}
