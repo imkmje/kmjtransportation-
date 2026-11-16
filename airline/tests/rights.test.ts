@@ -15,12 +15,12 @@ describe('지역 운수권', () => {
     for (const r of regions) expect(CITIES.filter((c) => c.region === r).length).toBeGreaterThanOrEqual(2);
     expect(CITIES.filter((c) => c.region === 'EA').map((c) => c.id).sort()).toEqual(['CJU', 'HKG', 'ICN', 'KIX', 'NRT', 'PEK', 'PUS', 'PVG', 'TPE']);
   });
-  it('기본은 제한 없음(시나리오·옛 저장), 켜면 출발 도시의 지역만 열려 있다', () => {
+  it('기본은 제한 없음(시나리오·옛 저장), 켜면 출발 도시의 지역(작은 지역이면 이웃 지역까지)만 열려 있다', () => {
     const free = new Game(3, undefined, { sandbox: true }); expect(free.rightsOn).toBe(false); expect(free.cityOpen('JFK')).toBe(true); expect(free.openRoute('ICN', 'JFK').ok).toBe(true);
     const sc = new Game(3, undefined, { scenario: 'europe', rights: true }); expect(sc.rightsOn).toBe(false); // 시나리오는 제한하지 않는다
     const g = gated(); expect(g.rightsOn).toBe(true); expect(g.state.rights).toEqual(['EA']);
     expect(g.cityOpen('NRT')).toBe(true); expect(g.cityOpen('BKK')).toBe(false);
-    expect(new Game(3, undefined, { sandbox: true, rights: true, base: 'FRA' }).state.rights).toEqual(['EU']);
+    expect(new Game(3, undefined, { sandbox: true, rights: true, base: 'FRA' }).state.rights).toEqual(['EU', 'SAME']); // 유럽은 5곳이라 가장 가까운 지역(이스탄불이 있는 남아시아·중동)도 연다
   });
   it('열린 지역 사이에서만 노선을 열 수 있고, 거절 이유에 지역 이름이 있다', () => {
     const g = gated();
@@ -66,5 +66,13 @@ describe('지역 운수권', () => {
     expect(g.buyForRoute(o.routeId, 'B737', 'new').ok).toBe(true);
     g.advanceDays(30 * 3); expect(g.state.history.length).toBe(3); expect(g.state.competitors.length).toBeGreaterThan(0);
     expect(cityById('ICN').region).toBe('EA');
+  });
+  it('도시가 적은 지역에서 시작하면 가장 가까운 지역도 처음부터 열리고, 다음 지역 기준은 산 지역부터 센다', () => {
+    expect(Game.startRegions('ICN')).toEqual(['EA']); // 동아시아 9곳은 넉넉하다
+    expect(Game.startRegions('SIN')).toEqual(['SEA', 'EA']); expect(Game.startRegions('SGN')).toEqual(['SEA', 'EA']);
+    for (const c of CITIES) expect(Game.startRegions(c.id).map((r) => CITIES.filter((x) => x.region === r).length).reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(7);
+    const g = gated('SIN'); expect(g.state.rights).toEqual(['SEA', 'EA']); expect(g.cityOpen('ICN')).toBe(true); expect(g.rightsNeed).toBe(config.rights.need[0]);
+    const old = gated('SGN'); old.state.rights = ['SEA']; const re = new Game(1, JSON.parse(JSON.stringify(old.state))); // 옛 저장: 동남아만 있던 게임
+    expect(re.state.rights).toEqual(['SEA', 'EA']); expect(re.rightsNeed).toBe(config.rights.need[0]);
   });
 });

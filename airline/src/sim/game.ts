@@ -36,7 +36,7 @@ export class Game {
   private rng: Rng;
 
   constructor(seed = 1, state?: GameState, opts: GameOptions = {}) {
-    if (state) { this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); applyOwnNames(state.ownNames); return; }
+    if (state) { this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); applyOwnNames(state.ownNames); if (state.rights) for (const r of Game.startRegions(state.base)) if (!state.rights.includes(r)) state.rights = [...state.rights, r]; return; } // 옛 저장: 작은 지역에서 시작했으면 이웃 지역도 연다
     applyOwnNames();
     this.rng = new Rng(seed);
     const sc = scenarioById(opts.sandbox ? 'free' : opts.scenario ?? 'free'), diff = opts.difficulty ?? 'normal', dm = config.difficulty[diff];
@@ -44,7 +44,7 @@ export class Game {
     this.state = {
       formatVersion: FORMAT_VERSION, seed, rng: this.rng.getState(), day: 0,
       cash: Math.round(sc.cash * dm.cash * 10) / 10, reputation: config.start.reputation, nextId: 1,
-      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, nextRival: config.competitors.start + 1, rivalsGone: [], auctions: [], upcoming: [], chronicle: [], hubs: {}, era: null, nextEra: null, eraFree: config.eras.firstFree, contracts: [], contractsDone: 0, nextOffer: config.contract.firstMonth, rights: opts.sandbox && opts.rights ? [cityById(base).region] : undefined, freeze: 0, sandbox: !!opts.sandbox, history: [],
+      planes: [], routes: [], events: sc.events.map((e) => ({ ...e })), cumProfit: 0, loan: sc.loan, slots: {}, growth: {}, competitors: Game.initCompetitors(dm.rival), economy: sc.economy, fuel: 1, hedge: null, ally: null, nextRival: config.competitors.start + 1, rivalsGone: [], auctions: [], upcoming: [], chronicle: [], hubs: {}, era: null, nextEra: null, eraFree: config.eras.firstFree, contracts: [], contractsDone: 0, nextOffer: config.contract.firstMonth, rights: opts.sandbox && opts.rights ? Game.startRegions(base) : undefined, freeze: 0, sandbox: !!opts.sandbox, history: [],
       base, difficulty: diff, scenario: sc.id,
       cur: { revenue: 0, cost: 0, pax: 0, seats: 0 }, status: 'playing', lowCashMonths: 0, log: [], alertsAt: [],
     };
@@ -343,8 +343,14 @@ export class Game {
     const p = (config.rights.price.find(([lim]) => d < lim) ?? config.rights.price[config.rights.price.length - 1])[1];
     const sale = this.state.rightsSale; return sale && sale.region === region && sale.until > this.monthsPassed ? Math.round(p * config.extra.policy.saleCut) : p; // 정부 운수권 할인
   }
-  /** 다음 지역을 사려면 필요한 누적 이익($M) */
-  get rightsNeed(): number { const n = this.state.rights?.length ?? 1, k = config.rights.need; return k[Math.min(n - 1, k.length - 1)]; }
+  /** 처음부터 열린 지역: 출발 지역 + (그 지역 도시가 적으면) 출발 도시에서 가장 가까운 지역. 서울(동아시아 9곳)만 넉넉하고 나머지는 3~5곳이라 누적 이익을 못 쌓아 다음 지역을 살 수 없었다 */
+  static startRegions(base: string): string[] {
+    const B = cityById(base), home = B.region; if (CITIES.filter((c) => c.region === home).length >= config.rights.bigRegion) return [home];
+    let best = '', d = Infinity; for (const c of CITIES) if (c.region !== home) { const x = distanceKm(B, c); if (x < d || (x === d && c.region < best)) { d = x; best = c.region; } }
+    return best ? [home, best] : [home];
+  }
+  /** 다음 지역을 사려면 필요한 누적 이익($M): 돈 주고 산 지역 수로 센다(처음부터 열린 지역은 빼고) */
+  get rightsNeed(): number { const n = Math.max(1, (this.state.rights?.length ?? 1) - Game.startRegions(this.state.base).length + 1), k = config.rights.need; return k[Math.min(n - 1, k.length - 1)]; }
   regionInfo(region: string) {
     const owned = !!this.state.rights?.includes(region), price = this.rightsPrice(region), need = this.rightsNeed;
     return { id: region, name: this.regionName(region), owned, price, need, profitOk: this.state.cumProfit >= need, cashOk: this.state.cash >= price, cities: CITIES.filter((c) => c.region === region).map((c) => c.id) };
