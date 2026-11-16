@@ -665,6 +665,10 @@ await page.evaluate(() => { const g = window.__air.game; g.state.events = []; fo
 await page.click('#tabs button[data-tab="routes"]'); const rvId = await page.evaluate(() => { const g = window.__air.game; return g.state.routes.find((r) => r.open && g.planesOn(r.id).length > 0)?.id; }); await page.locator(`#panel button.trow[data-act="goRoute"][data-id="${rvId}"]`).click();
 check('노선 화면: 승객 후기', (await page.locator('#panel').innerText()).includes('승객 후기'));
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="ops"]').click(); await openAll();
+{ const h0 = await page.evaluate(() => { const g = window.__air.game; g.state.cash += 2000; return g.hubCities.length; }); await page.click('#tabs button[data-tab="money"]'); await openAll();
+  const lv = () => page.evaluate(() => { const g = window.__air.game; return Object.values(g.state.hubs ?? {}).reduce((a, h) => a + (h.terminal ?? 0) + (h.mro ?? 0) + (h.lounge ?? 0), 0); }), l0 = await lv();
+  await page.locator('#panel button[data-act="hubMany"][data-v="one"]').evaluate((el) => el.click()); await openAll();
+  check('허브 투자 여러 도시 일괄', h0 >= 1 && (await lv()) > l0, `도시 ${h0}, 단계 ${l0}→${await lv()}`); }
 const pil0 = await page.evaluate(() => window.__air.game.state.pilots ?? 0); await page.locator('#panel button[data-act="rushHire"]').click(); await openAll();
 await page.locator('#panel button[data-act="insurance"][data-v="1"]').click(); await openAll();
 check('재무: 조종사 급구 채용·보험', await page.evaluate((n) => (window.__air.game.state.pilots ?? 0) === n + 10 && window.__air.game.state.insurance === 1, pil0));
@@ -709,7 +713,7 @@ check('리스 회사: 항공기 사기', await page.evaluate(() => (window.__air
 await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
 await page.click('#tabs button[data-tab="rivals"]'); // 다음 점검(경쟁 탭)을 위해
 await page.click('#tabs button[data-tab="map"]'); await subMap('look'); await openAll();
-check('자동 처리에 증자·광고·전세기·동맹 안건·동맹 붙잡기 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="keep"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
+check('자동 처리에 증자·광고·전세기·동맹 안건·동맹 붙잡기·입찰 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="keep"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="autoBid"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
 await subMap('now');
 { const rid = await page.evaluate(() => { const g = window.__air.game; const r = g.state.routes.find((x) => x.open && g.planesOn(x.id).length); return r.id; });
   await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button[data-act="goRoute"][data-id="${rid}"]`).first().click();

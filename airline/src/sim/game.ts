@@ -173,6 +173,15 @@ export class Game {
     for (const kind of kinds) { const lv = this.hubLevel(cityId, kind), prices = config.invest[kind].prices; for (let i = lv; i < (mode === 'one' ? Math.min(lv + 1, prices.length) : prices.length); i++) list.push({ kind, price: prices[i] }); }
     return { list, total: list.reduce((a, x) => a + x.price, 0) };
   }
+  /** 허브 투자를 할 수 있는 도시(취항했거나 출발 도시, 아직 최고 단계가 아닌 곳), 노선 많은 순 */
+  get hubCities(): string[] { const s = this.state; return CITIES.filter((c) => this.cityOpen(c.id) && (this.linksAt(c.id) >= 1 || c.id === s.base) && this.hubBulkPlan(c.id, 'max').list.length).sort((a, b) => this.linksAt(b.id) - this.linksAt(a.id) || (a.id < b.id ? -1 : 1)).map((c) => c.id); }
+  /** 여러 도시 허브 투자 일괄 */
+  buyHubMany(cities: string[], mode: 'one' | 'max'): Result<{ count: number; total: number }> {
+    const ok = new Set(this.hubCities), list = cities.filter((c) => ok.has(c)); if (!list.length) return fail('투자할 도시가 없습니다');
+    const total = list.reduce((a, c) => a + this.hubBulkPlan(c, mode).total, 0); if (this.state.cash < total) return fail(`현금이 모자랍니다 (필요 $${total}M, 지금 $${this.state.cash.toFixed(1)}M)`);
+    let count = 0; for (const c of list) { const r = this.buyHubBulk(c, mode); if (!r.ok) return fail(r.error); count += r.count; }
+    return { ok: true, count, total };
+  }
   buyHubBulk(cityId: string, mode: 'one' | 'max'): Result<{ count: number; total: number }> {
     const plan = this.hubBulkPlan(cityId, mode);
     if (!plan.list.length) return fail('이미 모두 최고 단계입니다');
@@ -943,6 +952,8 @@ export class Game {
   }
   /** 경쟁사가 매기는 입찰 가치. 경쟁사는 이 값의 0.8~1.4배까지 부른다 */
   bidValue(b: NonNullable<GameState['bids']>[number]): number { return b.kind === 'concession' ? 14 + 2 * this.state.competitors.reduce((a, c) => a + c.routes.filter((r) => r.a === b.city || r.b === b.city).length, 0) : b.n * 4; }
+  /** 자동 입찰 한도: 경쟁사는 입찰 가치의 1.4배까지만 부르므로 여기까지 부르면 지지 않는다 */
+  bidCap(b: NonNullable<GameState['bids']>[number]): number { return Math.ceil(this.bidValue(b) * 1.4); }
   private bidStep(m: number): void {
     const s = this.state, k = config.extra.bid, mp = this.monthsPassed;
     for (const b of [...(s.bids ?? [])]) {
@@ -2137,10 +2148,11 @@ export class Game {
       if (p && this.acceptCharter(ch.id, p.id).ok) out.push(`전세기 자동 수락: ${cityById(ch.a).name} ⇄ ${cityById(ch.b).name}`);
     }
     if (r.agenda && s.alli?.meeting && this.chooseAgenda('fare').ok) out.push('동맹 회의 안건 자동: 공동 운임');
+    if (r.autoBid) for (const b of s.bids ?? []) { if (b.best?.who === 0) continue; const amount = b.best ? b.best.amount + config.extra.bid.step : b.min; if (amount <= this.bidCap(b) && s.cash >= amount * 2 && this.placeBid(b.id).ok) out.push(`입찰 자동: ${cityById(b.city).name} $${amount}M`); } /* 현금이 부른 값의 2배 이상일 때만(낙찰 뒤 현금 부족으로 포기하지 않게) */
     if (r.keep && s.alli?.poach && s.cash >= s.alli.poach.cost) { const c = s.competitors.find((x) => x.id === s.alli!.poach!.comp), cost = s.alli.poach.cost; if (this.keepMember().ok) out.push(`동맹 회원 자동으로 붙잡음: ${c?.name ?? '회원사'} $${cost}M`); }
     return out;
   }
-  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda' | 'keep', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
+  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda' | 'keep' | 'autoBid', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
   /** 지금 열면 좋을 노선: 내가 다니는 도시(또는 본사)에서 아직 안 연 도시로, 수요 × 기준 운임 ÷ (경쟁사 수·거리) 점수 상위 */
   recommendRoutes(n = 3): { a: string; b: string; demand: number; comps: number; km: number }[] {
     const s = this.state, from = new Set([s.base, ...this.servedCities()]), range = Math.max(0, ...s.planes.map((p) => typeById(p.type).range), typeById('B737').range), out: { a: string; b: string; demand: number; comps: number; km: number; sc: number }[] = [];

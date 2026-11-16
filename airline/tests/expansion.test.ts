@@ -153,6 +153,21 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     expect(g.pauseMega().ok).toBe(true); expect(g.state.mega!.paused).toBeUndefined(); g.advanceDays(30 * 2); expect(g.state.mega!.done).toBeGreaterThan(d0); void c0;
     expect(new Game(3, undefined, { sandbox: true }).pauseMega().ok).toBe(false);
   });
+  it('입찰 자동: 경쟁사보다 높게 부르되 한도와 현금 2배 조건을 지킨다', () => {
+    const g = sb(); g.state.base = 'ICN'; g.state.bids = [{ id: 1, kind: 'slots', city: 'HKG', n: 5, ends: g.monthsPassed + 3, best: { who: 99, amount: 12 }, min: 10 }];
+    expect(g.applyRules().some((x) => x.startsWith('입찰'))).toBe(false); // 규칙 꺼짐
+    g.setRule('autoBid', true); expect(g.applyRules().some((x) => x.startsWith('입찰 자동'))).toBe(true); expect(g.state.bids![0].best!.who).toBe(0);
+    expect(g.applyRules().some((x) => x.startsWith('입찰 자동'))).toBe(false); // 이미 최고가
+    const cap = g.bidCap(g.state.bids![0]); g.state.bids![0].best = { who: 99, amount: cap }; g.applyRules(); expect(g.state.bids![0].best!.who).toBe(99); // 한도 넘으면 안 부름
+    g.state.bids![0].best = { who: 99, amount: 12 }; g.state.cash = 20; g.applyRules(); expect(g.state.bids![0].best!.who).toBe(99); // 현금이 2배 안 되면 안 부름
+  });
+  it('허브 투자 여러 도시 일괄', () => {
+    const g = sb(); const o = g.openRoute(g.state.base, 'NRT'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new');
+    const cs = g.hubCities; expect(cs).toEqual(expect.arrayContaining([g.state.base, 'NRT'])); expect(cs).not.toContain('HKG');
+    const cash = g.state.cash, r = g.buyHubMany([g.state.base, 'NRT', 'HKG'], 'one'); expect(r.ok && r.count).toBe(6);
+    expect(g.hubLevel('NRT', 'lounge')).toBe(1); expect(g.hubLevel('HKG', 'lounge')).toBe(0); expect(cash - g.state.cash).toBeCloseTo(r.ok ? r.total : 0);
+    g.state.cash = 1; expect(g.buyHubMany(['NRT'], 'max').ok).toBe(false); expect(g.hubLevel('NRT', 'terminal')).toBe(1); // 모자라면 하나도 안 산다
+  });
   it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
     const g = sb(); expect(g.startMega('airport').ok).toBe(false);
     const cap = g.slotCapacity('PUS'); expect(g.startMega('airport', 'PUS').ok).toBe(true);
