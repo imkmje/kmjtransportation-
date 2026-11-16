@@ -2130,9 +2130,10 @@ export class Game {
       if (p && this.acceptCharter(ch.id, p.id).ok) out.push(`전세기 자동 수락: ${cityById(ch.a).name} ⇄ ${cityById(ch.b).name}`);
     }
     if (r.agenda && s.alli?.meeting && this.chooseAgenda('fare').ok) out.push('동맹 회의 안건 자동: 공동 운임');
+    if (r.keep && s.alli?.poach && s.cash >= s.alli.poach.cost) { const c = s.competitors.find((x) => x.id === s.alli!.poach!.comp), cost = s.alli.poach.cost; if (this.keepMember().ok) out.push(`동맹 회원 자동으로 붙잡음: ${c?.name ?? '회원사'} $${cost}M`); }
     return out;
   }
-  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
+  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda' | 'keep', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
   /** 지금 열면 좋을 노선: 내가 다니는 도시(또는 본사)에서 아직 안 연 도시로, 수요 × 기준 운임 ÷ (경쟁사 수·거리) 점수 상위 */
   recommendRoutes(n = 3): { a: string; b: string; demand: number; comps: number; km: number }[] {
     const s = this.state, from = new Set([s.base, ...this.servedCities()]), range = Math.max(0, ...s.planes.map((p) => typeById(p.type).range), typeById('B737').range), out: { a: string; b: string; demand: number; comps: number; km: number; sc: number }[] = [];
