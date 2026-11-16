@@ -579,6 +579,9 @@ await page.click('#tabs button[data-tab="cust"]'); await openAll(); await page.l
 check('재무: 마일리지 기본 단계', await page.evaluate(() => window.__air.game.state.loyalty?.level === 1));
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
 check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
+await page.locator('#panel button[data-act="megaPause"]').evaluate((el) => el.click());
+check('대형 사업 일시중지', await page.evaluate(() => window.__air.game.state.mega?.paused === true) && (await page.locator('#panel').innerText()).includes('공사 재개'));
+await page.locator('#panel button[data-act="megaPause"]').evaluate((el) => el.click());
 const alId = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major && !c.stake)?.id); await page.click('#tabs button[data-tab="rivals"]'); if (alId !== undefined) await page.locator(`#panel button[data-act="selComp"][data-id="${alId}"]`).click(); const alBtn = page.locator('#panel button[data-act="joinAlliance"]'); // 자회사가 아닌 일반 경쟁사를 고른다
 if (await alBtn.count()) { await alBtn.first().click(); }
 check('경쟁사: 동맹 초대', await page.evaluate(() => (window.__air.game.state.alliance ?? []).length > 0 || window.__air.game.state.competitors.every((c) => c.major || c.stake || (window.__air.game.state.rivalAlliance ?? []).includes(c.id))));
