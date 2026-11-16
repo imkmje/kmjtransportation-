@@ -112,3 +112,12 @@ describe('대형 항공사 견제', () => {
     expect(g.chooseAgenda('defend').ok).toBe(true); expect(g.majorDamp(k, 'war')).toBe(0); expect(g.majorDamp(k)).toBeCloseTo(0.5, 6);
   });
 });
+
+describe('경쟁사 항공기 상한(3.2.7)', () => {
+  it('대형 항공사 상한은 45대 또는 내 항공기의 70% 중 큰 쪽, 일반 경쟁사 상한은 시간과 내 기단에 따라 24대를 넘는다', () => {
+    const g = new Game(5, undefined, { sandbox: true }); expect(g.majorCap).toBe(45);
+    g.state.cash = 99999; for (let i = 0; i < 100; i++) g.buyPlane('B737'); expect(g.majorCap).toBe(Math.round(g.state.planes.length * 0.7));
+    expect(new Game(5).majorCap).toBe(45); // 시나리오는 그대로
+    const k = config.competitors, cap = Math.min(k.sandboxCap, k.maxPlanesCap + Math.floor(200 / k.capGrowMonths) + Math.floor(g.state.planes.length * k.perMyPlane)); expect(cap).toBeGreaterThan(24);
+  });
+});

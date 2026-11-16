@@ -146,6 +146,13 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     const g = sb(); g.state.ownTypes = ['KX200']; const o = g.openRoute('ICN', 'HKG'); if (!o.ok) throw new Error(o.error); const p = g.buyPlane('KX200'); if (!p.ok) throw new Error(p.error);
     expect(g.assign(p.planeId, o.routeId, 7).ok).toBe(true); expect(g.state.typesFlown ?? []).not.toContain('KX200');
   });
+  it('대형 사업 일시중지: 멈춘 동안 돈도 진행도 멈추고, 재개하면 이어서', () => {
+    const g = sb(); g.state.cash = 5000; expect(g.startMega('academy').ok).toBe(true); g.advanceDays(30 * 2); const d0 = g.state.mega!.done;
+    expect(g.pauseMega().ok).toBe(true); expect(g.state.mega!.paused).toBe(true); const c0 = g.state.cash; g.advanceDays(30 * 3);
+    expect(g.state.mega!.done).toBe(d0); expect(g.state.log.some((l) => l.includes('공사가 이번 달 멈췄습니다'))).toBe(false);
+    expect(g.pauseMega().ok).toBe(true); expect(g.state.mega!.paused).toBeUndefined(); g.advanceDays(30 * 2); expect(g.state.mega!.done).toBeGreaterThan(d0); void c0;
+    expect(new Game(3, undefined, { sandbox: true }).pauseMega().ok).toBe(false);
+  });
   it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
     const g = sb(); expect(g.startMega('airport').ok).toBe(false);
     const cap = g.slotCapacity('PUS'); expect(g.startMega('airport', 'PUS').ok).toBe(true);

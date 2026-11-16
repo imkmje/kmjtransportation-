@@ -995,9 +995,11 @@ export class Game {
     s.log.push(`${this.monthsPassed + 1}개월차: 대형 사업 착공 — ${d.name}(${d.months}개월, 매달 $${Math.round((cost / d.months) * 10) / 10}M).`); this.note(this.monthsPassed + 1, 'invest', `${d.name} 착공`);
     return { ok: true };
   }
+  /** 대형 사업 일시중지·재개: 멈춘 동안은 매달 돈도 안 내고 진행도 멈춘다 */
+  pauseMega(): Result<{ paused: boolean }> { const mg = this.state.mega; if (!mg) return fail('진행 중인 사업이 없습니다'); mg.paused = !mg.paused; if (!mg.paused) delete mg.paused; return { ok: true, paused: !!mg.paused }; }
   cancelMega(): Result { if (!this.state.mega) return fail('진행 중인 사업이 없습니다'); this.state.mega = null; return { ok: true }; }
   private megaStep(m: number): void {
-    const s = this.state, mg = s.mega; if (!mg) return;
+    const s = this.state, mg = s.mega; if (!mg || mg.paused) return;
     const d = config.extra.mega.list.find((x) => x.id === mg.id)!, pay = (mg.cost ?? d.cost) / d.months;
     if (s.cash < pay) { s.log.push(`${m + 1}개월차: 현금이 모자라 ${d.name} 공사가 이번 달 멈췄습니다.`); return; }
     s.cash -= pay; s.cur.cost += pay; mg.done++;
@@ -1142,7 +1144,7 @@ export class Game {
     const buyer = s.competitors.filter((c) => !c.stake && (c.major || (c.planes >= 5 && c.cash > 20))).sort((a, b) => b.planes - a.planes || a.id - b.id)[0];
     const target = s.competitors.filter((c) => !c.major && !c.stake && c.id !== buyer?.id && ((c.low ?? 0) > 0 || c.planes <= 2)).sort((a, b) => a.planes - b.planes || a.cash - b.cash || a.id - b.id)[0];
     if (!buyer || !target) return;
-    const gain = Math.max(0, Math.min(6, target.planes, buyer.major ? config.competitors.major.cap - buyer.planes : 99)); buyer.planes += gain; // 대형 항공사는 상한을 넘지 않는다
+    const gain = Math.max(0, Math.min(6, target.planes, buyer.major ? this.majorCap - buyer.planes : 99)); buyer.planes += gain; // 대형 항공사는 상한을 넘지 않는다
     for (const r of target.routes.slice(0, 2)) if (!buyer.routes.some((x) => this.sameRoute(x, r.a, r.b))) buyer.routes.push({ ...r });
     s.competitors = s.competitors.filter((c) => c.id !== target.id); if (s.ally === target.id) s.ally = null;
     s.rivalsGone = [...s.rivalsGone, { name: target.name, month: mon, acq: true, by: buyer.name }].slice(-12);
@@ -1473,6 +1475,8 @@ export class Game {
     this.leaseAssign(); let lease = 0; for (const p of s.biz.lessor ?? []) { if (p.lessee !== undefined) lease += this.rentOf(p.type); p.book = Math.round(p.book * (1 - config.biz.lessor.depr) * 100) / 100; p.age++; }
     const tot = Math.round((hotel + lease) * 100) / 100; s.cash += tot; s.cur.revenue += tot; s.biz.last = { hotel: Math.round(hotel * 100) / 100, lease: Math.round(lease * 100) / 100 };
   }
+  /** 대형 항공사 항공기 상한: 45대 또는 (자유 모드) 내 항공기의 70% 중 큰 쪽 */
+  get majorCap(): number { const M = config.competitors.major; return this.state.sandbox ? Math.max(M.cap, Math.round(this.state.planes.length * M.capMine)) : M.cap; }
   // ---- 그룹 경영(자유 모드) ----
   get groupSubs(): Competitor[] { return this.state.sandbox ? this.state.competitors.filter((c) => (c.stake ?? 0) >= 0.51) : []; }
   get groupPlanes(): number { return this.state.planes.length + this.groupSubs.reduce((a, c) => a + c.planes, 0); }
@@ -1726,7 +1730,7 @@ export class Game {
     const mp = this.monthsPassed;
     const major = s.competitors.find((c) => c.major);
     if (major && !this.majorFrozen(major)) for (const a of [...s.auctions]) { // 대형 항공사도 경매에 입찰한다(첫 달은 우리에게 양보)
-      if (major.planes < config.competitors.major.cap && mp > a.expires - config.auction.months && this.rng.next() < config.competitors.major.bidChance * (this.agendaOn('defend') ? 0.5 : 1)) { s.auctions = s.auctions.filter((x) => x.id !== a.id); major.planes++; s.log.push(`${mp + 1}개월차: ${major.name}이(가) 경매에 나온 항공기를 낙찰받았습니다.`); }
+      if (major.planes < this.majorCap && mp > a.expires - config.auction.months && this.rng.next() < config.competitors.major.bidChance * (this.agendaOn('defend') ? 0.5 : 1)) { s.auctions = s.auctions.filter((x) => x.id !== a.id); major.planes++; s.log.push(`${mp + 1}개월차: ${major.name}이(가) 경매에 나온 항공기를 낙찰받았습니다.`); }
     }
     this.eraStep(); this.contractStep();
     for (const t of AIRCRAFT) { // 신기종: 6개월 전에 발표하고, 때가 되면 출시한다
@@ -1780,7 +1784,7 @@ export class Game {
     for (const c of s.competitors) {
       if (s.sandbox && !c.trait && !c.major) c.trait = TRAIT_IDS[(c.id * 7 + c.hub.charCodeAt(0)) % TRAIT_IDS.length]; // 성격은 ID로 정해진다(난수 없음)
       const tr = this.traitOf(c);
-      const capNow = s.sandbox ? Math.min(k.sandboxCap, k.maxPlanesCap + Math.floor(this.monthsPassed / k.capGrowMonths)) : k.maxPlanesCap; // 자유 모드는 시간이 갈수록 경쟁사도 더 커질 수 있다
+      const capNow = s.sandbox ? Math.min(k.sandboxCap, k.maxPlanesCap + Math.floor(this.monthsPassed / k.capGrowMonths) + Math.floor(s.planes.length * k.perMyPlane)) : k.maxPlanesCap; // 자유 모드는 시간이 갈수록 경쟁사도 더 커질 수 있다
       const maxPlanes = Math.min(capNow, Math.floor((k.maxPlanesBase + k.maxPlanesPerMonth * (this.monthsPassed - (c.born ?? 0))) * (tr?.planes ?? 1) * (c.dir === 'grow' ? 1.2 : 1))); // 늦게 생긴 항공사는 처음부터 다시 키운다
       let profit = 0, revenue = 0; const lost = { fee: 0, alli: 0, suit: 0 }, mk = config.majorCheck, mine2 = c.major && s.sandbox ? s.routes.filter((x) => x.open) : [], alliR = c.major && this.agendaOn('defend') ? s.competitors.filter((x) => s.alliance?.includes(x.id)).flatMap((x) => x.routes) : [];
       for (const r of c.routes) {
@@ -1834,7 +1838,7 @@ export class Game {
       c.low = c.cash < 0 ? (c.low ?? 0) + 1 : 0;
       if (c.major) { // 대형 항공사: 시장(시간·내 항공기 수)에 맞춰 돈과 상관없이 커지고, 파산하지 않는다
         c.cash = Math.max(c.cash, 50); c.low = 0;
-        const M = k.major, target = Math.min(M.cap, Math.floor(M.base + M.perMonth * this.monthsPassed + M.perPlayerPlane * s.planes.length));
+        const M = k.major, target = Math.min(this.majorCap, Math.floor(M.base + M.perMonth * this.monthsPassed + M.perPlayerPlane * s.planes.length));
         if (!this.majorFrozen(c)) for (let i = 0; i < M.addPerMonth && c.planes < target; i++) this.compBuy(c, month, true); // 반독점 제재 중에는 크지 않는다
       } else if (c.cash >= B737.price * (s.sandbox ? k.buyRatio : 1) * (tr?.buy ?? 1) * (c.dir === 'grow' ? 0.7 : c.dir === 'profit' ? 1.5 : 1) && c.planes < maxPlanes) this.compBuy(c, month);
     }
