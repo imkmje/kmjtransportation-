@@ -676,7 +676,13 @@ check('매출 순위에 자회사·대형 등 딱지', await page.evaluate(() =>
   await page.locator(`#panel button[data-act="selComp"][data-id="${mid}"]`).click();
   check('대형 항공사 카드: 견제(지분·반독점 제소) 칸', (await page.locator('#panel').innerText()).includes('대형 항공사 견제') && (await page.locator('#panel button[data-act="antitrust"]').count()) === 1);
   await page.locator('#panel button[data-act="majorStake"]').evaluate((el) => el.click());
-  check('대형 항공사 지분 5% 사기', await page.evaluate((id) => (window.__air.game.state.majorHold?.[id] ?? 0) === 0.05, mid)); }
+  check('대형 항공사 지분 5% 사기', await page.evaluate((id) => (window.__air.game.state.majorHold?.[id] ?? 0) === 0.05, mid));
+  // 2.31.0: 거점 공항 운영권 입찰, 견제로 잃은 매출(빨간 막대)
+  await page.evaluate(() => { window.__air.game.state.bids = []; window.__air.render(); }); // 카드는 이미 열려 있다(같은 줄을 또 누르면 닫힌다)
+  await page.locator('#panel button[data-act="hubBid"]').first().evaluate((el) => el.click());
+  check('대형 항공사 거점 공항 운영권 입찰 열기', await page.evaluate(() => (window.__air.game.state.bids ?? []).length === 1 && window.__air.game.state.bids[0].kind === 'concession'));
+  await page.evaluate((id) => { const g = window.__air.game, k = g.state.competitors.find((c) => c.id === id); g.state.bids = []; const city = k.routes[0]?.a ?? 'DXB'; g.state.concessions = { ...(g.state.concessions ?? {}), [city]: { holder: 0, until: g.monthsPassed + 60 } }; g.competitorStep(); window.__air.render(); }, mid);
+  check('견제로 잃은 매출이 매출 막대의 빨간 윗부분과 문구로 보임', (await page.locator('#panel .chart i.stk b').count()) > 0 && (await page.locator('#panel').innerText()).includes('견제로 잃은 매출')); }
 
 // 2.20.0: 연말 백업·기능 끄기
 await page.click('#dsize button[data-h="min"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다

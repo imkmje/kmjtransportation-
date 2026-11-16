@@ -74,8 +74,10 @@ describe('대형 항공사 견제', () => {
     const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!;
     expect(g.majorDamp(k)).toBe(1); const p = g.majorStakePrice(k), c0 = g.state.cash;
     expect(g.buyMajorStake(77).ok).toBe(true); expect(g.state.cash).toBeCloseTo(c0 - p, 6); expect(g.majorDamp(k)).toBeCloseTo(0.65, 6);
-    expect(g.buyMajorStake(77).ok).toBe(true); expect(g.buyMajorStake(77).ok).toBe(false); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6);
+    const p2 = g.majorStakePrice(k); expect(p2).toBeGreaterThan(p); // 살수록 비싸진다
+    expect(g.buyMajorStake(77).ok).toBe(true); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6);
     const r0 = g.state.cur.revenue; (g as unknown as { majorDividends(): void }).majorDividends(); expect(g.state.cur.revenue - r0).toBeCloseTo(50 * 0.08 * 0.1, 6);
+    for (let i = 0; i < 4; i++) expect(g.buyMajorStake(77).ok).toBe(true); expect(g.buyMajorStake(77).ok).toBe(false); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6); // 30%까지, 확률 감소는 최대 70%
     const c1 = g.state.cash; expect(g.sellMajorStake(77).ok).toBe(true); expect(g.state.cash).toBeGreaterThan(c1); expect(g.majorDamp(k)).toBe(1);
     expect(g.buyMajorStake(1).ok).toBe(false); // 대형이 아니면 안 됨
     expect(new Game(5).buyMajorStake(77).ok).toBe(false); // 시나리오는 안 됨
@@ -86,5 +88,27 @@ describe('대형 항공사 견제', () => {
     expect(g.antitrust(77).ok).toBe(false);
     const n0 = k.planes; g.advanceDays(30 * 6); expect(k.planes).toBe(n0); // 제재 중에는 크지 않는다
     g.advanceDays(30 * 7); expect(g.majorFrozen(k)).toBe(false); expect(g.antitrust(77).ok).toBe(false); // 아직 36개월 안
+  });
+  it('이사회 의석(20% 이상): 12개월에 한 번 내 노선 진출을 막는다', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!; g.state.cash = 99999;
+    const o = g.openRoute('DXB', 'LHR'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'A330N', 'new');
+    expect(g.majorVetoReady(k)).toBe(false); for (let i = 0; i < 4; i++) g.buyMajorStake(77); expect(g.majorVetoReady(k)).toBe(true);
+    k.routes = []; config.competitors.major.invadeChance = 100; // 진출을 반드시 시도하게(지분 때문에 확률이 줄어도)
+    try { (g as unknown as { compBuy(c: unknown, m: number, f: boolean): void }).compBuy(k, g.month, true); } finally { config.competitors.major.invadeChance = 0.15; }
+    expect(k.routes.some((r) => (r.a === 'DXB' && r.b === 'LHR') || (r.a === 'LHR' && r.b === 'DXB'))).toBe(false); expect(g.majorVetoReady(k)).toBe(false); expect(g.state.log.at(-1)).toContain('거부권');
+  });
+  it('거점 공항 운영권: 입찰을 열 수 있고, 내 운영권이면 대형 항공사 매출이 줄어 그만큼 내 수입이 되며 잃은 매출로 기록된다', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!; k.name = config.competitors.major.name; g.state.bids = [];
+    expect(g.openHubBid(77, 'DXB').ok).toBe(true); expect(g.state.bids![0].city).toBe('DXB'); expect(g.openHubBid(77, 'FRA').ok).toBe(false); // 한 번에 하나
+    expect(g.openHubBid(77, 'ICN').ok).toBe(false); // 거점이 아님
+    g.state.bids = []; g.state.concessions = { DXB: { holder: 0, until: g.monthsPassed + 60 } };
+    const c0 = g.state.cash; (g as unknown as { competitorStep(): void }).competitorStep();
+    expect(k.lostNow!.fee).toBeGreaterThan(0); expect(k.lostHist!.at(-1)).toBeCloseTo(k.lostNow!.fee + k.lostNow!.alli + k.lostNow!.suit, 2);
+    expect(k.lostHist!.length).toBe(k.revHist!.length); expect(g.state.cash).toBeGreaterThan(c0 - 1e-9);
+  });
+  it('동맹 공동 대응 안건: 운임 전쟁 0, 진출 절반', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!; g.state.alliance = [1];
+    (g.state as { alli?: unknown }).alli = { name: '시험 동맹', meeting: { expires: g.monthsPassed + 2 } };
+    expect(g.chooseAgenda('defend').ok).toBe(true); expect(g.majorDamp(k, 'war')).toBe(0); expect(g.majorDamp(k)).toBeCloseTo(0.5, 6);
   });
 });

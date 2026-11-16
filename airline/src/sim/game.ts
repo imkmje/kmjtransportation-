@@ -1378,15 +1378,17 @@ export class Game {
   // ---- 대형 항공사 견제(자유 모드) ----
   majorFrozen(c: Competitor): boolean { return (this.state.majorFreeze?.[c.id] ?? -1) > this.monthsPassed; }
   /** 대형 항공사가 나를 공격하는 확률 배수: 지분 5%마다 줄고, 제재 중이면 0 */
-  majorDamp(c: Competitor): number { if (!c.major) return 1; if (this.majorFrozen(c)) return 0; const k = config.majorCheck, h = this.state.majorHold?.[c.id] ?? 0; return Math.max(0, 1 - (h / k.step) * k.damp); }
+  majorDamp(c: Competitor, kind: 'war' | 'invade' = 'invade'): number { if (!c.major) return 1; if (this.majorFrozen(c)) return 0; const k = config.majorCheck, h = this.state.majorHold?.[c.id] ?? 0, d = this.agendaOn('defend') ? (kind === 'war' ? 0 : 0.5) : 1; return Math.max(1 - k.dampCap, 1 - (h / k.step) * k.damp) * d; } // 지분(최대 70% 감소)·동맹 공동 대응(운임 전쟁 0, 진출 절반)
   majorValue(c: Competitor): number { return Math.round(Math.max(100, (c.revHist ?? []).reduce((a, b) => a + b, 0)) * config.majorCheck.value * 10) / 10; }
-  majorStakePrice(c: Competitor): number { return Math.round(this.majorValue(c) * config.majorCheck.step * 10) / 10; }
+  majorStakePrice(c: Competitor): number { const k = config.majorCheck, h = this.state.majorHold?.[c.id] ?? 0; return Math.round(this.majorValue(c) * k.step * (1 + (h / k.step) * k.stepUp) * 10) / 10; }
+  /** 이사회 거부권: 지분 20% 이상이고 마지막으로 쓴 지 12개월이 지났으면 쓸 수 있다 */
+  majorVetoReady(c: Competitor): boolean { const k = config.majorCheck, h = this.state.majorHold?.[c.id] ?? 0, last = this.state.majorVeto?.[c.id]; return h >= k.board - 1e-9 && (last === undefined || this.monthsPassed - last >= k.vetoMonths); }
   buyMajorStake(id: number): Result<{ price: number }> {
     const s = this.state, c = s.competitors.find((x) => x.id === id), k = config.majorCheck; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!c?.major) return fail('대형 항공사가 아닙니다'); const h = s.majorHold?.[id] ?? 0; if (h >= k.max - 1e-9) return fail(`지분은 ${Math.round(k.max * 100)}%까지만 살 수 있습니다`);
     const price = this.majorStakePrice(c); if (s.cash < price) return fail('현금이 모자랍니다');
     s.cash -= price; s.majorHold = { ...(s.majorHold ?? {}), [id]: Math.round((h + k.step) * 100) / 100 };
-    s.log.push(`${this.monthsPassed + 1}개월차: ${c.name} 지분 ${Math.round(k.step * 100)}%를 샀습니다($${price}M, 이제 ${Math.round(s.majorHold[id] * 100)}%). 주주가 된 만큼 내 노선을 덜 건드립니다.`); return { ok: true, price };
+    s.log.push(`${this.monthsPassed + 1}개월차: ${c.name} 지분 ${Math.round(k.step * 100)}%를 샀습니다($${price}M, 이제 ${Math.round(s.majorHold[id] * 100)}%). 주주가 된 만큼 내 노선을 덜 건드립니다.${h < k.board - 1e-9 && s.majorHold[id] >= k.board - 1e-9 ? ' 이사회 의석을 얻었습니다(내 노선 진출 거부권).' : ''}`); return { ok: true, price };
   }
   sellMajorStake(id: number): Result<{ price: number }> {
     const s = this.state, c = s.competitors.find((x) => x.id === id), h = s.majorHold?.[id] ?? 0; if (!c?.major || h <= 0) return fail('가진 지분이 없습니다');
@@ -1403,6 +1405,16 @@ export class Game {
     s.cash -= cost; s.cur.cost += cost; s.majorFreeze = { ...(s.majorFreeze ?? {}), [id]: mp + k.freeze }; s.majorSuit = { ...(s.majorSuit ?? {}), [id]: mp + k.cooldown };
     for (const r of c.routes) if (r.war) { r.war = 0; r.fareRatio = c.style === 'low' ? 0.85 : 1.15; } // 진행 중인 운임 전쟁도 멈춘다
     this.alert(`${mp + 1}개월차: ${c.name}을(를) 반독점 혐의로 제소했습니다($${cost}M). ${k.freeze}개월간 확장·노선 진출·운임 전쟁·경매 입찰이 멈춥니다.`); return { ok: true, cost };
+  }
+  /** 대형 항공사 거점 공항의 운영권 입찰을 연다(입찰이 없을 때만). 낙찰하면 그 공항을 지나는 대형 항공사 노선 매출의 12%가 착륙료로 내게 온다 */
+  majorHubs(c: Competitor): string[] { const K = config.competitors; return c.major ? (c.name === K.major2.name ? K.major2.hubs : K.major.hubs) : []; }
+  openHubBid(id: number, city: string): Result {
+    const s = this.state, c = s.competitors.find((x) => x.id === id), k = config.extra.bid, mp = this.monthsPassed; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    if (!c?.major || !this.majorHubs(c).includes(city)) return fail('그 대형 항공사의 거점이 아닙니다');
+    if ((s.bids ?? []).length) return fail('이미 진행 중인 입찰이 있습니다(끝난 뒤에 여세요)');
+    if (s.concessions?.[city] && s.concessions[city].until > mp) return fail('이미 운영권 주인이 있는 공항입니다');
+    s.bids = [{ id: s.nextId++, kind: 'concession', city, n: 0, ends: mp + k.months, best: null, min: k.concessionMin }];
+    s.log.push(`${mp + 1}개월차: ${cityById(city).name} 공항 운영권 입찰을 열었습니다(${k.months}개월). 낙찰하면 5년간 슬롯 +${k.concessionSlots}·착륙료 −30%, 그리고 ${c.name}이(가) 그 공항을 지나는 노선 매출의 ${Math.round(config.majorCheck.hubFee * 100)}%를 착륙료로 냅니다.`); return { ok: true };
   }
   /** 대형 항공사 지분 배당(매달) */
   private majorDividends(): void {
@@ -1610,7 +1622,7 @@ export class Game {
     const mp = this.monthsPassed;
     const major = s.competitors.find((c) => c.major);
     if (major && !this.majorFrozen(major)) for (const a of [...s.auctions]) { // 대형 항공사도 경매에 입찰한다(첫 달은 우리에게 양보)
-      if (major.planes < config.competitors.major.cap && mp > a.expires - config.auction.months && this.rng.next() < config.competitors.major.bidChance) { s.auctions = s.auctions.filter((x) => x.id !== a.id); major.planes++; s.log.push(`${mp + 1}개월차: ${major.name}이(가) 경매에 나온 항공기를 낙찰받았습니다.`); }
+      if (major.planes < config.competitors.major.cap && mp > a.expires - config.auction.months && this.rng.next() < config.competitors.major.bidChance * (this.agendaOn('defend') ? 0.5 : 1)) { s.auctions = s.auctions.filter((x) => x.id !== a.id); major.planes++; s.log.push(`${mp + 1}개월차: ${major.name}이(가) 경매에 나온 항공기를 낙찰받았습니다.`); }
     }
     this.eraStep(); this.contractStep();
     for (const t of AIRCRAFT) { // 신기종: 6개월 전에 발표하고, 때가 되면 출시한다
@@ -1666,7 +1678,7 @@ export class Game {
       const tr = this.traitOf(c);
       const capNow = s.sandbox ? Math.min(k.sandboxCap, k.maxPlanesCap + Math.floor(this.monthsPassed / k.capGrowMonths)) : k.maxPlanesCap; // 자유 모드는 시간이 갈수록 경쟁사도 더 커질 수 있다
       const maxPlanes = Math.min(capNow, Math.floor((k.maxPlanesBase + k.maxPlanesPerMonth * (this.monthsPassed - (c.born ?? 0))) * (tr?.planes ?? 1) * (c.dir === 'grow' ? 1.2 : 1))); // 늦게 생긴 항공사는 처음부터 다시 키운다
-      let profit = 0, revenue = 0;
+      let profit = 0, revenue = 0; const lost = { fee: 0, alli: 0, suit: 0 }, mk = config.majorCheck, mine2 = c.major && s.sandbox ? s.routes.filter((x) => x.open) : [], alliR = c.major && this.agendaOn('defend') ? s.competitors.filter((x) => s.alliance?.includes(x.id)).flatMap((x) => x.routes) : [];
       for (const r of c.routes) {
         const A = cityById(r.a), B = cityById(r.b), km = distanceKm(A, B), base = baseFare(km), fare = base * r.fareRatio;
         const mine = s.routes.find((x) => x.open && ((x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)));
@@ -1676,8 +1688,16 @@ export class Game {
         const dem = (rawMonthlyDemand(A, B, month, this.growthOf(r.a), this.growthOf(r.b)) * eco * priceFactor(fare, base) * share) / config.daysPerMonth;
         const pax = Math.min(dem, r.seatsDay * 0.9);
         r.rev = Math.round((pax * fare * config.daysPerMonth) / 1e4) / 100; r.share = Math.round(share * 1000) / 1000; r.lost = atk ? Math.round((share / 0.75) * 0.25 * 1000) / 1000 : 0; // 화면용 노선별 기록(추정)
-        revenue += (pax * fare * config.daysPerMonth) / 1e6;
-        profit += (pax * fare * (1 - Math.min(1.2, (k.costRatio * fuelMult) / (c.eff ?? 1))) * config.daysPerMonth) / 1e6; // 비용 비율은 연료비가 오르면 커지고 효율이 낮으면 더 커진다(적자 가능)
+        let cut = 0; // 대형 항공사 견제로 깎이는 몫(화면에 '잃은 매출'로 보인다)
+        if (c.major && s.sandbox) {
+          const rv = (pax * fare * config.daysPerMonth) / 1e6, same = (y: { a: string; b: string }) => (y.a === r.a && y.b === r.b) || (y.a === r.b && y.b === r.a);
+          if ([r.a, r.b].some((id) => s.concessions?.[id]?.holder === 0 && s.concessions[id].until > this.monthsPassed)) { cut += mk.hubFee; lost.fee += rv * mk.hubFee; }
+          if (alliR.length + mine2.length && this.agendaOn('defend') && (mine2.some(same) || alliR.some(same))) { cut += mk.alliCut; lost.alli += rv * mk.alliCut; }
+          if (this.majorFrozen(c)) { cut += mk.suitCut; lost.suit += rv * mk.suitCut; }
+          r.rev = Math.round(r.rev * (1 - cut) * 100) / 100;
+        }
+        revenue += (pax * fare * config.daysPerMonth) / 1e6 * (1 - cut);
+        profit += (pax * fare * (1 - Math.min(1.2, (k.costRatio * fuelMult) / (c.eff ?? 1))) * config.daysPerMonth) / 1e6 * (1 - cut); // 비용 비율은 연료비가 오르면 커지고 효율이 낮으면 더 커진다(적자 가능)
       }
       // 가격 반응: 우리가 같은 노선에서 더 싸게 팔면 따라 내리고(바닥까지), 아니면 천천히 목표 가격으로 돌아간다
       const rv = config.rival, floor = c.style === 'low' ? rv.lowFloor : rv.premFloor, target = c.style === 'low' ? rv.lowTarget : rv.premTarget;
@@ -1692,12 +1712,13 @@ export class Game {
       // 운임 전쟁: 우리와 겹치는 노선 하나에서 운임을 크게 내린다(제휴사는 걸어오지 않는다)
       if (!this.isFriend(c) && !c.routes.some((r) => r.war)) {
         const over = c.routes.filter((r) => s.routes.some((x) => x.open && this.planesOn(x.id).length && ((x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a))));
-        if (over.length && this.rng.next() < config.war.chance * this.mods.event * (c.major ? k.major.warMult * this.majorDamp(c) : 1) * (this.eraNow?.war ?? 1) * (tr?.war ?? 1)) {
+        if (over.length && this.rng.next() < config.war.chance * this.mods.event * (c.major ? k.major.warMult * this.majorDamp(c, 'war') : 1) * (this.eraNow?.war ?? 1) * (tr?.war ?? 1)) {
           const r = over[this.rng.int(over.length)]; r.war = config.war.months; r.fareRatio = config.war.ratio;
           this.alert(`${this.monthsPassed + 1}개월차: 운임 전쟁 — ${c.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선 운임을 ${config.war.months}개월간 크게 내렸습니다. 운임을 따라 내리거나, 버티거나, 제휴를 맺으세요.`); this.quote(c, 'war');
         }
       }
       c.revHist = [...(c.revHist ?? []), revenue].slice(-12);
+      if (c.major && s.sandbox) { const L = lost.fee + lost.alli + lost.suit; c.lostHist = [...(c.lostHist ?? Array((c.revHist.length - 1)).fill(0)), Math.round(L * 100) / 100].slice(-12); c.lostNow = { fee: Math.round(lost.fee * 100) / 100, alli: Math.round(lost.alli * 100) / 100, suit: Math.round(lost.suit * 100) / 100 }; if (lost.fee > 0) { s.cash += lost.fee; s.cur.revenue += lost.fee; } } // 운영권 착륙료는 내 수입
       c.pHist = [...(c.pHist ?? [c.planes]), c.planes].slice(-13); // 항공기 수 기록(화면의 증감 표시용)
       const net = profit * (s.sandbox ? k.profitScale : 1) - k.planeFixed * c.planes;
       c.cash += net;
@@ -1726,6 +1747,7 @@ export class Game {
       const mine = s.routes.filter((r) => r.open && this.planesOn(r.id).length > 0).map((r) => { const d = this.routeDay(r); return { r, p: d.revenue - d.cost }; }).sort((x, y) => y.p - x.p || x.r.id - y.r.id);
       for (const { r } of mine) {
         if (c.routes.some((x) => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) || !canFly(B737, cityById(r.a), cityById(r.b)).ok || (s.sandbox && this.competitorsOn(r.a, r.b).length >= config.competitors.maxOnRoute)) continue;
+        if (this.majorVetoReady(c)) { s.majorVeto = { ...(s.majorVeto ?? {}), [c.id]: this.monthsPassed }; this.alert(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 들어오려 했지만 이사회 거부권으로 막았습니다(다음 거부권은 ${config.majorCheck.vetoMonths}개월 뒤).`); return; }
         c.routes.push({ a: r.a, b: r.b, seatsDay: B737.seats * legsDay(distanceKm(cityById(r.a), cityById(r.b))), fareRatio: style });
         s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}이(가) ${cityById(r.a).name} ⇄ ${cityById(r.b).name} 노선에 진출했습니다. 내 노선과 겹칩니다.`);
         return;
