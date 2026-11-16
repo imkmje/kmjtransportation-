@@ -11,8 +11,8 @@ import { createMapView } from './mapview';
 import { icon } from './icons';
 import { musicOn, play, renderPeaks, setMusic, setSound, setVolumes, soundOn, volumes, type Sfx } from './sound';
 import { bestWorst, logKind, newspaper, routeMonthStats, type LogKind } from '../sim/report';
-import { backupInfo, deleteSlot, exportText, loadBackup, loadSlot, parseImport, saveBackup, saveSlot, slotInfos } from './saves';
-import { LOCKED_BASES, UNLOCK_NEED, addAch, baseUnlocked, lifetime, startBonus, titleOf } from './profile';
+import { backupInfo, deleteSlot, exportText, loadBackup, loadSlot, parseImport, saveBackup, saveSlot, slotInfos, exportAll, importAll } from './saves';
+import { LOCKED_BASES, UNLOCK_NEED, addAch, baseUnlocked, bumpStats, lifetime, startBonus, stats as lifeStats, titleOf } from './profile';
 import { esc, eulReul, fare, km, money, num, pct } from './fmt';
 
 type Tab = 'map' | 'routes' | 'fleet' | 'rivals' | 'money' | 'news';
@@ -159,6 +159,7 @@ export function startApp(): void {
     showInfo('저장 관리', `<h4>저장 칸</h4>${infos.map((i) => `<div class="slot"><div><b>칸 ${i.slot}</b><br><small>${i.empty ? '비어 있음' : `${esc(i.when ?? '')} · ${esc(i.summary ?? '')}`}</small></div><div class="btns2"><button data-act="slotSave" data-i="${i.slot}">저장</button>${i.empty ? '' : `<button class="ghost" data-act="slotLoad" data-i="${i.slot}">불러오기</button><button class="ghost" data-act="slotDel" data-i="${i.slot}">삭제</button>`}</div></div>`).join('')}
       ${(() => { const b = backupInfo(); return `<h4>연말 자동 백업</h4>${b ? `<div class="slot"><div><b>자동 백업</b><br><small>${esc(b.when)} · ${esc(b.summary)}</small></div><div><button class="ghost" data-act="backupLoad">불러오기</button></div></div>` : '<p class="empty">해마다 연말에 저장 칸과 따로 한 번 더 저장합니다. 아직 백업이 없습니다.</p>'}<p class="hint">저장 칸을 잘못 덮어썼을 때를 위한 것입니다. 브라우저 저장소가 통째로 지워지면 백업도 사라지니, 오래 보관하려면 파일로 내보내세요.</p>`; })()}<h4>파일로 보관</h4><p class="hint">브라우저 저장소는 사파리에서 일주일 넘게 안 쓰면 지워질 수 있습니다. 파일로 내보내 두면 안전합니다. 평생 업적(칭호·시작 보너스)도 함께 담깁니다.</p>
       <div class="btns row2"><button data-act="exportFile">파일로 내보내기</button><button class="ghost" data-act="importFile">파일에서 가져오기</button></div><div class="btns row2" style="margin-top:8px"><button class="ghost" data-act="copyExport">내용 복사</button></div>
+      <h4>다른 기기에서 이어 하기</h4><div class="btns row2"><button data-act="exportAll">이 기기 기록 전부 내보내기</button><button class="ghost" data-act="importAll">다른 기기 기록 가져오기</button></div><p class="hint">위의 '파일로 내보내기'는 지금 게임 하나만, 이것은 저장 칸·백업·업적·통계·설정까지 전부 옮깁니다.</p>
       <h4>홈 화면에 추가</h4><p class="hint">아이패드: 사파리의 공유 버튼 → "홈 화면에 추가". 앱처럼 열리고, 저장도 훨씬 오래 보존됩니다(애플이 홈 화면 앱은 일주일 삭제 규칙에서 제외한다고 밝혔습니다).</p>`);
   }
   /** D1 회사 역사 한 장: 연도별 이익 막대·주요 사건·최종 성적을 그림(PNG)으로 내려받는다 */
@@ -204,6 +205,8 @@ export function startApp(): void {
     else if (act === 'exportFile') { download(`the-air-${new Date().toISOString().slice(0, 10)}.json`, exportText(game, lifetime())); toast('파일로 내보냈습니다'); }
     else if (act === 'copyExport') { const t = exportText(game, lifetime()); navigator.clipboard?.writeText(t).then(() => toast('내용을 복사했습니다'), () => toast('복사하지 못했습니다. 파일로 내보내기를 써 주세요')); }
     else if (act === 'importFile') $<HTMLInputElement>('#import-file').click();
+    else if (act === 'exportAll') doExportAll();
+    else if (act === 'importAll') $<HTMLInputElement>('#import-all').click();
   }
   $<HTMLInputElement>('#import-file').addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (!f) return;
@@ -980,7 +983,7 @@ export function startApp(): void {
   }
   function renderRecords() {
     const all = records();
-    $('#records').innerHTML = SCENARIOS.map((sc) => { const b = all[sc.id]?.[0]; return b ? `<div>${esc(sc.name)} 최고 <b>${num(b.score)}점</b> (${DIFF_NAME[b.diff]}, ${esc(cityById(b.base).name)}, ${b.when})</div>` : ''; }).join('') || '<div>아직 기록이 없습니다.</div>';
+    $('#records').innerHTML = '<h4>시나리오 최고 기록</h4>' + SCENARIOS.map((sc) => { const b = all[sc.id]?.[0]; return b ? `<div>${esc(sc.name)} 최고 <b>${num(b.score)}점</b> (${DIFF_NAME[b.diff]}, ${esc(cityById(b.base).name)}, ${b.when})</div>` : ''; }).join('') || '<div>아직 기록이 없습니다.</div>';
   }
   function renderEnd() {
     const el = $('#end'), s = game.state;
@@ -990,7 +993,7 @@ export function startApp(): void {
     if (!recorded) play(s.status === 'bankrupt' ? 'lose' : 'win');
     const title = s.status === 'won' ? '목표를 달성했습니다!' : s.status === 'bankrupt' ? '파산했습니다' : '제한 기간이 끝났습니다';
     $('#end-title').innerHTML = `<span style="-webkit-text-fill-color:${s.status === 'won' ? '#e8a13a' : '#8a96a3'};color:${s.status === 'won' ? '#e8a13a' : '#8a96a3'}">${icon(s.status === 'won' ? 'trophy' : s.status === 'bankrupt' ? 'alert' : 'calendar', 30)}</span>${title}`; // 제목 문자열은 고정 문구라 안전
-    if (!recorded) { recorded = true; if (!s.sandbox) saveRecord(); }
+    if (!recorded) { recorded = true; if (!s.sandbox) saveRecord(); bumpStats((x) => { if (s.status === 'bankrupt') x.bankrupt++; else if (s.status === 'won') x.won++; }); }
     const best = s.sandbox ? undefined : records()[s.scenario ?? 'free']?.[0];
     $('#end-body').textContent = `${s.sandbox ? '자유 모드' : game.scenario.name} · ${DIFF_NAME[s.difficulty ?? 'normal']} · ${game.monthsPassed}개월 · 누적 이익 ${money(s.cumProfit)} · 현금 ${money(s.cash)} · 항공기 ${s.planes.length}대 · 점수 ${num(game.score)}${best ? ` (이 시나리오 최고 ${num(best.score)})` : ''}`;
   }
@@ -1258,7 +1261,7 @@ export function startApp(): void {
   $('#end-new').addEventListener('click', () => openSetup());
   $('#end-continue').addEventListener('click', () => { const r = game.continuePlay(); if (r.ok) { lastHtml = ''; render(); toast('자유 모드로 계속합니다'); } });
 
-  function newGame(opts: GameOptions = {}) { recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); if (opts.sandbox) game.state.cash += startBonus(); /* 평생 업적 보너스(자유 모드만) */ seenLog = 0; seenEvents = new Set(); achSeen = new Set(); msSeen = new Set(reachedSteps(game)); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; setDrawer('min'); map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.state.sandbox ? '자유 모드' : game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
+  function newGame(opts: GameOptions = {}) { bumpStats((x) => { x.games++; }); recorded = false; prevComp = ''; $('#report').hidden = true; game = new Game((Date.now() & 0x7fffffff) || 1, undefined, opts); if (opts.sandbox) game.state.cash += startBonus(); /* 평생 업적 보너스(자유 모드만) */ seenLog = 0; seenEvents = new Set(); achSeen = new Set(); msSeen = new Set(reachedSteps(game)); selCity = selRoute = null; speed = 0; lastMonth = 0; tab = 'map'; syncMap(); lastHtml = ''; $('#title').hidden = true; $('#setup').hidden = true; setDrawer('min'); map.focusCity(game.state.base); prevLog = game.state.log.length; render(); toast(`${game.state.sandbox ? '자유 모드' : game.scenario.name} 시작! 지도에서 ${eulReul(cityById(game.state.base).name)} 눌러 보세요.`); }
 
   // ---- 새 게임 설정(시나리오·시작 도시·난이도) ----
   let setupScen = 'sandbox', setupDiff: Difficulty = 'normal', setupBase = 'ICN', setupRights = true; const setupCh = new Set<string>(), setupOff = new Set<string>(); // 기본은 목표 없는 자유 모드
@@ -1295,8 +1298,24 @@ export function startApp(): void {
     $('#t-title').textContent = `칭호: ${titleOf()} · 평생 업적 ${lifetime().length}/${ACHIEVEMENTS.length}`;
     $('#t-continue').hidden = !hasSave();
     try { const raw = localStorage.getItem(SAVE_KEY), sv = raw ? JSON.parse(raw) : null; $('#t-last').textContent = sv ? `이어하기: ${sv.sandbox ? '자유 모드' : '시나리오'} · ${Math.floor((sv.day ?? 0) / 360) + 1}년차 · 현금 ${money(sv.cash ?? 0)} · 항공기 ${(sv.planes ?? []).length}대 · ${cityById(sv.base ?? 'ICN').name} 출발` : ''; } catch { $('#t-last').textContent = ''; } // 지난 판 한 줄 요약
-    renderRecords();
+    renderRecords(); renderProfile();
   }
+  /** 시작 화면: 평생 통계, 업적, 기기 옮기기 */
+  function renderProfile() {
+    const st = lifeStats(), got = new Set(lifetime()), n = ACHIEVEMENTS.length, yrs = (m: number) => (m >= 12 ? `${Math.floor(m / 12)}년${m % 12 ? ` ${m % 12}개월` : ''}` : `${m}개월`);
+    const tiles: [string, string][] = [['플레이한 판', `${num(st.games)}판`], ['운영한 기간(합계)', yrs(st.months)], ['가장 오래 운영', yrs(st.bestMonths)], ['최고 연매출', money(st.bestRev)], ['최대 기단', `${num(st.bestPlanes)}대`], ['최다 노선', `${num(st.bestRoutes)}개`], ['목표 달성', `${st.won}번`], ['파산', `${st.bankrupt}번`], ['평생 업적', `${got.size}/${n}`]];
+    $('#t-prof').innerHTML = `<h4>나의 기록</h4><div class="tstats">${tiles.map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div>
+      <details><summary>업적 ${got.size}/${n} 보기</summary><div class="achbar"><i style="width:${(got.size / Math.max(1, n)) * 100}%"></i></div><div class="achgrid">${[...ACHIEVEMENTS].sort((a, b) => Number(got.has(b.id)) - Number(got.has(a.id))).map((a) => `<div class="${got.has(a.id) ? '' : 'no'}" title="${esc(a.desc)}"><b>${got.has(a.id) ? '✓ ' : ''}${esc(a.name)}</b>${esc(a.desc)}</div>`).join('')}</div></details>
+      <h4>다른 기기에서 이어 하기</h4><div class="btns row2"><button class="ghost" data-tact="exportAll">이 기기 기록 전부 내보내기</button><button class="ghost" data-tact="importAll">다른 기기 기록 가져오기</button></div><p class="hint">이어하기·저장 칸·연말 백업·업적·통계·기록·설정을 파일 하나로 옮깁니다. A 기기에서 내보낸 파일을 아이클라우드 드라이브·에어드롭·카톡 '나에게 보내기' 등으로 B 기기에 옮긴 뒤 '가져오기'에서 고르세요. 업적·통계·시나리오 기록은 두 기기 것을 합치고, 게임 저장은 파일 것으로 바뀝니다.</p>`;
+  }
+  $('#t-prof').addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tact]'); if (!b) return; if (b.dataset.tact === 'exportAll') doExportAll(); else $<HTMLInputElement>('#import-all').click(); });
+  function doExportAll() { download(`the-air-all-${new Date().toISOString().slice(0, 10)}.json`, exportAll()); toast('이 기기의 기록 전부를 파일로 내보냈습니다'); }
+  $<HTMLInputElement>('#import-all').addEventListener('change', async (e) => {
+    const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (!f) return;
+    if (!await ask('다른 기기의 기록을 가져올까요?\n업적·통계·시나리오 기록은 합치고, 이어하기·저장 칸·설정은 파일 것으로 바뀝니다. 가져온 뒤 화면을 다시 엽니다.')) return;
+    const r = importAll(await f.text()); if (!r.ok) return err(r.error);
+    toast(`기록 ${r.n}개를 가져왔습니다. 다시 엽니다…`); window.setTimeout(() => location.reload(), 600);
+  });
   $('#t-new').addEventListener('click', () => openSetup());
   $('#t-continue').addEventListener('click', () => { if (load()) { $('#title').hidden = true; selCity = selRoute = null; syncMap(); lastHtml = ''; render(); } });
 
@@ -1310,7 +1329,7 @@ export function startApp(): void {
       let n = 0;
       while (acc >= SECONDS_PER_DAY && n < 8) { acc -= SECONDS_PER_DAY; game.advanceDay(); n++; const ar = game.applyRules(); if (ar.length) toast(ar[ar.length - 1], 3000); }
       if (n) {
-        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; window.setTimeout(save, 0); showReport(); /* 저장은 다음 틈에(월말 처리와 한 프레임에 몰리지 않게) */ play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
+        if (game.monthsPassed !== lastMonth) { lastMonth = game.monthsPassed; window.setTimeout(save, 0); showReport(); { const s = game.state, rev = s.history.slice(-12).reduce((a, h) => a + h.revenue, 0), nr = s.routes.filter((r) => r.open).length; bumpStats((x) => { x.months++; x.bestMonths = Math.max(x.bestMonths, game.monthsPassed); x.bestRev = Math.max(x.bestRev, Math.round(rev * 10) / 10); x.bestPlanes = Math.max(x.bestPlanes, s.planes.length); x.bestRoutes = Math.max(x.bestRoutes, nr); }); } /* 저장은 다음 틈에(월말 처리와 한 프레임에 몰리지 않게) */ play('coin'); addAch(achieved(game)); for (const a of ACHIEVEMENTS) if (!achSeen.has(a.id) && a.test(game)) { achSeen.add(a.id); toast(`업적 달성: ${a.name}`, 3500); play('achieve'); }
           if (game.state.sandbox) for (const l of LADDERS) for (const st of l.steps) { const key = `${l.id}:${st}`; if (!msSeen.has(key) && l.value(game) >= st) { msSeen.add(key); toast(`이정표 달성: ${l.name} ${l.unit === 'M' ? money(st) : `${num(st)}${l.unit}`}`, 3500); play('achieve'); } } const h = game.state.history[game.state.history.length - 1]; if (h && h.month % 12 === 0) saveBackup(game); if (h && h.month % 12 === 0 && $('#info').hidden) { paperResume = speed; speed = 0; renderTop(); showPaper(h.month / 12); } else if (h) toast(`${h.month}개월차 정산: 이익 ${money(h.profit)}`, 2600); } // 해가 바뀌면 연말 신문을 띄우고 잠깐 멈춘다(닫으면 원래 배속으로)(화면을 가리지 않게)
         const lg = game.state.log;
         if (lg.length > prevLog) { // 새 알림: 눈에 띄게 알리고(알림 띠·탭 표시), 설정에 따라 시간을 멈춘다

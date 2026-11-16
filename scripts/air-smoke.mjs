@@ -27,6 +27,7 @@ const shot = (n) => !process.argv[2] ? Promise.resolve() : page.screenshot({ pat
 await page.goto('http://localhost:4190/air/');
 await page.waitForSelector('canvas');
 check('시작 화면: 제목과 새 게임 버튼', (await page.locator('#title').isVisible()) && (await page.locator('#title').innerText()).includes('The Air'));
+check('시작 화면: 나의 기록(플레이한 판·평생 업적)과 기기 옮기기', (await page.locator('#t-prof').innerText()).includes('플레이한 판') && (await page.locator('#t-prof button[data-tact="exportAll"]').count()) === 1);
 check('제목 화면: 버전 표시(vN.N.N)', /^v\d+\.\d+\.\d+$/.test(await page.locator('#t-version').innerText()), await page.locator('#t-version').innerText());
 await shot('title');
 await page.click('#t-new');
@@ -355,6 +356,9 @@ await page.click('#menubtn'); await page.click('#menu button[data-m="saves"]');
 const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#info-body button[data-act="exportFile"]').click()]);
 const exported = JSON.parse(readFileSync(await dl.path(), 'utf8'));
 check('파일 내보내기: 게임 저장과 평생 업적이 들어 있음', exported['the-air-export'] === 1 && exported.game.day === dayBefore && Array.isArray(exported.profile.ach), String(dl.suggestedFilename()));
+{ const [dl2] = await Promise.all([page.waitForEvent('download'), page.locator('#info-body button[data-act="exportAll"]').click()]);
+  const all = JSON.parse(readFileSync(await dl2.path(), 'utf8'));
+  check('기기 옮기기 파일: 이어하기·평생 기록 등 the-air 기록 전부', all['the-air-all'] === 1 && typeof all.data['the-air-save'] === 'string' && Object.keys(all.data).every((k) => k.startsWith('the-air')), Object.keys(all.data).join(',')); }
 await page.evaluate(() => window.__air.game.advanceDays(60));
 await page.setInputFiles('#import-file', await dl.path());
 await page.waitForFunction((d) => window.__air.game.state.day === d, dayBefore, { timeout: 5000 });

@@ -6,15 +6,21 @@ export const LOCKED_BASES = ['JNB', 'LOS', 'NBO', 'ADD', 'GRU', 'MEX', 'EZE', 'S
 export const UNLOCK_NEED = 6;
 export const TITLES: [number, string][] = [[0, '신입 사장'], [3, '지역 항공사 사장'], [6, '노선 개척자'], [10, '중견 항공사 회장'], [14, '항공 그룹 총수'], [18, '하늘의 제왕']];
 
+type Raw = { ach?: unknown; stats?: Partial<Stats> };
+const read = (): Raw => { try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+const write = (v: Raw) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* 저장 불가 */ } };
 /** 지금까지 달성한 업적 ID(모든 판을 합친 것) */
-export function lifetime(): string[] {
-  try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return Array.isArray(v.ach) ? v.ach.filter((x: unknown) => typeof x === 'string') : []; } catch { return []; }
-}
+export function lifetime(): string[] { const v = read().ach; return Array.isArray(v) ? v.filter((x: unknown): x is string => typeof x === 'string') : []; }
+/** 평생 플레이 통계(모든 판): 시작한 판, 운영한 개월, 파산·목표 달성, 최장 운영 개월, 최고 연매출($M), 최대 기단·노선 */
+export interface Stats { games: number; months: number; bankrupt: number; won: number; bestMonths: number; bestRev: number; bestPlanes: number; bestRoutes: number }
+export const STAT_KEYS: (keyof Stats)[] = ['games', 'months', 'bankrupt', 'won', 'bestMonths', 'bestRev', 'bestPlanes', 'bestRoutes'];
+export function stats(): Stats { const s = read().stats ?? {}; return Object.fromEntries(STAT_KEYS.map((k) => [k, Number(s[k]) || 0])) as unknown as Stats; }
+export function bumpStats(f: (s: Stats) => void): void { const s = stats(); f(s); write({ ...read(), stats: s }); }
 /** 새로 달성한 업적을 기록하고, 새로 늘어난 개수를 돌려준다 */
 export function addAch(ids: string[]): number {
   const cur = new Set(lifetime()); let n = 0;
   for (const id of ids) if (!cur.has(id)) { cur.add(id); n++; }
-  if (n) { try { localStorage.setItem(KEY, JSON.stringify({ ach: [...cur] })); } catch { /* 저장 불가 */ } }
+  if (n) write({ ...read(), ach: [...cur] }); // 통계는 그대로 둔다
   return n;
 }
 /** 자유 모드 시작 자금 보너스($M): 평생 업적 3개마다 $1M, 최대 $6M */
