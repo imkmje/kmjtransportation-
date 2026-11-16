@@ -1007,7 +1007,7 @@ export function startApp(): void {
   }
   function renderRecords() {
     const all = records();
-    $('#records').innerHTML = '<h4>시나리오 최고 기록</h4>' + SCENARIOS.map((sc) => { const b = all[sc.id]?.[0]; return b ? `<div>${esc(sc.name)} 최고 <b>${num(b.score)}점</b> (${DIFF_NAME[b.diff]}, ${esc(cityById(b.base).name)}, ${b.when})</div>` : ''; }).join('') || '<div>아직 기록이 없습니다.</div>';
+    $('#records').innerHTML = '<h4>시나리오 최고 기록</h4>' + (SCENARIOS.map((sc) => { const b = all[sc.id]?.[0]; return b ? `<div>${esc(sc.name)} 최고 <b>${num(b.score)}점</b> (${DIFF_NAME[b.diff]}, ${esc(cityById(b.base).name)}, ${b.when})</div>` : ''; }).join('') || '<div class="hint">아직 시나리오 기록이 없습니다.</div>');
   }
   function renderEnd() {
     const el = $('#end'), s = game.state;
@@ -1324,7 +1324,7 @@ export function startApp(): void {
     speed = 0; $('#title').hidden = false;
     $('#t-version').textContent = `v${AIR_VERSION}`;
     $('#t-title').textContent = `칭호: ${titleOf()} · 평생 업적 ${lifetime().length}/${ACHIEVEMENTS.length}`;
-    $('#t-continue').hidden = !hasSave();
+    const sv0 = hasSave(); $('#t-contbox').hidden = !sv0; $('#t-new').classList.toggle('alt', sv0); // 저장이 있으면 이어하기가 앞, 새 게임은 보조
     try { const raw = localStorage.getItem(SAVE_KEY), sv = raw ? JSON.parse(raw) : null; $('#t-last').textContent = sv ? `이어하기: ${sv.sandbox ? '자유 모드' : '시나리오'} · ${Math.floor((sv.day ?? 0) / 360) + 1}년차 · 현금 ${money(sv.cash ?? 0)} · 항공기 ${(sv.planes ?? []).length}대 · ${cityById(sv.base ?? 'ICN').name} 출발` : ''; } catch { $('#t-last').textContent = ''; } // 지난 판 한 줄 요약
     renderRecords(); renderProfile();
   }
