@@ -1,1 +1,1 @@
-export const AIR_VERSION = '2.30.0';
+export const AIR_VERSION = '2.31.0';

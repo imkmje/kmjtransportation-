@@ -88,7 +88,7 @@ export const config = {
       levels: [12, 36, 72, 120], lvCodeshare: 0.05, lvWeight: 0.05, // 동맹 경험치(매달 회원 수만큼): 12·36·72·120이면 2~5등급. 등급마다 환승 +0.05, 동맹사가 빼앗는 힘 −0.05, 3·5등급에 회원 한도 +1
       projects: { mkt: { name: '공동 마케팅', desc: '12개월간 동맹사가 다니는 도시의 내 노선 수요 +4%', cost: 15, rev: 0.2, months: 12, boost: 0.04 }, lounge: { name: '공동 라운지', desc: '모든 내 노선 별점 +0.3(영구)', cost: 25, rev: 0.4, rating: 0.3 }, terminal: { name: '공동 터미널', desc: '본사 공항 슬롯 +6(영구)', cost: 40, rev: 0.3, slots: 6 } } as Record<string, { name: string; desc: string; cost: number; rev: number; months?: number; boost?: number; rating?: number; slots?: number }>, // 비용 = max(기본, 최근 월평균 매출 × rev)
       poach: { chance: 0.06, months: 2 }, recruit: { base: 0.3, perLv: 0.1, fee: 10, ratio: 0.15 }, // 스카이 동맹의 영입 시도(월 6%), 내가 스카이 회원을 데려오기: $10M + 인수가의 15%, 성공 30% + 등급마다 10%
-      meetMonth: 6, meetMonths: 2, agendaMonths: 12, agendas: { fare: { name: '공동 운임', desc: '12개월간 동맹사와 겹치는 내 노선 수요 +5%' }, buy: { name: '공동 구매', desc: '12개월간 새 항공기 값 −5%' }, expand: { name: '회원 확대', desc: '12개월간 회원 한도 +1, 가입비 면제' } } as Record<string, { name: string; desc: string }> }, // 해마다 7월 동맹 회의(2개월 안에 안건 선택)
+      meetMonth: 6, meetMonths: 2, agendaMonths: 12, agendas: { fare: { name: '공동 운임', desc: '12개월간 동맹사와 겹치는 내 노선 수요 +5%' }, defend: { name: '대형 항공사 공동 대응', desc: '12개월간 대형 항공사의 운임 전쟁이 막히고, 내 노선 진출·경매 가로채기가 절반이 되며, 우리·동맹과 겹치는 대형 항공사 노선 매출이 15% 줄어든다' }, buy: { name: '공동 구매', desc: '12개월간 새 항공기 값 −5%' }, expand: { name: '회원 확대', desc: '12개월간 회원 한도 +1, 가입비 면제' } } as Record<string, { name: string; desc: string }> }, // 해마다 7월 동맹 회의(2개월 안에 안건 선택)
     bid: { months: 2, step: 2, concessionChance: 0.08, concessionMin: 10, concessionMonths: 60, concessionSlots: 3, concessionFee: 0.7, airportChance: 0.04, airportPublic: 3, airportLot: 5, startMonth: 12 }, // 입찰: 공항 운영권·신공항 슬롯
     rating: { weight: 0.04 }, // 별점 1점당 수요 ±4%
     award: { rep: 0.02 }, // 연말 시상식 수상 1개당 평판
@@ -146,7 +146,8 @@ export const config = {
     startPlane: { AF: 'A321N', OC: 'A330N' } as Record<string, string>,
   },
   majorCheck: { // 대형 항공사 견제(자유 모드)
-    step: 0.05, max: 0.1, value: 1.2, sell: 0.9, margin: 0.08, damp: 0.35, // 지분 5%씩 최대 10%. 회사 가치 = 최근 12개월 매출 × 1.2, 팔면 90%. 배당 = 지난달 매출 × 8% × 지분. 지분 5%마다 내 노선 진출·운임 전쟁 확률 35%p 줄임
+    step: 0.05, max: 0.3, value: 1.2, sell: 0.9, margin: 0.08, damp: 0.35, dampCap: 0.7, stepUp: 0.25, board: 0.2, vetoMonths: 12, // 지분 30%까지(5%마다 값 25%씩 비싸짐), 확률 감소는 최대 70%, 20% 이상이면 이사회 의석: 12개월에 한 번 내 노선 진출을 거부권으로 막는다
+    hubFee: 0.12, alliCut: 0.15, suitCut: 0.05, // 매출 손실: 내가 운영권을 가진 공항을 지나는 노선 매출의 12%(착륙료, 그만큼 내 수입), 동맹 공동 대응 중 우리·동맹과 겹치는 노선 15%, 반독점 제재 중 5% // 지분 5%씩 최대 10%. 회사 가치 = 최근 12개월 매출 × 1.2, 팔면 90%. 배당 = 지난달 매출 × 8% × 지분. 지분 5%마다 내 노선 진출·운임 전쟁 확률 35%p 줄임
     suitCost: 0.04, suitMin: 20, freeze: 12, cooldown: 36, // 반독점 제소: 최근 12개월 매출의 4%(최소 $20M), 12개월간 확장·진출·운임 전쟁·경매 입찰 중단, 같은 회사는 36개월 뒤에 다시 // 자유 모드 시작 기체(지역별, 없으면 시나리오 기본): 아프리카는 근거리 수요가 작아 중동·유럽까지 가는 기체, 오세아니아는 아시아까지 가는 광동체
   },
   slb: { ratio: 0.95, rent: 0.035, buyback: 1.05 }, // 세일 앤 리스백: 장부가의 95%를 받고 판 뒤 판 값의 월 3.5%를 임대료로 낸다. 되살 때는 판 값의 105% 이상
