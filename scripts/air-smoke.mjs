@@ -678,6 +678,8 @@ await page.evaluate(() => { const g = window.__air.game, o = g.openRoute('ICN', 
   await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button.trow[data-act="goRoute"][data-id="${rid}"]`).click();
   await page.locator('#panel button[data-act="handRoute"]').first().evaluate((el) => el.click());
   check('노선 상세: 자회사에 넘기기', await page.evaluate((id) => !window.__air.game.route(id).open && window.__air.game.state.competitors.some((c) => c.stake >= 0.51 && c.routes.some((r) => (r.a === 'ICN' && r.b === 'TPE') || (r.a === 'TPE' && r.b === 'ICN'))), rid)); }
+  await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="routesHome"]').click().catch(() => undefined);
+  check('노선 탭: 자회사에 넘긴 노선 목록(넘김 딱지·가져오기)', (await page.locator('#panel').innerText()).includes('자회사에 넘긴 노선') && (await page.locator('#panel button[data-act="takeRoute"]').count()) >= 1);
 await page.click('#tabs button[data-tab="group"]'); await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
 check('자회사·그룹: 그룹 시너지(구매 할인·고정비 할인·관리비)', (await page.locator('#panel').innerText()).includes('그룹 시너지') && (await page.locator('#panel').innerText()).includes('그룹 관리비'));
 await page.click('#tabs button[data-tab="rivals"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="rivalSub"][data-v="comp"]')?.click()); // 다음 점검을 위해 경쟁사 목록으로
