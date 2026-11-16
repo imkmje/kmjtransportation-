@@ -56,3 +56,35 @@ describe('허브 환승', () => {
     expect(viaIcn).toBeGreaterThan(0); expect(viaNrt).toBe(0); expect(all).toBeCloseTo(viaIcn + viaNrt, 6);
   });
 });
+
+describe('대형 항공사 노선 확장', () => {
+  it('거점 여러 곳에서 장거리 노선을 열어 노선이 11개 언저리에서 멈추지 않는다', () => {
+    const g = new Game(5, undefined, { sandbox: true }); g.state.cash = 9000; for (let i = 0; i < 60; i++) g.buyPlane('B737'); // 사진 속 판처럼 내 기단이 크면 대형 항공사도 크게(항공기 최대 45대)
+    g.advanceDays(30 * 120); // 10년
+    const majors = g.state.competitors.filter((c) => c.major); expect(majors.length).toBeGreaterThanOrEqual(1);
+    const gs = majors.find((c) => c.name === config.competitors.major.name)!;
+    expect(gs.routes.length).toBeGreaterThan(11);
+    expect(new Set(gs.routes.map((r) => r.a)).size).toBeGreaterThan(1); // 허브 한 곳에서만 나가지 않는다
+  });
+});
+
+describe('대형 항공사 견제', () => {
+  const setup = () => { const g = new Game(5, undefined, { sandbox: true }); g.state.cash = 2000; g.state.competitors.push({ id: 77, name: '시험 대형', style: 'premium', hub: 'DXB', cash: 50, planes: 20, routes: [{ a: 'DXB', b: 'LHR', seatsDay: 900, fareRatio: 1.15, war: 2 }], major: true, revHist: Array(12).fill(50) }); return g; };
+  it('지분은 5%씩 10%까지, 배당이 들어오고 진출·운임 전쟁 확률이 줄며, 팔면 돈이 돌아온다', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!;
+    expect(g.majorDamp(k)).toBe(1); const p = g.majorStakePrice(k), c0 = g.state.cash;
+    expect(g.buyMajorStake(77).ok).toBe(true); expect(g.state.cash).toBeCloseTo(c0 - p, 6); expect(g.majorDamp(k)).toBeCloseTo(0.65, 6);
+    expect(g.buyMajorStake(77).ok).toBe(true); expect(g.buyMajorStake(77).ok).toBe(false); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6);
+    const r0 = g.state.cur.revenue; (g as unknown as { majorDividends(): void }).majorDividends(); expect(g.state.cur.revenue - r0).toBeCloseTo(50 * 0.08 * 0.1, 6);
+    const c1 = g.state.cash; expect(g.sellMajorStake(77).ok).toBe(true); expect(g.state.cash).toBeGreaterThan(c1); expect(g.majorDamp(k)).toBe(1);
+    expect(g.buyMajorStake(1).ok).toBe(false); // 대형이 아니면 안 됨
+    expect(new Game(5).buyMajorStake(77).ok).toBe(false); // 시나리오는 안 됨
+  });
+  it('반독점 제소: 12개월간 멈추고(운임 전쟁도 끝), 36개월 동안 다시 못 한다', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!;
+    expect(g.antitrust(77).ok).toBe(true); expect(g.majorFrozen(k)).toBe(true); expect(g.majorDamp(k)).toBe(0); expect(k.routes[0].war).toBe(0);
+    expect(g.antitrust(77).ok).toBe(false);
+    const n0 = k.planes; g.advanceDays(30 * 6); expect(k.planes).toBe(n0); // 제재 중에는 크지 않는다
+    g.advanceDays(30 * 7); expect(g.majorFrozen(k)).toBe(false); expect(g.antitrust(77).ok).toBe(false); // 아직 36개월 안
+  });
+});

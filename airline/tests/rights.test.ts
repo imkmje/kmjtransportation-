@@ -75,4 +75,9 @@ describe('지역 운수권', () => {
     const old = gated('SGN'); old.state.rights = ['SEA']; const re = new Game(1, JSON.parse(JSON.stringify(old.state))); // 옛 저장: 동남아만 있던 게임
     expect(re.state.rights).toEqual(['SEA', 'EA']); expect(re.rightsNeed).toBe(config.rights.need[0]);
   });
+  it('자유 모드 시작 기체는 출발 지역에 맞춘다(아프리카 A321N, 오세아니아 A330N, 그 밖은 기본)', () => {
+    const t = (base: string) => new Game(3, undefined, { sandbox: true, rights: true, base }).state.planes[0].type;
+    expect(t('JNB')).toBe('A321N'); expect(t('SYD')).toBe('A330N'); expect(t('ICN')).toBe('B737'); expect(t('SIN')).toBe('B737');
+    expect(new Game(3, undefined, { scenario: 'europe' }).state.planes[0].type).not.toBe('A330N'); // 시나리오는 그대로
+  });
 });

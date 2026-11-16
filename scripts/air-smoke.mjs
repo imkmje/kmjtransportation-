@@ -668,6 +668,16 @@ await subMap('now');
   const y1 = await page.evaluate(() => document.querySelector('#panel .pside').scrollTop);
   check('노선 상세: 시간이 흘러 다시 그려도 스크롤 위치 유지', y0 > 100 && Math.abs(y1 - y0) < 5, `${y0} -> ${y1}`); }
 await page.evaluate(() => { window.__air.setSpeed(0); document.getElementById('info').hidden = true; }); // 그사이 해가 바뀌어 연말 신문이 떠 있을 수 있다
+// 2.30.0: 매출 순위 딱지, 대형 항공사 견제(지분·반독점 제소)
+await page.evaluate(() => { const g = window.__air.game; window.__air.setSpeed(0); g.state.cash = 5000; if (!g.state.competitors.some((c) => c.major)) g.state.competitors.push({ id: 777, name: '시험 대형', style: 'premium', hub: 'DXB', cash: 50, planes: 20, routes: [{ a: 'DXB', b: 'LHR', seatsDay: 900, fareRatio: 1.15 }], major: true, revHist: Array(12).fill(50) }); window.__air.render(); });
+await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalsHome"]').click().catch(() => undefined);
+check('매출 순위에 자회사·대형 등 딱지', await page.evaluate(() => { const h = [...document.querySelectorAll('#panel h3')].find((x) => x.textContent.includes('매출 순위')); const list = h?.nextElementSibling; return !!list && /자회사|지분/.test(list.textContent) && list.textContent.includes('대형'); }));
+{ const mid = await page.evaluate(() => window.__air.game.state.competitors.find((c) => c.major).id);
+  await page.locator(`#panel button[data-act="selComp"][data-id="${mid}"]`).click();
+  check('대형 항공사 카드: 견제(지분·반독점 제소) 칸', (await page.locator('#panel').innerText()).includes('대형 항공사 견제') && (await page.locator('#panel button[data-act="antitrust"]').count()) === 1);
+  await page.locator('#panel button[data-act="majorStake"]').evaluate((el) => el.click());
+  check('대형 항공사 지분 5% 사기', await page.evaluate((id) => (window.__air.game.state.majorHold?.[id] ?? 0) === 0.05, mid)); }
+
 // 2.20.0: 연말 백업·기능 끄기
 await page.click('#dsize button[data-h="min"]').catch(() => undefined); // '크게'일 때는 시간이 멈춘다
 await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed % 12 !== 11) g.advanceDays(30); while ((g.state.day + 1) % 30 !== 0) g.advanceDays(1); window.__air.setSpeed(4); }); // 연말 하루 전까지 넘기고 마지막 하루만 흘린다
