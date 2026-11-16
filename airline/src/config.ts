@@ -132,6 +132,9 @@ export const config = {
     failRep: 0.03, // 자회사가 파산하면 평판 하락
     codeshare: 0.5, // 51% 자회사 노선과 내 노선이 이어지면 환승 손님(내 노선끼리의 절반)
     lendRate: 0.8, // 내 항공기를 자회사에 빌려주면 받는 월 임대료 = 새 기체 값 × 임대율 × 0.8
+    synergy: { per: 50, buyCut: 0.02, buyMax: 0.1, fixCut: 0.02, fixMax: 0.1, upkeep: 0.5, upkeepGrow: 0.2 }, // 그룹 시너지: 그룹 항공기 50대마다 항공기 값 −2%(최대 10%), 자회사 1곳마다 항공기 고정비 −2%(최대 10%). 그룹 관리비 = 자회사 수 × $0.5M × (1 + 0.2 × (자회사 수 − 1))
+    spinoff: { premium: 1.1, minSell: 0.1, lossRep: 0.003, gainRep: 0.001 }, // 자회사 일부 상장: 51%를 넘는 지분을 시장에 판다(지분 값 × 1.1). 상장 뒤 적자인 달은 평판 −0.3%p, 흑자인 달은 +0.1%p
+    handBack: 0.7, // 자회사 노선을 가져오면 그 좌석만큼 B7-37을 받는다(장부가 = 새 기체 값 × 0.7)
     dirs: { grow: { name: '확장', desc: '항공기를 빨리 늘립니다(배당 적음)' }, profit: { name: '수익', desc: '배당을 많이 줍니다(성장 느림)' }, attack: { name: '공세', desc: '다른 경쟁사 노선에 들어가 손님을 빼앗습니다' } } as Record<string, { name: string; desc: string }>,
   },
   acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
