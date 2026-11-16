@@ -135,4 +135,30 @@ describe('경쟁사 항공기 상한(자유 모드)', () => {
     for (let i = 0; i < 12; i++) { g.advanceDays(360); g.state.cash = 900; }
     expect(Math.max(...g.state.competitors.filter((c) => !c.major).map((c) => c.planes))).toBeGreaterThan(10);
   });
+  it('노선 넘겨주기: 내 노선·소유 항공기를 자회사로, 다시 가져오면 B7-37을 받아 배정된다', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0]; g.state.cash = 900;
+    const o = g.openRoute('ICN', 'PEK'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new'); g.buyForRoute(o.routeId, 'B737', 'new');
+    const n0 = g.state.planes.length, p0 = k.planes, r0 = k.routes.length;
+    expect(g.handRouteToSub(o.routeId, 90).ok).toBe(true);
+    expect(g.state.planes.length).toBe(n0 - 2); expect(k.planes).toBe(p0 + 2); expect(k.routes.length).toBe(r0 + 1); expect(g.route(o.routeId)!.open).toBe(false);
+    expect(g.handRouteToSub(o.routeId, 90).ok).toBe(false); // 이미 닫힘
+    const c0 = g.state.cash; const t = g.takeRouteFromSub(90, 'ICN', 'PEK'); expect(t.ok).toBe(true);
+    expect(g.route(o.routeId)!.open).toBe(true); expect(g.planesOn(o.routeId).length).toBeGreaterThanOrEqual(1); expect(g.state.cash).toBe(c0); // 넘겼다 가져오면 재개 비용 없음
+    expect(k.routes.some((r) => (r.a === 'ICN' && r.b === 'PEK') || (r.a === 'PEK' && r.b === 'ICN'))).toBe(false);
+    expect(g.takeRouteFromSub(90, 'ICN', 'CJU').ok).toBe(false); // 자회사가 운항하지 않는 노선
+  });
+  it('일부 상장: 51%를 넘는 지분을 팔아 돈을 받고 경영권은 유지, 한 번만, 51%뿐이면 안 된다', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0];
+    expect(g.spinOff(90).ok).toBe(false); // 51%뿐
+    k.stake = 1; const c0 = g.state.cash, r = g.spinOff(90); expect(r.ok).toBe(true); if (r.ok) { expect(r.sold).toBeCloseTo(0.49, 6); expect(g.state.cash).toBeCloseTo(c0 + r.cash, 6); }
+    expect(k.stake).toBe(0.51); expect(k.listed).toBe(g.monthsPassed); expect(g.spinOff(90).ok).toBe(false);
+  });
+  it('그룹 시너지: 자회사가 있으면 항공기 고정비 할인과 관리비, 그룹 항공기 50대마다 구매 할인', () => {
+    const g = sandbox(); expect(g.synergyFix).toBe(0); expect(g.groupUpkeep).toBe(0); expect(g.synergyBuy).toBe(0);
+    comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0];
+    expect(g.synergyFix).toBeCloseTo(config.subsidiary.synergy.fixCut, 6); expect(g.groupUpkeep).toBeCloseTo(config.subsidiary.synergy.upkeep, 6);
+    k.planes = 60; expect(g.synergyBuy).toBeCloseTo(config.subsidiary.synergy.buyCut, 6);
+    const price = g.state.cash; expect(g.buyPlane('B737').ok).toBe(true); expect(price - g.state.cash).toBeCloseTo(60 * 0.98, 1);
+    expect(new Game(3).synergyFix).toBe(0); // 시나리오는 없음
+  });
 });

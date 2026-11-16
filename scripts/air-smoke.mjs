@@ -657,6 +657,19 @@ await pickComp();
 const cashI = await page.evaluate(() => window.__air.game.state.cash);
 await page.locator('#panel button[data-act="injectSub"][data-v="10"]').evaluate((el) => el.click());
 check('자회사에 자본금 넣기(+$10M)', Math.abs((await page.evaluate(() => window.__air.game.state.cash)) - (cashI - 10)) < 0.01);
+// 2.32.0: 일부 상장, 노선 넘겨주기, 그룹 시너지
+await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors.find((x) => !x.major && x.stake >= 0.51); c.stake = 1; delete c.listed; window.__air.render(); });
+check('자회사 카드: 일부 상장 버튼(51% 넘는 지분)', (await page.locator('#panel button[data-act="spinOff"]').count()) === 1);
+await page.locator('#panel button[data-act="spinOff"]').evaluate((el) => el.click());
+check('일부 상장: 지분 51%로, 상장 표시', await page.evaluate(() => { const c = window.__air.game.state.competitors.find((x) => !x.major && x.stake >= 0.51); return c.stake === 0.51 && c.listed !== undefined; }));
+await page.evaluate(() => { const g = window.__air.game, o = g.openRoute('ICN', 'TPE'); if (o.ok) g.buyForRoute(o.routeId, 'B737', 'new'); window.__air.render(); });
+{ const rid = await page.evaluate(() => window.__air.game.state.routes.find((r) => r.open && ((r.a === 'ICN' && r.b === 'TPE') || (r.a === 'TPE' && r.b === 'ICN'))).id);
+  await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button.trow[data-act="goRoute"][data-id="${rid}"]`).click();
+  await page.locator('#panel button[data-act="handRoute"]').first().evaluate((el) => el.click());
+  check('노선 상세: 자회사에 넘기기', await page.evaluate((id) => !window.__air.game.route(id).open && window.__air.game.state.competitors.some((c) => c.stake >= 0.51 && c.routes.some((r) => (r.a === 'ICN' && r.b === 'TPE') || (r.a === 'TPE' && r.b === 'ICN'))), rid)); }
+await page.click('#tabs button[data-tab="rivals"]'); await page.locator('#panel button[data-act="rivalSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
+check('자회사·그룹: 그룹 시너지(구매 할인·고정비 할인·관리비)', (await page.locator('#panel').innerText()).includes('그룹 시너지') && (await page.locator('#panel').innerText()).includes('그룹 관리비'));
+await page.locator('#panel button[data-act="rivalSub"][data-v="comp"]').evaluate((el) => el.click()).catch(() => undefined); // 다음 점검을 위해 경쟁사 목록으로
 await page.click('#tabs button[data-tab="map"]'); await subMap('look'); await openAll();
 check('자동 처리에 증자·광고·전세기·동맹 안건 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
 await subMap('now');
