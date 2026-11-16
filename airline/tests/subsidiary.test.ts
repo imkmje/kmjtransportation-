@@ -158,6 +158,17 @@ describe('경쟁사 항공기 상한(자유 모드)', () => {
     const back = g.planesOn(o.routeId); expect(back.map((p) => p.type).sort()).toEqual(['A321N', 'B737']); expect(back.find((p) => p.type === 'A321N')!.name).toBe('하늘 1호'); expect(back.every((p) => p.age >= 2)).toBe(true); // 넘긴 항공기가 그대로(나이는 먹음)
     expect(g.takeRouteFromSub(90, 'ICN', 'CJU').ok).toBe(false); // 자회사가 운항하지 않는 노선
   });
+  it('자회사가 이미 다니는 노선도 넘길 수 있고(합침), 가져오면 넘긴 항공기만 돌아오고 자회사 원래 몫은 남는다', () => {
+    const g = sandbox(); comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0]; g.state.cash = 900;
+    const cr = k.routes.find((r) => r.a === 'ICN' && r.b === 'NRT')!, seats0 = cr.seatsDay, p0 = k.planes;
+    const o = g.openRoute('ICN', 'NRT'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'A220', 'new');
+    expect(g.handRouteToSub(o.routeId, 90).ok).toBe(true);
+    expect(k.routes.filter((r) => (r.a === 'ICN' && r.b === 'NRT') || (r.a === 'NRT' && r.b === 'ICN')).length).toBe(1); // 노선이 둘로 늘지 않고 합쳐짐
+    expect(cr.seatsDay).toBeGreaterThan(seats0); expect(cr.fleet!.length).toBe(1); expect(k.planes).toBe(p0 + 1);
+    expect(g.takeRouteFromSub(90, 'ICN', 'NRT').ok).toBe(true);
+    expect(k.routes.includes(cr)).toBe(true); expect(cr.seatsDay).toBe(seats0); expect(cr.fleet).toBeUndefined(); expect(k.planes).toBe(p0); // 자회사 원래 몫은 그대로
+    expect(g.planesOn(o.routeId).map((p) => p.type)).toEqual(['A220']);
+  });
   it('일부 상장: 51%를 넘는 지분을 팔아 돈을 받고 경영권은 유지, 한 번만, 51%뿐이면 안 된다', () => {
     const g = sandbox(); comp(g); g.buyStake(90, 0.51); const k = g.state.competitors[0];
     expect(g.spinOff(90).ok).toBe(false); // 51%뿐

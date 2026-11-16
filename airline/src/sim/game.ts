@@ -1487,29 +1487,32 @@ export class Game {
   handRouteToSub(routeId: number, id: number): Result<{ planes: number }> {
     const s = this.state, r = this.route(routeId), c = s.competitors.find((x) => x.id === id); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!c || (c.stake ?? 0) < 0.51) return fail('자회사(지분 51% 이상)에만 넘길 수 있습니다'); if (!r || !r.open) return fail('열려 있는 노선이 아닙니다');
-    if (c.routes.some((x) => this.sameRoute(x, r.a, r.b))) return fail(`${c.name}이(가) 이미 운항하는 노선입니다`);
     const ps = this.planesOn(routeId), own = ps.filter((p) => !p.leased && p.charter === undefined); if (!own.length) return fail('넘길 내 소유 항공기가 없습니다(임대기만으로는 넘길 수 없음)');
-    const seats = own.reduce((a, p) => a + typeById(p.type).seats * ((p.weekly * 2) / 7), 0);
+    const seats = Math.round(own.reduce((a, p) => a + typeById(p.type).seats * ((p.weekly * 2) / 7), 0)), mp = this.monthsPassed;
     for (const p of ps) { p.routeId = null; p.weekly = 0; }
     const ids = new Set(own.map((p) => p.id)); s.planes = s.planes.filter((p) => !ids.has(p.id)); this.touch();
-    c.planes += own.length; c.routes.push({ a: r.a, b: r.b, seatsDay: Math.round(seats), fareRatio: c.style === 'low' ? 0.85 : 1.15, fleet: own.map((p) => ({ type: p.type, book: p.book, age: p.age, ...(p.cabin ? { cabin: p.cabin } : {}), ...(p.name ? { name: p.name } : {}) })), fleetAt: this.monthsPassed }); // 기종·나이·객실·이름을 기억한다
+    const fleet = own.map((p) => ({ type: p.type, book: p.book, age: p.age, at: mp, ...(p.cabin ? { cabin: p.cabin } : {}), ...(p.name ? { name: p.name } : {}) })); // 기종·나이·객실·이름·넘긴 개월을 기억한다
+    const ex = c.routes.find((x) => this.sameRoute(x, r.a, r.b)); c.planes += own.length;
+    if (ex) { ex.seatsDay = Math.round(ex.seatsDay + seats); ex.handSeats = (ex.handSeats ?? (ex.fleet?.length ? ex.seatsDay - seats : 0)) + seats; ex.fleet = [...(ex.fleet ?? []), ...fleet]; ex.fleetAt ??= mp; } // 자회사가 이미 다니던 노선이면 합친다
+    else c.routes.push({ a: r.a, b: r.b, seatsDay: seats, fareRatio: c.style === 'low' ? 0.85 : 1.15, fleet, fleetAt: mp, handSeats: seats });
     r.open = false; delete r.closed; // 넘긴 노선은 다시 가져와도 재개 비용이 없다
-    s.log.push(`${this.monthsPassed + 1}개월차: ${routeLabelText(r.a, r.b)} 노선을 자회사 ${c.name}에 넘겼습니다(항공기 ${own.length}대).`); return { ok: true, planes: own.length };
+    s.log.push(`${mp + 1}개월차: ${routeLabelText(r.a, r.b)} 노선을 자회사 ${c.name}에 넘겼습니다(항공기 ${own.length}대${ex ? ', 자회사가 다니던 노선에 합침' : ''}).`); return { ok: true, planes: own.length };
   }
-  /** 자회사 노선을 가져온다: 내가 그 노선을 열고, 그 좌석만큼 B7-37을 받아 바로 배정한다 */
+  /** 자회사 노선을 가져온다: 내가 넘긴 항공기는 그대로 돌려받고(자회사가 원래 다니던 몫은 남는다), 원래 자회사 노선이면 그 좌석만큼 B7-37을 받는다 */
   takeRouteFromSub(id: number, a: string, b: string): Result<{ planes: number }> {
     const s = this.state, c = s.competitors.find((x) => x.id === id); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!c || (c.stake ?? 0) < 0.51) return fail('자회사(지분 51% 이상)에서만 가져올 수 있습니다');
     const cr = c.routes.find((x) => this.sameRoute(x, a, b)); if (!cr) return fail('그 자회사가 운항하지 않는 노선입니다');
     const o = this.openRoute(a, b); if (!o.ok) return o;
-    const km = distanceKm(cityById(a), cityById(b)), since = this.monthsPassed - (cr.fleetAt ?? this.monthsPassed);
-    let got: { type: string; book: number; age: number; cabin?: number; name?: string }[];
-    if (cr.fleet?.length) got = cr.fleet.map((f) => ({ ...f, age: f.age + since })); // 내가 넘긴 항공기를 그대로(그동안 나이만 먹음)
+    const km = distanceKm(cityById(a), cityById(b)), mp = this.monthsPassed;
+    let got: { type: string; book: number; age: number; cabin?: number; name?: string }[], keep = 0;
+    if (cr.fleet?.length) { got = cr.fleet.map((f) => ({ ...f, age: f.age + (mp - (f.at ?? cr.fleetAt ?? mp)) })); keep = cr.handSeats !== undefined ? Math.max(0, cr.seatsDay - cr.handSeats) : 0; } // 내가 넘긴 항공기를 그대로(그동안 나이만 먹음)
     else { const t = typeById('B737'), per = t.seats * (2 * Math.max(1, maxWeeklyRoundTrips(km, t))) / 7, n = Math.max(1, Math.min(c.planes, Math.round(cr.seatsDay / per))); got = Array.from({ length: n }, () => ({ type: 'B737', book: Math.round(t.price * config.subsidiary.handBack * 10) / 10, age: 0 })); } // 원래 자회사 노선은 좌석만큼 B7-37
-    c.routes = c.routes.filter((x) => x !== cr); c.planes = Math.max(0, c.planes - got.length);
+    if (keep >= 1) { cr.seatsDay = Math.round(keep); delete cr.fleet; delete cr.fleetAt; delete cr.handSeats; } else c.routes = c.routes.filter((x) => x !== cr); // 자회사 원래 몫이 있으면 노선은 자회사에도 남는다
+    c.planes = Math.max(0, c.planes - got.length);
     for (const f of got) { const t = typeById(f.type), p = this.addPlane(f.type, f.book, { age: f.age, ...(f.cabin ? { cabin: f.cabin } : {}), ...(f.name ? { name: f.name } : {}) }); if (canFly(t, cityById(a), cityById(b)).ok) this.assign(p.id, o.routeId, Math.max(1, maxWeeklyRoundTrips(km, t))); }
     const names = [...new Set(got.map((f) => typeById(f.type).name))].join('·');
-    s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}의 ${routeLabelText(a, b)} 노선을 가져왔습니다(${names} ${got.length}대).`); return { ok: true, planes: got.length };
+    s.log.push(`${mp + 1}개월차: 자회사 ${c.name}의 ${routeLabelText(a, b)} 노선을 가져왔습니다(${names} ${got.length}대${keep >= 1 ? ', 자회사 원래 몫은 남음' : ''}).`); return { ok: true, planes: got.length };
   }
   /** 자회사 일부 상장: 51%를 넘는 지분을 시장에 팔아 돈을 마련한다(경영권은 유지, 한 번만) */
   spinOff(id: number): Result<{ cash: number; sold: number }> {
