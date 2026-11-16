@@ -439,7 +439,9 @@ export function startApp(): void {
           ${slotsNote(o)}<div class="btnrow"><button data-act="rbuy" data-t="${t.id}" data-how="new" ${no(s.cash < t.price + o.slotCost, short(t.price + o.slotCost))}>새것 ${money(t.price)}</button><button class="ghost" data-act="rbuy" data-t="${t.id}" data-how="used" ${no(s.cash < used + o.slotCost, short(used + o.slotCost))}>중고 ${money(used)}</button><button class="ghost" data-act="rbuy" data-t="${t.id}" data-how="lease" ${no(!leaseOk || s.cash < dep + o.slotCost, !leaseOk ? leaseFull : short(dep + o.slotCost))}>임대 ${money(rent)}/월</button></div></div>`; };
     return `<details class="rbuy" data-rid="${rId}" ${open ? 'open' : ''}><summary><span>항공기 추가</span><small>${rec ? `추천 ${esc(typeById(rec.type).name)} · 회수 ${Math.round(rec.payback!)}개월` : '지금은 늘려도 이익이 안 늘어납니다'}</small></summary>
       <p class="hint">한 대를 더 넣었을 때의 <b>추정</b>입니다(지금 수요 기준, 경기·성수기·사건에 따라 달라짐). 사면 이 노선에 최대 횟수로 바로 배정됩니다. 회수 기간 = 새 기체 값 ÷ 늘어나는 월 이익.</p>
-      ${(() => { const sorted = [...opts].sort((a, b) => (a.payback ?? 1e9) - (b.payback ?? 1e9) || b.profit - a.profit), row = (o: typeof opts[number]) => optRow(o), top = sorted.slice(0, 5), rest = sorted.slice(5); return top.map(row).join('') + (rest.length ? `<details class="rbuymore"><summary>나머지 기종 ${rest.length}개 보기</summary>${rest.map(row).join('')}</details>` : ''); })()}
+      <div class="chips">${([['pay', '회수 빠른 순'], ['profit', '예상 이익 큰 순'], ['price', '새것 싼 순'], ['rent', '임대료 싼 순'], ['seats', '좌석 많은 순'], ['share', '점유율 많이 오르는 순']] as const).map(([v, t]) => `<button data-act="buySort" data-v="${v}" class="${buySort === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+      ${(() => { const P = (o: typeof opts[number]) => typeById(o.type).price, key = (o: typeof opts[number]): number => (buySort === 'profit' ? -o.profit : buySort === 'price' || buySort === 'rent' ? P(o) : buySort === 'seats' ? -typeById(o.type).seats : buySort === 'share' ? -(o.shareAfter - o.shareBefore) : o.payback ?? 1e9); // 임대료는 새 기체 값에 비례(같은 순서)
+        const sorted = [...opts].sort((a, b) => key(a) - key(b) || (a.payback ?? 1e9) - (b.payback ?? 1e9) || b.profit - a.profit || (a.type < b.type ? -1 : 1)), row = (o: typeof opts[number]) => optRow(o), top = sorted.slice(0, 5), rest = sorted.slice(5); return top.map(row).join('') + (rest.length ? `<details class="rbuymore"><summary>나머지 기종 ${rest.length}개 보기</summary>${rest.map(row).join('')}</details>` : ''); })()}
       <small class="hint">임대 보증금은 임대료 ${config.lease.deposit}개월치, 임대 가능 ${game.leasedCount}/${game.leaseCap}대.</small></details>`;
   }
   /** 노선 화면 아래에 늘 보이는 예상치: 운임을 움직이는 동안에도 바로 바뀐다 */
@@ -564,6 +566,7 @@ export function startApp(): void {
   }
   const s_idlePlanes = () => game.state.planes.filter((p) => p.routeId === null && p.charter === undefined);
 
+  let buySort: 'pay' | 'profit' | 'price' | 'rent' | 'seats' | 'share' = 'pay'; // 노선 '항공기 추가' 정렬
   let shopOpen: boolean | null = null, shopSort: 'price' | 'seats' | 'range' | 'eff' | 'cargo' = 'price';
   panel.addEventListener('click', (e) => { const gs = (e.target as HTMLElement).closest('details > summary'); if (gs) { const d = gs.parentElement as HTMLDetailsElement; detOpen.set(detKey(d), !d.open); } const rs = (e.target as HTMLElement).closest('details.rbuy > summary'); if (rs) { const d = rs.parentElement as HTMLDetailsElement; rbuyOpen.set(Number(d.dataset.rid), !d.open); } const sc = (e.target as HTMLElement).closest('details.sec > summary'); if (sc) { const d = sc.parentElement as HTMLDetailsElement; secOpen.set(d.dataset.k ?? '', !d.open); } const sm = (e.target as HTMLElement).closest('#shop > summary'); if (sm) shopOpen = !(sm.parentElement as HTMLDetailsElement).open; }); // 사용자가 누른 것만 기억(화면을 다시 그릴 때 생기는 toggle 신호는 무시)
   /** 대기 중인 항공기: 눌러서 어느 노선에 넣으면 좋은지 본다 */
@@ -1153,6 +1156,7 @@ export function startApp(): void {
     else if (act === 'subRegion') { const v = b.dataset.v; const r = game.setSubRegion(id, v || null); if (!r.ok) return err(r.error); done('확장 지역을 정했습니다'); }
     else if (act === 'lendPlane') { const r = game.lendPlane(Number(b.dataset.p), id); if (!r.ok) return err(r.error); done(`빌려주었습니다(월 임대료 ${money(r.rent)})`); }
     else if (act === 'recallPlane') { const r = game.recallPlane(id); if (!r.ok) return err(r.error); done('한 대를 돌려받았습니다(기단에서 대기 중)'); }
+    else if (act === 'buySort') { buySort = b.dataset.v as typeof buySort; done(); }
     else if (act === 'shopSort') { shopSort = b.dataset.v as typeof shopSort; done(); }
     else if (act === 'hubBulk') { const city = b.dataset.city!, mode = b.dataset.v as 'one' | 'max', plan = game.hubBulkPlan(city, mode); if (!await ask(`${cityById(city).name} 허브 투자 ${plan.list.length}건을 ${money(plan.total)}에 한꺼번에 살까요?\n(단계마다 월 운영비 ${money(config.investUpkeep)})`)) return; const r = game.buyHubBulk(city, mode); if (!r.ok) return err(r.error); done(`허브 투자 ${r.count}건을 완료했습니다`); }
     else if (act === 'charter') { const r = game.acceptCharter(id, Number(b.dataset.p)); if (!r.ok) return err(r.error); done('전세 운항을 시작했습니다'); }
