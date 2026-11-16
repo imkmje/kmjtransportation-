@@ -657,8 +657,10 @@ export function startApp(): void {
   /** 일반 경쟁사의 노선 목록 */
   function compRoutes(k: Competitor): string {
     const mineOf = (r: { a: string; b: string }) => game.state.routes.find((m) => m.open && ((m.a === r.a && m.b === r.b) || (m.a === r.b && m.b === r.a))); // 같은 두 도시를 잇는 내 노선
-    const rs = [...k.routes].sort((x, y) => Number(!mineOf(x)) - Number(!mineOf(y))), nOver = rs.filter(mineOf).length; // 겹치는 노선을 위로
-    return `<h3>${esc(k.name)}의 노선 <small>${k.routes.length}개${nOver ? ` · 내 노선과 겹침 ${nOver}개` : ''}</small></h3><div class="list">${rs.map((r) => { const m = mineOf(r); return `<div class="row"><div class="grow"><b>${routeLabel(r.a, r.b)}${m ? ' <span class="badge">겹침</span>' : ''}</b><small>하루 ${num(r.seatsDay)}석 · 운임 ${pct(r.fareRatio)}${r.war ? ' · <span class="neg">운임 전쟁 중</span>' : ''}${m && game.planesOn(m.id).length ? ` · 내 점유율 ${pct(game.routeDay(m).share)}` : ''}</small></div>${m ? `<button class="ghost" data-act="goRoute" data-id="${m.id}">내 노선 보기</button>` : `<button class="ghost" data-act="open" data-a="${r.a}" data-b="${r.b}" ${no(!game.cityOpen(r.a) || !game.cityOpen(r.b), `${[r.a, r.b].filter((c) => !game.cityOpen(c)).map((c) => cityById(c).name).join('·')}의 운수권이 필요합니다(현황 탭)`)}>열기</button>`}</div>`; }).join('') || '<p class="empty">아직 노선이 없습니다.</p>'}</div>`;
+    const subOf = (r: { a: string; b: string }) => game.groupSubs.filter((c) => c.id !== k.id && c.routes.some((y) => (y.a === r.a && y.b === r.b) || (y.a === r.b && y.b === r.a))); // 같은 노선을 다니는 내 자회사(51% 이상)
+    const rank = (r: { a: string; b: string }) => (mineOf(r) ? 0 : subOf(r).length ? 1 : 2);
+    const rs = [...k.routes].sort((x, y) => rank(x) - rank(y)), nOver = rs.filter(mineOf).length, nSub = rs.filter((r) => subOf(r).length).length; // 내 노선 겹침 → 자회사 겹침 → 나머지
+    return `<h3>${esc(k.name)}의 노선 <small>${k.routes.length}개${nOver ? ` · 내 노선과 겹침 ${nOver}개` : ''}${nSub ? ` · 자회사와 겹침 ${nSub}개` : ''}</small></h3><div class="list">${rs.map((r) => { const m = mineOf(r), sb = subOf(r); return `<div class="row"><div class="grow"><b>${routeLabel(r.a, r.b)}${m ? ' <span class="badge">겹침</span>' : ''}${sb.map((c) => ` <span class="otag cab" title="내 자회사가 운항">자회사 ${esc(c.name)}</span>`).join('')}</b><small>하루 ${num(r.seatsDay)}석 · 운임 ${pct(r.fareRatio)}${r.war ? ' · <span class="neg">운임 전쟁 중</span>' : ''}${m && game.planesOn(m.id).length ? ` · 내 점유율 ${pct(game.routeDay(m).share)}` : ''}</small></div>${sb.length && !m ? `<button class="ghost" data-act="goSub" data-id="${sb[0].id}">자회사 보기</button>` : ''}${m ? `<button class="ghost" data-act="goRoute" data-id="${m.id}">내 노선 보기</button>` : `<button class="ghost" data-act="open" data-a="${r.a}" data-b="${r.b}" ${no(!game.cityOpen(r.a) || !game.cityOpen(r.b), `${[r.a, r.b].filter((c) => !game.cityOpen(c)).map((c) => cityById(c).name).join('·')}의 운수권이 필요합니다(현황 탭)`)}>열기</button>`}</div>`; }).join('') || '<p class="empty">아직 노선이 없습니다.</p>'}</div>`;
   }
   /** 자회사 노선 표: 지난달 매출, 시장 몫(자회사·다른 경쟁사·우리), 공세 성과 */
   function subRoutes(k: Competitor): string {
@@ -1090,6 +1092,7 @@ export function startApp(): void {
     else if (act === 'foundOpen') { showFound(); }
     else if (act === 'mapSub') { mapSub = b.dataset.v as typeof mapSub; done(); }
     else if (act === 'moneySub') { moneySub = b.dataset.v as typeof moneySub; done(); }
+    else if (act === 'goSub') { tab = 'group'; groupSub = 'subs'; selComp = id; selCity = selRoute = null; syncMap(); done(); }
     else if (act === 'groupSub') { groupSub = b.dataset.v as typeof groupSub; selComp = null; syncMap(); done(); }
     else if (act === 'rivalSub') { rivalSub = b.dataset.v as typeof rivalSub; selComp = null; syncMap(); done(); }
     else if (act === 'autoFreq') { game.setAutoFreq(!game.state.autoFreq); done(game.state.autoFreq ? '자동 증감편을 켰습니다' : '자동 증감편을 껐습니다'); }
