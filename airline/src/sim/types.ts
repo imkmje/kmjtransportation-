@@ -107,7 +107,7 @@ export interface GameState {
   charters?: Charter[]; // 전세기 주문(제안·진행)
   alliance?: number[]; rivalAlliance?: number[]; // 우리 동맹 회원, 대형 항공사가 만든 동맹
   bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; compLots?: { city: string; n: number; holder: number }[]; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯
-  mega?: { id: string; city?: string; done: number; cost?: number; paused?: boolean } | null; /* paused: 일시중지(돈도 안 내고 진행도 멈춤) */ megaDone?: string[]; megaCity?: Record<string, number>; // 메가 프로젝트
+  mega?: { id: string; city?: string; done: number; cost?: number; paused?: boolean; paid?: boolean } | null; /* paid: 일시금으로 미리 냄 */ /* paused: 일시중지(돈도 안 내고 진행도 멈춤) */ megaDone?: string[]; megaCity?: Record<string, number>; // 메가 프로젝트
   preorders?: { type: string; n: number; deposit: number }[]; // 신기종 선주문
   pioneered?: string[]; pioneer?: Record<string, number>; // 첫 취항한 도시, 보너스가 끝나는 개월차
   records?: Record<string, { v: number; m: number }>; noFail?: number; // 개인 기록, 고장 없이 지난 개월

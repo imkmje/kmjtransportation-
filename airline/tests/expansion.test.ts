@@ -12,9 +12,19 @@ describe('대형 사업 비용은 회사 규모에 따라', () => {
   it('최근 12개월 매출이 클수록 비싸지고, 착공 때 값이 고정된다', () => {
     const g = sb(), base = config.extra.mega.list.find((x) => x.id === 'academy')!.cost;
     expect(g.megaCost('academy')).toBe(base);
-    richHistory(g, 50); // 연 매출 $600M → 4배
-    expect(g.megaMult).toBe(4); expect(g.megaCost('academy')).toBe(base * 4);
-    expect(g.startMega('academy').ok).toBe(true); expect(g.state.mega!.cost).toBe(base * 4);
+    richHistory(g, 50); // 연 매출 $600M → √4 = 2배(3.10.0부터 매출의 제곱근)
+    expect(g.megaScale).toBe(2); expect(g.megaCost('academy')).toBe(base * 2); expect(g.megaCost('academy', true)).toBe(Math.round(base * 2 * 0.9));
+    expect(g.startMega('academy').ok).toBe(true); expect(g.state.mega!.cost).toBe(base * 2);
+  });
+  it('일시금: 10% 싸게 한 번에 내고, 공사 중엔 매달 내지 않는다', () => {
+    const g = sb(); g.state.cash = 5000; const cost = g.megaCost('academy', true), c0 = g.state.cash;
+    expect(g.startMega('academy', undefined, true).ok).toBe(true); expect(g.state.cash).toBeCloseTo(c0 - cost, 6); expect(g.state.mega!.paid).toBe(true);
+    const d = g.state.mega!.done; g.state.cash = 1; g.advanceDays(31); expect(g.state.mega!.done).toBe(d + 1); // 현금이 없어도 공사는 계속
+    const h = sb(); h.state.cash = 1; expect(h.startMega('academy', undefined, true).ok).toBe(false);
+  });
+  it('전용 터미널: 슬롯 +24, 착륙료 −30%, 허브 효과 +20%', () => {
+    const g = sb(), b = g.state.base, cap = g.slotCapacity(b), hb = g.hubBonus(b); g.state.mega = { id: 'terminal', done: 23, cost: 0, city: b }; g.advanceDays(31);
+    expect(g.slotCapacity(b)).toBe(cap + 24); expect(g.hubBonus(b)).toBeCloseTo(hb + 0.2, 6);
   });
 });
 
@@ -172,6 +182,13 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     const v = g.acquirePrice(c), want = Math.round(((0.51 * v + 100) / (v + 100)) * 100) / 100; expect(g.stakeAfter(c, 100)).toBe(want);
     expect(g.injectSubsidiary(c.id, 100).ok).toBe(true); expect(c.stake).toBe(want); expect(c.stake).toBeGreaterThan(0.51);
     expect(g.subReturn(c).put).toBeCloseTo((b.ok ? b.price : 0) + 100); expect(g.stakeAfter(c, 1e9)).toBe(1); expect((g as unknown as { allyWeight: (x: typeof c) => number }).allyWeight(c)).toBe(config.subsidiary.weight['0.51']); // 51~99%는 자회사 힘
+  });
+  it('자회사는 비상금을 남기고 항공기를 산다', () => {
+    const g = sb(); g.advanceDays(30 * 12); g.state.cash = 99999; const c = g.state.competitors.find((x) => !x.major)!; g.buyStake(c.id, 0.51); g.setSubDir(c.id, 'grow');
+    const r0 = config.subsidiary.reserve; expect(r0).toBe(15);
+    try { config.subsidiary.reserve = 1000; c.cash = 100; const n = c.planes; g.advanceDays(30); expect(c.planes).toBe(n); // 비상금보다 적으면 안 산다
+      config.subsidiary.reserve = 0; c.cash = 100; g.advanceDays(30); expect(c.planes).toBeGreaterThan(n);
+    } finally { config.subsidiary.reserve = r0; }
   });
   it('허브 투자 여러 도시 일괄', () => {
     const g = sb(); const o = g.openRoute(g.state.base, 'NRT'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new');

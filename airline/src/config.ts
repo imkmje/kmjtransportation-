@@ -92,10 +92,10 @@ export const config = {
     bid: { months: 2, step: 2, concessionChance: 0.08, concessionMin: 10, concessionMonths: 60, concessionSlots: 3, concessionFee: 0.7, airportChance: 0.04, airportPublic: 3, airportLot: 5, startMonth: 12 }, // 입찰: 공항 운영권·신공항 슬롯
     rating: { weight: 0.04 }, // 별점 1점당 수요 ±4%
     award: { rep: 0.02 }, // 연말 시상식 수상 1개당 평판
-    mega: { scalePer: 150, list: [ // scalePer: 비용 = 기본 비용 × max(1, 최근 12개월 매출 ÷ $150M) — 회사가 클수록 큰 사업도 비싸진다(착공 때 고정)
-      { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +12', cost: 120, months: 24 },
+    mega: { scalePer: 150, lumpOff: 0.1, termSlots: 24, termFee: 0.7, termHub: 0.2, academyOps: 0.03, list: [ // 3.10.0: 비용 = 기본 비용 × max(1, √(최근 12개월 매출 ÷ $150M)) — 회사가 클수록 비싸지지만 예전(매출에 정비례)보다 완만, 착공 때 고정. lumpOff: 일시금이면 10% 할인. termSlots·termFee·termHub: 전용 터미널 슬롯 +24·그 공항 착륙료 −30%·허브 효과 +20%(그 공항 노선 수요 약 +10%). academyOps: 항공 학교 운영비 −3%
+      { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +24, 그 공항을 쓰는 내 노선 착륙료 −30%·수요 약 +10%(허브 효과)', cost: 50, months: 24 },
       { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 150, months: 30 },
-      { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 완공 때 평판 +5%', cost: 90, months: 18 },
+      { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 조종사 채용 한도 +8명/월, 운영비 −3%, 완공 때 평판 +5%', cost: 90, months: 18 },
       { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 200, months: 30 },
       { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '220석 단거리기. 시중 최고 기종보다 좌석당 운항비 약 30% 낮고 더 빠르며 새 객실(별점↑). 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 250, months: 36 },
       { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '330석 중장거리 광동체(13,000km). 시중 기종보다 좌석당 운항비 약 40% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 380, months: 42 },
@@ -126,7 +126,8 @@ export const config = {
   subsidiary: { // 자회사(자유 모드): 경쟁사 지분을 사서 회사는 그대로 두고 배당을 받는다
     priceMult: 1.2, // 지분 값 = 인수가 × 지분율 × 1.2(경영권 웃돈)
     weight: { 0.2: 0.6, 0.51: 0.3, 1: 0.2 } as Record<string, number>, // 내 노선과 겹칠 때 손님을 빼앗는 힘(1 = 보통 경쟁사, 제휴 0.5)
-    payout: { none: 0.4, grow: 0.2, profit: 0.6, attack: 0.3 } as Record<string, number>, // 자회사 월 이익 중 배당으로 나눠 주는 비율(방향별)
+    reserve: 15, // 3.10.0: 자회사(51% 이상)는 현금 $15M을 비상금으로 남기고 항공기를 산다(확장 방향이 돈을 다 써서 증자 요청이 잦던 문제)
+    payout: { none: 0.4, grow: 0.3, profit: 0.6, attack: 0.3 } as Record<string, number>, // 자회사 월 이익 중 배당으로 나눠 주는 비율(방향별)
     sellRatio: 0.8, // 지분을 팔 때 받는 값 = 지분 값 × 0.8
     callMonths: 2, callMax: 30, // 증자 요청: 응답 기한(개월), 최대 금액($M, 지분율을 곱함)
     failRep: 0.03, // 자회사가 파산하면 평판 하락
