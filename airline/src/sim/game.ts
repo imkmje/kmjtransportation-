@@ -157,7 +157,7 @@ export class Game {
   /** 대출 한도 = 기본 + 보유 항공기 장부가 합 × 비율 */
   get loanLimit(): number { return config.loan.limitBase + config.loan.limitBookRatio * this.state.planes.reduce((a, p) => a + p.book, 0); }
   /** 이번 달 대출 월 이율(한도를 많이 쓸수록 오른다) */
-  get loanRate(): number { const lim = this.loanLimit; return (config.loan.baseRate + config.loan.spread * (lim > 0 ? Math.min(1, this.state.loan / lim) : 0) + Math.max(0, 0.95 - (this.state.economy ?? 1)) * config.loan.crunch) * this.mods.rate; } // 불황이면 은행이 이율을 올린다(신용 경색)
+  get loanRate(): number { const lim = this.loanLimit; return (Math.max(0, config.loan.baseRate - this.diversifyCut) + config.loan.spread * (lim > 0 ? Math.min(1, this.state.loan / lim) : 0) + Math.max(0, 0.95 - (this.state.economy ?? 1)) * config.loan.crunch) * this.mods.rate; } // 불황이면 은행이 이율을 올린다(신용 경색)
 
   // ---- 슬롯·허브 ----
   slotCapacity(cityId: string): number { return this.slotCapacityRaw(cityId) - (this.state.taken?.[cityId] ?? 0); }
@@ -290,7 +290,7 @@ export class Game {
     const eco = s.economy ?? 1;
     const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice; // 계약 중이면 계약 가격
     d0 *= eco; cg0 *= Math.pow(eco, c.economy.cargoPow);
-    let capMult = this.crewFactor, costMult = (1 - this.up('ops')) * (1 - c.extra.green.ops * (s.green ?? 0)) * (s.megaDone?.includes('academy') ? 1 - c.extra.mega.academyOps : 1); // 친환경 연료: 운영비 절감
+    let capMult = this.crewFactor, costMult = (1 - this.up('ops')) * (1 - this.unitEff('catering')) * (1 - c.extra.green.ops * (s.green ?? 0)) * (s.megaDone?.includes('academy') ? 1 - c.extra.mega.academyOps : 1); // 친환경 연료: 운영비 절감
     d0 *= 1 + this.up('marketing');
     for (const e of s.events) {
       const def = EVENTS.find((x) => x.id === e.def)!, k = (e.handled && def.option ? def.option.scale : 1) * (1 - this.insCut); // 대응하면, 보험이 있으면 효과가 줄어든다
@@ -326,7 +326,7 @@ export class Game {
     const demB = (d0 * sb * Math.pow(eco, c.economy.bizPow - 1) * priceFactor(r.fareBiz, baseBiz, c.cabin.bizElasticity) * share * (1 + this.up('service')) * (1 + ((this.hubLevel(r.a, 'lounge') + this.hubLevel(r.b, 'lounge')) / 2) * config.invest.lounge.biz)) / c.daysPerMonth; // 비즈니스는 경기에 더 민감(d0에 이미 한 번 곱함)
     const paxB = Math.min(demB, seatsB), paxE = Math.min(demE, seatsE), pax = paxE + paxB;
     const cgDem = (cg0 * priceFactor(r.cargoRatio, 1, c.cargo.elasticity) * share) / c.daysPerMonth, cargoT = Math.min(cgDem, cargoCap);
-    const cargoRevenue = (cargoT * cargoRate(km) * r.cargoRatio) / 1e6;
+    const cargoRevenue = ((cargoT * cargoRate(km) * r.cargoRatio) / 1e6) * (1 + this.unitEff('logistics'));
     const prem = this.premium(r), revenue = ((paxE * r.fare + paxB * r.fareBiz) / 1e6) * prem + cargoRevenue; // prem: 광고·객실 개조로 붙는 운임 프리미엄
     const compensation = revenue * (1 - otp) * c.delay.compensation; // 지연 보상금
     const svcDaily = (this.planesOn(r.id).length * c.strategy.svcCost[r.svc ?? 0]) / c.daysPerMonth; // 노선 서비스 등급 비용(항공기 1대당 월 비용)
@@ -483,7 +483,7 @@ export class Game {
     return { ok: true };
   }
   /** 정비 점검 비용(M): 기종 가격의 2%(최소 $0.5M) */
-  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * this.agingMult(p) * (1 - this.up('hangar', true)) * (1 - this.mroLevel(p) * config.invest.mro.serviceCut); } // 낡을수록 점검도 비싸다, 정비 기지가 있으면 싸다
+  serviceCost(p: Plane): number { return Math.max(config.maint.minCost, typeById(p.type).price * config.maint.costRatio) * this.agingMult(p) * (1 - this.up('hangar', true)) * (1 - this.mroLevel(p) * config.invest.mro.serviceCut) * (1 - this.unitEff('mro')); } // 낡을수록 점검도 비싸다, 정비 기지가 있으면 싸다
   /** 이 기체가 점검으로 회복할 수 있는 정비 상태의 상한(7년이 넘으면 낮아진다) */
   maxCond(p: Plane): number { const a = config.aging; return Math.max(a.capMin, 1 - Math.max(0, p.age - a.capStart) * a.capPerMonth); }
   /** 교체 권고: 점검해도 회복이 75% 아래까지만 되는 기체 */
@@ -800,7 +800,7 @@ export class Game {
     const s = this.state; if (!s.sandbox) return 1;
     const mp = this.monthsPassed, pio = [r.a, r.b].some((id) => (s.pioneer?.[id] ?? -1) > mp) ? config.extra.pioneer.boost : 0;
     const adc = s.adWar && s.adWar.until > mp ? s.competitors.find((x) => x.id === s.adWar!.comp) : undefined, ad = adc?.routes.some((y) => (y.a === r.a && y.b === r.b) || (y.a === r.b && y.b === r.a)) ? config.majorCheck.ad.boost : 0;
-    return (1 + ad) * (1 + this.loyaltyBoost) * (1 + pio) * (1 + config.extra.rating.weight * (this.routeRating(r) - 3)) * this.alliDemand(r) * (s.campaign && s.campaign.until > mp ? 1 + (config.extra.campaign[s.campaign.kind]?.boost ?? 0) : 1) * (1 + this.hotelBoost(r));
+    return (1 + ad) * (1 + this.loyaltyBoost) * (1 + pio) * (1 + config.extra.rating.weight * (this.routeRating(r) - 3)) * this.alliDemand(r) * (s.campaign && s.campaign.until > mp ? 1 + (config.extra.campaign[s.campaign.kind]?.boost ?? 0) : 1) * (1 + this.hotelBoost(r)) * (1 + this.unitEff('travel'));
   }
   /** 착륙료 배율: 우리가 운영권을 가진 공항이면 싸다 */
   private landingFactor(r: Route): number { return ([r.a, r.b].some((x) => (this.state.megaCity?.[x] ?? 0) > 0) ? config.extra.mega.termFee : 1) * this.landingBase(r); } // 전용 터미널: 착륙료 −30%
@@ -1601,10 +1601,10 @@ export class Game {
   /** 다음 단계 호텔 값($M): 큰 도시일수록 비싸다. 최고 단계면 null */
   hotelCost(city: string): number | null { const k = config.biz.hotel, lv = this.hotelLevel(city); if (lv >= k.cost.length) return null; return Math.round(k.cost[lv] * (0.5 + cityById(city).pop / 40) * 10) / 10; }
   /** 호텔 한 달: 객실 점유율(기본 + 내 노선 수, 경기), 매출·순이익($M) */
-  hotelInfo(city: string, lv = this.hotelLevel(city)): { occ: number; rev: number; net: number } {
+  hotelInfo(city: string, lv = this.hotelLevel(city), eco = this.state.economy ?? 1): { occ: number; rev: number; net: number } {
     const k = config.biz.hotel; if (!lv) return { occ: 0, rev: 0, net: 0 };
     const n = this.state.routes.filter((r) => r.open && (r.a === city || r.b === city) && this.planesOn(r.id).length).length;
-    const occ = Math.min(k.occMax, (k.baseOcc + k.perRoute * n) * (this.state.economy ?? 1)), rev = (k.rooms[lv - 1] * config.daysPerMonth * occ * k.rate * cityById(city).income) / 1e6;
+    const occ = Math.min(k.occMax, (k.baseOcc + k.perRoute * n) * eco), rev = (k.rooms[lv - 1] * config.daysPerMonth * occ * k.rate * cityById(city).income) / 1e6;
     return { occ, rev: Math.round(rev * 100) / 100, net: Math.round(rev * (1 - k.opex) * 100) / 100 };
   }
   /** 호텔이 있는 도시를 오가는 내 노선 수요 증가(두 끝 합) */
@@ -1640,12 +1640,50 @@ export class Game {
     for (const p of L) if (p.lessee === undefined) { const best = [...dem].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]; if (!best) break; p.lessee = best[0]; dem.set(best[0], best[1] - 1); }
   }
   rentOf(type: string): number { return Math.round(typeById(type).price * config.biz.lessor.rent * 100) / 100; }
-  /** 그룹 사업 한 달: 호텔 순이익, 리스 월세, 리스기 감가 */
+  // ---- 그룹 사업 다각화(3.15.0): 여행사·기내식·정비 회사·항공 물류 ----
+  unitLevel(id: string): number { return this.state.biz?.units?.[id] ?? 0; }
+  /** 단계별 효과(수요·운영비·점검비·화물 수입 가감 비율) */
+  unitEff(id: string): number { const lv = this.unitLevel(id), k = config.biz.units[id]; return k && lv ? k.eff[lv - 1] : 0; }
+  /** 해금 조건: 채웠으면 null, 아니면 무엇이 모자란지 */
+  unitLock(id: string): string | null {
+    const n = config.biz.units[id]?.need, s = this.state; if (!n) return null; const miss: string[] = [];
+    if (n.planes && s.planes.length < n.planes) miss.push(`항공기 ${n.planes}대(지금 ${s.planes.length}대)`);
+    if (n.cities && this.servedCities().size < n.cities) miss.push(`취항 도시 ${n.cities}곳(지금 ${this.servedCities().size}곳)`);
+    return miss.length ? miss.join(', ') : null;
+  }
+  unitCost(id: string): number | null { const k = config.biz.units[id], lv = this.unitLevel(id); return k && lv < k.cost.length ? k.cost[lv] : null; }
+  /** 월 소득: 여행사는 지난달 승객 수, 물류는 지난달 화물 수입, 기내식·정비는 경쟁사 항공기 수(자회사 제외)에 기대고, 경기에 따라 달라진다 */
+  unitInfo(id: string, lv = this.unitLevel(id), eco = this.state.economy ?? 1): { rev: number; net: number } {
+    const k = config.biz.units[id]; if (!k || !lv) return { rev: 0, net: 0 };
+    const last = this.state.history.at(-1), comp = this.state.competitors.reduce((a, c) => a + ((c.stake ?? 0) < 0.51 ? c.planes : 0), 0);
+    const base = id === 'travel' ? ((last?.pax ?? 0) * k.perPax![lv - 1]) / 1e6 : id === 'logistics' ? (last?.cargo ?? 0) * k.share![lv - 1] : comp * k.ext![lv - 1], rev = base * Math.pow(Math.max(0.3, eco), k.eco);
+    return { rev: Math.round(rev * 100) / 100, net: Math.round(rev * (1 - k.opex) * 100) / 100 };
+  }
+  buildUnit(id: string): Result<{ cost: number; level: number }> {
+    const s = this.state, k = config.biz.units[id]; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!k) return fail('없는 사업입니다');
+    const lock = this.unitLock(id); if (lock) return fail(`아직 잠겨 있습니다: ${lock}`);
+    const cost = this.unitCost(id); if (cost === null) return fail('이미 최고 단계입니다'); if (s.cash < cost) return fail('현금이 모자랍니다');
+    const lv = this.unitLevel(id) + 1; s.cash -= cost; s.cur.cost += cost; s.biz = { ...(s.biz ?? {}), units: { ...(s.biz?.units ?? {}), [id]: lv } };
+    s.log.push(`${this.monthsPassed + 1}개월차: ${k.name}을(를) ${lv === 1 ? '세웠습니다' : `${lv}단계로 키웠습니다`}($${cost}M). ${k.effText[lv - 1]}.`); this.note(this.monthsPassed + 1, 'invest', `${k.name} ${lv === 1 ? '설립' : `${lv}단계`}`);
+    return { ok: true, cost, level: lv };
+  }
+  /** 가진 사업의 종류 수(호텔·리스 회사·여행사·기내식·정비 회사·항공 물류) */
+  get bizKinds(): number { const b = this.state.biz; return (Object.keys(b?.hotels ?? {}).length ? 1 : 0) + (b?.lessor?.length ? 1 : 0) + Object.keys(config.biz.units).filter((i) => this.unitLevel(i) > 0).length; }
+  /** 다각화 효과: 월 대출 이자 인하폭 */
+  get diversifyCut(): number { const d = config.biz.diversify, n = this.state.sandbox ? this.bizKinds : 0; return n >= d.n2 ? d.cut2 : n >= d.n1 ? d.cut1 : 0; }
+  /** 경기가 eco일 때 사업 전체 월 순이익(경기 충격 시험용) */
+  bizNet(eco = this.state.economy ?? 1): number {
+    const b = this.state.biz; if (!b) return 0;
+    return Object.keys(b.hotels ?? {}).reduce((a, c) => a + this.hotelInfo(c, this.hotelLevel(c), eco).net, 0) + (b.lessor ?? []).reduce((a, p) => a + (p.lessee !== undefined ? this.rentOf(p.type) : 0), 0) + Object.keys(config.biz.units).reduce((a, i) => a + this.unitInfo(i, this.unitLevel(i), eco).net, 0);
+  }
+  /** 그룹 사업 한 달: 호텔 순이익, 리스 월세, 리스기 감가, 여행사·기내식·정비·물류 순이익, 사업 사고 */
   private bizStep(): void {
     const s = this.state; if (!s.sandbox || !s.biz) return;
-    const hotel = Object.keys(s.biz.hotels ?? {}).reduce((a, c) => a + this.hotelInfo(c).net, 0);
+    const hotel = Object.keys(s.biz.hotels ?? {}).reduce((a, c) => a + this.hotelInfo(c).net, 0), units: Record<string, number> = {};
+    for (const id of Object.keys(config.biz.units)) if (this.unitLevel(id)) units[id] = this.unitInfo(id).net;
     this.leaseAssign(); let lease = 0; for (const p of s.biz.lessor ?? []) { if (p.lessee !== undefined) lease += this.rentOf(p.type); p.book = Math.round(p.book * (1 - config.biz.lessor.depr) * 100) / 100; p.age++; }
-    const tot = Math.round((hotel + lease) * 100) / 100; s.cash += tot; s.cur.revenue += tot; s.biz.last = { hotel: Math.round(hotel * 100) / 100, lease: Math.round(lease * 100) / 100 };
+    const tot = Math.round((hotel + lease + Object.values(units).reduce((a, b) => a + b, 0)) * 100) / 100; s.cash += tot; s.cur.revenue += tot; s.biz.last = { hotel: Math.round(hotel * 100) / 100, lease: Math.round(lease * 100) / 100, units };
+    const d = config.biz.diversify; for (const id of Object.keys(units)) if (d.shock > 0 && this.rng.next() < d.shock) { const loss = Math.round(units[id] * d.shockMonths * (1 - this.insCut) * 100) / 100; s.cash -= loss; s.cur.cost += loss; s.log.push(`${this.monthsPassed + 1}개월차: ${config.biz.units[id].name}에 사고가 났습니다(손실 $${loss}M${this.insCut > 0 ? ', 보험이 일부 막아 줌' : ''}).`); }
   }
   /** 일반 항공사(또는 자회사)를 대형 항공사로 올린다: 거점 + 가장 많이 다니는 도시 2곳 */
   private promoteMajor(c: Competitor, m: number): void {

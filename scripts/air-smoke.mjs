@@ -724,6 +724,10 @@ await page.click('#tabs button[data-tab="group"]'); await page.locator('#panel b
 check('그룹 > 그룹 사업: 호텔·리스 회사', (await page.locator('#panel').innerText()).includes('호텔') && (await page.locator('#panel').innerText()).includes('리스 회사') && (await page.locator('#panel button[data-act="hotel"]').count()) > 0);
 await page.locator('#panel button[data-act="hotel"]').first().evaluate((el) => el.click());
 check('호텔 열기', await page.evaluate(() => Object.keys(window.__air.game.state.biz?.hotels ?? {}).length >= 1));
+{ check('그룹 사업: 새 사업 4종(여행사·기내식·정비 회사·항공 물류)과 잠김 표시', (await page.locator('#panel button[data-act="unit"]').count()) === 4 && (await page.locator('#panel').innerText()).includes('잠김 — 조건') && (await page.locator('#panel').innerText()).includes('다각화'));
+  await page.evaluate(() => { for (const d of Object.values(window.__air.config.biz.units)) d.need = undefined; window.__air.game.state.cash += 500; window.__air.render(); }); await openAll();
+  await page.locator('#panel button[data-act="unit"][data-u="catering"]').evaluate((el) => el.click());
+  check('새 사업 세우기(기내식)', await page.evaluate(() => window.__air.game.unitLevel('catering') === 1) && (await page.locator('#panel').innerText()).includes('모든 노선 운영비')); }
 await page.evaluate(() => { document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
 await page.locator('#panel button[data-act="leaseBuy"]').first().evaluate((el) => el.click());
 check('리스 회사: 항공기 사기', await page.evaluate(() => (window.__air.game.state.biz?.lessor ?? []).length === 1));
