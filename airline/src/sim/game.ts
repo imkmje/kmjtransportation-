@@ -2158,11 +2158,12 @@ export class Game {
       if (p && this.acceptCharter(ch.id, p.id).ok) out.push(`전세기 자동 수락: ${cityById(ch.a).name} ⇄ ${cityById(ch.b).name}`);
     }
     if (r.agenda && s.alli?.meeting && this.chooseAgenda('fare').ok) out.push('동맹 회의 안건 자동: 공동 운임');
+    if (r.events) s.events.forEach((e, i) => { const d = EVENTS.find((x) => x.id === e.def); if (d?.option && !e.handled && s.cash >= this.eventCost(d) * 3) { const cost = this.eventCost(d); if (this.respondEvent(i).ok) out.push(`사건 자동 대응: ${d.name} $${Math.round(cost * 10) / 10}M`); } }); /* 현금이 대응 비용 3배 이상일 때만 */
     if (r.autoBid) for (const b of s.bids ?? []) { if (b.best?.who === 0) continue; const amount = b.best ? b.best.amount + config.extra.bid.step : b.min; if (amount <= this.bidCap(b) && s.cash >= amount * 2 && this.placeBid(b.id).ok) out.push(`입찰 자동: ${cityById(b.city).name} $${amount}M`); } /* 현금이 부른 값의 2배 이상일 때만(낙찰 뒤 현금 부족으로 포기하지 않게) */
     if (r.keep && s.alli?.poach && s.cash >= s.alli.poach.cost) { const c = s.competitors.find((x) => x.id === s.alli!.poach!.comp), cost = s.alli.poach.cost; if (this.keepMember().ok) out.push(`동맹 회원 자동으로 붙잡음: ${c?.name ?? '회원사'} $${cost}M`); }
     return out;
   }
-  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda' | 'keep' | 'autoBid', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
+  setRule(k: 'contracts' | 'auctions' | 'bids' | 'subsidy' | 'story' | 'call' | 'campaign' | 'charter' | 'agenda' | 'keep' | 'autoBid' | 'events', on: boolean): void { this.state.rules = { ...(this.state.rules ?? {}), [k]: on }; }
   /** 지금 열면 좋을 노선: 내가 다니는 도시(또는 본사)에서 아직 안 연 도시로, 수요 × 기준 운임 ÷ (경쟁사 수·거리) 점수 상위 */
   recommendRoutes(n = 3): { a: string; b: string; demand: number; comps: number; km: number }[] {
     const s = this.state, from = new Set([s.base, ...this.servedCities()]), range = Math.max(0, ...s.planes.map((p) => typeById(p.type).range), typeById('B737').range), out: { a: string; b: string; demand: number; comps: number; km: number; sc: number }[] = [];
