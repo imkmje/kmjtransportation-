@@ -29,6 +29,26 @@ describe('대형 항공사', () => {
     const g = sandbox(); months(g, 12); const c = g.state.competitors.find((x) => !x.major && !x.stake && !x.founded)!; c.planes = config.competitors.major.promotePlanes; c.cash = 100; months(g, 1);
     expect(c.major).toBe(true); expect(c.hubs?.[0]).toBe(c.hub); expect(g.majorHubs(c)).toEqual(c.hubs); expect(g.state.log.some((l) => l.includes(c.name) && l.includes('대형 항공사가 됐습니다'))).toBe(true);
   });
+  it('자유 모드: 자회사도 40대면 대형이 되지만, 돈이 있어야 크고 내 노선을 공격하지 않는다', () => {
+    const k = config.competitors.major, inv = k.invadeChance, cap = config.competitors.maxOnRoute; k.invadeChance = 1; config.competitors.maxOnRoute = 9;
+    try {
+      const g = sandbox(); const rid = open(g, 'ICN', 'NRT'); g.assign(g.state.planes[0].id, rid, 14); months(g, 12);
+      const c = g.state.competitors.find((x) => !x.major)!; c.routes = c.routes.filter((r) => !([r.a, r.b].includes('ICN') && [r.a, r.b].includes('NRT'))); c.stake = 0.51; c.planes = k.promotePlanes; c.cash = 200; months(g, 1);
+      expect(c.major).toBe(true); expect(g.state.log.some((l) => l.includes(`자회사 ${c.name}`) && l.includes('대형 항공사가 됐습니다'))).toBe(true);
+      c.planes = 1; c.cash = -1; const n = c.planes; months(g, 1); expect(c.planes).toBe(n); expect(c.major).toBe(true); // 돈이 없으면 크지 않는다
+      c.cash = 99999; const L = g.state.log.length; months(g, 6); expect(c.planes).toBeGreaterThan(n); expect(g.state.log.slice(L).some((l) => l.includes(c.name) && l.includes('내 노선과 겹칩니다'))).toBe(false); // 내 노선에 들어오지 않는다
+    } finally { k.invadeChance = inv; config.competitors.maxOnRoute = cap; }
+  });
+  it('자유 모드: 내 최근 12개월 매출이 더 크면 대형 항공사도 동맹에 들어오고, 그러면 내 노선에 들어오지 않는다', () => {
+    const k = config.competitors.major, inv = k.invadeChance, cap = config.competitors.maxOnRoute; k.invadeChance = 1; config.competitors.maxOnRoute = 9;
+    try {
+      const g = sandbox(); g.state.rights = undefined; const rid = open(g, 'ICN', 'NRT'); g.assign(g.state.planes[0].id, rid, 14); months(g, 12); const m = major(g)!;
+      m.routes = m.routes.filter((r) => !((r.a === 'ICN' && r.b === 'NRT') || (r.a === 'NRT' && r.b === 'ICN')));
+      m.revHist = [1e6]; expect(g.majorAllyOk(m)).toBe(false); expect(g.joinAlliance(m.id).ok).toBe(false);
+      m.revHist = [0]; g.state.cash = 99999; expect(g.majorAllyOk(m)).toBe(true); expect(g.joinAlliance(m.id).ok).toBe(true); expect(g.state.alliance).toContain(m.id);
+      m.planes = 1; const L = g.state.log.length; months(g, 6); expect(m.planes).toBeGreaterThan(1); expect(g.state.log.slice(L).some((l) => l.includes(m.name) && l.includes('내 노선과 겹칩니다'))).toBe(false);
+    } finally { k.invadeChance = inv; config.competitors.maxOnRoute = cap; }
+  });
   it('시나리오: 파산하지 않고, 시간과 내 항공기 수에 맞춰 커지며 상한이 있다', () => {
     const g = new Game(3); g.state.cash = 99999; months(g, 12); const m = major(g)!; m.cash = -9999; m.low = 99; months(g, 2);
     expect(major(g)).toBeDefined(); expect(g.state.log.some((l) => l.includes(m.name) && l.includes('파산'))).toBe(false);
