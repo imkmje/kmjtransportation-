@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Game } from '../src/sim/game';
 import { config } from '../src/config';
 import { distanceKm } from '../src/sim/model';
@@ -8,13 +8,23 @@ const sb = () => { const g = new Game(3, undefined, { sandbox: true }); g.state.
 const route = (g: Game, a: string, b: string) => { const r = g.openRoute(a, b); if (!r.ok) throw new Error(r.error); const p = g.buyPlane('B737'); if (!p.ok) throw new Error(p.error); g.assign(p.planeId, r.routeId, 7); return { rid: r.routeId, pid: p.planeId }; };
 const richHistory = (g: Game, rev: number) => { g.advanceDays(30); for (let i = 0; i < 12; i++) g.state.history.push({ ...g.state.history[0], month: 100 + i, revenue: rev }); };
 
-describe('대형 사업 비용은 회사 규모에 따라', () => {
-  it('최근 12개월 매출이 클수록 비싸지고, 착공 때 값이 고정된다', () => {
+// 대형 사업 해금 조건(3.11.0)은 따로 시험한다: 다른 시험에서는 조건을 잠시 없앤다
+const needs = config.extra.mega.list.map((d) => d.need); beforeAll(() => { for (const d of config.extra.mega.list) (d as { need?: unknown }).need = undefined; }); afterAll(() => { config.extra.mega.list.forEach((d, i) => { d.need = needs[i]; }); });
+
+describe('대형 사업 값은 고정, 조건을 채우면 해금(3.11.0)', () => {
+  it('회사가 커져도 값이 오르지 않고, 일시금은 10% 할인', () => {
     const g = sb(), base = config.extra.mega.list.find((x) => x.id === 'academy')!.cost;
-    expect(g.megaCost('academy')).toBe(base);
-    richHistory(g, 50); // 연 매출 $600M → √4 = 2배(3.10.0부터 매출의 제곱근)
-    expect(g.megaScale).toBe(2); expect(g.megaCost('academy')).toBe(base * 2); expect(g.megaCost('academy', true)).toBe(Math.round(base * 2 * 0.9));
-    expect(g.startMega('academy').ok).toBe(true); expect(g.state.mega!.cost).toBe(base * 2);
+    expect(g.megaCost('academy')).toBe(base); richHistory(g, 500); expect(g.megaCost('academy')).toBe(base); expect(g.megaCost('academy', true)).toBe(Math.round(base * 0.9));
+    expect(g.startMega('academy').ok).toBe(true); expect(g.state.mega!.cost).toBe(base);
+  });
+  it('조건을 못 채우면 잠기고, 채우면 열린다(항공기 수·운항 노선·연차·앞 사업 완공)', () => {
+    const g = sb(), d = config.extra.mega.list, need = (id: string) => needs[d.findIndex((x) => x.id === id)];
+    const t = (id: string) => { const i = d.findIndex((x) => x.id === id); d[i].need = needs[i]; try { return g.megaLock(id); } finally { d[i].need = undefined; } };
+    expect(t('academy')).toContain('항공기'); expect(t('own_KX200')).toContain('년차'); expect(t('own_KX300')).toContain('KX-200');
+    expect(t('airport')).toContain('운항 노선'); expect(t('terminal')).toContain('출발 도시 노선');
+    for (let i = 0; i < (need('academy')?.planes ?? 0); i++) (g as unknown as { addPlane: (t: string, b: number) => void }).addPlane('B737', 1);
+    expect(t('academy')).toBeNull(); g.state.megaDone = ['own_KX200']; expect(t('own_KX300')).toBeNull();
+    const i = d.findIndex((x) => x.id === 'mro'); d[i].need = needs[i]; try { expect(g.startMega('mro').ok).toBe(false); } finally { d[i].need = undefined; }
   });
   it('일시금: 10% 싸게 한 번에 내고, 공사 중엔 매달 내지 않는다', () => {
     const g = sb(); g.state.cash = 5000; const cost = g.megaCost('academy', true), c0 = g.state.cash;
@@ -189,6 +199,16 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     try { config.subsidiary.reserve = 1000; c.cash = 100; const n = c.planes; g.advanceDays(30); expect(c.planes).toBe(n); // 비상금보다 적으면 안 산다
       config.subsidiary.reserve = 0; c.cash = 100; g.advanceDays(30); expect(c.planes).toBeGreaterThan(n);
     } finally { config.subsidiary.reserve = r0; }
+  });
+  it('자회사 합병: 항공기·노선·현금을 합치고 지분은 가치 비율로, 흡수된 회사는 사라진다', () => {
+    const g = sb(); g.advanceDays(30 * 12); g.state.cash = 99999; const [a, b] = g.state.competitors.filter((x) => !x.major); g.buyStake(a.id, 0.51); g.buyStake(b.id, 0.51); g.injectSubsidiary(b.id, 100);
+    b.routes.push({ ...a.routes[0] }); const shared = a.routes[0], seats = shared.seatsDay, n0 = a.routes.length;
+    const pa = a.planes, pb = b.planes, ca = a.cash, cb = b.cash, va = g.acquirePrice(a), vb = g.acquirePrice(b), sa = a.stake!, sbk = b.stake!, cost = g.mergeCost(b), c0 = g.state.cash;
+    const r = g.mergeSubs(a.id, b.id); expect(r.ok).toBe(true);
+    expect(a.planes).toBe(pa + pb); expect(a.cash).toBeCloseTo(ca + cb, 6); expect(g.state.cash).toBeCloseTo(c0 - cost, 6); expect(g.state.competitors.includes(b)).toBe(false);
+    expect(a.stake).toBeCloseTo(Math.round(((sa * va + sbk * vb) / (va + vb)) * 100) / 100, 6); expect(a.stake).toBeGreaterThan(sa);
+    expect(shared.seatsDay).toBe(Math.round(seats * 2)); expect(a.routes.length).toBe(n0 + b.routes.length - 1);
+    expect(g.mergeSubs(a.id, a.id).ok).toBe(false); g.state.competitors.push({ id: 999, name: '남의 회사', style: 'low', hub: 'PUS', cash: 50, planes: 3, routes: [] }); expect(g.mergeSubs(a.id, 999).ok).toBe(false); // 자회사가 아니면 안 됨
   });
   it('허브 투자 여러 도시 일괄', () => {
     const g = sb(); const o = g.openRoute(g.state.base, 'NRT'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new');

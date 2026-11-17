@@ -1016,15 +1016,24 @@ export class Game {
   get megaMult(): number { const rev = this.state.history.slice(-12).reduce((a, h) => a + h.revenue, 0); return Math.max(1, Math.round((rev / config.extra.mega.scalePer) * 10) / 10); }
   /** 최근 12개월 월평균 매출 */
   get monthlyRev(): number { const h = this.state.history.slice(-12); return h.length ? h.reduce((a, x) => a + x.revenue, 0) / h.length : 0; }
-  /** 대형 사업 규모 배수: √(최근 12개월 매출 ÷ $150M), 최소 1 */
-  get megaScale(): number { const rev = this.state.history.slice(-12).reduce((a, h) => a + h.revenue, 0); return Math.max(1, Math.round(Math.sqrt(rev / config.extra.mega.scalePer) * 10) / 10); }
-  megaCost(id: string, lump = false): number { const d = config.extra.mega.list.find((x) => x.id === id); return d ? Math.round(d.cost * this.megaScale * (lump ? 1 - config.extra.mega.lumpOff : 1)) : 0; }
+  megaCost(id: string, lump = false): number { const d = config.extra.mega.list.find((x) => x.id === id); return d ? Math.round(d.cost * (lump ? 1 - config.extra.mega.lumpOff : 1)) : 0; }
+  /** 대형 사업 해금 조건: 채웠으면 null, 아니면 무엇이 모자란지 */
+  megaLock(id: string): string | null {
+    const d = config.extra.mega.list.find((x) => x.id === id), n = d?.need, s = this.state; if (!n) return null; const miss: string[] = [];
+    if (n.planes && s.planes.length < n.planes) miss.push(`항공기 ${n.planes}대(지금 ${s.planes.length}대)`);
+    if (n.links && this.linksAt(s.base) < n.links) miss.push(`출발 도시 노선 ${n.links}개(지금 ${this.linksAt(s.base)}개)`);
+    if (n.routes) { const r = s.routes.filter((x) => x.open && this.planesOn(x.id).length).length; if (r < n.routes) miss.push(`운항 노선 ${n.routes}개(지금 ${r}개)`); }
+    if (n.month && this.monthsPassed < n.month) miss.push(`${n.month / 12 + 1}년차부터(지금 ${Math.floor(this.monthsPassed / 12) + 1}년차)`);
+    if (n.after && !(s.megaDone ?? []).includes(n.after)) miss.push(`${config.extra.mega.list.find((x) => x.id === n.after)?.name ?? n.after} 완공`);
+    return miss.length ? miss.join(', ') : null;
+  }
   startMega(id: string, city?: string, lump = false): Result {
     const s = this.state, d = config.extra.mega.list.find((x) => x.id === id);
     if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!d) return fail('없는 사업입니다');
     if (s.mega) return fail('이미 진행 중인 대형 사업이 있습니다');
     if (id !== 'terminal' && id !== 'airport' && (s.megaDone ?? []).includes(id)) return fail('이미 완공했습니다');
+    const lock = this.megaLock(id); if (lock) return fail(`아직 잠겨 있습니다: ${lock}`);
     if (id === 'airport' && (!city || !this.cityOpen(city) || s.myAirports?.includes(city))) return fail('공항을 지을 도시를 골라 주세요(운수권이 있고 아직 내 공항이 없는 곳)');
     const cost = this.megaCost(id, lump); if (lump && s.cash < cost) return fail('현금이 모자랍니다');
     if (lump) { s.cash -= cost; s.cur.cost += cost; } s.mega = { id, done: 0, cost, ...(lump ? { paid: true } : {}), ...(id === 'terminal' || id === 'airport' ? { city: city ?? s.base } : {}) };
@@ -1553,6 +1562,24 @@ export class Game {
   /** 대형 항공사 항공기 상한: 45대 또는 (자유 모드) 내 항공기의 70% 중 큰 쪽 */
   get majorCap(): number { const M = config.competitors.major; return this.state.sandbox ? Math.max(M.cap, Math.round(this.state.planes.length * M.capMine)) : M.cap; }
   // ---- 그룹 경영(자유 모드) ----
+  mergeCost(from: Competitor): number { const k = config.subsidiary.merge; return Math.round(Math.max(k.min, this.acquirePrice(from) * k.fee) * 10) / 10; }
+  /** 자회사 합병: from을 into에 흡수한다. 항공기·노선(같은 노선은 좌석을 합침)·현금·빌려준 항공기를 합치고, 내 지분은 두 회사 가치 비율로 다시 계산 */
+  mergeSubs(intoId: number, fromId: number): Result<{ stake: number; cost: number }> {
+    const s = this.state, a = s.competitors.find((x) => x.id === intoId), b = s.competitors.find((x) => x.id === fromId), k = config.subsidiary.merge; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
+    if (!a || !b || a === b || (a.stake ?? 0) < 0.51 || (b.stake ?? 0) < 0.51) return fail('내 자회사(51% 이상) 두 곳을 골라 주세요');
+    const cost = this.mergeCost(b); if (s.cash < cost) return fail('현금이 모자랍니다');
+    const va = Math.max(1, this.acquirePrice(a)), vb = Math.max(1, this.acquirePrice(b)), stake = Math.min(1, Math.round(((a.stake! * va + b.stake! * vb) / (va + vb)) * 100) / 100);
+    s.cash -= cost; s.cur.cost += cost;
+    for (const r of b.routes) { const ex = a.routes.find((x) => this.sameRoute(x, r.a, r.b)); if (!ex) { a.routes.push(r); continue; } ex.seatsDay = Math.round(ex.seatsDay + r.seatsDay); if (r.fleet?.length) { ex.fleet = [...(ex.fleet ?? []), ...r.fleet]; ex.fleetAt ??= r.fleetAt; ex.handSeats = (ex.handSeats ?? 0) + (r.handSeats ?? 0); } }
+    a.planes += b.planes; a.cash += b.cash; a.stake = stake; a.invested = (a.invested ?? 0) + (b.invested ?? 0) + cost; a.divTotal = Math.round(((a.divTotal ?? 0) + (b.divTotal ?? 0)) * 100) / 100; a.lent = [...(a.lent ?? []), ...(b.lent ?? [])];
+    a.eff = Math.min(k.effMax, Math.round((Math.max(a.eff ?? 1, b.eff ?? 1) + k.eff) * 1000) / 1000); a.low = 0;
+    const ra = a.revHist ?? [], rb = b.revHist ?? [], n = Math.max(ra.length, rb.length); a.revHist = Array.from({ length: n }, (_, i) => Math.round(((ra[ra.length - n + i] ?? 0) + (rb[rb.length - n + i] ?? 0)) * 100) / 100);
+    if (b.major && !a.major) { a.major = true; a.hubs = this.majorHubs(b).includes(a.hub) ? this.majorHubs(b) : [a.hub, ...this.majorHubs(b)].slice(0, 4); } else if (a.major && b.major) a.hubs = [...new Set([...this.majorHubs(a), ...this.majorHubs(b)])].slice(0, 5);
+    if (b.call && !a.call) a.call = b.call;
+    s.competitors = s.competitors.filter((x) => x !== b); if (s.adWar?.comp === b.id) s.adWar = null; if (s.majorHold?.[b.id] !== undefined) { const m = { ...s.majorHold }; delete m[b.id]; s.majorHold = m; }
+    s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${b.name}을(를) ${a.name}에 합병했습니다($${cost}M). 항공기 ${a.planes}대·노선 ${a.routes.length}개, 내 지분 ${Math.round(stake * 100)}%.`); this.note(this.monthsPassed + 1, 'rival', `${b.name} → ${a.name} 합병`);
+    return { ok: true, stake, cost };
+  }
   get groupSubs(): Competitor[] { return this.state.sandbox ? this.state.competitors.filter((c) => (c.stake ?? 0) >= 0.51) : []; }
   get groupPlanes(): number { return this.state.planes.length + this.groupSubs.reduce((a, c) => a + c.planes, 0); }
   /** 그룹 시너지: 그룹 항공기 수에 따른 항공기 값 할인, 자회사 수에 따른 항공기 고정비 할인 */
