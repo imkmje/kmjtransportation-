@@ -49,6 +49,18 @@ describe('대형 항공사', () => {
       m.planes = 1; const L = g.state.log.length; months(g, 6); expect(m.planes).toBeGreaterThan(1); expect(g.state.log.slice(L).some((l) => l.includes(m.name) && l.includes('내 노선과 겹칩니다'))).toBe(false);
     } finally { k.invadeChance = inv; config.competitors.maxOnRoute = cap; }
   });
+  it('자유 모드: 대형 자리가 다 찼으면, 가장 작은 대형보다 매출이 6개월 연속 큰 일반 항공사와 자리를 바꾼다', () => {
+    const g = sandbox(); months(g, 48); const K = config.competitors.major;
+    for (const c of g.state.competitors.filter((x) => !x.major).slice(0, K.maxMajors - g.state.competitors.filter((x) => x.major).length)) { c.major = true; c.hubs = [c.hub]; }
+    const majors = g.state.competitors.filter((x) => x.major); expect(majors.length).toBe(K.maxMajors);
+    const top = g.state.competitors.find((x) => !x.major)!, L = g.state.log.length;
+    const pump = () => { top.planes = K.promotePlanes; top.cash = 500; top.revHist = Array(12).fill(1e5); months(g, 1); };
+    for (let i = 0; i < K.swapMonths - 1; i++) pump();
+    expect(top.major).toBeFalsy(); expect(top.ahead).toBe(K.swapMonths - 1);
+    pump(); expect(top.major).toBe(true); expect(g.state.competitors.filter((x) => x.major).length).toBe(K.maxMajors);
+    const out = majors.find((x) => !x.major)!; expect(out).toBeDefined(); expect(out.planes).toBeGreaterThan(0); expect(g.state.fallen).toContain(out.name);
+    expect(g.state.log.slice(L).some((l) => l.includes('대형 자리를 바꿨습니다'))).toBe(true);
+  });
   it('시나리오: 파산하지 않고, 시간과 내 항공기 수에 맞춰 커지며 상한이 있다', () => {
     const g = new Game(3); g.state.cash = 99999; months(g, 12); const m = major(g)!; m.cash = -9999; m.low = 99; months(g, 2);
     expect(major(g)).toBeDefined(); expect(g.state.log.some((l) => l.includes(m.name) && l.includes('파산'))).toBe(false);
