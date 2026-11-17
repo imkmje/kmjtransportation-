@@ -99,7 +99,7 @@ export interface GameState {
   allianceRank?: { y: number; mine: number; sky: number; won: boolean } | null; // 동맹 순위전 결과
   off?: string[]; // 자유 모드에서 끈 기능(crew·alliance·subsidiary·finance·crisis·saga·policy)
   pilots?: number; crewShort?: boolean; autoHire?: boolean; insurance?: number; bonds?: { amount: number; rate: number; until: number }[]; // 조종사 수·자동 채용(끄면 false), 보험 단계(0~2), 채권(원금·월 이율·만기 개월)
-  biz?: { hotels?: Record<string, number>; lessor?: { id: number; type: string; book: number; age: number; lessee?: number }[]; last?: { hotel: number; lease: number } }; // 그룹 사업(자유 모드): 호텔(도시 → 단계 1~3), 리스 회사 보유기(빌려 간 경쟁사), 지난달 순이익
+  biz?: { hotels?: Record<string, number>; lessor?: { id: number; type: string; book: number; age: number; lessee?: number }[]; units?: Record<string, number>; last?: { hotel: number; lease: number; units?: Record<string, number> } }; // 3.15.0 units: 여행사·기내식·정비 회사·항공 물류의 단계(1~3) // 그룹 사업(자유 모드): 호텔(도시 → 단계 1~3), 리스 회사 보유기(빌려 간 경쟁사), 지난달 순이익
   majorVeto?: Record<number, number>; // 대형 항공사 이사회 거부권을 마지막으로 쓴 개월
   majorHold?: Record<number, number>; majorFreeze?: Record<number, number>; majorSuit?: Record<number, number>; // 대형 항공사 견제: 내 지분(0~0.1), 제재가 끝나는 개월, 다음 제소 가능 개월
   refitQ?: number[]; refitNow?: number[]; // 객실 일괄 개조: 기다리는 항공기 ID, 지금 개조 중인 항공기 ID(옛 저장의 refitCur는 무시)
