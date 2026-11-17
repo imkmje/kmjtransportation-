@@ -3,7 +3,7 @@ import { AIRCRAFT, EVENTS, CITIES, OWN_TYPES, applyOwnNames, typeById, cityById,
 import { Rng } from './rng';
 import { marketSize, baseFare, baseSlots, bizDemandShare, blockHours, canFly, cargoRate, distanceKm, maxWeeklyRoundTrips, priceFactor, rawCargoDemand, rawMonthlyDemand } from './model';
 import { ACHIEVEMENTS, LADDERS } from './achievements';
-import type { Charter, ChronEntry, Competitor, Season, Threat, Contract, ContractReward, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route, CompRoute } from './types';
+import type { MgrCand, Manager, Charter, ChronEntry, Competitor, Season, Threat, Contract, ContractReward, DayStat, Difficulty, EventDef, GameState, GoalProgress, MonthReport, Plane, Route, CompRoute } from './types';
 
 type Trait = { name: string; desc: string; war?: number; buy?: number; planes?: number; q?: number; shock?: number };
 type StoryChoice = { label: string; cash?: number; rep?: number; slot?: boolean; baseTaken?: number; duel?: boolean; subSell?: boolean; next?: { id: string; months: number }; result: string; risk?: { chance: number; cash?: number; rep?: number; subCash?: number; text: string } };
@@ -1134,7 +1134,7 @@ export class Game {
   /** 월말: 자유 모드 재미 요소를 한꺼번에 돌린다 */
   private extraMonth(): void {
     const s = this.state, m = this.monthsPassed; if (!s.sandbox) return;
-    this.loyaltyStep(); this.alliStep(m); this.lateStep(m); this.crewStep(); this.financeStep(m); this.majorDividends(); this.bizStep();
+    this.loyaltyStep(); this.alliStep(m); this.lateStep(m); this.crewStep(); this.financeStep(m); this.majorDividends(); this.bizStep(); this.mgrStep(m);
     this.charterStep(m); this.bidStep(m); this.megaStep(m); this.awardsStep(m); this.recordsStep(m); this.pioneerStep(m); this.rivalAllianceStep(m);
     if (m % 6 === 0) s.netHist = [...(s.netHist ?? []), { m, routes: s.routes.filter((r) => r.open && this.planesOn(r.id).length).map((r) => [r.a, r.b] as [string, string]) }].slice(-60);
     for (const id of Object.keys(s.concessions ?? {})) if (s.concessions![id].until <= m) { const c = { ...s.concessions! }; delete c[id]; s.concessions = c; }
@@ -1512,6 +1512,84 @@ export class Game {
     if (s.concessions?.[city] && s.concessions[city].until > mp) return fail('이미 운영권 주인이 있는 공항입니다');
     s.bids = [{ id: s.nextId++, kind: 'concession', city, n: 0, ends: mp + k.months, best: null, min: k.concessionMin }];
     s.log.push(`${mp + 1}개월차: ${cityById(city).name} 공항 운영권 입찰을 열었습니다(${k.months}개월). 낙찰하면 5년간 슬롯 +${k.concessionSlots}·착륙료 −30%, 그리고 ${c.name}이(가) 그 공항을 지나는 노선 매출의 ${Math.round(config.majorCheck.hubFee * 100)}%를 착륙료로 냅니다.`); return { ok: true };
+  }
+  // ---- 위임 경영진(3.14.0): 자회사·동맹 운영을 맡기면 월급을 받고 예산 안에서 알아서 한다(직접 하는 것보다 조금 서툴다) ----
+  mgrSalary(skill: number): number { const k = config.mgr.salary; return Math.round((k.base + k.perSkill * (skill - 0.7)) * 100) / 100; }
+  mgrFee(c: MgrCand): number { return Math.round(this.mgrSalary(c.skill) * config.mgr.feeMonths * 10) / 10; }
+  mgrStars(skill: number): number { return Math.max(1, Math.min(5, Math.round(1 + ((skill - 0.7) / 0.6) * 4))); }
+  mgrOf(post: 'alli' | number): Manager | undefined { return this.state.mgrs?.find((m) => m.post === post); }
+  /** 맡길 수 있는 자리: 동맹(회원이 있을 때)과 지분 51% 이상 자회사 중 비어 있는 곳 */
+  mgrPosts(): { post: 'alli' | number; name: string }[] {
+    const s = this.state, out: { post: 'alli' | number; name: string }[] = []; if (!s.sandbox) return out;
+    if (s.alliance?.length && !this.mgrOf('alli')) out.push({ post: 'alli', name: s.alli?.name ?? '우리 동맹' });
+    for (const c of this.groupSubs) if (!this.mgrOf(c.id)) out.push({ post: c.id, name: c.name }); return out;
+  }
+  private mgrRefresh(): void {
+    const s = this.state, k = config.mgr, taken = new Set((s.mgrs ?? []).map((m) => m.name)), names = config.extra.ceos.filter((n) => !taken.has(n)), styles = Object.keys(k.styles) as MgrCand['style'][];
+    s.mgrPool = Array.from({ length: k.pool }, () => { const skill = Math.round((0.7 + this.rng.next() * 0.6) * 100) / 100, name = names.splice(this.rng.int(names.length), 1)[0]; return { id: s.nextId++, name, style: styles[this.rng.int(styles.length)], skill, shown: Math.max(1, Math.min(5, this.mgrStars(skill) + this.rng.int(3) - 1)) }; });
+    s.mgrPoolYear = Math.floor(this.monthsPassed / 12);
+  }
+  hireMgr(candId: number, post: 'alli' | number, budget = config.mgr.startBudget): Result<{ fee: number }> {
+    const s = this.state, k = config.mgr, cand = s.mgrPool?.find((x) => x.id === candId);
+    if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!cand) return fail('없는 후보입니다(해마다 새 후보가 옵니다)');
+    if ((s.mgrs?.length ?? 0) >= k.maxHired) return fail(`경영진은 ${k.maxHired}명까지입니다`);
+    if (this.mgrOf(post)) return fail('이미 경영자가 있는 자리입니다');
+    if (!this.mgrPosts().some((x) => x.post === post)) return fail(post === 'alli' ? '동맹 회원이 있어야 동맹을 맡길 수 있습니다' : '지분 51% 이상 자회사만 맡길 수 있습니다');
+    if (!k.budgets.includes(budget)) return fail('없는 예산입니다');
+    const fee = this.mgrFee(cand); if (s.cash < fee) return fail('현금이 모자랍니다');
+    const c = typeof post === 'number' ? s.competitors.find((x) => x.id === post) : undefined, effBonus = c ? Math.round((cand.skill - 1) * k.effPerSkill * 1000) / 1000 : 0;
+    s.cash -= fee; s.cur.cost += fee; s.mgrPool = s.mgrPool!.filter((x) => x !== cand);
+    if (c) c.eff = Math.round(((c.eff ?? 1) + effBonus) * 1000) / 1000;
+    (s.mgrs ??= []).push({ ...cand, post, budget, hired: this.monthsPassed, used: 0, spent: 0, base: Math.round((c?.hist ?? []).slice(-12).reduce((a, h) => a + h.profit, 0) * 10) / 10, salary: this.mgrSalary(cand.skill), notes: [], effBonus });
+    s.log.push(`${this.monthsPassed + 1}개월차: ${k.styles[cand.style].name} 경영자 ${cand.name}을(를) ${c?.name ?? s.alli?.name ?? '동맹'}에 영입했습니다(계약금 $${fee}M, 월급 $${this.mgrSalary(cand.skill)}M).`); this.note(this.monthsPassed + 1, 'invest', `경영자 ${cand.name} 영입`);
+    return { ok: true, fee };
+  }
+  setMgrBudget(id: number, budget: number): Result { const g = this.state.mgrs?.find((x) => x.id === id); if (!g) return fail('없는 경영자입니다'); if (!config.mgr.budgets.includes(budget)) return fail('없는 예산입니다'); g.budget = budget; return { ok: true }; }
+  fireMgr(id: number, why = '해임했습니다'): Result {
+    const s = this.state, g = s.mgrs?.find((x) => x.id === id); if (!g) return fail('없는 경영자입니다');
+    const c = typeof g.post === 'number' ? s.competitors.find((x) => x.id === g.post) : undefined; if (c) c.eff = Math.round(((c.eff ?? 1) - g.effBonus) * 1000) / 1000;
+    s.mgrs = s.mgrs!.filter((x) => x !== g); s.log.push(`${this.monthsPassed + 1}개월차: 경영자 ${g.name} — ${why}(누적 사용 $${Math.round(g.spent)}M).`); return { ok: true };
+  }
+  private mgrStep(m: number): void {
+    const s = this.state, k = config.mgr; if (!s.sandbox) return;
+    if (m >= k.minMonth && (s.mgrPool === undefined || s.mgrPoolYear !== Math.floor(m / 12))) this.mgrRefresh();
+    for (const g of [...(s.mgrs ?? [])].sort((a, b) => a.id - b.id)) {
+      const st = k.styles[g.style], c = typeof g.post === 'number' ? s.competitors.find((x) => x.id === g.post) : undefined;
+      if (typeof g.post === 'number' ? !c || (c.stake ?? 0) < 0.51 : !s.alliance?.length) { this.fireMgr(g.id, '맡은 곳이 없어져 계약이 끝났습니다'); continue; }
+      g.used = 0; s.cash -= g.salary; s.cur.cost += g.salary;
+      const where = c?.name ?? s.alli?.name ?? '동맹', room = () => g.budget - g.used, sloppy = () => this.rng.next() < Math.max(0, 1 - g.skill) * 1.5;
+      const say = (t: string) => { g.notes = [`${m + 1}개월차 ${t}`, ...g.notes].slice(0, 6); s.log.push(`${m + 1}개월차: 경영진 ${g.name}(${where}) — ${t}`); };
+      if (this.rng.next() < st.mistake * (1.6 - 0.6 * g.skill)) { const loss = Math.round(g.budget * (0.3 + 0.7 * this.rng.next()) * 10) / 10; s.cash -= loss; s.cur.cost += loss; say(`${st.slip[this.rng.int(st.slip.length)]} 탓에 $${loss}M 손실을 냈습니다`); }
+      if (c) {
+        const prof = c.hist?.at(-1)?.profit ?? 0, call = c.call;
+        if (call && call.amount <= room() && s.cash >= call.amount * 2) { const a = call.amount; if (this.fundSubsidiary(c.id).ok) { g.used += a; g.spent += a; say(`증자 요청에 응했습니다($${a}M)`); } }
+        else if (!call && (c.stake ?? 0) < 0.95 && c.cash < st.low) { const amt = Math.min(room(), Math.round(g.budget * st.inject)); if (amt >= 5 && s.cash >= amt * 4 && this.injectSubsidiary(c.id, amt).ok) { g.used += amt; g.spent += amt; say(`자본금 $${amt}M을 넣었습니다(지분 ${Math.round((c.stake ?? 0) * 100)}%)`); } }
+        const dirs = ['grow', 'profit', 'attack'] as const, rivals = s.competitors.some((x) => x.id !== c.id && !x.stake && !x.major);
+        let want: 'grow' | 'profit' | 'attack' = g.style === 'careful' ? (c.cash < 30 || prof < 0 ? 'profit' : 'grow') : g.style === 'bold' ? (c.cash > 60 && rivals ? 'attack' : prof < -2 && c.cash < 15 ? 'profit' : 'grow') : prof < 0 ? 'profit' : c.cash > 80 ? 'grow' : (c.dir ?? 'grow');
+        if (sloppy()) want = dirs[this.rng.int(3)];
+        if (want !== (c.dir ?? 'grow') && m - (g.dirAt ?? -9) >= 3 && this.setSubDir(c.id, want).ok) { g.dirAt = m; say(`운영 방향을 '${config.subsidiary.dirs[want].name}'(으)로 바꿨습니다`); }
+      } else {
+        const a = s.alli!;
+        if (a.meeting) {
+          const hurt = s.competitors.some((x) => x.major && !this.isFriend(x) && x.routes.some((r) => s.routes.some((mr) => mr.open && this.sameRoute(mr, r.a, r.b)))), ids = Object.keys(config.extra.alliance.agendas);
+          let id = hurt && g.style !== 'bold' ? 'defend' : g.style === 'bold' && (s.alliance?.length ?? 0) < this.alliMax ? 'expand' : g.style === 'careful' ? 'buy' : 'fare'; if (sloppy()) id = ids[this.rng.int(ids.length)];
+          if (this.chooseAgenda(id).ok) say(`연례 회의에서 '${config.extra.alliance.agendas[id].name}' 안건을 통과시켰습니다`);
+        }
+        if (a.poach && a.poach.cost <= g.budget * 1.5 && s.cash >= a.poach.cost * 3) { const cost = a.poach.cost; if (this.keepMember().ok) { g.used += cost; g.spent += cost; say(`스카이 동맹에 넘어갈 뻔한 회원을 붙잡았습니다($${cost}M)`); } }
+        if (a.req) {
+          const q = a.req, rc = s.competitors.find((x) => x.id === q.comp), ok = (s.alliance?.length ?? 0) < this.alliMax && (g.style !== 'careful' || (rc && (rc.low ?? 0) === 0));
+          if (rc && ok && this.answerJoinReq(true).ok) say(`${rc.name}의 가입 요청을 받았습니다(가입비 +$${q.fee}M)`); else if (rc && g.style === 'careful' && this.answerJoinReq(false).ok) say(`${rc.name}의 가입 요청을 거절했습니다(자금난)`);
+        }
+        const sky = s.competitors.filter((x) => s.rivalAlliance?.includes(x.id) && !x.major)[0];
+        if (g.style === 'bold' && sky && m % 12 === 3 && (s.alliance?.length ?? 0) < this.alliMax) { const cost = this.recruitCost(sky); if (cost <= room() && s.cash >= cost * 4) { const r = this.recruitFromSky(sky.id); if (r.ok) { g.used += cost; g.spent += cost; say(`스카이 동맹의 ${sky.name}을(를) 데려오려 했습니다(${r.won ? '성공' : '실패'}, $${cost}M)`); } } }
+        a.xp += 1;
+      }
+      if (m - g.hired > 0 && (m - g.hired) % 12 === 0) {
+        g.stars = this.mgrStars(g.skill);
+        if (c) { const p12 = Math.round((c.hist ?? []).slice(-12).reduce((a, h) => a + h.profit, 0) * 10) / 10; say(`1년 평가 ★${g.stars}: 연 이익 $${g.base}M → $${p12}M(${p12 >= g.base ? '기대 이상' : '기대 이하'})`); } else say(`1년 평가 ★${g.stars}: 동맹 ${this.alliLevel}등급, 회원 ${s.alliance?.length ?? 0}곳, 사용 $${Math.round(g.spent)}M`);
+        if (g.skill >= 1.1 && this.rng.next() < k.poachChance) this.fireMgr(g.id, '더 좋은 조건을 찾아 다른 회사로 옮겼습니다');
+      }
+    }
   }
   /** 대형 항공사 지분 배당(매달) */
   private majorDividends(): void {
