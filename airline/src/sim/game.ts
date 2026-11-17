@@ -240,7 +240,7 @@ export class Game {
     return this.state.routes.filter((r) => r.open && (r.a === cityId || r.b === cityId) && this.planesOn(r.id).length > 0).length;
   }
   /** 허브 효과: 노선이 2개 이상이면 그 도시 수요 보너스 */
-  hubBonus(cityId: string): number { const n = this.linksAt(cityId); return n > 1 ? Math.min(config.hub.max, config.hub.perLink * (n - 1)) : 0; }
+  hubBonus(cityId: string): number { const n = this.linksAt(cityId); return (n > 1 ? Math.min(config.hub.max, config.hub.perLink * (n - 1)) : 0) + ((this.state.megaCity?.[cityId] ?? 0) > 0 ? config.extra.mega.termHub : 0); } // 전용 터미널은 허브 효과 상한을 넘겨 더한다
 
   // ---- 경쟁 ----
   /** 같은 도시 쌍의 경쟁사 노선들 */
@@ -289,7 +289,7 @@ export class Game {
     const eco = s.economy ?? 1;
     const fuelPrice = s.hedge ? s.hedge.price : (s.fuel ?? 1), fuelMult = 1 - c.fuel.share + c.fuel.share * fuelPrice; // 계약 중이면 계약 가격
     d0 *= eco; cg0 *= Math.pow(eco, c.economy.cargoPow);
-    let capMult = this.crewFactor, costMult = (1 - this.up('ops')) * (1 - c.extra.green.ops * (s.green ?? 0)); // 친환경 연료: 운영비 절감
+    let capMult = this.crewFactor, costMult = (1 - this.up('ops')) * (1 - c.extra.green.ops * (s.green ?? 0)) * (s.megaDone?.includes('academy') ? 1 - c.extra.mega.academyOps : 1); // 친환경 연료: 운영비 절감
     d0 *= 1 + this.up('marketing');
     for (const e of s.events) {
       const def = EVENTS.find((x) => x.id === e.def)!, k = (e.handled && def.option ? def.option.scale : 1) * (1 - this.insCut); // 대응하면, 보험이 있으면 효과가 줄어든다
@@ -802,7 +802,8 @@ export class Game {
     return (1 + ad) * (1 + this.loyaltyBoost) * (1 + pio) * (1 + config.extra.rating.weight * (this.routeRating(r) - 3)) * this.alliDemand(r) * (s.campaign && s.campaign.until > mp ? 1 + (config.extra.campaign[s.campaign.kind]?.boost ?? 0) : 1) * (1 + this.hotelBoost(r));
   }
   /** 착륙료 배율: 우리가 운영권을 가진 공항이면 싸다 */
-  private landingFactor(r: Route): number {
+  private landingFactor(r: Route): number { return ([r.a, r.b].some((x) => (this.state.megaCity?.[x] ?? 0) > 0) ? config.extra.mega.termFee : 1) * this.landingBase(r); } // 전용 터미널: 착륙료 −30%
+  private landingBase(r: Route): number {
     if (this.state.myAirports?.some((x) => x === r.a || x === r.b)) return [r.a, r.b].every((x) => this.state.myAirports!.includes(x)) ? 0 : 0.5; // 내 공항: 착륙료 면제(한쪽만이면 절반)
     const c = this.state.concessions; if (!c) return 1;
     return [r.a, r.b].some((id) => c[id]?.holder === 0 && c[id].until > this.monthsPassed) ? config.extra.bid.concessionFee : 1;
@@ -1015,16 +1016,19 @@ export class Game {
   get megaMult(): number { const rev = this.state.history.slice(-12).reduce((a, h) => a + h.revenue, 0); return Math.max(1, Math.round((rev / config.extra.mega.scalePer) * 10) / 10); }
   /** 최근 12개월 월평균 매출 */
   get monthlyRev(): number { const h = this.state.history.slice(-12); return h.length ? h.reduce((a, x) => a + x.revenue, 0) / h.length : 0; }
-  megaCost(id: string): number { const d = config.extra.mega.list.find((x) => x.id === id); return d ? Math.round(d.cost * this.megaMult) : 0; }
-  startMega(id: string, city?: string): Result {
+  /** 대형 사업 규모 배수: √(최근 12개월 매출 ÷ $150M), 최소 1 */
+  get megaScale(): number { const rev = this.state.history.slice(-12).reduce((a, h) => a + h.revenue, 0); return Math.max(1, Math.round(Math.sqrt(rev / config.extra.mega.scalePer) * 10) / 10); }
+  megaCost(id: string, lump = false): number { const d = config.extra.mega.list.find((x) => x.id === id); return d ? Math.round(d.cost * this.megaScale * (lump ? 1 - config.extra.mega.lumpOff : 1)) : 0; }
+  startMega(id: string, city?: string, lump = false): Result {
     const s = this.state, d = config.extra.mega.list.find((x) => x.id === id);
     if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!d) return fail('없는 사업입니다');
     if (s.mega) return fail('이미 진행 중인 대형 사업이 있습니다');
     if (id !== 'terminal' && id !== 'airport' && (s.megaDone ?? []).includes(id)) return fail('이미 완공했습니다');
     if (id === 'airport' && (!city || !this.cityOpen(city) || s.myAirports?.includes(city))) return fail('공항을 지을 도시를 골라 주세요(운수권이 있고 아직 내 공항이 없는 곳)');
-    const cost = this.megaCost(id); s.mega = { id, done: 0, cost, ...(id === 'terminal' || id === 'airport' ? { city: city ?? s.base } : {}) };
-    s.log.push(`${this.monthsPassed + 1}개월차: 대형 사업 착공 — ${d.name}(${d.months}개월, 매달 $${Math.round((cost / d.months) * 10) / 10}M).`); this.note(this.monthsPassed + 1, 'invest', `${d.name} 착공`);
+    const cost = this.megaCost(id, lump); if (lump && s.cash < cost) return fail('현금이 모자랍니다');
+    if (lump) { s.cash -= cost; s.cur.cost += cost; } s.mega = { id, done: 0, cost, ...(lump ? { paid: true } : {}), ...(id === 'terminal' || id === 'airport' ? { city: city ?? s.base } : {}) };
+    s.log.push(`${this.monthsPassed + 1}개월차: 대형 사업 착공 — ${d.name}(${d.months}개월, ${lump ? `일시금 $${cost}M` : `매달 $${Math.round((cost / d.months) * 10) / 10}M`}).`); this.note(this.monthsPassed + 1, 'invest', `${d.name} 착공`);
     return { ok: true };
   }
   /** 대형 사업 일시중지·재개: 멈춘 동안은 매달 돈도 안 내고 진행도 멈춘다 */
@@ -1032,12 +1036,12 @@ export class Game {
   cancelMega(): Result { if (!this.state.mega) return fail('진행 중인 사업이 없습니다'); this.state.mega = null; return { ok: true }; }
   private megaStep(m: number): void {
     const s = this.state, mg = s.mega; if (!mg || mg.paused) return;
-    const d = config.extra.mega.list.find((x) => x.id === mg.id)!, pay = (mg.cost ?? d.cost) / d.months;
-    if (s.cash < pay) { s.log.push(`${m + 1}개월차: 현금이 모자라 ${d.name} 공사가 이번 달 멈췄습니다.`); return; }
+    const d = config.extra.mega.list.find((x) => x.id === mg.id)!, pay = mg.paid ? 0 : (mg.cost ?? d.cost) / d.months;
+    if (pay > 0 && s.cash < pay) { s.log.push(`${m + 1}개월차: 현금이 모자라 ${d.name} 공사가 이번 달 멈췄습니다.`); return; } // 일시금으로 낸 사업은 현금과 상관없이 진행
     s.cash -= pay; s.cur.cost += pay; mg.done++;
     if (mg.done >= d.months) {
       s.megaDone = [...(s.megaDone ?? []), mg.id];
-      if (mg.id === 'terminal' && mg.city) s.megaCity = { ...(s.megaCity ?? {}), [mg.city]: (s.megaCity?.[mg.city] ?? 0) + 12 };
+      if (mg.id === 'terminal' && mg.city) s.megaCity = { ...(s.megaCity ?? {}), [mg.city]: (s.megaCity?.[mg.city] ?? 0) + config.extra.mega.termSlots };
       if (mg.id === 'academy') s.reputation = Math.min(1, s.reputation + 0.05);
       if (mg.id === 'airport' && mg.city) s.myAirports = [...(s.myAirports ?? []), mg.city];
       if (mg.id.startsWith('own_')) s.ownTypes = [...(s.ownTypes ?? []), mg.id.slice(4)];
@@ -1912,7 +1916,7 @@ export class Game {
         if (!s.sandbox) { c.cash = Math.max(c.cash, 50); c.low = 0; } else if (c.cash < 0) continue;
         const M = k.major, target = Math.min(this.majorCap, Math.floor(M.base + M.perMonth * this.monthsPassed + M.perPlayerPlane * s.planes.length));
         if (!this.majorFrozen(c)) for (let i = 0; i < M.addPerMonth && c.planes < target; i++) { if (c.stake && c.cash < B737.price * k.buyRatio) break; this.compBuy(c, month, !c.stake); } /* 자회사 대형은 돈을 내고 산다 */ // 반독점 제재 중에는 크지 않는다
-      } else if (c.cash >= B737.price * (s.sandbox ? k.buyRatio : 1) * (tr?.buy ?? 1) * (c.dir === 'grow' ? 0.7 : c.dir === 'profit' ? 1.5 : 1) && c.planes < maxPlanes) this.compBuy(c, month);
+      } else if (c.cash - ((c.stake ?? 0) >= 0.51 ? config.subsidiary.reserve : 0) >= B737.price * (s.sandbox ? k.buyRatio : 1) * (tr?.buy ?? 1) * (c.dir === 'grow' ? 0.7 : c.dir === 'profit' ? 1.5 : 1) && c.planes < maxPlanes) this.compBuy(c, month);
     }
   }
 
