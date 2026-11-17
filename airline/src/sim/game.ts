@@ -1272,7 +1272,7 @@ export class Game {
 
   /** 내 노선과 겹칠 때 이 회사가 손님을 빼앗는 힘(제휴·자회사는 약하다) */
   private allyWeight(c: Competitor): number {
-    const w = c.stake ? config.subsidiary.weight[String(c.stake)] ?? 1 : 1;
+    const w = c.stake ? config.subsidiary.weight[c.stake >= 1 ? '1' : c.stake >= 0.51 ? '0.51' : '0.2'] ?? 1 : 1; // 증자로 지분이 51~99%가 될 수 있다
     return Math.min(w, c.id === this.state.ally ? config.ally.weight : 1, this.state.alliance?.includes(c.id) ? this.alliWeight : 1);
   }
   // ---------- 자회사 ----------
@@ -1292,7 +1292,7 @@ export class Game {
     if ((c.stake ?? 0) >= pct) return fail('이미 그만큼 지분을 가지고 있습니다');
     const price = this.stakePrice(c, pct);
     if (s.cash < price) return fail('현금이 모자랍니다');
-    s.cash -= price; c.cash += price * 0.5; c.stake = pct; if (s.alliance?.includes(id)) s.alliance = s.alliance.filter((x) => x !== id); if (pct >= 0.51 && !c.dir) c.dir = 'grow'; // 낸 돈의 절반은 회사 운영 자금으로 들어간다
+    s.cash -= price; c.cash += price * 0.5; c.stake = pct; c.invested = (c.invested ?? 0) + price; if (s.alliance?.includes(id)) s.alliance = s.alliance.filter((x) => x !== id); if (pct >= 0.51 && !c.dir) c.dir = 'grow'; // 낸 돈의 절반은 회사 운영 자금으로 들어간다
     if (s.ally === id) s.ally = null; // 자회사는 제휴보다 가까운 관계
     if (s.rivalId === id) { s.rivalId = null; this.note(this.monthsPassed + 1, 'rival', `라이벌 ${c.name}을(를) 자회사로`); }
     s.log.push(`${this.monthsPassed + 1}개월차: ${c.name}의 지분 ${Math.round(pct * 100)}%를 $${price}M에 샀습니다. ${pct >= 0.51 ? '경영권을 가진 자회사가 되어 운영 방향을 정할 수 있습니다.' : '매달 이익의 일부를 배당으로 받습니다.'}`);
@@ -1384,13 +1384,17 @@ export class Game {
     return { rank: 1 + others.filter((v) => v > group).length, total: others.length + 1, revenue: group };
   }
   /** 자회사(51% 이상)에 자본금을 더 넣는다: 회사 현금이 늘어 확장에 쓰고, 증자 요청이 있으면 그만큼 채운다 */
+  /** 자본금을 넣은 뒤 내 지분: (지분 × 회사 가치 + 넣은 돈) ÷ (회사 가치 + 넣은 돈), 최대 100% */
+  stakeAfter(c: Competitor, amount: number): number { const v = Math.max(1, this.acquirePrice(c)), st = c.stake ?? 0; return Math.min(1, Math.round(((st * v + amount) / (v + amount)) * 100) / 100); }
+  /** 자회사 투자 성적: 넣은 돈, 받은 배당, 지금 팔면 받는 값, 손익 */
+  subReturn(c: Competitor): { put: number; div: number; sell: number; net: number } { const K = config.subsidiary, put = c.invested ?? 0, div = c.divTotal ?? 0, sell = Math.round(this.acquirePrice(c) * (c.stake ?? 0) * K.priceMult * K.sellRatio * 10) / 10; return { put, div, sell, net: Math.round((div + sell - put) * 10) / 10 }; }
   injectSubsidiary(id: number, amount: number): Result {
     const s = this.state, c = s.competitors.find((x) => x.id === id);
     if (!c || (c.stake ?? 0) < 0.51) return fail('자회사(지분 51% 이상)에만 넣을 수 있습니다');
     if (!(amount > 0)) return fail('금액이 잘못됐습니다'); if (s.cash < amount) return fail('현금이 모자랍니다');
-    s.cash -= amount; c.cash += amount; c.low = 0; // 다른 주주는 따라 넣지 않는다(내 돈만 들어간다)
+    const st = this.stakeAfter(c, amount); s.cash -= amount; c.cash += amount; c.low = 0; c.invested = (c.invested ?? 0) + amount; c.stake = st; // 다른 주주는 따라 넣지 않으므로 그만큼 내 지분이 오른다
     if (c.call && amount >= c.call.amount) delete c.call;
-    s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}에 자본금 $${amount}M을 넣었습니다.`); return { ok: true };
+    s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}에 자본금 $${amount}M을 넣었습니다(지분 ${Math.round(st * 100)}%).`); return { ok: true };
   }
   // ---- 대형 항공사 견제(자유 모드) ----
   majorFrozen(c: Competitor): boolean { return (this.state.majorFreeze?.[c.id] ?? -1) > this.monthsPassed; }
@@ -1554,7 +1558,7 @@ export class Game {
     const s = this.state, c = s.competitors.find((x) => x.id === id);
     if (!c || !c.call) return fail('증자 요청이 없습니다');
     if (s.cash < c.call.amount) return fail('현금이 모자랍니다');
-    s.cash -= c.call.amount; c.cash += c.call.amount / (c.stake ?? 1); c.low = 0; // 다른 주주도 지분만큼 함께 넣는다
+    s.cash -= c.call.amount; c.cash += c.call.amount / (c.stake ?? 1); c.low = 0; c.invested = (c.invested ?? 0) + c.call.amount; // 다른 주주도 지분만큼 함께 넣는다(지분율 그대로)
     const price = c.call.amount; delete c.call;
     s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${c.name}에 $${price}M을 증자했습니다.`);
     return { ok: true, price };
@@ -1936,7 +1940,7 @@ export class Game {
     if (s.competitors.filter((c) => c.founded).length >= k.max) return fail(`직접 차린 자회사는 ${k.max}곳까지입니다`);
     const cost = this.foundCost(o.size); if (s.cash < cost) return fail('현금이 모자랍니다');
     s.cash -= cost; s.cur.cost += cost;
-    const c: Competitor = { id: s.nextRival++, name, style: o.kind === 'premium' ? 'premium' : 'low', hub: o.hub, cash: Math.round(cost * k.cashShare), planes: 0, routes: [], born: this.monthsPassed, eff: k.kinds[o.kind].eff, low: 0, stake: 1, dir: 'grow', founded: o.kind };
+    const c: Competitor = { id: s.nextRival++, name, style: o.kind === 'premium' ? 'premium' : 'low', hub: o.hub, cash: Math.round(cost * k.cashShare), planes: 0, routes: [], born: this.monthsPassed, eff: k.kinds[o.kind].eff, low: 0, stake: 1, dir: 'grow', founded: o.kind, invested: cost };
     s.competitors.push(c);
     for (let i = 0; i < k.planes[o.size]; i++) this.compBuy(c, this.month, true);
     s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${name}(${k.kinds[o.kind].name}, ${cityById(o.hub).name} 거점)을 세웠습니다. 항공기 ${c.planes}대·노선 ${c.routes.length}개로 출발합니다($${cost}M).`); this.note(this.monthsPassed + 1, 'invest', `자회사 ${name} 창업`);

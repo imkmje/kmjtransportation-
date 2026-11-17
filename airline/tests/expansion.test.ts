@@ -167,6 +167,12 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     g.state.cash = g.eventCost(d) * 3 + 1; expect(g.applyRules().some((x) => x.startsWith('사건 자동 대응'))).toBe(true); expect(g.state.events[i].handled).toBe(true);
     expect(g.applyRules().some((x) => x.startsWith('사건 자동 대응'))).toBe(false); // 한 번만
   });
+  it('자회사 자본금: 넣은 만큼 내 지분이 오르고, 투자 성적에 잡힌다', () => {
+    const g = sb(); g.advanceDays(30 * 12); g.state.cash = 99999; const c = g.state.competitors.find((x) => !x.major)!; const b = g.buyStake(c.id, 0.51); expect(b.ok).toBe(true);
+    const v = g.acquirePrice(c), want = Math.round(((0.51 * v + 100) / (v + 100)) * 100) / 100; expect(g.stakeAfter(c, 100)).toBe(want);
+    expect(g.injectSubsidiary(c.id, 100).ok).toBe(true); expect(c.stake).toBe(want); expect(c.stake).toBeGreaterThan(0.51);
+    expect(g.subReturn(c).put).toBeCloseTo((b.ok ? b.price : 0) + 100); expect(g.stakeAfter(c, 1e9)).toBe(1); expect((g as unknown as { allyWeight: (x: typeof c) => number }).allyWeight(c)).toBe(config.subsidiary.weight['0.51']); // 51~99%는 자회사 힘
+  });
   it('허브 투자 여러 도시 일괄', () => {
     const g = sb(); const o = g.openRoute(g.state.base, 'NRT'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new');
     const cs = g.hubCities; expect(cs).toEqual(expect.arrayContaining([g.state.base, 'NRT'])); expect(cs).not.toContain('HKG');
