@@ -12,7 +12,7 @@ export interface Plane { id: number; type: string; book: number; routeId: number
 export interface DayStat { pax: number; seats: number; profit: number; cargo: number; otp?: number; share?: number } // 하루 기록(노선별 그래프용, 최근 60일)
 export interface Route { id: number; a: string; b: string; fare: number; fareBiz: number; cargoRatio: number; open: boolean; daily: DayStat[]; priority: number; name?: string; closed?: number; ad?: number; stance?: 'share'; svc?: number; monthly?: { p: number; s: number }[] } // monthly: 최근 12개월 월 이익·평균 점유율 // priority: 공항 우선 배정 등급 1~3(높을수록 혼잡할 때 덜 지연되고 월 수수료가 든다)
 export interface CompRoute { a: string; b: string; seatsDay: number; fareRatio: number; war?: number; rev?: number; share?: number; atk?: boolean; lost?: number; fleet?: { type: string; book: number; age: number; cabin?: number; name?: string; at?: number }[]; fleetAt?: number; handSeats?: number } // at: 그 항공기를 넘긴 개월, handSeats: 내가 넘겨서 늘어난 좌석(가져오면 이만큼만 빠진다) // fleet: 내가 넘긴 항공기(가져올 때 그대로 돌려받음), fleetAt: 넘긴 개월 // rev: 지난달 매출(M), share: 우리와 나눈 몫(추정), atk: 공세로 진출, lost: 공세 자회사에 빼앗긴 몫 // war: 운임 전쟁 남은 개월
-export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; listed?: number; lostHist?: number[]; lostNow?: { fee: number; alli: number; suit: number }; pHist?: number[]; trait?: string; major?: boolean; hubs?: string[]; invested?: number; /* invested: 내가 이 회사에 넣은 돈 합계(지분 매입·자본금·증자, 3.8.0부터 기록) */ ahead?: number; /* ahead: 가장 작은 대형보다 매출이 큰 채 지난 개월(자리 바꾸기) */ stake?: number; dir?: 'grow' | 'profit' | 'attack'; call?: { amount: number; expires: number }; lastDiv?: number; divTotal?: number; hist?: { rev: number; profit: number; planes: number }[]; target?: number; region?: string; lent?: { type: string; book: number; age: number }[]; lastRent?: number; founded?: 'low' | 'premium' | 'regional' } // stake: 내 지분(0.2·0.51), dir: 51% 자회사의 운영 방향, call: 증자 요청 // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
+export interface Competitor { id: number; name: string; style: 'low' | 'premium'; hub: string; cash: number; planes: number; routes: CompRoute[]; born?: number; eff?: number; low?: number; revHist?: number[]; listed?: number; lostHist?: number[]; lostNow?: { fee: number; alli: number; suit: number; ad?: number }; pHist?: number[]; trait?: string; major?: boolean; hubs?: string[]; invested?: number; /* invested: 내가 이 회사에 넣은 돈 합계(지분 매입·자본금·증자, 3.8.0부터 기록) */ ahead?: number; /* ahead: 가장 작은 대형보다 매출이 큰 채 지난 개월(자리 바꾸기) */ stake?: number; dir?: 'grow' | 'profit' | 'attack'; call?: { amount: number; expires: number }; lastDiv?: number; divTotal?: number; hist?: { rev: number; profit: number; planes: number }[]; target?: number; region?: string; lent?: { type: string; book: number; age: number }[]; lastRent?: number; founded?: 'low' | 'premium' | 'regional' } // stake: 내 지분(0.2·0.51), dir: 51% 자회사의 운영 방향, call: 증자 요청 // born: 생긴 개월(없으면 0), eff: 운영 효율(1 = 평균, 높을수록 비용이 낮다), low: 현금이 마이너스인 채로 지난 개월 수
 export interface Auction { id: number; from: string; type: string; price: number; age: number; cond: number; expires: number } // 파산한 경쟁사가 내놓은 항공기 한 대(expires: 이 개월차가 되면 사라진다)
 export interface Upcoming { def: string; city: string; start: number } // 예고된 행사(start: 시작하는 개월차)
 export interface ActiveEra { id: string; start: number; end: number } // 시대(start·end: 개월차)
@@ -62,6 +62,9 @@ export interface GameState {
   nextOffer: number; // 이 개월차부터 새 계약을 제안할 수 있다
   auctions: Auction[]; // 경매 중인 항공기
   upcoming: Upcoming[]; // 예고된 행사
+  adWar?: { comp: number; until: number } | null; /* 대형 항공사 겨냥 비교 광고 */
+  slotLock?: Record<string, number>; /* 대형 거점 슬롯 선점: 도시 → 끝나는 개월 */
+  majorPaid?: Record<number, number>; /* 대형 항공사 지분에 쓴 돈(인수하면 투자 성적으로) */
   fallen?: string[]; /* 대형 지위를 잃은 대형 항공사 이름(같은 이름으로 다시 출범하지 않게) */
   rivalsGone: RivalGone[]; // 파산한 경쟁사 기록(이름은 다시 쓰지 않는다)
   ally: number | null; // 제휴(공동 운항) 중인 경쟁사 ID
@@ -84,7 +87,7 @@ export interface GameState {
   acquired?: number; // 인수한 경쟁사 수
   livery?: string; // 도색 색(지도의 내 비행기)
   loyalty?: { level: number; members: number; silver?: number; gold?: number; plat?: number; card?: boolean; cardInc?: number; promo?: number; promoNext?: number }; // 등급별 회원, 제휴 카드, 프로모션(남은 개월·다음 가능 개월)
-  alli?: { name: string; xp: number; proj?: Record<string, number>; agenda?: { id: string; until: number } | null; meeting?: { expires: number } | null; poach?: { comp: number; expires: number; cost: number } | null }; // 우리 동맹: 이름·경험치·공동 사업(끝나는 개월, −1은 영구)·회의 안건·영입 시도
+  alli?: { name: string; xp: number; proj?: Record<string, number>; agenda?: { id: string; until: number } | null; meeting?: { expires: number } | null; poach?: { comp: number; expires: number; cost: number } | null; req?: { comp: number; expires: number; fee: number } | null }; // 우리 동맹: 이름·경험치·공동 사업(끝나는 개월, −1은 영구)·회의 안건·영입 시도
   campaign?: { kind: string; until: number } | null; green?: number;
   ownTypes?: string[]; myAirports?: string[]; dynasty?: { id: string; until: number } | null; dynastyDone?: string[]; // 자체 기종, 내 허브 공항, 왕조 목표(진행 중·달성)
   ipo?: { month: number; price: number; base: number; hist: number[]; res?: boolean[] } | null; // 상장: 상장 개월, 주가 지수(상장 때 100), 작년 12개월 이익, 해마다 주가
@@ -100,7 +103,7 @@ export interface GameState {
   alertsAt?: number[]; // 중요한 알림의 순번(log 배열 번호)
   challenges?: string[]; // 자유 모드 도전 조건(debt·crowded·lowrep·small)
   sagaStarted?: boolean; duel?: { start: number; until: number } | null; duelWon?: boolean; duelDone?: boolean; // 대형 항공사와의 장기 대결: 시작 여부, 1년 매출 대결(시작·끝 개월), 결과
-  rules?: { contracts?: boolean; auctions?: boolean; bids?: boolean; subsidy?: boolean; story?: boolean; call?: boolean; campaign?: boolean; charter?: boolean; agenda?: boolean; keep?: boolean; autoBid?: boolean; events?: boolean }; /* events: 진행 중인 사건 자동 대응(현금이 대응 비용 3배 이상일 때) */ /* autoBid: 입찰 자동(경쟁사가 부를 수 있는 최고가까지) */ // keep: 스카이 동맹이 회원사를 빼 가려 하면 자동으로 붙잡기 // call: 자회사 증자 자동 동의, campaign: 광고 자동, charter: 전세기 주문 자동 수락, agenda: 동맹 회의 안건 자동 // 자동 처리: 계약 자동 수락, 경매·입찰 알림 끄기, 보조금 자동 수락, 이야기 자동 선택 // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
+  rules?: { contracts?: boolean; auctions?: boolean; bids?: boolean; subsidy?: boolean; story?: boolean; call?: boolean; campaign?: boolean; charter?: boolean; agenda?: boolean; keep?: boolean; autoBid?: boolean; events?: boolean; adWar?: boolean }; /* events: 진행 중인 사건 자동 대응(현금이 대응 비용 3배 이상일 때) */ /* autoBid: 입찰 자동(경쟁사가 부를 수 있는 최고가까지) */ // keep: 스카이 동맹이 회원사를 빼 가려 하면 자동으로 붙잡기 // call: 자회사 증자 자동 동의, campaign: 광고 자동, charter: 전세기 주문 자동 수락, agenda: 동맹 회의 안건 자동 // 자동 처리: 계약 자동 수락, 경매·입찰 알림 끄기, 보조금 자동 수락, 이야기 자동 선택 // 대형 광고 캠페인, 친환경 연료 투자 단계 // 마일리지 프로그램
   charters?: Charter[]; // 전세기 주문(제안·진행)
   alliance?: number[]; rivalAlliance?: number[]; // 우리 동맹 회원, 대형 항공사가 만든 동맹
   bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; compLots?: { city: string; n: number; holder: number }[]; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯

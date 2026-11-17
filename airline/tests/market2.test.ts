@@ -77,7 +77,7 @@ describe('대형 항공사 견제', () => {
     const p2 = g.majorStakePrice(k); expect(p2).toBeGreaterThan(p); // 살수록 비싸진다
     expect(g.buyMajorStake(77).ok).toBe(true); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6);
     const r0 = g.state.cur.revenue; (g as unknown as { majorDividends(): void }).majorDividends(); expect(g.state.cur.revenue - r0).toBeCloseTo(50 * 0.08 * 0.1, 6);
-    for (let i = 0; i < 4; i++) expect(g.buyMajorStake(77).ok).toBe(true); expect(g.buyMajorStake(77).ok).toBe(false); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6); // 30%까지, 확률 감소는 최대 70%
+    const d0 = config.majorCheck.defense; config.majorCheck.defense = 0.99; for (let i = 0; i < 4; i++) expect(g.buyMajorStake(77).ok).toBe(true); config.majorCheck.defense = d0; expect(g.state.majorHold?.[77]).toBeCloseTo(0.3, 6); expect(g.majorDamp(k)).toBeCloseTo(0.3, 6); // 확률 감소는 최대 70%
     const c1 = g.state.cash; expect(g.sellMajorStake(77).ok).toBe(true); expect(g.state.cash).toBeGreaterThan(c1); expect(g.majorDamp(k)).toBe(1);
     expect(g.buyMajorStake(1).ok).toBe(false); // 대형이 아니면 안 됨
     expect(new Game(5).buyMajorStake(77).ok).toBe(false); // 시나리오는 안 됨
@@ -113,6 +113,41 @@ describe('대형 항공사 견제', () => {
   });
 });
 
+describe('대형 항공사 견제 추가(3.9.0)', () => {
+  const setup = () => { const g = new Game(5, undefined, { sandbox: true }); g.state.cash = 99999; g.state.rights = undefined; g.state.competitors.push({ id: 77, name: '시험 대형', style: 'premium', hub: 'DXB', cash: 50, planes: 20, routes: [{ a: 'DXB', b: 'LHR', seatsDay: 900, fareRatio: 1.15 }], major: true, revHist: Array(12).fill(50), hubs: ['DXB', 'LHR'] }); return g; };
+  it('적대적 인수: 51%를 넘기면 대형이 내 자회사가 되고, 쓴 돈이 투자 성적으로 잡힌다', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!, d0 = config.majorCheck.defense; config.majorCheck.defense = 0.99;
+    try { let paid = 0; for (let i = 0; i < 11; i++) { const r = g.buyMajorStake(77); expect(r.ok).toBe(true); paid += r.ok ? r.price : 0; }
+      expect(k.stake).toBeCloseTo(0.55, 6); expect(k.major).toBe(true); expect(g.state.majorHold?.[77]).toBeUndefined(); expect(k.invested).toBeCloseTo(paid, 1); expect(g.buyMajorStake(77).ok).toBe(false); // 이제 대형 지분이 아니라 자회사
+    } finally { config.majorCheck.defense = d0; }
+  });
+  it('경영권 방어: 30%를 넘긴 뒤엔 일부 매입이 막혀 돈만 나간다', () => {
+    const g = setup(); let blocked = 0;
+    for (let i = 0; i < 30; i++) { g.state.majorHold = { 77: 0.3 }; const c0 = g.state.cash; expect(g.buyMajorStake(77).ok).toBe(true); expect(g.state.cash).toBeLessThan(c0); if (g.state.majorHold[77] === 0.3) blocked++; }
+    expect(blocked).toBeGreaterThan(0); expect(blocked).toBeLessThan(30);
+  });
+  it('비교 광고: 겹치는 대형 노선 매출이 줄고(잃은 매출에 표시), 내 수요가 늘며, 한 번에 한 곳', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!; const o = g.openRoute('DXB', 'LHR'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new');
+    const r = g.route(o.routeId)!, ex = (g as unknown as { extraDemand: (x: typeof r) => number }).extraDemand.bind(g), d0 = ex(r);
+    expect(g.startAdWar(77).ok).toBe(true); expect(g.startAdWar(77).ok).toBe(false); expect(ex(r)).toBeCloseTo(d0 * 1.05, 6);
+    g.advanceDays(31); expect(k.lostNow?.ad ?? 0).toBeGreaterThan(0);
+    g.state.alliance = [77]; g.state.adWar = null; expect(g.startAdWar(77).ok).toBe(false); // 내 동맹은 겨냥할 수 없다
+  });
+  it('슬롯 선점: 그 거점에서 대형이 새 노선·증편을 못 한다', () => {
+    const g = setup(), k = g.state.competitors.find((c) => c.id === 77)!; expect(g.lockHub(77, 'DXB').ok).toBe(true); expect(g.lockHub(77, 'DXB').ok).toBe(false); expect(g.lockHub(77, 'NRT').ok).toBe(false);
+    const best = (g as unknown as { majorBest: (c: typeof k, m: number) => { a: string } | null }).majorBest(k, 0); expect(best?.a).toBe('LHR');
+    expect(g.lockHub(77, 'LHR').ok).toBe(true); expect((g as unknown as { majorBest: (c: typeof k, m: number) => unknown }).majorBest(k, 0)).toBeNull();
+    const seats = k.routes[0].seatsDay; (g as unknown as { compBuy: (c: typeof k, m: number, f: boolean) => void }).compBuy(k, 0, true); expect(k.routes.length).toBe(1); expect(k.routes[0].seatsDay).toBe(seats);
+  });
+  it('동맹 가입 요청: 받으면 가입비가 들어오고, 회원은 월 회비를 낸다', () => {
+    const g = setup(); const c = g.state.competitors.find((x) => !x.major && x.id !== 77)!, d = g.state.competitors.find((x) => !x.major && x.id !== 77 && x.id !== c.id)!; g.state.alliance = [d.id]; g.state.alli = { name: '우리 동맹', xp: 0 };
+    const fee = g.joinReqFee(); expect(fee).toBeCloseTo(config.extra.alliance.req.fee * (1 + config.extra.alliance.req.perMember), 6);
+    c.cash = 100; g.state.alli.req = { comp: c.id, expires: g.monthsPassed + 3, fee }; const c0 = g.state.cash; expect(g.answerJoinReq(true).ok).toBe(true);
+    expect(g.state.alliance).toContain(c.id); expect(g.state.cash).toBeCloseTo(c0 + fee, 6); expect(g.state.alli.req).toBeNull();
+    expect(g.alliDues).toBeCloseTo(config.extra.alliance.dues.base + config.extra.alliance.dues.perMember * 2, 6);
+    expect(g.answerJoinReq(true).ok).toBe(false);
+  });
+});
 describe('경쟁사 항공기 상한(3.2.7)', () => {
   it('대형 항공사 상한은 45대 또는 내 항공기의 70% 중 큰 쪽, 일반 경쟁사 상한은 시간과 내 기단에 따라 24대를 넘는다', () => {
     const g = new Game(5, undefined, { sandbox: true }); expect(g.majorCap).toBe(45);

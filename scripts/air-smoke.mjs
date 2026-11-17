@@ -713,7 +713,7 @@ check('리스 회사: 항공기 사기', await page.evaluate(() => (window.__air
 await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
 await page.click('#tabs button[data-tab="rivals"]'); // 다음 점검(경쟁 탭)을 위해
 await page.click('#tabs button[data-tab="map"]'); await subMap('look'); await openAll();
-check('자동 처리에 증자·광고·전세기·동맹 안건·동맹 붙잡기·입찰·사건 대응 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="keep"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="autoBid"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="events"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
+check('자동 처리에 증자·광고·전세기·동맹 안건·동맹 붙잡기·입찰·사건 대응·비교 광고 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="keep"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="autoBid"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="events"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="adWar"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
 await subMap('now');
 { const rid = await page.evaluate(() => { const g = window.__air.game; const r = g.state.routes.find((x) => x.open && g.planesOn(x.id).length); return r.id; });
   await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button[data-act="goRoute"][data-id="${rid}"]`).first().click();
@@ -730,6 +730,7 @@ check('매출 순위에 자회사·대형 등 딱지', await page.evaluate(() =>
 { const mid = await page.evaluate(() => window.__air.game.state.competitors.find((c) => c.major).id);
   await page.locator(`#panel button[data-act="selComp"][data-id="${mid}"]`).click();
   check('대형 항공사 카드: 견제(지분·반독점 제소) 칸', (await page.locator('#panel').innerText()).includes('대형 항공사 견제') && (await page.locator('#panel button[data-act="antitrust"]').count()) === 1);
+  check('대형 항공사 카드: 비교 광고·슬롯 선점·적대적 인수 안내', (await page.locator('#panel button[data-act="adWar"]').count()) === 1 && (await page.locator('#panel button[data-act="lockHub"]').count()) >= 1 && (await page.locator('#panel').innerText()).includes('적대적 인수'));
   await page.locator('#panel button[data-act="majorStake"]').evaluate((el) => el.click());
   check('대형 항공사 지분 5% 사기', await page.evaluate((id) => (window.__air.game.state.majorHold?.[id] ?? 0) === 0.05, mid));
   // 2.31.0: 거점 공항 운영권 입찰, 견제로 잃은 매출(빨간 막대)
