@@ -21,6 +21,8 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
   let dark = false; // C1 어두운 화면
   const marketRank = (() => { const v = CITIES.map((c) => marketSize(c)).sort((a, b) => b - a); return { big: v[Math.floor(v.length / 4)], mid: v[Math.floor(v.length / 2)] }; })(); // B3 도시 크기 3단계 기준(상위 1/4, 1/2)
   let routeMode: 'profit' | 'share' | 'rating' | 'lf' = 'profit'; // 노선 색: 이익(초록·빨강) 또는 점유율·별점·탑승률(빨강→노랑→초록)
+  let powerOn = false; // 세력도: 도시마다 우세한 세력의 색 원
+  const POWER_COL: Record<string, string> = Object.fromEntries(config.power.factions.map((f) => [f.id, f.color]));
   let compMode: 'all' | 'mine' | 'subs' | 'off' = 'all'; // 경쟁사 노선 보기: 전부 / 내 노선과 겹치는 것만 / 자회사만 / 끔(경쟁사 탭에서 고른 회사는 늘 보임)
   const widths = new Map<string, number>();
   const toX = (lon: number) => W / 2 + (lon - cx) * scale, toY = (lat: number) => H / 2 - (lat - cy) * scale;
@@ -116,7 +118,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     // 도시: 운항 중이면 노란색, 선택하면 진한 파랑 테두리. 이름은 겹치지 않는 자리에 놓고, 자리가 없으면 중요하지 않은 도시의 이름은 숨긴다(확대하면 나타남)
     ctx.font = '600 12px system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'; ctx.textBaseline = 'middle';
     const connectedOf = (id: string) => g.state.routes.some((r) => r.open && (r.a === id || r.b === id) && g.planesOn(r.id).length > 0);
-    const items: LabelItem[] = [];
+    const pm = powerOn ? g.cityPowerMap() : null, items: LabelItem[] = [];
     for (const c of CITIES) for (const shift of [-360, 0, 360]) {
       const x = toX(c.lon + shift), y = toY(c.lat);
       if (x < -40 || x > W + 40 || y < -20 || y > H + 20) continue;
@@ -127,6 +129,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     const t = real / 1000;
     for (const it of items) {
       const id = it.id.split('@')[0], c = cityOf(id), sel = id === selCity, connected = connectedOf(id);
+      const pw = pm?.get(id); if (pw) { ctx.save(); ctx.globalAlpha = 0.22 + 0.5 * pw.shares[pw.top]; ctx.fillStyle = POWER_COL[pw.top]; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + Math.min(16, Math.sqrt(pw.total) / 3.5), 0, Math.PI * 2); ctx.fill(); if (pw.contested) { ctx.globalAlpha = 0.95; ctx.strokeStyle = dark ? '#ffffff' : '#16212c'; ctx.lineWidth = 1.6; ctx.setLineDash([3, 3]); ctx.stroke(); } ctx.restore(); } // 접전(1위 몫이 40% 미만)이면 점선 테두리
       if ((g.state.pioneer?.[id] ?? -1) > g.monthsPassed) { const ph = ((now / 1800) + it.x / 97) % 1; ctx.strokeStyle = `rgba(242,183,5,${0.8 * (1 - ph)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(it.x, it.y, 8 + ph * 16, 0, Math.PI * 2); ctx.stroke(); } // 첫 취항 보너스 중인 도시
       if (id === pulseCity) { const ph = (t % 1.4) / 1.4; ctx.strokeStyle = `rgba(31, 122, 224, ${1 - ph})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(it.x, it.y, 10 + ph * 22, 0, Math.PI * 2); ctx.stroke(); }
       const locked = !g.cityOpen(id); // 운수권이 없는 지역
@@ -233,6 +236,7 @@ export function createMapView(canvas: HTMLCanvasElement, getGame: () => Game, ev
     setOverlay(routes: [string, string][] | null, label: string, fresh: string[] = []) { overlay = routes; overlayLabel = label; overlayNew = new Set(fresh); },
     setCompMode(m: 'all' | 'mine' | 'subs' | 'off') { compMode = m; },
     setRouteMode(m: 'profit' | 'share' | 'rating' | 'lf') { routeMode = m; },
+    setPowerMode(on: boolean) { powerOn = on; },
     setDark(v: boolean) { dark = v; },
     /** 일시정지 중이면 애니메이션을 멈춘다 */
     setPaused(v: boolean) { paused = v; },

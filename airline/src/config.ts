@@ -140,6 +140,7 @@ export const config = {
     dirs: { grow: { name: '확장', desc: '항공기를 빨리 늘립니다(배당 적음)' }, profit: { name: '수익', desc: '배당을 많이 줍니다(성장 느림)' }, attack: { name: '공세', desc: '다른 경쟁사 노선에 들어가 손님을 빼앗습니다' } } as Record<string, { name: string; desc: string }>,
   },
   acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
+  power: { factions: [{ id: 'mine', name: '내 그룹', color: '#1f7ae0' }, { id: 'alli', name: '내 동맹', color: '#2f9e5b' }, { id: 'sky', name: '스카이 동맹', color: '#8e44ad' }, { id: 'major', name: '대형', color: '#d64545' }, { id: 'other', name: '기타', color: '#8a96a3' }], contest: 0.4 }, // 3.13.0 세력도: 도시를 지나는 하루 좌석을 누가 차지하나. 1위 몫이 contest(40%) 미만이면 접전
   reopen: { months: 6, fee: 1.5, rep: 0.01 }, // 노선 폐지: 운항 중이던 노선을 닫으면 평판 −rep, 닫은 지 months개월 안에 다시 열면 fee($M)
   sale: { ratio: 0.9 }, // 매각가 = 장부가 × 0.9
   slot: { base: 6, perSize: 0.35, price: 2, priceStep: 0.2, lease: 0.12 }, // 공항 1일 이착륙 한도 = base + perSize × 시장 규모 + 구매분. 구매가(M)·월 임대료(M)

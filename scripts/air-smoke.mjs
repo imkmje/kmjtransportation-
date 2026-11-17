@@ -331,6 +331,7 @@ check('연말 신문: 제호·머리기사·숫자 표·한마디', paperText.in
 await page.click('#info-close');
 await tapCity('ICN');
 const hubText = await page.locator('#panel').innerText();
+check('도시 화면: 도시 세력 칸(세력 막대)', hubText.includes('도시 세력') || (await page.evaluate(() => !window.__air.game.cityPower(window.__air.game.state.base))), hubText.slice(0, 40));
 check('도시 화면: 허브 투자 3종', hubText.includes('허브 투자') && hubText.includes('터미널 확장') && (await page.locator('#panel button[data-act="hub"]').count()) === 3, hubText.slice(0, 60));
 const capHub0 = await page.evaluate(() => window.__air.game.slotCapacity('ICN'));
 await page.locator('#panel button[data-act="hub"][data-kind="terminal"]').click();
@@ -594,6 +595,9 @@ await page.evaluate(() => { const g = window.__air.game; g.state.netHist = [{ m:
 await page.click('#menubtn'); await page.click('#menu button[data-m="timelapse"]');
 check('메뉴: 성장 타임랩스 재생(그동안 시간 정지)', (await page.locator('#speeds button.on').getAttribute('data-speed')) === '0');
 await page.click('#dsize button[data-h="min"]').catch(() => undefined); await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#complayer'); const cl1 = await page.locator('#complayer').innerText(); await page.click('#complayer'); await page.click('#complayer'); await page.click('#complayer');
+await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#powerbtn');
+check('지도: 세력도 켜기(세력별 우세 도시 수 범례)', (await page.locator('#powerbtn').innerText()).includes('켜짐') && (await page.locator('#powerlegend').isVisible()) && (await page.locator('#powerlegend').innerText()).includes('내 그룹'), await page.locator('#powerlegend').innerText());
+await page.click('#powerbtn'); check('지도: 세력도 끄기', (await page.locator('#powerbtn').innerText()).includes('끔') && !(await page.locator('#powerlegend').isVisible()));
 check('지도: 경쟁사 노선 보기 전환(전부→겹침만→…→전부)', cl1.includes('겹침만') && (await page.locator('#complayer').innerText()).includes('전부'), cl1);
 await page.evaluate(() => { document.getElementById('mtpanel').hidden = false; }); await page.click('#legendbtn'); check('지도: 범례 열기', await page.locator('#legend').isVisible()); await page.click('#legendbtn');
 await page.click('#tabs button[data-tab="routes"]'); await page.locator('#panel button[data-act="autoFreq"]').click();
