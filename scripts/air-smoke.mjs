@@ -713,7 +713,7 @@ check('리스 회사: 항공기 사기', await page.evaluate(() => (window.__air
 await page.locator('#panel button[data-act="groupSub"][data-v="subs"]').evaluate((el) => el.click()).catch(() => undefined);
 await page.click('#tabs button[data-tab="rivals"]'); // 다음 점검(경쟁 탭)을 위해
 await page.click('#tabs button[data-tab="map"]'); await subMap('look'); await openAll();
-check('자동 처리에 증자·광고·전세기·동맹 안건·동맹 붙잡기·입찰 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="keep"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="autoBid"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
+check('자동 처리에 증자·광고·전세기·동맹 안건·동맹 붙잡기·입찰·사건 대응 줄', (await page.locator('#panel button.rulerow[data-v="call"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="keep"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="autoBid"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="events"]').count()) === 1 && (await page.locator('#panel button.rulerow[data-v="campaign"]').count()) === 1);
 await subMap('now');
 { const rid = await page.evaluate(() => { const g = window.__air.game; const r = g.state.routes.find((x) => x.open && g.planesOn(x.id).length); return r.id; });
   await page.click('#tabs button[data-tab="routes"]'); await page.locator(`#panel button[data-act="goRoute"][data-id="${rid}"]`).first().click();

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Game } from '../src/sim/game';
 import { config } from '../src/config';
 import { distanceKm } from '../src/sim/model';
-import { AIRCRAFT, cityById, typeById } from '../src/data';
+import { AIRCRAFT, EVENTS, cityById, typeById } from '../src/data';
 
 const sb = () => { const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 5000; g.state.rights = undefined; return g; };
 const route = (g: Game, a: string, b: string) => { const r = g.openRoute(a, b); if (!r.ok) throw new Error(r.error); const p = g.buyPlane('B737'); if (!p.ok) throw new Error(p.error); g.assign(p.planeId, r.routeId, 7); return { rid: r.routeId, pid: p.planeId }; };
@@ -160,6 +160,12 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     expect(g.applyRules().some((x) => x.startsWith('입찰 자동'))).toBe(false); // 이미 최고가
     const cap = g.bidCap(g.state.bids![0]); g.state.bids![0].best = { who: 99, amount: cap }; g.applyRules(); expect(g.state.bids![0].best!.who).toBe(99); // 한도 넘으면 안 부름
     g.state.bids![0].best = { who: 99, amount: 12 }; g.state.cash = 20; g.applyRules(); expect(g.state.bids![0].best!.who).toBe(99); // 현금이 2배 안 되면 안 부름
+  });
+  it('진행 중인 사건 자동 대응: 현금이 대응 비용 3배 이상일 때만', () => {
+    const g = sb(), d = EVENTS.find((x) => x.option && !x.scheduled)!; g.state.events.push({ def: d.id, monthsLeft: 3 }); const i = g.state.events.length - 1;
+    g.state.cash = g.eventCost(d) * 2; g.setRule('events', true); expect(g.applyRules().some((x) => x.startsWith('사건 자동 대응'))).toBe(false); expect(g.state.events[i].handled).toBeFalsy();
+    g.state.cash = g.eventCost(d) * 3 + 1; expect(g.applyRules().some((x) => x.startsWith('사건 자동 대응'))).toBe(true); expect(g.state.events[i].handled).toBe(true);
+    expect(g.applyRules().some((x) => x.startsWith('사건 자동 대응'))).toBe(false); // 한 번만
   });
   it('허브 투자 여러 도시 일괄', () => {
     const g = sb(); const o = g.openRoute(g.state.base, 'NRT'); if (!o.ok) throw new Error(o.error); g.buyForRoute(o.routeId, 'B737', 'new');
