@@ -577,7 +577,10 @@ check('현황: 입찰에서 값을 부르면 우리가 최고가', await page.ev
 await page.click('#tabs button[data-tab="money"]'); await openAll();
 await page.click('#tabs button[data-tab="cust"]'); await openAll(); await page.locator('#panel button[data-act="loyalty"][data-v="1"]').click();
 check('재무: 마일리지 기본 단계', await page.evaluate(() => window.__air.game.state.loyalty?.level === 1));
-await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll(); await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
+await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
+check('재무: 대형 사업은 조건을 채워야 해금(잠김 표시)', (await page.locator('#panel').innerText()).includes('잠김 — 조건') && (await page.locator('#panel button[data-act="mega"][data-v="academy"]').getAttribute('data-why'))?.includes('항공기'));
+await page.evaluate(() => { for (const d of window.__air.config.extra.mega.list) d.need = undefined; window.__air.render(); }); await openAll(); // 이후 점검을 위해 조건을 없앤다
+await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
 check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
 await page.locator('#panel button[data-act="megaPause"]').evaluate((el) => el.click());
 check('대형 사업 일시중지', await page.evaluate(() => window.__air.game.state.mega?.paused === true) && (await page.locator('#panel').innerText()).includes('공사 재개'));
@@ -681,6 +684,10 @@ await pickComp();
 const cashI = await page.evaluate(() => window.__air.game.state.cash);
 await page.locator('#panel button[data-act="injectSub"][data-v="10"]').evaluate((el) => el.click());
 check('자회사에 자본금 넣기(+$10M)', Math.abs((await page.evaluate(() => window.__air.game.state.cash)) - (cashI - 10)) < 0.01);
+{ const n0 = await page.evaluate(() => { const g = window.__air.game, subs = g.state.competitors.filter((x) => !x.major && (x.stake ?? 0) >= 0.51), d = g.state.competitors.find((x) => !x.major && !subs.includes(x)); d.stake = 0.51; window.__air.render(); return g.state.competitors.length; });
+  await page.evaluate(() => { document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
+  const btn = page.locator('#panel button[data-act="mergeSub"]').first(); const has = (await btn.count()) >= 1; if (has) await btn.evaluate((el) => el.click());
+  check('자회사 합병(다른 자회사 흡수)', has && (await page.evaluate(() => window.__air.game.state.competitors.length)) === n0 - 1); }
 // 2.32.0: 일부 상장, 노선 넘겨주기, 그룹 시너지
 await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors.find((x) => !x.major && x.stake >= 0.51); c.stake = 1; delete c.listed; window.__air.render(); });
 check('자회사 카드: 일부 상장 버튼(51% 넘는 지분)', (await page.locator('#panel button[data-act="spinOff"]').count()) === 1);

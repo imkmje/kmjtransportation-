@@ -92,14 +92,14 @@ export const config = {
     bid: { months: 2, step: 2, concessionChance: 0.08, concessionMin: 10, concessionMonths: 60, concessionSlots: 3, concessionFee: 0.7, airportChance: 0.04, airportPublic: 3, airportLot: 5, startMonth: 12 }, // 입찰: 공항 운영권·신공항 슬롯
     rating: { weight: 0.04 }, // 별점 1점당 수요 ±4%
     award: { rep: 0.02 }, // 연말 시상식 수상 1개당 평판
-    mega: { scalePer: 150, lumpOff: 0.1, termSlots: 24, termFee: 0.7, termHub: 0.2, academyOps: 0.03, list: [ // 3.10.0: 비용 = 기본 비용 × max(1, √(최근 12개월 매출 ÷ $150M)) — 회사가 클수록 비싸지지만 예전(매출에 정비례)보다 완만, 착공 때 고정. lumpOff: 일시금이면 10% 할인. termSlots·termFee·termHub: 전용 터미널 슬롯 +24·그 공항 착륙료 −30%·허브 효과 +20%(그 공항 노선 수요 약 +10%). academyOps: 항공 학교 운영비 −3%
-      { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +24, 그 공항을 쓰는 내 노선 착륙료 −30%·수요 약 +10%(허브 효과)', cost: 50, months: 24 },
-      { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 150, months: 30 },
-      { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 조종사 채용 한도 +8명/월, 운영비 −3%, 완공 때 평판 +5%', cost: 90, months: 18 },
-      { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 200, months: 30 },
-      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '220석 단거리기. 시중 최고 기종보다 좌석당 운항비 약 30% 낮고 더 빠르며 새 객실(별점↑). 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 250, months: 36 },
-      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '330석 중장거리 광동체(13,000km). 시중 기종보다 좌석당 운항비 약 40% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 380, months: 42 },
-      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '450석 초장거리 광동체(18,000km, 세계 어디든 직항). 시중 기종보다 좌석당 운항비 약 45% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 500, months: 48 },
+    mega: { scalePer: 150, lumpOff: 0.1, termSlots: 24, termFee: 0.7, termHub: 0.2, academyOps: 0.03, list: [ // 3.11.0: 값은 고정(회사 규모로 오르지 않음), 대신 사업마다 need 조건을 채워야 해금. need: planes 항공기 수, links 출발 도시 노선 수, routes 운항 노선 수, month 경과 개월, after 먼저 완공해야 하는 사업. scalePer: 이야기(대형 항공사와의 대결) 금액 배수에만 쓴다. lumpOff: 일시금 10% 할인. 전용 터미널 슬롯 +24·착륙료 −30%·허브 효과 +20%. 항공 학교 운영비 −3%
+      { id: 'terminal', name: '전용 터미널', desc: '출발 도시에 슬롯 +24, 그 공항을 쓰는 내 노선 착륙료 −30%·수요 약 +10%(허브 효과)', cost: 200, months: 24 , need: { links: 8 } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
+      { id: 'mro', name: '정비 단지', desc: '모든 항공기의 정비 상태가 20% 덜 닳음', cost: 500, months: 30 , need: { planes: 30 } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
+      { id: 'academy', name: '항공 학교', desc: '정시율 +3%p, 조종사 채용 한도 +8명/월, 운영비 −3%, 완공 때 평판 +5%', cost: 300, months: 18 , need: { planes: 15 } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
+      { id: 'airport', name: '허브 공항 건설', desc: '고른 도시에 내 공항: 슬롯 +30, 내 착륙료 면제, 그 도시를 쓰는 경쟁사 노선마다 월 사용료', cost: 700, months: 30 , need: { routes: 30 } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
+      { id: 'own_KX200', name: '자체 기종 개발: KX-200', desc: '220석 단거리기. 시중 최고 기종보다 좌석당 운항비 약 30% 낮고 더 빠르며 새 객실(별점↑). 완성되면 나만 살 수 있고, 경쟁사 항공기 수에 비례해 기술료', cost: 900, months: 36 , need: { month: 48, planes: 30 } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
+      { id: 'own_KX300', name: '자체 기종 개발: KX-300', desc: '330석 중장거리 광동체(13,000km). 시중 기종보다 좌석당 운항비 약 40% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 1400, months: 42 , need: { after: 'own_KX200' } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
+      { id: 'own_KX400', name: '자체 기종 개발: KX-400', desc: '450석 초장거리 광동체(18,000km, 세계 어디든 직항). 시중 기종보다 좌석당 운항비 약 45% 낮고 새 객실. 완성되면 나만 살 수 있고 기술료', cost: 2000, months: 48 , need: { after: 'own_KX300' } as { planes?: number; links?: number; routes?: number; month?: number; after?: string } | undefined },
     ] },
     found: { capital: [40, 90, 180], planes: [2, 4, 8], cashShare: 0.35, max: 3, regionalKm: 1500, regionalSeat: 0.55, sizes: ['소', '중', '대'], kinds: { low: { name: '저가 항공사', desc: '운임이 싸고 운영비가 낮습니다', eff: 1.05 }, premium: { name: '프리미엄 항공사', desc: '운임이 비싸고 품질이 높습니다', eff: 0.97 }, regional: { name: '지역 항공사', desc: '1,500km 안 단거리만, 작은 기체로 자주 다닙니다', eff: 1 } } as Record<string, { name: string; desc: string; eff: number }> }, // 자회사 차리기: 자본금(고정) 중 35%는 운영 자금, 나머지로 항공기를 들인다
     cabin: { cost: [0.08, 0.14], rating: 0.3, biz: 0.08, premium: 0.08, shop: 5, names: ['기본', '개조', '최고급'] }, // 객실 개조: 새 기체 값의 8%·14%, 단계마다(노선 평균) 운임 수입 +8%·별점 +0.3·비즈니스 수요 +8%, 5일간 운항 못 함
@@ -126,6 +126,7 @@ export const config = {
   subsidiary: { // 자회사(자유 모드): 경쟁사 지분을 사서 회사는 그대로 두고 배당을 받는다
     priceMult: 1.2, // 지분 값 = 인수가 × 지분율 × 1.2(경영권 웃돈)
     weight: { 0.2: 0.6, 0.51: 0.3, 1: 0.2 } as Record<string, number>, // 내 노선과 겹칠 때 손님을 빼앗는 힘(1 = 보통 경쟁사, 제휴 0.5)
+    merge: { fee: 0.05, min: 5, eff: 0.03, effMax: 1.1 }, // 3.11.0 자회사 합병: 비용 = 흡수되는 회사 가치의 5%(최소 $5M), 합친 회사 운영 효율 = 둘 중 높은 쪽 + 3%(최대 1.1)
     reserve: 15, // 3.10.0: 자회사(51% 이상)는 현금 $15M을 비상금으로 남기고 항공기를 산다(확장 방향이 돈을 다 써서 증자 요청이 잦던 문제)
     payout: { none: 0.4, grow: 0.3, profit: 0.6, attack: 0.3 } as Record<string, number>, // 자회사 월 이익 중 배당으로 나눠 주는 비율(방향별)
     sellRatio: 0.8, // 지분을 팔 때 받는 값 = 지분 값 × 0.8

@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Game } from '../src/sim/game';
 import { config } from '../src/config';
 
 const sb = (seed = 3) => { const g = new Game(seed, undefined, { sandbox: true }); g.state.cash = 3000; return g; };
 const route = (g: Game, a = 'ICN', b = 'NRT', t = 'A220') => { const o = g.openRoute(a, b); if (!o.ok) throw new Error('open'); g.buyForRoute(o.routeId, t, 'new'); return g.route(o.routeId)!; };
+
+// 대형 사업 해금 조건(3.11.0)은 따로 시험한다: 다른 시험에서는 조건을 잠시 없앤다
+const needs = config.extra.mega.list.map((d) => d.need); beforeAll(() => { for (const d of config.extra.mega.list) (d as { need?: unknown }).need = undefined; }); afterAll(() => { config.extra.mega.list.forEach((d, i) => { d.need = needs[i]; }); });
 
 describe('마일리지', () => {
   it('회원이 쌓이면 수요가 늘고 비용이 든다, 혜택을 줄이면 회원이 떠난다', () => {
