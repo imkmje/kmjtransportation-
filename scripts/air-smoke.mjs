@@ -737,6 +737,7 @@ check('매출 순위에 자회사·대형 등 딱지', await page.evaluate(() =>
 { const mid = await page.evaluate(() => window.__air.game.state.competitors.find((c) => c.major).id);
   await page.locator(`#panel button[data-act="selComp"][data-id="${mid}"]`).click();
   check('대형 항공사 카드: 견제(지분·반독점 제소) 칸', (await page.locator('#panel').innerText()).includes('대형 항공사 견제') && (await page.locator('#panel button[data-act="antitrust"]').count()) === 1);
+  await rtab(); // 3.12.0: 설명·거점 공항은 접혀 있다
   check('대형 항공사 카드: 비교 광고·슬롯 선점·적대적 인수 안내', (await page.locator('#panel button[data-act="adWar"]').count()) === 1 && (await page.locator('#panel button[data-act="lockHub"]').count()) >= 1 && (await page.locator('#panel').innerText()).includes('적대적 인수'));
   await page.locator('#panel button[data-act="majorStake"]').evaluate((el) => el.click());
   check('대형 항공사 지분 5% 사기', await page.evaluate((id) => (window.__air.game.state.majorHold?.[id] ?? 0) === 0.05, mid));
