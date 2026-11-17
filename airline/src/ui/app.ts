@@ -38,7 +38,7 @@ const $ = <T extends HTMLElement>(s: string, root: ParentNode = document) => roo
 export function startApp(): void {
   let game = new Game(1);
   let tab: Tab = 'map';
-  let mapSub: 'now' | 'look' = 'now', moneySub: 'ops' | 'invest' = 'ops', rivalSub: 'comp' | 'alli' = 'comp', groupSub: 'subs' | 'biz' = 'subs'; // 재무·경쟁사 탭 안쪽 탭
+  let mapSub: 'now' | 'look' = 'now', moneySub: 'ops' | 'invest' = 'ops', rivalSub: 'comp' | 'alli' = 'comp', groupSub: 'subs' | 'biz' | 'mgr' = 'subs'; // 재무·경쟁사 탭 안쪽 탭
   let reportMonth = -1;
   let selCity: string | null = null, selRoute: number | null = null, selPlane: number | null = null, selComp: number | null = null, reportOpen = false, alertsOpen = false;
   let drawer: 'min' | 'full' = 'full'; // 아래 서랍: 접기·펼침
@@ -712,7 +712,7 @@ export function startApp(): void {
       ${sorted.map((x) => `<button class="trow${x.k.id === selComp ? ' sel' : ''}" data-act="selComp" data-id="${x.k.id}"><span><b>${esc(x.k.name)}</b></span><span><small>${x.k.style === 'low' ? '저가형' : '프리미엄형'}${game.traitOf(x.k) ? ` · ${game.traitOf(x.k)!.name}` : ''}</small></span><span>${x.k.planes}대${x.grow ? ` <small class="${x.grow > 0 ? 'pos' : 'neg'}">${x.grow > 0 ? '+' : ''}${x.grow}</small>` : ''}</span><span>${x.k.routes.length}개</span><span>${money(x.rev)}</span><span>${x.overlap ? `<b class="warn">${x.overlap}개</b>` : '0'}</span><span>${st(x.k)}</span></button>`).join('')}</div>
       ${gone}${s.routes.some((r) => r.open) ? `<p class="hint">우리 시장 점유율(경쟁사와 겹치는 노선의 좌석 점유): <b>${pct(game.marketShare)}</b>. 경쟁사 매출은 여객 매출만 추정한 값입니다.</p>` : ''}`;
     if (!game.on('alliance') && rivalSub === 'alli') rivalSub = 'comp'; if (!game.on('subsidiary') && groupSub === 'subs') groupSub = 'biz';
-    const mainV = mode === 'group' ? (!s.sandbox ? '<h2>그룹</h2><p class="hint">자유 모드에서 쓰는 탭입니다.</p>' : `${subTabs('groupSub', ([['subs', '자회사·그룹'], ['biz', '그룹 사업']] as [string, string][]).filter(([k]) => k !== 'subs' || game.on('subsidiary')), groupSub)}${groupSub === 'biz' ? fold(bizHtml()) : groupHtml() + foundHtml()}`)
+    const mainV = mode === 'group' ? (!s.sandbox ? '<h2>그룹</h2><p class="hint">자유 모드에서 쓰는 탭입니다.</p>' : `${subTabs('groupSub', ([['subs', '자회사·그룹'], ['mgr', '경영진'], ['biz', '그룹 사업']] as [string, string][]).filter(([k]) => k !== 'subs' || game.on('subsidiary')), groupSub)}${groupSub === 'biz' ? fold(bizHtml()) : groupSub === 'mgr' ? mgrHtml() : groupHtml() + foundHtml()}`)
       : !s.sandbox ? main : `${game.on('alliance') ? subTabs('rivalSub', [['comp', '경쟁사'], ['alli', '우리 동맹']], rivalSub) : ''}${rivalSub === 'alli' ? alliHtml() : main}`;
     const k = selComp !== null ? s.competitors.find((x) => x.id === selComp) : undefined;
     const tg = k ? ((): string => { const tr = game.traitOf(k), nw = !k.major && (k.born ?? 0) > 0 && game.monthsPassed - (k.born ?? 0) < 6; return [k.major ? '<b class="neg">대형</b>' : '', s.ally === k.id ? '<b class="pos">제휴 중</b>' : '', s.alliance?.includes(k.id) ? '<b class="pos">내 동맹</b>' : '', s.rivalAlliance?.includes(k.id) ? '<b class="neg">스카이 동맹</b>' : '', k.stake ? `<b class="subc">${(k.stake ?? 0) >= 0.51 ? '자회사' : '지분'} ${Math.round(k.stake * 100)}%</b>` : '', s.rivalId === k.id ? '<b class="warn">라이벌</b>' : '', nw ? '<b class="pos">신생</b>' : '', (k.low ?? 0) > 0 ? '<b class="neg">자금난</b>' : '', k.call ? '<b class="neg">증자 요청</b>' : '', (s.threats ?? []).some((x) => x.comp === k.id) ? '<b class="warn">진출 예고</b>' : '', tr ? `<b title="${esc(tr.desc)}">${esc(tr.name)}</b>` : ''].join(''); })() : '';
@@ -758,6 +758,23 @@ export function startApp(): void {
   function showAirportPick() {
     const s = game.state, cities = CITIES.filter((c) => game.cityOpen(c.id) && !s.myAirports?.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name, 'ko')), d = config.extra.mega.list.find((x) => x.id === 'airport')!;
     showInfo('허브 공항 건설', `<p class="hint">${esc(d.desc)}. 총 ${money(game.megaCost('airport'))}을 ${d.months}개월에 나눠 냅니다.</p><label class="fld">도시<select id="ap-city">${cities.map((c) => `<option value="${c.id}">${esc(c.name)} — 경쟁사 노선 ${s.competitors.reduce((a, k) => a + k.routes.filter((r) => r.a === c.id || r.b === c.id).length, 0)}개</option>`).join('')}</select></label><div class="btns"><button data-act="airportGo">착공(나눠 냄)</button><button class="ghost" data-act="airportGo" data-v="lump" ${no(s.cash < game.megaCost('airport', true), short(game.megaCost('airport', true)))}>일시금 ${money(game.megaCost('airport', true))}</button></div>`);
+  }
+  /** 3.14.0 위임 경영진: 자회사·동맹 운영을 맡긴다 */
+  function mgrHtml(): string {
+    const s = game.state, K = config.mgr, mp = game.monthsPassed, ms = s.mgrs ?? [], pool = s.mgrPool ?? [], posts = game.mgrPosts(), stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
+    const postName = (p: 'alli' | number) => (p === 'alli' ? s.alli?.name ?? '우리 동맹' : s.competitors.find((c) => c.id === p)?.name ?? '?');
+    const cur = ms.map((g) => `<div class="goal"><div class="hd"><b>${esc(g.name)}</b><small>${esc(postName(g.post))} 담당</small></div><div class="tags"><b>${K.styles[g.style].name}</b>${g.stars ? `<b class="pos">평가 ${stars(g.stars)}</b>` : `<b>첫 평가 ${12 - ((mp - g.hired) % 12)}개월 뒤</b>`}</div>
+      <div class="kpi k3"><div><small>월급</small><b>${money(g.salary)}</b></div><div><small>월 예산</small><b>${money(g.budget)}</b></div><div><small>누적 사용</small><b>${money(g.spent)}</b></div></div>
+      <div class="seg">${K.budgets.map((b) => `<button data-act="mgrBudget" data-id="${g.id}" data-v="${b}" class="${g.budget === b ? 'on' : ''}">예산 ${money(b)}</button>`).join('')}</div>
+      ${g.notes.length ? `<ul class="mnotes">${g.notes.slice(0, 4).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '<small class="sub">아직 한 일이 없습니다.</small>'}
+      <div class="bgrid">${bbtn(`data-act="fireMgr" data-id="${g.id}"`, '해임')}</div></div>`).join('');
+    const cands = pool.map((c) => `<div class="goal"><div class="hd"><b>${esc(c.name)}</b><small>${K.styles[c.style].name}</small></div><div class="tags"><b class="warn">평판 ${stars(c.shown)}</b></div><small class="sub">${esc(K.styles[c.style].desc)}</small>
+      <div class="kpi k3"><div><small>월급</small><b>${money(game.mgrSalary(c.skill))}</b></div><div><small>계약금</small><b>${money(game.mgrFee(c))}</b></div><div><small>월 예산</small><b>${money(K.startBudget)}~</b></div></div>
+      ${posts.length ? `<label class="fld">맡길 곳<select data-mgrpost="${c.id}">${posts.map((p) => `<option value="${p.post}">${esc(p.name)}</option>`).join('')}</select></label><div class="bgrid">${bbtn(`data-act="hireMgr" data-id="${c.id}" ${no(s.cash < game.mgrFee(c) || ms.length >= K.maxHired, ms.length >= K.maxHired ? `경영진은 ${K.maxHired}명까지입니다` : short(game.mgrFee(c)))}`, '영입', money(game.mgrFee(c)), '')}</div>` : '<small class="sub">맡길 곳이 없습니다(동맹 회원이나 지분 51% 이상 자회사가 필요).</small>'}</div>`).join('');
+    return `<h2>경영진 <small>맡기면 알아서 합니다 · ${ms.length}/${K.maxHired}명</small></h2>
+      <h3>현재 경영진</h3><div class="list">${cur || '<p class="empty">아직 고용한 경영자가 없습니다.</p>'}</div>
+      <h3>영입 후보 <small>${mp < K.minMonth ? `${K.minMonth / 12 + 1}년차부터` : `해마다 새 후보 · 다음은 ${12 - (mp % 12)}개월 뒤`}</small></h3><div class="list">${cands || `<p class="empty">${mp < K.minMonth ? `${K.minMonth / 12 + 1}년차부터 후보가 옵니다.` : '이번 해 후보를 모두 영입했습니다.'}</p>`}</div>
+      ${help('경영진 설명', `<ul><li>자회사(지분 51% 이상)나 동맹을 맡기면, 월급을 받고 <b>월 예산 안에서</b> 알아서 운영합니다.</li><li><b>자회사</b>: 증자 요청에 응하고, 현금이 모자라면 자본금을 넣고, 상황에 맞춰 운영 방향(확장·수익·공세)을 바꿉니다. 능력에 따라 그 회사의 운영 효율이 ±${Math.round(K.effPerSkill * 30)}%까지 달라집니다.</li><li><b>동맹</b>: 연례 회의 안건을 고르고, 스카이 동맹이 회원을 빼 가려 하면 붙잡고, 가입 요청에 답합니다. 공격형은 스카이 회원 영입도 시도합니다.</li><li>후보 카드의 '평판'은 면접 인상이라 <b>실제 능력과 ±1칸 다를 수 있습니다</b>. 1년이 지나면 진짜 평가가 나옵니다.</li><li>직접 하는 것보다 조금 서툴고 가끔 실수합니다(예산 안에서 손실). 마음에 안 들면 해임하세요. 능력이 좋으면 스카우트당할 수도 있습니다.</li><li>한 일은 알림 탭 뉴스에 '경영진 …'으로 남습니다.</li></ul>`)}`;
   }
   /** 왕조 목표(현황 탭) */
   function dynastyHtml(): string {
@@ -1178,6 +1195,9 @@ export function startApp(): void {
     else if (act === 'hotel') { const r = game.buildHotel(b.dataset.c!); if (!r.ok) return err(r.error); done(r.level === 1 ? '호텔을 열었습니다' : `호텔을 ${r.level}단계로 키웠습니다`); }
     else if (act === 'leaseBuy') { const r = game.buyLeasePlane(b.dataset.t!); if (!r.ok) return err(r.error); done(`리스 회사가 항공기를 샀습니다(${money(r.price)})`); }
     else if (act === 'leaseSell') { const r = game.sellLeasePlane(id); if (!r.ok) return err(r.error); done(`리스 항공기를 팔았습니다(+${money(r.price)})`); }
+    else if (act === 'hireMgr') { const v = panel.querySelector<HTMLSelectElement>(`select[data-mgrpost="${id}"]`)?.value ?? '', r = game.hireMgr(id, v === 'alli' ? 'alli' : Number(v)); if (!r.ok) return err(r.error); done('경영자를 영입했습니다'); }
+    else if (act === 'mgrBudget') { const r = game.setMgrBudget(id, Number(b.dataset.v)); if (!r.ok) return err(r.error); done(); }
+    else if (act === 'fireMgr') { const g = game.state.mgrs?.find((x) => x.id === id); if (!g || !await ask(`${g.name}을(를) 해임할까요? 계약금은 돌려받지 못합니다.`)) return; game.fireMgr(id); done('해임했습니다'); }
     else if (act === 'mergeSub') { const a = game.state.competitors.find((x) => x.id === id), bb = game.state.competitors.find((x) => x.id === Number(b.dataset.v)); if (!a || !bb || !await ask(`${bb.name}을(를) ${a.name}에 합병할까요? 비용 ${money(game.mergeCost(bb))}\n${bb.name}의 항공기·노선·현금이 ${a.name}으로 옮겨지고 ${bb.name}은(는) 사라집니다. 내 지분은 두 회사 가치 비율로 다시 계산됩니다.`)) return; const r = game.mergeSubs(id, bb.id); if (!r.ok) return err(r.error); done(`합병했습니다(지분 ${Math.round(r.stake * 100)}%)`); }
     else if (act === 'injectSub') { const v = Number(b.dataset.v); const r = game.injectSubsidiary(id, v); if (!r.ok) return err(r.error); done(`자회사에 ${money(v)}을 넣었습니다`); }
     else if (act === 'fundSub') { const r = game.fundSubsidiary(id); if (!r.ok) return err(r.error); done(`${money(r.price)}을 증자했습니다`); }

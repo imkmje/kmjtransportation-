@@ -18,7 +18,7 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 const fails = [];
 let checks = 0; // 점검 항목 수(중간에 멈추면 몇 번째에서 멈췄는지 알 수 있게)
-const halt = (e) => { console.log(`FAIL 점검이 중간에 멈춤(${checks}번째 항목 뒤): ${String(e?.message ?? e).split('\n').filter((l) => /intercepts|visible|resolved|Error/.test(l)).slice(0, 4).join(' | ')}`); process.exit(1); };
+const halt = (e) => { console.log(`FAIL 점검이 중간에 멈춤(${checks}번째 항목 뒤): ${String(e?.message ?? e).split('\n').slice(0, 6).join(' | ')}`); process.exit(1); };
 process.on('uncaughtException', halt); process.on('unhandledRejection', halt);
 const check = (name, ok, detail = '') => { checks++; console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); if (!ok) fails.push(name); };
 // 스크린샷은 경로를 줬을 때만 찍는다(움직이는 지도 캡처가 한 장에 수 초~20초 걸려 점검 시간 대부분을 차지)
@@ -692,6 +692,12 @@ check('자회사에 자본금 넣기(+$10M)', Math.abs((await page.evaluate(() =
   await page.evaluate(() => { document.querySelectorAll('#panel details').forEach((d) => { d.open = true; }); });
   const btn = page.locator('#panel button[data-act="mergeSub"]').first(); const has = (await btn.count()) >= 1; if (has) await btn.evaluate((el) => el.click());
   check('자회사 합병(다른 자회사 흡수)', has && (await page.evaluate(() => window.__air.game.state.competitors.length)) === n0 - 1); }
+{ await page.evaluate(() => { const g = window.__air.game; g.state.cash += 500; g.state.mgrPool = [{ id: 9991, name: '시험 경영자', style: 'steady', skill: 1, shown: 3 }]; window.__air.render(); });
+  await page.click('#tabs button[data-tab="group"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="groupSub"][data-v="mgr"]')?.click());
+  check('그룹 탭: 경영진 화면(영입 후보 카드·맡길 곳)', (await page.locator('#panel').innerText()).includes('영입 후보') && (await page.locator('#panel button[data-act="hireMgr"]').count()) === 1 && (await page.locator('#panel select[data-mgrpost]').count()) === 1);
+  await page.locator('#panel button[data-act="hireMgr"]').evaluate((el) => el.click());
+  check('경영자 영입(화면에서 맡길 곳 고르고 영입)', (await page.evaluate(() => window.__air.game.state.mgrs?.length ?? 0)) === 1 && (await page.locator('#panel button[data-act="fireMgr"]').count()) === 1 && (await page.locator('#panel button[data-act="mgrBudget"]').count()) === 3);
+  await page.evaluate(() => { const g = window.__air.game; for (const m of [...(g.state.mgrs ?? [])]) g.fireMgr(m.id); document.querySelector('#panel button[data-act="groupSub"][data-v="subs"]')?.click(); }); await pickComp(); } // 경영진 화면을 거치면 선택한 회사가 풀리므로 다시 고른다
 // 2.32.0: 일부 상장, 노선 넘겨주기, 그룹 시너지
 await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors.find((x) => !x.major && x.stake >= 0.51); c.stake = 1; delete c.listed; window.__air.render(); });
 check('자회사 카드: 일부 상장 버튼(51% 넘는 지분)', (await page.locator('#panel button[data-act="spinOff"]').count()) === 1);
