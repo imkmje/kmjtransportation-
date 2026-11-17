@@ -17,6 +17,7 @@ const fail = (error: string): { ok: false; error: string } => ({ ok: false, erro
 const month1 = (day: number) => (Math.floor(day / config.daysPerMonth) % 12) + 1; // 1일차는 1월
 
 /** 노선 하루 계산 결과(화면 추정과 실제 정산이 같은 함수를 쓴다) */
+export interface CityPower { total: number; shares: Record<string, number>; top: string; contested: boolean }
 export interface RouteDay {
   demand: number; seats: number; pax: number; revenue: number; cost: number; legs: number; // pax·seats는 일반석+비즈니스석 합계
   paxE: number; paxB: number; seatsE: number; seatsB: number; demandE: number; demandB: number;
@@ -1396,6 +1397,22 @@ export class Game {
     delete c.lent;
   }
   /** 이 도시 쌍의 시장 몫(추정): 우리·각 경쟁사. 화면용 */
+  /** 세력도: 도시마다 그 도시를 지나는 노선의 하루 좌석을 누가 얼마나 차지하는지(내 그룹·내 동맹·스카이 동맹·대형·기타). 하루에 한 번만 다시 계산한다 */
+  private powerCache?: { key: string; map: Map<string, CityPower> };
+  cityPowerMap(): Map<string, CityPower> {
+    const s = this.state, key = `${s.day}|${s.planes.length}|${s.planes.reduce((a, p) => a + p.weekly + (p.routeId ?? -1), 0)}|${s.competitors.length}|${s.alliance?.length ?? 0}|${s.rivalAlliance?.length ?? 0}|${s.competitors.reduce((a, c) => a + c.routes.length + (c.stake ?? 0) + (c.major ? 1 : 0), 0)}`;
+    if (this.powerCache?.key === key) return this.powerCache.map;
+    const ids = config.power.factions.map((f) => f.id), acc = new Map<string, Record<string, number>>();
+    const add = (city: string, f: string, seats: number) => { let r = acc.get(city); if (!r) { r = Object.fromEntries(ids.map((i) => [i, 0])); acc.set(city, r); } r[f] += seats; };
+    for (const r of s.routes) { if (!r.open || !this.planesOn(r.id).length) continue; const seats = this.routeDay(r).seats; add(r.a, 'mine', seats); add(r.b, 'mine', seats); }
+    for (const c of s.competitors) { const f = (c.stake ?? 0) >= 0.51 ? 'mine' : s.alliance?.includes(c.id) ? 'alli' : s.rivalAlliance?.includes(c.id) ? 'sky' : c.major ? 'major' : 'other'; for (const r of c.routes) { add(r.a, f, r.seatsDay); add(r.b, f, r.seatsDay); } }
+    const map = new Map<string, CityPower>();
+    for (const [city, seats] of acc) { const total = ids.reduce((a, i) => a + seats[i], 0); if (total <= 0) continue; const shares = Object.fromEntries(ids.map((i) => [i, seats[i] / total])), top = ids.reduce((b, i) => (shares[i] > shares[b] ? i : b), ids[0]); map.set(city, { total, shares, top, contested: shares[top] < config.power.contest }); }
+    this.powerCache = { key, map }; return map;
+  }
+  cityPower(id: string): CityPower | undefined { return this.cityPowerMap().get(id); }
+  /** 세력별 우세 도시 수 */
+  powerCounts(): Record<string, number> { const out = Object.fromEntries(config.power.factions.map((f) => [f.id, 0])); for (const p of this.cityPowerMap().values()) out[p.top]++; return out; }
   marketShares(a: string, b: string): { id: number; name: string; share: number; me: boolean; stake?: number }[] {
     const s = this.state, A = cityById(a), B = cityById(b), base = baseFare(distanceKm(A, B)), out: { id: number; name: string; w: number; me: boolean; stake?: number }[] = [];
     const mine = s.routes.find((x) => x.open && ((x.a === a && x.b === b) || (x.a === b && x.b === a)) && this.planesOn(x.id).length > 0);
