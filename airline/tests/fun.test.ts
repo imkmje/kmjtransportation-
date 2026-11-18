@@ -48,8 +48,8 @@ describe('입찰', () => {
 });
 describe('메가 프로젝트·선주문·첫 취항·기록·도감·시상식', () => {
   it('항공 학교를 다 지으면 정시율이 오른다', () => {
-    const g = sb(); const r = route(g); const o0 = g.routeOtp(r); expect(g.startMega('academy').ok).toBe(true); expect(g.startMega('mro').ok).toBe(false);
-    g.advanceDays(30 * 19 + 1); expect(g.state.megaDone).toContain('academy'); expect(g.routeOtp(r)).toBeGreaterThan(o0 - 0.2);
+    const g = sb(); const r = route(g); const o0 = g.routeOtp(r); expect(g.startMega('academy').ok).toBe(true); expect(g.startMega('mro').ok).toBe(true); /* 3.18.0: 동시에 여러 개 */
+    g.advanceDays(30 * 19 + 1); expect(g.state.megaDone).toContain('academy'); expect(g.state.megas!.map((m) => m.id)).toEqual(['mro']); expect(g.routeOtp(r)).toBeGreaterThan(o0 - 0.2);
   });
   it('발표된 신기종을 선주문하면 출시 때 할인가로 인도받는다', () => {
     const g = sb(); g.advanceDays(30 * 7); expect(g.canPreorder('B757')).toBe(true); expect(g.preorder('B757', 2).ok).toBe(true);
