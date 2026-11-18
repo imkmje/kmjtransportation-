@@ -639,8 +639,9 @@ await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed <
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
 await page.locator('#offerpop button[data-act="offerClose"]').click({ timeout: 1000 }).catch(() => undefined); // 펼침에서는 제안 팝업이 패널 위에 뜬다
 await page.locator('#panel button[data-act="ipo"]').evaluate((el) => el.click()); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
-await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.selectOption('#ap-city', 'PUS'); await page.click('#info-body button[data-act="airportGo"]');
+await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.check('#info-body input.ap-pick[value="PUS"]'); await page.check('#info-body input.ap-pick[value="NRT"]'); const apTotal = await page.locator('#ap-total').innerText(); await page.click('#info-body button[data-act="airportGo"]');
 check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.megas?.some((m) => m.id === 'airport' && m.city === 'PUS')));
+check('허브 공항: 여러 도시 동시 착공(2곳 선택, 합계 표시)', apTotal.includes('2곳 선택') && (await page.evaluate(() => window.__air.game.state.megas?.filter((m) => m.id === 'airport').length === 2)), apTotal);
 // 2.15.0: 자동 처리·추천 노선·성적표
 await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll(); await subMap('look'); await openAll(); await page.locator('#panel button[data-act="rule"][data-v="contracts"]').click();
 check('현황: 자동 처리 규칙 켜기(계약 자동 수락)', await page.evaluate(() => window.__air.game.state.rules?.contracts === true));
