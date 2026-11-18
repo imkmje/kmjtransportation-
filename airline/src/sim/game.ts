@@ -38,7 +38,7 @@ export class Game {
   private rng: Rng;
 
   constructor(seed = 1, state?: GameState, opts: GameOptions = {}) {
-    if (state) { this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); applyOwnNames(state.ownNames); if (state.rights) for (const r of Game.startRegions(state.base)) if (!state.rights.includes(r)) state.rights = [...state.rights, r]; return; } // 옛 저장: 작은 지역에서 시작했으면 이웃 지역도 연다
+    if (state) { if (state.mega) { (state.megas ??= []).push({ ...state.mega, uid: state.nextId++ }); state.mega = null; } this.state = state; this.rng = new Rng(state.seed); this.rng.setState(state.rng); applyOwnNames(state.ownNames); if (state.rights) for (const r of Game.startRegions(state.base)) if (!state.rights.includes(r)) state.rights = [...state.rights, r]; return; } // 옛 저장: 작은 지역에서 시작했으면 이웃 지역도 연다
     applyOwnNames();
     this.rng = new Rng(seed);
     const sc = scenarioById(opts.sandbox ? 'free' : opts.scenario ?? 'free'), diff = opts.difficulty ?? 'normal', dm = config.difficulty[diff];
@@ -1038,20 +1038,22 @@ export class Game {
     const s = this.state, d = config.extra.mega.list.find((x) => x.id === id);
     if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다');
     if (!d) return fail('없는 사업입니다');
-    if (s.mega) return fail('이미 진행 중인 대형 사업이 있습니다');
     if (id !== 'terminal' && id !== 'airport' && (s.megaDone ?? []).includes(id)) return fail('이미 완공했습니다');
     const lock = this.megaLock(id); if (lock) return fail(`아직 잠겨 있습니다: ${lock}`);
+    if ((s.megas ?? []).some((x) => x.id === id && (id !== 'terminal' && id !== 'airport' ? true : (x.city ?? s.base) === (city ?? s.base)))) return fail('이미 진행 중인 사업입니다');
     if (id === 'airport' && (!city || !this.cityOpen(city) || s.myAirports?.includes(city))) return fail('공항을 지을 도시를 골라 주세요(운수권이 있고 아직 내 공항이 없는 곳)');
     const cost = this.megaCost(id, lump); if (lump && s.cash < cost) return fail('현금이 모자랍니다');
-    if (lump) { s.cash -= cost; s.cur.cost += cost; } s.mega = { id, done: 0, cost, ...(lump ? { paid: true } : {}), ...(id === 'terminal' || id === 'airport' ? { city: city ?? s.base } : {}) };
+    if (lump) { s.cash -= cost; s.cur.cost += cost; } (s.megas ??= []).push({ uid: s.nextId++, id, done: 0, cost, ...(lump ? { paid: true } : {}), ...(id === 'terminal' || id === 'airport' ? { city: city ?? s.base } : {}) });
     s.log.push(`${this.monthsPassed + 1}개월차: 대형 사업 착공 — ${d.name}(${d.months}개월, ${lump ? `일시금 $${cost}M` : `매달 $${Math.round((cost / d.months) * 10) / 10}M`}).`); this.note(this.monthsPassed + 1, 'invest', `${d.name} 착공`);
     return { ok: true };
   }
   /** 대형 사업 일시중지·재개: 멈춘 동안은 매달 돈도 안 내고 진행도 멈춘다 */
-  pauseMega(): Result<{ paused: boolean }> { const mg = this.state.mega; if (!mg) return fail('진행 중인 사업이 없습니다'); mg.paused = !mg.paused; if (!mg.paused) delete mg.paused; return { ok: true, paused: !!mg.paused }; }
-  cancelMega(): Result { if (!this.state.mega) return fail('진행 중인 사업이 없습니다'); this.state.mega = null; return { ok: true }; }
-  private megaStep(m: number): void {
-    const s = this.state, mg = s.mega; if (!mg || mg.paused) return;
+  pauseMega(uid?: number): Result<{ paused: boolean }> { const mg = (this.state.megas ?? []).find((x) => uid === undefined || x.uid === uid); if (!mg) return fail('진행 중인 사업이 없습니다'); mg.paused = !mg.paused; if (!mg.paused) delete mg.paused; return { ok: true, paused: !!mg.paused }; }
+  cancelMega(uid?: number): Result { const s = this.state, mg = (s.megas ?? []).find((x) => uid === undefined || x.uid === uid); if (!mg) return fail('진행 중인 사업이 없습니다'); s.megas = s.megas!.filter((x) => x !== mg); return { ok: true }; }
+  /** 진행 중인 사업을 하나씩 한 달 진행(번호 순): 돈이 모자란 사업만 그 달 멈춘다 */
+  private megaStep(m: number): void { for (const mg of [...(this.state.megas ?? [])].sort((a, b) => a.uid - b.uid)) this.megaOne(m, mg); }
+  private megaOne(m: number, mg: NonNullable<GameState['megas']>[number]): void {
+    const s = this.state; if (mg.paused) return;
     const d = config.extra.mega.list.find((x) => x.id === mg.id)!, pay = mg.paid ? 0 : (mg.cost ?? d.cost) / d.months;
     if (pay > 0 && s.cash < pay) { s.log.push(`${m + 1}개월차: 현금이 모자라 ${d.name} 공사가 이번 달 멈췄습니다.`); return; } // 일시금으로 낸 사업은 현금과 상관없이 진행
     s.cash -= pay; s.cur.cost += pay; mg.done++;
@@ -1062,7 +1064,7 @@ export class Game {
       if (mg.id === 'airport' && mg.city) s.myAirports = [...(s.myAirports ?? []), mg.city];
       if (mg.id.startsWith('own_')) s.ownTypes = [...(s.ownTypes ?? []), mg.id.slice(4)];
       s.log.push(`${m + 1}개월차: 대형 사업 완공 — ${d.name}${mg.city ? `(${cityById(mg.city).name})` : ''}! ${d.desc}.`); this.note(m + 1, 'invest', `${d.name} 완공`);
-      s.mega = null;
+      s.megas = s.megas!.filter((x) => x !== mg);
     }
   }
 
@@ -1531,6 +1533,14 @@ export class Game {
   mgrSalary(skill: number): number { const k = config.mgr.salary; return Math.round((k.base + k.perSkill * (skill - 0.7)) * 100) / 100; }
   mgrFee(c: MgrCand): number { return Math.round(this.mgrSalary(c.skill) * config.mgr.feeMonths * 10) / 10; }
   mgrStars(skill: number): number { return Math.max(1, Math.min(5, Math.round(1 + ((skill - 0.7) / 0.6) * 4))); }
+  /** 경영진 자리 수: 기본 + 본부 확장 */
+  get mgrMax(): number { return config.mgr.maxHired + (this.state.mgrExtra ?? 0); }
+  /** 다음 자리 확장 값($M), 끝까지 늘렸으면 null */
+  get mgrSlotCost(): number | null { return config.mgr.slotCost[this.state.mgrExtra ?? 0] ?? null; }
+  expandMgr(): Result<{ cost: number; max: number }> {
+    const s = this.state, cost = this.mgrSlotCost; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (cost === null) return fail('경영진 본부를 끝까지 확장했습니다'); if (s.cash < cost) return fail('현금이 모자랍니다');
+    s.cash -= cost; s.cur.cost += cost; s.mgrExtra = (s.mgrExtra ?? 0) + 1; s.log.push(`${this.monthsPassed + 1}개월차: 경영진 본부를 확장했습니다($${cost}M). 경영자를 ${this.mgrMax}명까지 둘 수 있습니다.`); return { ok: true, cost, max: this.mgrMax };
+  }
   mgrOf(post: 'alli' | number): Manager | undefined { return this.state.mgrs?.find((m) => m.post === post); }
   /** 맡길 수 있는 자리: 동맹(회원이 있을 때)과 지분 51% 이상 자회사 중 비어 있는 곳 */
   mgrPosts(): { post: 'alli' | number; name: string }[] {
@@ -1546,7 +1556,7 @@ export class Game {
   hireMgr(candId: number, post: 'alli' | number, budget = config.mgr.startBudget): Result<{ fee: number }> {
     const s = this.state, k = config.mgr, cand = s.mgrPool?.find((x) => x.id === candId);
     if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!cand) return fail('없는 후보입니다(해마다 새 후보가 옵니다)');
-    if ((s.mgrs?.length ?? 0) >= k.maxHired) return fail(`경영진은 ${k.maxHired}명까지입니다`);
+    if ((s.mgrs?.length ?? 0) >= this.mgrMax) return fail(`경영진은 ${this.mgrMax}명까지입니다(그룹 탭 > 경영진에서 본부를 확장할 수 있음)`);
     if (this.mgrOf(post)) return fail('이미 경영자가 있는 자리입니다');
     if (!this.mgrPosts().some((x) => x.post === post)) return fail(post === 'alli' ? '동맹 회원이 있어야 동맹을 맡길 수 있습니다' : '지분 51% 이상 자회사만 맡길 수 있습니다');
     if (!k.budgets.includes(budget)) return fail('없는 예산입니다');

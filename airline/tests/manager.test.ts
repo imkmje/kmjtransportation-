@@ -30,6 +30,17 @@ describe('위임 경영진(3.14.0)', () => {
     g.state.alliance = [other.id]; expect(g.hireMgr(b.id, 'alli').ok).toBe(true);
     expect(g.mgrPosts().length).toBe(0);
   });
+  it('경영진 본부 확장: 자리가 1칸씩 늘고(값은 단계별), 가득 차면 영입이 막히고 확장하면 다시 된다', () => {
+    const k = config.mgr, old = k.maxHired; k.maxHired = 1;
+    try {
+      const { g, c } = setup(), o = g.state.competitors.find((x) => !x.major && x.id !== c.id)!; g.buyStake(o.id, 0.51); const [a, b] = g.state.mgrPool!;
+      expect(g.mgrMax).toBe(1); expect(g.hireMgr(a.id, c.id).ok).toBe(true); const r = g.hireMgr(b.id, o.id); expect(r.ok).toBe(false); expect(r.ok === false && r.error).toContain('1명까지');
+      const cash = g.state.cash; expect(g.mgrSlotCost).toBe(k.slotCost[0]); expect(g.expandMgr().ok).toBe(true); expect(g.state.cash).toBe(cash - k.slotCost[0]); expect(g.mgrMax).toBe(2); expect(g.mgrSlotCost).toBe(k.slotCost[1]);
+      expect(g.hireMgr(b.id, o.id).ok).toBe(true); g.state.cash = 1; expect(g.expandMgr().ok).toBe(false); expect(g.mgrMax).toBe(2); g.state.cash = 99999;
+      for (let i = 0; i < k.slotCost.length - 1; i++) expect(g.expandMgr().ok).toBe(true); expect(g.mgrMax).toBe(1 + k.slotCost.length); expect(g.mgrSlotCost).toBeNull(); expect(g.expandMgr().ok).toBe(false);
+      expect(new Game(3).expandMgr().ok).toBe(false); // 시나리오 모드는 불가
+    } finally { k.maxHired = old; }
+  });
   it('월급을 매달 낸다', () => {
     const { g, c } = setup(), x = cand(g, { style: 'careful', skill: 1 }); g.hireMgr(x.id, c.id); const sal = g.mgrOf(c.id)!.salary; g.state.cash = 5000; const m = g.mgrOf(c.id)!;
     m.budget = 20; g.state.cash = 5000; const s0 = g.state.cash; months(g, 1); expect(s0 - g.state.cash).toBeGreaterThanOrEqual(sal - 1e-6); // 월급은 반드시 빠진다(다른 수입도 있어 정확히 같지는 않다)

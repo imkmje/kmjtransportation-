@@ -69,6 +69,7 @@ export interface GameState {
   slotLock?: Record<string, number>; /* 대형 거점 슬롯 선점: 도시 → 끝나는 개월 */
   majorPaid?: Record<number, number>; /* 대형 항공사 지분에 쓴 돈(인수하면 투자 성적으로) */
   support?: { monthly: number; total?: number }; /* 3.16.0 개척 지원금: 출발 도시가 작은 시장일 때 매달 받는 돈 */
+  mgrExtra?: number; /* 3.18.0 경영진 본부 확장으로 늘린 자리 수 */
   mgrs?: Manager[]; mgrPool?: MgrCand[]; mgrPoolYear?: number; /* 위임 경영진 */
   fallen?: string[]; /* 대형 지위를 잃은 대형 항공사 이름(같은 이름으로 다시 출범하지 않게) */
   rivalsGone: RivalGone[]; // 파산한 경쟁사 기록(이름은 다시 쓰지 않는다)
@@ -112,7 +113,8 @@ export interface GameState {
   charters?: Charter[]; // 전세기 주문(제안·진행)
   alliance?: number[]; rivalAlliance?: number[]; // 우리 동맹 회원, 대형 항공사가 만든 동맹
   bids?: Bid[]; concessions?: Record<string, { holder: number; until: number }>; compSlots?: Record<string, number>; compLots?: { city: string; n: number; holder: number }[]; newAirport?: Record<string, number>; // 입찰·운영권·경쟁사 낙찰 슬롯·신공항 공용 슬롯
-  mega?: { id: string; city?: string; done: number; cost?: number; paused?: boolean; paid?: boolean } | null; /* paid: 일시금으로 미리 냄 */ /* paused: 일시중지(돈도 안 내고 진행도 멈춤) */ megaDone?: string[]; megaCity?: Record<string, number>; // 메가 프로젝트
+  megas?: { uid: number; id: string; city?: string; done: number; cost?: number; paused?: boolean; paid?: boolean }[]; /* 3.18.0: 대형 사업은 동시에 여러 개(uid: 진행 중인 사업 번호) */
+  mega?: { id: string; city?: string; done: number; cost?: number; paused?: boolean; paid?: boolean } | null; /* 3.17.0 이전 저장(불러올 때 megas로 옮김) */ megaDone?: string[]; megaCity?: Record<string, number>; // 메가 프로젝트
   preorders?: { type: string; n: number; deposit: number }[]; // 신기종 선주문
   pioneered?: string[]; pioneer?: Record<string, number>; // 첫 취항한 도시, 보너스가 끝나는 개월차
   records?: Record<string, { v: number; m: number }>; noFail?: number; // 개인 기록, 고장 없이 지난 개월

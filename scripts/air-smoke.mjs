@@ -585,10 +585,14 @@ check('재무: 대형 사업은 조건을 채워야 해금(잠김 표시)', (awa
   await page.evaluate(() => { delete window.__air.game.state.support; window.__air.render(); }); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').evaluate((el) => el.click()).catch(() => undefined); }
 await page.evaluate(() => { for (const d of window.__air.config.extra.mega.list) d.need = undefined; window.__air.render(); }); await openAll(); // 이후 점검을 위해 조건을 없앤다
 await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
-check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
-await page.locator('#panel button[data-act="megaPause"]').evaluate((el) => el.click());
-check('대형 사업 일시중지', await page.evaluate(() => window.__air.game.state.mega?.paused === true) && (await page.locator('#panel').innerText()).includes('공사 재개'));
-await page.locator('#panel button[data-act="megaPause"]').evaluate((el) => el.click());
+check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.megas?.some((m) => m.id === 'academy')));
+await page.locator('#panel button[data-act="megaPause"]').first().evaluate((el) => el.click());
+check('대형 사업 일시중지', await page.evaluate(() => window.__air.game.state.megas?.[0]?.paused === true) && (await page.locator('#panel').innerText()).includes('공사 재개'));
+{ await page.evaluate(() => { for (const d of window.__air.config.extra.mega.list) d.need = undefined; window.__air.render(); }); await openAll();
+  check('대형 사업: 진행 중에도 다른 사업이 목록에 보이고 함께 착공할 수 있다', (await page.locator('#panel').innerText()).includes('정비 단지') && (await page.locator('#panel button[data-act="mega"][data-v="mro"]').count()) === 1 && (await page.locator('#panel .mprog').count()) >= 1);
+  await page.locator('#panel button[data-act="mega"][data-v="mro"]').evaluate((el) => el.click());
+  check('대형 사업 동시 진행(2개)', await page.evaluate(() => window.__air.game.state.megas?.length === 2)); }
+await page.locator('#panel button[data-act="megaPause"]').first().evaluate((el) => el.click());
 const alId = await page.evaluate(() => window.__air.game.state.competitors.find((c) => !c.major && !c.stake)?.id); await page.click('#tabs button[data-tab="rivals"]'); if (alId !== undefined) await page.locator(`#panel button[data-act="selComp"][data-id="${alId}"]`).click(); const alBtn = page.locator('#panel button[data-act="joinAlliance"]'); // 자회사가 아닌 일반 경쟁사를 고른다
 if (await alBtn.count()) { await alBtn.first().click(); }
 check('경쟁사: 동맹 초대', await page.evaluate(() => (window.__air.game.state.alliance ?? []).length > 0 || window.__air.game.state.competitors.every((c) => c.major || c.stake || (window.__air.game.state.rivalAlliance ?? []).includes(c.id))));
@@ -628,15 +632,15 @@ const ffDay = await page.evaluate(() => window.__air.game.state.day); await page
 check('건너뛰기: 하루 이상 지나고 이유를 알려 줌', (await page.evaluate(() => window.__air.game.state.day)) > ffDay && (await page.locator('#toast').innerText()).includes('건너뜀'));
 await page.waitForTimeout(3300); check('알림 띠는 몇 초 뒤 사라짐', !(await page.locator('#toast.show').count()));
 // 2.14.0: 왕조 목표·상장·허브 공항
-await page.evaluate(() => { const g = window.__air.game; g.state.cash = 5000; g.state.mega = null; window.__air.render(); });
+await page.evaluate(() => { const g = window.__air.game; g.state.cash = 5000; g.state.megas = []; window.__air.render(); });
 await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll(); await page.locator('#panel button[data-act="dynasty"][data-v="fleet"]').click();
 check('현황: 왕조 목표 도전', await page.evaluate(() => window.__air.game.state.dynasty?.id === 'fleet'));
-await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed < 36) g.advanceDays(30); g.state.cash = 5000; g.state.mega = null; window.__air.render(); });
+await page.evaluate(() => { const g = window.__air.game; while (g.monthsPassed < 36) g.advanceDays(30); g.state.cash = 5000; g.state.megas = []; window.__air.render(); });
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
 await page.locator('#offerpop button[data-act="offerClose"]').click({ timeout: 1000 }).catch(() => undefined); // 펼침에서는 제안 팝업이 패널 위에 뜬다
 await page.locator('#panel button[data-act="ipo"]').evaluate((el) => el.click()); check('재무: 주식 상장', await page.evaluate(() => !!window.__air.game.state.ipo));
 await openAll(); await page.locator('#panel button[data-act="mega"][data-v="airport"]').click(); await page.selectOption('#ap-city', 'PUS'); await page.click('#info-body button[data-act="airportGo"]');
-check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.mega?.id === 'airport' && window.__air.game.state.mega?.city === 'PUS'));
+check('재무: 허브 공항 착공(도시 고르기)', await page.evaluate(() => window.__air.game.state.megas?.some((m) => m.id === 'airport' && m.city === 'PUS')));
 // 2.15.0: 자동 처리·추천 노선·성적표
 await page.click('#tabs button[data-tab="map"]'); await subMap('now'); await openAll(); await subMap('look'); await openAll(); await page.locator('#panel button[data-act="rule"][data-v="contracts"]').click();
 check('현황: 자동 처리 규칙 켜기(계약 자동 수락)', await page.evaluate(() => window.__air.game.state.rules?.contracts === true));
@@ -697,6 +701,7 @@ check('자회사에 자본금 넣기(+$10M)', Math.abs((await page.evaluate(() =
   check('자회사 합병(다른 자회사 흡수)', has && (await page.evaluate(() => window.__air.game.state.competitors.length)) === n0 - 1); }
 { await page.evaluate(() => { const g = window.__air.game; g.state.cash += 500; g.state.mgrPool = [{ id: 9991, name: '시험 경영자', style: 'steady', skill: 1, shown: 3 }]; window.__air.render(); });
   await page.click('#tabs button[data-tab="group"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="groupSub"][data-v="mgr"]')?.click());
+  check('경영진 본부 확장 버튼', (await page.locator('#panel button[data-act="expandMgr"]').count()) === 1);
   check('그룹 탭: 경영진 화면(영입 후보 카드·맡길 곳)', (await page.locator('#panel').innerText()).includes('영입 후보') && (await page.locator('#panel button[data-act="hireMgr"]').count()) === 1 && (await page.locator('#panel select[data-mgrpost]').count()) === 1);
   await page.locator('#panel button[data-act="hireMgr"]').evaluate((el) => el.click());
   check('경영자 영입(화면에서 맡길 곳 고르고 영입)', (await page.evaluate(() => window.__air.game.state.mgrs?.length ?? 0)) === 1 && (await page.locator('#panel button[data-act="fireMgr"]').count()) === 1 && (await page.locator('#panel button[data-act="mgrBudget"]').count()) === 3);

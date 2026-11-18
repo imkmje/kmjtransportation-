@@ -15,7 +15,7 @@ describe('대형 사업 값은 고정, 조건을 채우면 해금(3.11.0)', () =
   it('회사가 커져도 값이 오르지 않고, 일시금은 10% 할인', () => {
     const g = sb(), base = config.extra.mega.list.find((x) => x.id === 'academy')!.cost;
     expect(g.megaCost('academy')).toBe(base); richHistory(g, 500); expect(g.megaCost('academy')).toBe(base); expect(g.megaCost('academy', true)).toBe(Math.round(base * 0.9));
-    expect(g.startMega('academy').ok).toBe(true); expect(g.state.mega!.cost).toBe(base);
+    expect(g.startMega('academy').ok).toBe(true); expect(g.state.megas![0].cost).toBe(base);
   });
   it('조건을 못 채우면 잠기고, 채우면 열린다(항공기 수·운항 노선·연차·앞 사업 완공)', () => {
     const g = sb(), d = config.extra.mega.list, need = (id: string) => needs[d.findIndex((x) => x.id === id)];
@@ -26,14 +26,37 @@ describe('대형 사업 값은 고정, 조건을 채우면 해금(3.11.0)', () =
     expect(t('academy')).toBeNull(); g.state.megaDone = ['own_KX200']; expect(t('own_KX300')).toBeNull();
     const i = d.findIndex((x) => x.id === 'mro'); d[i].need = needs[i]; try { expect(g.startMega('mro').ok).toBe(false); } finally { d[i].need = undefined; }
   });
+  it('동시에 여러 개: 서로 다른 사업은 함께 진행되고 매달 각각 돈을 낸다. 같은 사업은 한 번에 하나', () => {
+    const g = sb(); g.state.cash = 9999; const c0 = g.state.cash;
+    expect(g.startMega('academy').ok).toBe(true); expect(g.startMega('mro').ok).toBe(true); expect(g.startMega('own_KX200').ok).toBe(true); expect(g.state.megas!.length).toBe(3);
+    expect(g.startMega('academy').ok).toBe(false); // 같은 사업은 한 번에 하나
+    const per = (id: string) => config.extra.mega.list.find((x) => x.id === id)!.cost / config.extra.mega.list.find((x) => x.id === id)!.months; g.advanceDays(31);
+    expect(c0 - g.state.cash).toBeGreaterThanOrEqual(per('academy') + per('mro') + per('own_KX200') - 1e-6); expect(g.state.megas!.every((m) => m.done === 1)).toBe(true);
+  });
+  it('중단·일시중지는 그 사업만: 다른 사업은 계속된다', () => {
+    const g = sb(); g.state.cash = 9999; g.startMega('academy'); g.startMega('mro'); const [a, b] = g.state.megas!;
+    expect(g.pauseMega(a.uid).ok).toBe(true); g.advanceDays(31); expect(a.done).toBe(0); expect(b.done).toBe(1);
+    expect(g.cancelMega(a.uid).ok).toBe(true); expect(g.state.megas!.map((m) => m.id)).toEqual(['mro']); expect(g.pauseMega(9999).ok).toBe(false); g.advanceDays(31); expect(g.state.megas![0].done).toBe(2);
+  });
+  it('돈이 모자라면 그 사업만 그 달 멈추고, 일시금 사업은 계속된다', () => {
+    const g = sb(); g.state.cash = 9999; g.startMega('academy', undefined, true); g.startMega('mro'); g.state.cash = 1; g.advanceDays(31);
+    expect(g.state.megas!.find((m) => m.id === 'academy')!.done).toBe(1); expect(g.state.megas!.find((m) => m.id === 'mro')!.done).toBe(0);
+  });
+  it('전용 터미널·허브 공항은 도시가 다르면 동시에 가능, 같은 도시는 불가', () => {
+    const g = sb(); g.state.cash = 99999; expect(g.startMega('airport', 'PUS').ok).toBe(true); expect(g.startMega('airport', 'NRT').ok).toBe(true); expect(g.startMega('airport', 'PUS').ok).toBe(false);
+  });
+  it('3.17.0 이전 저장(mega 하나)을 불러오면 megas로 옮겨져 계속 진행된다', () => {
+    const g = sb(); g.startMega('academy'); const raw = JSON.parse(JSON.stringify(g.state)); const m0 = raw.megas[0]; delete raw.megas; raw.mega = { id: m0.id, done: 5, cost: m0.cost };
+    const h = Game.fromJSON(raw); expect(h.state.mega).toBeNull(); expect(h.state.megas!.length).toBe(1); expect(h.state.megas![0].done).toBe(5); h.advanceDays(31); expect(h.state.megas![0].done).toBe(6);
+  });
   it('일시금: 10% 싸게 한 번에 내고, 공사 중엔 매달 내지 않는다', () => {
     const g = sb(); g.state.cash = 5000; const cost = g.megaCost('academy', true), c0 = g.state.cash;
-    expect(g.startMega('academy', undefined, true).ok).toBe(true); expect(g.state.cash).toBeCloseTo(c0 - cost, 6); expect(g.state.mega!.paid).toBe(true);
-    const d = g.state.mega!.done; g.state.cash = 1; g.advanceDays(31); expect(g.state.mega!.done).toBe(d + 1); // 현금이 없어도 공사는 계속
+    expect(g.startMega('academy', undefined, true).ok).toBe(true); expect(g.state.cash).toBeCloseTo(c0 - cost, 6); expect(g.state.megas![0].paid).toBe(true);
+    const d = g.state.megas![0].done; g.state.cash = 1; g.advanceDays(31); expect(g.state.megas![0].done).toBe(d + 1); // 현금이 없어도 공사는 계속
     const h = sb(); h.state.cash = 1; expect(h.startMega('academy', undefined, true).ok).toBe(false);
   });
   it('전용 터미널: 슬롯 +24, 착륙료 −30%, 허브 효과 +20%', () => {
-    const g = sb(), b = g.state.base, cap = g.slotCapacity(b), hb = g.hubBonus(b); g.state.mega = { id: 'terminal', done: 23, cost: 0, city: b }; g.advanceDays(31);
+    const g = sb(), b = g.state.base, cap = g.slotCapacity(b), hb = g.hubBonus(b); g.state.megas = [{ uid: 1, ...{ id: 'terminal', done: 23, cost: 0, city: b } }]; g.advanceDays(31);
     expect(g.slotCapacity(b)).toBe(cap + 24); expect(g.hubBonus(b)).toBeCloseTo(hb + 0.2, 6);
   });
 });
@@ -134,7 +157,7 @@ describe('돈 쓸 곳', () => {
 describe('월말 처리 금액이 보고에서 빠지지 않는다', () => {
   it('대형 사업 납입(월말)이 다음 달 보고의 비용에 들어간다', () => {
     const g = sb(); route(g, 'ICN', 'NRT'); g.advanceDays(30); expect(g.startMega('academy').ok).toBe(true);
-    const pay = g.state.mega!.cost! / 18; g.advanceDays(60);
+    const pay = g.state.megas![0].cost! / 18; g.advanceDays(60);
     expect(g.state.history.at(-1)!.cost).toBeGreaterThanOrEqual(pay - 1e-6);
   });
 });
@@ -149,7 +172,7 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
   });
   it('자체 기종: 개발 전에는 못 사고, 완성되면 구매 목록에 나오고 기술료가 들어온다', () => {
     const g = sb(); expect(g.buyPlane('KX200').ok).toBe(false); expect(g.shopTypes().some((t) => t.id === 'KX200')).toBe(false);
-    g.state.mega = { id: 'own_KX200', done: 35, cost: 36 }; g.advanceDays(30);
+    g.state.megas = [{ uid: 1, ...{ id: 'own_KX200', done: 35, cost: 36 } }]; g.advanceDays(30);
     expect(g.state.ownTypes).toContain('KX200'); expect(g.shopTypes().some((t) => t.id === 'KX200')).toBe(true); expect(g.buyPlane('KX200').ok).toBe(true);
     const c0 = g.state.cash, n = g.state.competitors.reduce((a, c) => a + c.planes, 0); (g as unknown as { lateStep(m: number): void }).lateStep(g.monthsPassed);
     expect(g.state.cash - c0).toBeCloseTo(Math.round(config.extra.royalty * n * 100) / 100);
@@ -167,10 +190,10 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
     expect(g.assign(p.planeId, o.routeId, 7).ok).toBe(true); expect(g.state.typesFlown ?? []).not.toContain('KX200');
   });
   it('대형 사업 일시중지: 멈춘 동안 돈도 진행도 멈추고, 재개하면 이어서', () => {
-    const g = sb(); g.state.cash = 5000; expect(g.startMega('academy').ok).toBe(true); g.advanceDays(30 * 2); const d0 = g.state.mega!.done;
-    expect(g.pauseMega().ok).toBe(true); expect(g.state.mega!.paused).toBe(true); const c0 = g.state.cash; g.advanceDays(30 * 3);
-    expect(g.state.mega!.done).toBe(d0); expect(g.state.log.some((l) => l.includes('공사가 이번 달 멈췄습니다'))).toBe(false);
-    expect(g.pauseMega().ok).toBe(true); expect(g.state.mega!.paused).toBeUndefined(); g.advanceDays(30 * 2); expect(g.state.mega!.done).toBeGreaterThan(d0); void c0;
+    const g = sb(); g.state.cash = 5000; expect(g.startMega('academy').ok).toBe(true); g.advanceDays(30 * 2); const d0 = g.state.megas![0].done;
+    expect(g.pauseMega().ok).toBe(true); expect(g.state.megas![0].paused).toBe(true); const c0 = g.state.cash; g.advanceDays(30 * 3);
+    expect(g.state.megas![0].done).toBe(d0); expect(g.state.log.some((l) => l.includes('공사가 이번 달 멈췄습니다'))).toBe(false);
+    expect(g.pauseMega().ok).toBe(true); expect(g.state.megas![0].paused).toBeUndefined(); g.advanceDays(30 * 2); expect(g.state.megas![0].done).toBeGreaterThan(d0); void c0;
     expect(new Game(3, undefined, { sandbox: true }).pauseMega().ok).toBe(false);
   });
   it('입찰 자동: 경쟁사보다 높게 부르되 한도와 현금 2배 조건을 지킨다', () => {
@@ -220,7 +243,7 @@ describe('후반: 왕조 목표·자체 기종·허브 공항·상장·정책·�
   it('허브 공항: 도시를 골라야 착공되고, 완공되면 슬롯 +30·착륙료 면제', () => {
     const g = sb(); expect(g.startMega('airport').ok).toBe(false);
     const cap = g.slotCapacity('PUS'); expect(g.startMega('airport', 'PUS').ok).toBe(true);
-    g.state.mega!.done = 29; g.advanceDays(30); expect(g.state.myAirports).toContain('PUS'); expect(g.slotCapacity('PUS')).toBe(cap + 30);
+    g.state.megas![0].done = 29; g.advanceDays(30); expect(g.state.myAirports).toContain('PUS'); expect(g.slotCapacity('PUS')).toBe(cap + 30);
   });
   it('상장: 3년차 전에는 못 하고, 상장하면 현금, 1년 뒤 주주 총회에서 배당', () => {
     const g = sb(); route(g, 'ICN', 'NRT'); expect(g.goPublic().ok).toBe(false);
