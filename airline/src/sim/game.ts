@@ -61,6 +61,8 @@ export class Game {
     }
     const startPlane = ch.includes('small') ? [...AIRCRAFT].filter((t) => t.seats > 0 && !t.from).sort((a, b) => a.seats - b.seats)[0].id : (opts.sandbox && config.rights.startPlane[cityById(base).region]) || sc.plane; // 자유 모드는 출발 지역에 맞는 기체
     this.addPlane(startPlane, typeById(startPlane).price); // 시작 항공기는 무료로 받지만 장부가·감가상각은 같다
+    const sup = opts.sandbox && opts.rights && !ch.length ? config.rights.startSupport.table[base] : undefined, SK = config.rights.startSupport; // 도전 조건을 건 판은 일부러 어렵게 하는 것이라 지원하지 않는다
+    if (sup) { this.state.support = { monthly: sup }; this.state.log.push(`${cityById(base).name}에서 시작하는 항공사에게 정부 개척 지원금이 나옵니다: 월 $${sup}M(처음 ${SK.hold}개월 그대로, 이후 ${SK.fade}개월에 걸쳐 줄어듭니다).`); }
   }
 
   static initCompetitors(rival = 1, n = config.competitors.start): Competitor[] {
@@ -1132,8 +1134,16 @@ export class Game {
     s.log.push(`${m}개월차: ${major.name}이(가) ${mem.map((c) => c.name).join('·')}과(와) '스카이 동맹'을 결성했습니다. 회원사는 서비스 품질이 올라 손님을 더 끌어갑니다.`); this.note(m, 'rival', '스카이 동맹 결성');
   }
   /** 월말: 자유 모드 재미 요소를 한꺼번에 돌린다 */
+  /** 개척 지원금 이번 달 몫($M): 처음 hold개월 전액, 이후 fade개월에 걸쳐 0으로 */
+  supportNow(m = this.monthsPassed): number { const sp = this.state.support, k = config.rights.startSupport; if (!sp) return 0; return Math.round(sp.monthly * (m < k.hold ? 1 : Math.max(0, 1 - (m - k.hold) / k.fade)) * 100) / 100; }
+  private supportStep(m: number): void {
+    const s = this.state, k = config.rights.startSupport, sp = this.supportNow(m); if (!s.support) return;
+    if (sp > 0) { s.cash += sp; s.cur.revenue += sp; s.support.total = Math.round(((s.support.total ?? 0) + sp) * 100) / 100; }
+    if (m === k.hold + k.fade) s.log.push(`${m + 1}개월차: 정부 개척 지원금이 끝났습니다(지금까지 받은 돈 $${s.support.total ?? 0}M). 이제 스스로 설 때입니다.`);
+  }
   private extraMonth(): void {
     const s = this.state, m = this.monthsPassed; if (!s.sandbox) return;
+    this.supportStep(m);
     this.loyaltyStep(); this.alliStep(m); this.lateStep(m); this.crewStep(); this.financeStep(m); this.majorDividends(); this.bizStep(); this.mgrStep(m);
     this.charterStep(m); this.bidStep(m); this.megaStep(m); this.awardsStep(m); this.recordsStep(m); this.pioneerStep(m); this.rivalAllianceStep(m);
     if (m % 6 === 0) s.netHist = [...(s.netHist ?? []), { m, routes: s.routes.filter((r) => r.open && this.planesOn(r.id).length).map((r) => [r.a, r.b] as [string, string]) }].slice(-60);

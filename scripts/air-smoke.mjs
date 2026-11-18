@@ -580,6 +580,9 @@ await page.click('#tabs button[data-tab="cust"]'); await openAll(); await page.l
 check('재무: 마일리지 기본 단계', await page.evaluate(() => window.__air.game.state.loyalty?.level === 1));
 await page.click('#tabs button[data-tab="money"]'); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').click(); await openAll();
 check('재무: 대형 사업은 조건을 채워야 해금(잠김 표시)', (await page.locator('#panel').innerText()).includes('잠김 — 조건') && (await page.locator('#panel button[data-act="mega"][data-v="academy"]').getAttribute('data-why'))?.includes('항공기'));
+{ await page.evaluate(() => { window.__air.game.state.support = { monthly: 1.6 }; window.__air.render(); }); await page.click('#tabs button[data-tab="money"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="moneySub"][data-v="ops"]')?.click());
+  check('재무: 개척 지원금 줄(월 금액·남은 개월)', (await page.locator('#panel').innerText()).includes('개척 지원금') && (await page.locator('#panel').innerText()).includes('개월 뒤 끝납니다'));
+  await page.evaluate(() => { delete window.__air.game.state.support; window.__air.render(); }); await page.locator('#panel button[data-act="moneySub"][data-v="invest"]').evaluate((el) => el.click()).catch(() => undefined); }
 await page.evaluate(() => { for (const d of window.__air.config.extra.mega.list) d.need = undefined; window.__air.render(); }); await openAll(); // 이후 점검을 위해 조건을 없앤다
 await page.locator('#panel button[data-act="mega"][data-v="academy"]').click();
 check('재무: 대형 사업(항공 학교) 착공', await page.evaluate(() => window.__air.game.state.mega?.id === 'academy'));
