@@ -902,6 +902,7 @@ export function startApp(): void {
     return `<div class="cols2"><div><h2>재무</h2>
       <div class="kv"><div>현금</div><div><b class="${s.cash < 0 ? 'neg' : ''}">${money(s.cash)}</b></div><div>이번 달 수익</div><div>${money(cur.revenue)}</div><div>이번 달 비용</div><div>${money(cur.cost)}</div>
         <div>월 고정비</div><div>${money(game.fixedMonthly)}</div><div>누적 이익</div><div>${money(s.cumProfit)}</div></div>
+      ${game.supportNow() > 0 ? `<div class="ret"><span>개척 지원금</span><b class="pos">월 ${money(game.supportNow())}</b><small>출발 도시에서 시작하는 항공사를 돕는 정부 지원입니다(이번 달 이익에 들어 있음). 지금까지 받은 돈 ${money(s.support?.total ?? 0)} · ${config.rights.startSupport.hold + config.rights.startSupport.fade - game.monthsPassed}개월 뒤 끝납니다.</small></div>` : ''}
       ${divHtml()}
       <h3>월별 이익</h3>${h.length ? `<div class="chart">${bars}</div>` : '<p class="empty">첫 달이 끝나면 그래프가 나옵니다.</p>'}
       <h3>월말 정산</h3>${s.history.length ? `<div class="list">${[...s.history].reverse().slice(0, 12).map((m) => `<div class="row"><div class="grow"><b>${m.month}개월차</b><small>수익 ${money(m.revenue)}${m.dividend ? ` (배당 ${money(m.dividend)} 포함)` : ''} · 비용 ${money(m.cost + m.fixed)} · 탑승률 ${pct(m.loadFactor)}</small></div><div class="right ${m.profit >= 0 ? 'pos' : 'neg'}">${money(m.profit)}</div></div>`).join('')}</div>` : '<p class="empty">아직 정산한 달이 없습니다.</p>'}

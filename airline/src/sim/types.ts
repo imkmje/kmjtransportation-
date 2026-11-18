@@ -68,6 +68,7 @@ export interface GameState {
   adWar?: { comp: number; until: number } | null; /* 대형 항공사 겨냥 비교 광고 */
   slotLock?: Record<string, number>; /* 대형 거점 슬롯 선점: 도시 → 끝나는 개월 */
   majorPaid?: Record<number, number>; /* 대형 항공사 지분에 쓴 돈(인수하면 투자 성적으로) */
+  support?: { monthly: number; total?: number }; /* 3.16.0 개척 지원금: 출발 도시가 작은 시장일 때 매달 받는 돈 */
   mgrs?: Manager[]; mgrPool?: MgrCand[]; mgrPoolYear?: number; /* 위임 경영진 */
   fallen?: string[]; /* 대형 지위를 잃은 대형 항공사 이름(같은 이름으로 다시 출범하지 않게) */
   rivalsGone: RivalGone[]; // 파산한 경쟁사 기록(이름은 다시 쓰지 않는다)
