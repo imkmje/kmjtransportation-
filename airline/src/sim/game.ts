@@ -1047,6 +1047,15 @@ export class Game {
     s.log.push(`${this.monthsPassed + 1}개월차: 대형 사업 착공 — ${d.name}(${d.months}개월, ${lump ? `일시금 $${cost}M` : `매달 $${Math.round((cost / d.months) * 10) / 10}M`}).`); this.note(this.monthsPassed + 1, 'invest', `${d.name} 착공`);
     return { ok: true };
   }
+  /** 허브 공항을 여러 도시에 한꺼번에 착공(3.19.0): 도시마다 같은 값이 들고, 일시금이면 합계가 한 번에 나간다. 하나라도 못 짓는 도시가 있으면 아무것도 시작하지 않는다 */
+  startAirports(cities: string[], lump = false): Result<{ started: number; cost: number }> {
+    const s = this.state, list = [...new Set(cities)]; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!list.length) return fail('도시를 하나 이상 골라 주세요');
+    const lock = this.megaLock('airport'); if (lock) return fail(`아직 잠겨 있습니다: ${lock}`);
+    for (const c of list) { if (!CITIES.some((x) => x.id === c) || !this.cityOpen(c)) return fail(`${CITIES.find((x) => x.id === c)?.name ?? c}은(는) 운수권이 없는 지역입니다`); if (s.myAirports?.includes(c)) return fail(`${cityById(c).name}에는 이미 내 공항이 있습니다`); if ((s.megas ?? []).some((x) => x.id === 'airport' && x.city === c)) return fail(`${cityById(c).name} 공항은 이미 짓는 중입니다`); }
+    const one = this.megaCost('airport', lump), cost = Math.round(one * list.length * 10) / 10; if (lump && s.cash < cost) return fail(`일시금은 ${list.length}곳 합계 $${cost}M이 필요합니다(지금 $${s.cash.toFixed(1)}M)`);
+    for (const c of list) { const r = this.startMega('airport', c, lump); if (!r.ok) return fail(r.error); }
+    return { ok: true, started: list.length, cost };
+  }
   /** 대형 사업 일시중지·재개: 멈춘 동안은 매달 돈도 안 내고 진행도 멈춘다 */
   pauseMega(uid?: number): Result<{ paused: boolean }> { const mg = (this.state.megas ?? []).find((x) => uid === undefined || x.uid === uid); if (!mg) return fail('진행 중인 사업이 없습니다'); mg.paused = !mg.paused; if (!mg.paused) delete mg.paused; return { ok: true, paused: !!mg.paused }; }
   cancelMega(uid?: number): Result { const s = this.state, mg = (s.megas ?? []).find((x) => uid === undefined || x.uid === uid); if (!mg) return fail('진행 중인 사업이 없습니다'); s.megas = s.megas!.filter((x) => x !== mg); return { ok: true }; }

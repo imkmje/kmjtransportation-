@@ -195,7 +195,7 @@ export function startApp(): void {
     const act = b.dataset.act, i = Number(b.dataset.i);
     if (act === 'paper') showPaper(Number(b.dataset.y));
     else if (act === 'ownNameGo') { const r = game.nameOwnType(b.dataset.v!, $<HTMLInputElement>('#own-name').value); if (!r.ok) return err(r.error); $('#info').hidden = true; toast('기종 이름을 바꿨습니다'); play('ok'); lastHtml = ''; render(); }
-    else if (act === 'airportGo') { const city = $<HTMLSelectElement>('#ap-city').value, r = game.startMega('airport', city, b.dataset.v === 'lump'); if (!r.ok) return err(r.error); $('#info').hidden = true; toast(`${cityById(city).name}에 허브 공항 공사를 시작했습니다`); play('buy'); lastHtml = ''; render(); }
+    else if (act === 'airportGo') { const cs = [...document.querySelectorAll<HTMLInputElement>('#info-body input.ap-pick:checked')].map((x) => x.value), r = game.startAirports(cs, b.dataset.v === 'lump'); if (!r.ok) return err(r.error); $('#info').hidden = true; toast(`허브 공항 ${r.started}곳 공사를 시작했습니다(${cs.map((c) => cityById(c).name).join('·')})`); play('buy'); lastHtml = ''; render(); }
     else if (act === 'alNameGo') { const r = game.setAllianceName(($<HTMLInputElement>('#al-name')).value); if (!r.ok) return err(r.error); $('#info').hidden = true; toast('동맹 이름을 바꿨습니다'); play('ok'); lastHtml = ''; render(); }
     else if (act === 'foundGo') {
       const kind = (document.querySelector<HTMLInputElement>('input[name="f-kind"]:checked')?.value ?? 'low') as 'low' | 'premium' | 'regional', size = Number(document.querySelector<HTMLInputElement>('input[name="f-size"]:checked')?.value ?? 0);
@@ -756,8 +756,13 @@ export function startApp(): void {
     return `<div class="goal"><div><b>자회사 차리기</b> <small>직접 차린 자회사 ${mine}/${k.max} · 자본금 ${money(game.foundCost(0))}~${money(game.foundCost(2))}</small></div><small>거점·형태·자본금을 정해 새 항공사를 세웁니다(지분 100%). 운영 방향과 배당은 기존 자회사와 같습니다.</small><button class="wide" data-act="foundOpen" ${no(mine >= k.max, `직접 차린 자회사는 ${k.max}곳까지입니다`)}>새 항공사 세우기</button></div>`;
   }
   function showAirportPick() {
-    const s = game.state, cities = CITIES.filter((c) => game.cityOpen(c.id) && !s.myAirports?.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name, 'ko')), d = config.extra.mega.list.find((x) => x.id === 'airport')!;
-    showInfo('허브 공항 건설', `<p class="hint">${esc(d.desc)}. 총 ${money(game.megaCost('airport'))}을 ${d.months}개월에 나눠 냅니다.</p><label class="fld">도시<select id="ap-city">${cities.map((c) => `<option value="${c.id}">${esc(c.name)} — 경쟁사 노선 ${s.competitors.reduce((a, k) => a + k.routes.filter((r) => r.a === c.id || r.b === c.id).length, 0)}개</option>`).join('')}</select></label><div class="btns"><button data-act="airportGo">착공(나눠 냄)</button><button class="ghost" data-act="airportGo" data-v="lump" ${no(s.cash < game.megaCost('airport', true), short(game.megaCost('airport', true)))}>일시금 ${money(game.megaCost('airport', true))}</button></div>`);
+    const s = game.state, d = config.extra.mega.list.find((x) => x.id === 'airport')!, comps = (id: string) => s.competitors.reduce((a, k) => a + k.routes.filter((r) => r.a === id || r.b === id).length, 0), building = new Set((s.megas ?? []).filter((x) => x.id === 'airport').map((x) => x.city));
+    const cities = CITIES.filter((c) => game.cityOpen(c.id) && !s.myAirports?.includes(c.id)).sort((a, b) => Number(building.has(a.id)) - Number(building.has(b.id)) || comps(b.id) - comps(a.id) || a.name.localeCompare(b.name, 'ko'));
+    const one = game.megaCost('airport'), oneL = game.megaCost('airport', true);
+    showInfo('허브 공항 건설', `<p class="hint">${esc(d.desc)}. 도시마다 총 ${money(one)}을 ${d.months}개월에 나눠 냅니다(일시금이면 ${money(oneL)}). <b>여러 도시를 한꺼번에 고를 수 있습니다.</b> 경쟁사 노선이 많은 도시일수록 사용료 수입이 큽니다(노선 1개마다 월 ${money(config.extra.airport.fee)}).</p>
+      <div class="list" style="max-height:46vh;overflow:auto">${cities.map((c) => `<label class="row hubpick"><input type="checkbox" class="ap-pick" value="${c.id}" ${building.has(c.id) ? 'disabled' : ''}><div class="grow"><b>${esc(c.name)}</b><small>${building.has(c.id) ? '이미 짓는 중' : `경쟁사 노선 ${comps(c.id)}개 · 월 사용료 약 ${money(comps(c.id) * config.extra.airport.fee)}`}</small></div></label>`).join('')}</div>
+      <p class="hint" id="ap-total" data-m="${one / d.months}" data-l="${oneL}">도시를 고르세요.</p>
+      <div class="btns"><button data-act="airportGo">착공(나눠 냄)</button><button class="ghost" data-act="airportGo" data-v="lump">일시금</button></div>`);
   }
   /** 3.14.0 위임 경영진: 자회사·동맹 운영을 맡긴다 */
   function mgrHtml(): string {
@@ -1368,7 +1373,7 @@ export function startApp(): void {
     else if (e.key === 'Escape') { selCity = selRoute = null; menu.hidden = true; syncMap(); lastHtml = ''; render(); }
   });
   $('#info-body').addEventListener('input', (e) => { const t = e.target as HTMLInputElement; if (t.id === 'v-sfx') { setVolumes({ sfx: Number(t.value) / 100 }); $('#v-sfx-n').textContent = `${t.value}%`; } else if (t.id === 'v-music') { setVolumes({ music: Number(t.value) / 100 }); $('#v-music-n').textContent = `${t.value}%`; } });
-  $('#info-body').addEventListener('change', (e) => { if ((e.target as HTMLElement).id === 'v-sfx') play('ok'); }); // 효과음 크기는 손을 뗄 때 들려 준다
+  $('#info-body').addEventListener('change', (e) => { const t = e.target as HTMLElement; if (t.id === 'v-sfx') play('ok'); if (t.classList.contains('ap-pick')) { const n = document.querySelectorAll('#info-body input.ap-pick:checked').length, el = $('#ap-total'), m = Number(el.dataset.m), l = Number(el.dataset.l); el.textContent = n ? `${n}곳 선택 · 나눠 내면 매달 ${money(m * n)} · 일시금이면 ${money(l * n)}` : '도시를 고르세요.'; } }); // 효과음 크기는 손을 뗄 때 들려 준다
   ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false })); // 사파리의 두 손가락 화면 확대를 막는다(지도는 직접 처리)
   let paperResume = 0; // 연말 신문이 멈춘 배속(닫으면 되돌린다)
   $('#info-close').addEventListener('click', () => { $('#info').hidden = true; play('tap'); if (paperResume && game.state.status === 'playing') { speed = paperResume; renderTop(); } paperResume = 0; });

@@ -45,6 +45,21 @@ describe('대형 사업 값은 고정, 조건을 채우면 해금(3.11.0)', () =
   it('전용 터미널·허브 공항은 도시가 다르면 동시에 가능, 같은 도시는 불가', () => {
     const g = sb(); g.state.cash = 99999; expect(g.startMega('airport', 'PUS').ok).toBe(true); expect(g.startMega('airport', 'NRT').ok).toBe(true); expect(g.startMega('airport', 'PUS').ok).toBe(false);
   });
+  it('허브 공항 여러 도시 한꺼번에: 도시마다 같은 값, 일시금은 합계, 하나라도 안 되면 아무것도 시작하지 않는다', () => {
+    const g = sb(); g.state.cash = 99999; const one = g.megaCost('airport'), c0 = g.state.cash;
+    const r = g.startAirports(['PUS', 'NRT', 'HKG']); expect(r.ok && r.started).toBe(3); expect(g.state.megas!.filter((m) => m.id === 'airport').map((m) => m.city).sort()).toEqual(['HKG', 'NRT', 'PUS']); g.advanceDays(31);
+    expect(c0 - g.state.cash).toBeGreaterThanOrEqual(3 * (one / config.extra.mega.list.find((x) => x.id === 'airport')!.months) - 1e-6);
+    const bad = g.startAirports(['SIN', 'PUS']); expect(bad.ok).toBe(false); expect(g.state.megas!.some((m) => m.city === 'SIN')).toBe(false); // PUS는 이미 짓는 중이라 SIN도 시작하지 않는다
+    expect(g.startAirports([]).ok).toBe(false); expect(g.startAirports(['ZZZ']).ok).toBe(false);
+  });
+  it('허브 공항 일시금 여러 곳: 합계만큼 한 번에 나가고, 돈이 모자라면 시작하지 않는다', () => {
+    const g = sb(); const lump = g.megaCost('airport', true); g.state.cash = lump * 2 + 1; const c0 = g.state.cash;
+    expect(g.startAirports(['PUS', 'NRT', 'HKG'], true).ok).toBe(false); expect(g.state.megas ?? []).toHaveLength(0); expect(g.state.cash).toBe(c0);
+    const r = g.startAirports(['PUS', 'NRT'], true); expect(r.ok).toBe(true); expect(c0 - g.state.cash).toBeCloseTo(lump * 2, 6); expect(g.state.megas!.every((m) => m.paid)).toBe(true);
+  });
+  it('허브 공항을 짓는 중이거나 이미 지은 도시는 다시 고를 수 없다', () => {
+    const g = sb(); g.state.cash = 99999; g.state.myAirports = ['SIN']; expect(g.startAirports(['SIN']).ok).toBe(false); expect(g.startAirports(['PUS']).ok).toBe(true); expect(g.startAirports(['PUS']).ok).toBe(false);
+  });
   it('3.17.0 이전 저장(mega 하나)을 불러오면 megas로 옮겨져 계속 진행된다', () => {
     const g = sb(); g.startMega('academy'); const raw = JSON.parse(JSON.stringify(g.state)); const m0 = raw.megas[0]; delete raw.megas; raw.mega = { id: m0.id, done: 5, cost: m0.cost };
     const h = Game.fromJSON(raw); expect(h.state.mega).toBeNull(); expect(h.state.megas!.length).toBe(1); expect(h.state.megas![0].done).toBe(5); h.advanceDays(31); expect(h.state.megas![0].done).toBe(6);
