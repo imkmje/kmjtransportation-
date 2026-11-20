@@ -30,7 +30,10 @@ type CoTab = 'fin' | 'staff' | 'hq' | 'factory' | 'research';
 type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView };
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
 
-const WEEK_MS = 1500; // 1배속: 1주 = 1.5초(설계서 4장)
+const WEEK_MS = 3000; // 보통(1배): 1주 = 3초. 0.4.2 사용자 불만(너무 빠름)으로 1.5초 → 3초. 빠름 2배 1.5초, 아주 빠름 4배 0.75초
+const PAUSE_KEY = 'car-company-autopause'; // 자동 멈춤 설정(기기 저장소, 디버그 표시와 같은 방식)
+const PAUSE_ITEMS = [['cands', '채용 후보가 왔을 때'], ['ready', '개발한 차가 출시 대기가 됐을 때'], ['choice', '결정할 사건이 생겼을 때(선택 창을 띄움)']] as const;
+type PauseKey = typeof PAUSE_ITEMS[number][0];
 const OFFICE_GAP_MS = 1800; // 사무실 점수 연출 최소 간격(점수 글자가 떠 있는 시간)
 const MAX_TICKS_PER_FRAME = 4;
 const PICKUP_YAW = 0.75; // 픽업 무대·썸네일 기본 각도: 뒤 3/4(짐칸이 보이게)
@@ -79,6 +82,12 @@ export function startApp(): void {
   const devLog = new Map<number, string[]>(), devPrev = new Map<number, number>();
   let stage: Stage | null = null, lookKey = '';
   let debugOn = (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
+  const pauseOn = ((): Record<PauseKey, boolean> => { // 기본 모두 켬. 저장값이 깨졌으면 켬
+    let o: Record<string, unknown> = {}; try { o = JSON.parse(localStorage.getItem(PAUSE_KEY) ?? '{}') ?? {}; } catch { /* 저장 불가 */ }
+    return Object.fromEntries(PAUSE_ITEMS.map(([k]) => [k, o[k] !== false])) as Record<PauseKey, boolean>;
+  })();
+  const candSeen = new Set<number>(); // 알림을 띄운 채용 후보
+  let pxHold: HTMLInputElement | null = null; // 손가락·−/+ 단추로 조절 중인 가격 슬라이더(그동안 패널을 다시 그리지 않고 숫자만 바꾼다)
   let titleMode: 'home' | 'new' = 'home', gameOverShown = false, reviewTimers: number[] = [];
   let lastPanel = '', lastOv = '', dragging = false;
 
@@ -334,10 +343,14 @@ export function startApp(): void {
       }
       case 'company': toast(e.text, 'alert', '회사', 7000); break;
       case 'news': { const k = e.category ?? 'other'; toast(newsLine(e.text), 'alert', NEWS_KIND[k], 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break; }
-      case 'choice': if (!quietChoice && sheet.hidden && $('#ask').hidden && title.hidden) showChoice(); break; // 화면 안 창이 떠 있는 동안 시간이 멈춘다
+      case 'choice': // 화면 안 창이 떠 있는 동안 시간이 멈춘다. 자동 멈춤을 끄면 창 대신 알림만
+        if (quietChoice) break;
+        if (!pauseOn.choice) toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() });
+        else if (sheet.hidden && $('#ask').hidden && title.hidden) showChoice();
+        break;
       case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
         const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
-        if (w) { waitSeen.add(w.id); toast(e.text, 'alert', `「${w.name}」 출시 대기`, 20000, '', { label: '출시 준비', fn: () => openLaunch(w.id) }); }
+        if (w) { waitSeen.add(w.id); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
         else toast(e.text, 'alert', '조언', 9000);
         break;
       }
@@ -360,6 +373,20 @@ export function startApp(): void {
     }
   }
   function setSpeed(v: number): void { speed = v; acc = 0; renderTop(); }
+  /** 자동 멈춤(설정에서 항목별로 끔): 알림은 늘 띄우고, 켜져 있으면 시간을 멈춘다 */
+  function autoPause(k: PauseKey, text: string, head: string, open: { label: string; fn: () => void }): void {
+    const stop = pauseOn[k] && speed > 0;
+    if (stop) setSpeed(0);
+    toast(`${text}${stop ? ' 시간을 멈췄습니다.' : ''}`, 'alert', head, 20000, `pause-${k}`, open);
+  }
+  /** 새 채용 후보가 오면 알림(+자동 멈춤). 기한 안에 채용하지 않으면 후보가 떠난다 */
+  function watchCands(): void {
+    const s = game!.state, fresh = s.candidates.filter((c) => !candSeen.has(c.id));
+    if (!fresh.length) return;
+    for (const c of fresh) candSeen.add(c.id);
+    const wk = Math.max(1, Math.min(...fresh.map((c) => c.expiresWeek)) - s.week);
+    autoPause('cands', `${ROLE_NAME[fresh[0].role]} 후보 ${fresh.length}명이 왔습니다. ${wk}주 안에 채용하지 않으면 다른 회사로 갑니다.`, '채용 후보', { label: '채용 화면', fn: () => { coTab = 'staff'; go('company'); } });
+  }
 
   let last = performance.now(), frames = 0, fps = 0, fpsT = last;
   function frame(now: number): void {
@@ -410,6 +437,7 @@ export function startApp(): void {
   // ---------- 화면 그리기 ----------
   function render(): void {
     if (!game) return;
+    watchCands();
     renderTop();
     const s = game.state;
     if (s.status === 'gameOver') { if (!gameOverShown) showGameOver(); return; }
@@ -426,9 +454,17 @@ export function startApp(): void {
     showOffice(v.office ?? null);
     if (v.look !== undefined && !v.office) showLook(v.look);
     const ae = document.activeElement as HTMLElement | null;
-    const busy = !!ae && panel.contains(ae) && (ae.matches('input[type=text]') || (dragging && ae.matches('input[type=range]')));
-    if (!busy && v.panel !== lastPanel) { const y = panel.scrollTop; panel.innerHTML = v.panel; panel.scrollTop = y; lastPanel = v.panel; }
+    const busy = (!!ae && panel.contains(ae) && (ae.matches('input[type=text]') || (dragging && ae.matches('input[type=range]')))) || !!pxHold?.isConnected;
+    if (v.panel !== lastPanel) {
+      if (!busy) { const y = panel.scrollTop; panel.innerHTML = v.panel; panel.scrollTop = y; lastPanel = v.panel; }
+      else patchLive(v.panel);
+    }
     if (tipHover && tipAnchor && !tipAnchor.isConnected) hideTip();
+  }
+  /** 조절 중에는 data-live 칸(id로 짝)만 새 내용으로 바꿔 끼운다(슬라이더 자신은 그대로 두어 손가락이 놓치지 않게) */
+  function patchLive(html: string): void {
+    const t = document.createElement('template'); t.innerHTML = html;
+    for (const n of [...t.content.querySelectorAll<HTMLElement>('[data-live]')]) { const o = document.getElementById(n.id); if (o && o.outerHTML !== n.outerHTML) o.replaceWith(n); }
   }
   const go = (sc: Screen) => { screen = sc; lastPanel = ''; panel.scrollTop = 0; render(); };
 

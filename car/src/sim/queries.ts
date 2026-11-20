@@ -286,3 +286,11 @@ export function capacityAdvice(s: CarState): string {
 }
 
 export { hqDef, factoryDef, staffCap, devTeams, optionSlots, capacityOf, linesOf, costMultOf, upkeepOf } from './company';
+
+/** 판매 중인 차의 가격을 price로 바꾸면 이번 달 예상 판매(대, 생산 한도까지). 가격 슬라이더 미리 보기용(배분·재구매·단종 달 보정은 뺀 어림) */
+export function priceForecast(s: CarState, generationId: number, price: number): number | null {
+  const g = generationById(s, generationId);
+  if (!g) return null;
+  const m = monthOf(s.week), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
+  return Math.round(Math.min(capacityOf(s), monthlyDemand(s, { ...toSaleCar(g, m), price }, others, monthTime(m))));
+}
