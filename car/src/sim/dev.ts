@@ -32,39 +32,71 @@ export const staffOn = (state: CarState, p: Project): Staff[] => state.staff.fil
 /** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 */
 export const devCostPerWeek = (team: Staff[], budget: Budget): number =>
   (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek;
-export const weeklyDevCost = (state: CarState, p: Project): number => devCostPerWeek(staffOn(state, p), p.budget);
+/** 페이스리프트의 주간 비용: 그 세대 개발비 × 25% ÷ (설계 4주 + 최소 시험 2주). 시험을 더 하면 그만큼 더 든다 */
+export const faceliftWeekCost = (genDevCost: number): number =>
+  (genDevCost * config.lifecycle.facelift.costShare) / (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks);
+/** 풀체인지 비용 배수: 같은 차체 85%, 차체를 바꾸면 100% */
+export const fullChangeCostMult = (sameBody: boolean): number => (sameBody ? config.lifecycle.fullChange.sameBodyCost : config.lifecycle.fullChange.newBodyCost);
+const genById = (state: CarState, id: number | null) => state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id);
+const latestGenOf = (state: CarState, nameplateId: number | null) => state.nameplates.find((n) => n.id === nameplateId)?.generations.at(-1);
+export function weeklyDevCost(state: CarState, p: Project): number {
+  if (p.kind === 'facelift') return faceliftWeekCost(genById(state, p.targetId)?.devCost ?? 0);
+  const base = devCostPerWeek(staffOn(state, p), p.budget);
+  return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
+}
 
-/** 설계 한 주의 능력치별 점수. rand(): 직원마다 한 번 부르는 난수(0.85~1.15) */
-export function designWeek(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number): Stats {
-  const d = config.dev, week = zeroStats();
-  for (const s of team) {
+/** 설계 한 주의 직원별 능력치 점수(팀 순서). rand(): 직원마다 한 번 부르는 난수(0.85~1.15) */
+export function designWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number): Stats[] {
+  const d = config.dev;
+  return team.map((s) => {
     const out = (s.ability / d.abilityDiv) * d.budgets[spec.budget].out * s.condition * rand() * d.scale;
-    const split = d.roleSplit[s.role];
-    for (const k of STATS) week[k] += out * (split[k] ?? 0) * (d.dirBase + spec.direction[k] / d.dirDiv);
-  }
+    const split = d.roleSplit[s.role], w = zeroStats();
+    for (const k of STATS) w[k] = out * (split[k] ?? 0) * (d.dirBase + spec.direction[k] / d.dirDiv);
+    return w;
+  });
+}
+/** 설계 한 주의 능력치별 점수(직원 합) */
+export function designWeek(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number): Stats {
+  const week = zeroStats();
+  for (const w of designWeekByStaff(team, spec, rand)) for (const k of STATS) week[k] += w[k];
   return week;
+}
+/** 페이스리프트 설계 한 주(8.2): 디자이너만, 점수는 D에만(디자이너 산출의 D 몫, 방향 배수 1) */
+export function faceliftWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number): Stats[] {
+  const designers = designWeekByStaff(team.filter((s) => s.role === 'designer'), spec, rand);
+  let i = 0;
+  return team.map((s) => { const w = zeroStats(); if (s.role === 'designer') w.D = designers[i++].D; return w; });
 }
 /** 시험 한 주에 줄어드는 결함 = Σ 테스터 꼼꼼함/10 + Σ 엔지니어 기술/30 */
 export const testCut = (team: Staff[]): number =>
   team.reduce((a, s) => a + s.ability / (s.role === 'tester' ? config.dev.testerDiv : s.role === 'engineer' ? config.dev.engineerDiv : Infinity), 0);
 
-/** 한 주 진행. 설계가 끝난 주면 true */
-export function stepProject(state: CarState, p: Project, rng: Rng): boolean {
+/** 한 주 진행 결과: 설계가 끝났는지 + 직원별 점수와 결함 증감(사무실 화면용 주간 기록) */
+export interface WeekLog { designDone: boolean; staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number }
+
+/** 한 주 진행(난수 순서: 설계 주는 직원마다 1번, 그다음 결함 추정 1번) */
+export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
   const d = config.dev, team = staffOn(state, p);
-  let designDone = false;
+  const log: WeekLog = { designDone: false, staff: team.map((s) => ({ id: s.id, stats: zeroStats() })), defectsAdded: 0, defectsRemoved: 0 };
   if (p.phase === 'design') {
-    const week = designWeek(team, p, () => rng.range(d.randMin, d.randMax));
+    const rand = () => rng.range(d.randMin, d.randMax);
+    const per = p.kind === 'facelift' ? faceliftWeekByStaff(team, p, rand) : designWeekByStaff(team, p, rand);
+    const week = zeroStats();
+    per.forEach((w, i) => { log.staff[i].stats = w; for (const k of STATS) week[k] += w[k]; });
     let made = 0;
     for (const k of STATS) { p.points[k] += week[k]; made += week[k]; }
-    p.defects += made * d.defectPerPoint;
+    log.defectsAdded = made * d.defectPerPoint * (p.kind === 'facelift' ? config.lifecycle.facelift.defectRate : 1);
+    p.defects += log.defectsAdded;
     p.weeksDone++;
-    if (p.weeksDone >= p.designWeeks) { p.phase = 'test'; designDone = true; }
+    if (p.weeksDone >= p.designWeeks) { p.phase = 'test'; log.designDone = true; }
   } else {
+    const before = p.defects;
     p.defects = Math.max(0, p.defects - testCut(team));
+    log.defectsRemoved = before - p.defects;
     p.testWeeks++;
   }
   const cost = weeklyDevCost(state, p);
   p.spent += cost; state.pendingDev += cost;
   p.defectEst = Math.round(p.defects * (1 + rng.range(-d.estError, d.estError)));
-  return designDone;
+  return log;
 }

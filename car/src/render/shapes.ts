@@ -22,11 +22,55 @@ export const BODY: Record<BodyId, BodyShape> = {
 // 휠 크기 단계별 반지름 증가(데모의 17/19/21인치)
 export const WHEEL_GROW = [0, .03, .06] as const;
 
-// 시대 스타일: 끝 둥글림(re: 위아래, rpF/rpR: 평면 앞뒤), 지붕·바닥 모서리 반경, 앞뒤 좁아짐
-export interface EraStyle { re: number; rpF: number; rpR: number; rc: number; rb: number; taper: number; classic: boolean }
-const MODERN: EraStyle = { re: .2, rpF: .55, rpR: .42, rc: .11, rb: .07, taper: .05, classic: false };
-const CLASSIC: EraStyle = { re: .09, rpF: .2, rpR: .16, rc: .045, rb: .03, taper: .02, classic: true };
-export const eraStyle = (look: CarLook): EraStyle => (look.era && look.era < 1990 ? CLASSIC : MODERN);
+// 시대 스타일: 끝 둥글림(re: 위아래, rpF/rpR: 평면 앞뒤), 지붕·바닥 모서리 반경, 앞뒤 좁아짐,
+// smooth: 옆선 문지르기 횟수(많을수록 둥근 지붕선), wedge: 벨트라인이 뒤로 갈수록 올라가는 양(쐐기)
+export type Era = 1970 | 1990 | 2010 | 2020;
+export interface EraStyle { re: number; rpF: number; rpR: number; rc: number; rb: number; taper: number; smooth: number; wedge: number; classic: boolean }
+export const ERA: Record<Era, EraStyle> = {
+  1970: { re: .09, rpF: .2, rpR: .16, rc: .045, rb: .03, taper: .02, smooth: 1, wedge: .07, classic: true }, // 각진 상자, 크롬 범퍼
+  1990: { re: .3, rpF: .62, rpR: .52, rc: .16, rb: .1, taper: .09, smooth: 4, wedge: .04, classic: false }, // 둥근 비누
+  2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .13, classic: false }, // 쐐기
+  2020: { re: .2, rpF: .55, rpR: .42, rc: .11, rb: .07, taper: .05, smooth: 2, wedge: .07, classic: false }, // 매끈
+};
+export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1990 ? 1970 : e < 2010 ? 1990 : e < 2020 ? 2010 : 2020; };
+export const eraStyle = (look: CarLook): EraStyle => ERA[eraOf(look)];
+
+// 차대 변형 범위(chassisSeed). 시드마다 각 값이 −1~+1 사이에서 뽑혀 이 폭을 곱한다. 보수적으로 잡았다.
+export const ARCH_GAP = .055; // 휠 아치와 타이어 사이 기본 여유
+export const VARY = {
+  len: .04, // 전체 길이 배율 ±4%(축·객실·도어 위치도 함께 늘어남)
+  wid: .02, // 폭 ±m
+  roof: .04, // 지붕 높이 ±m
+  belt: .03, // 벨트라인 ±m
+  rake: .2, // 앞유리 기울기 길이 배율 ±
+  rear: .25, // 뒤유리 기울기 길이 배율 ±
+  cab: .08, // 객실 앞뒤 이동 ±m(+면 앞으로)
+  deck: .08, // 트렁크 길이 ±m(트렁크 있는 차만, +면 길어짐)
+  arch: .015, // 휠 아치 여유 ±m
+} as const;
+
+// 얼굴 선택지(faceSeed). 시대마다 고를 수 있는 모양이 다르다. 같은 항목을 두 번 넣으면 그만큼 자주 뽑힌다.
+export type LampKind = 'round' | 'twin' | 'rect' | 'oval' | 'vertical' | 'swept' | 'slim';
+export type GrilleKind = 'rect' | 'hex' | 'twin' | 'bars' | 'none';
+export type IntakeKind = 'wide' | 'three' | 'slim' | 'none';
+export type TailKind = 'bar' | 'vertical' | 'L' | 'split' | 'full';
+export interface FaceSpec {
+  lamp: LampKind; lampW: number; lampDy: number; bar: boolean; // lampW: 크기 배율, lampDy: 높이 이동(m), bar: 앞 가로 라이트 바
+  grille: GrilleKind; grilleW: number; grilleH: number;
+  intake: IntakeKind; bumper: 'body' | 'black';
+  tail: TailKind; tailDy: number;
+  plateF: 'center' | 'offset'; plateR: 'low' | 'high';
+}
+export const ERA_FACE: Record<Era, { lamp: LampKind[]; grille: GrilleKind[]; intake: IntakeKind[]; bumper: FaceSpec['bumper'][]; tail: TailKind[]; bar: number; grilleW: [number, number]; def: FaceSpec }> = {
+  1970: { lamp: ['round', 'twin', 'rect'], grille: ['rect', 'bars', 'twin'], intake: ['slim', 'none', 'wide'], bumper: ['body'], tail: ['bar', 'vertical', 'split'], bar: 0, grilleW: [.85, 1.15],
+    def: { lamp: 'round', lampW: 1, lampDy: 0, bar: false, grille: 'rect', grilleW: 1, grilleH: 1, intake: 'wide', bumper: 'body', tail: 'bar', tailDy: 0, plateF: 'center', plateR: 'high' } },
+  1990: { lamp: ['oval', 'rect', 'vertical', 'oval'], grille: ['rect', 'bars', 'none'], intake: ['wide', 'slim', 'three'], bumper: ['body', 'black'], tail: ['bar', 'L', 'vertical'], bar: 0, grilleW: [.8, 1.1],
+    def: { lamp: 'oval', lampW: 1, lampDy: 0, bar: false, grille: 'rect', grilleW: 1, grilleH: 1, intake: 'wide', bumper: 'body', tail: 'bar', tailDy: 0, plateF: 'center', plateR: 'high' } },
+  2010: { lamp: ['swept', 'swept', 'slim', 'rect'], grille: ['hex', 'twin', 'rect'], intake: ['three', 'wide', 'slim'], bumper: ['body', 'black'], tail: ['L', 'split', 'bar'], bar: .15, grilleW: [1.1, 1.4],
+    def: { lamp: 'swept', lampW: 1, lampDy: 0, bar: false, grille: 'hex', grilleW: 1.2, grilleH: 1, intake: 'three', bumper: 'body', tail: 'L', tailDy: 0, plateF: 'center', plateR: 'high' } },
+  2020: { lamp: ['slim', 'slim', 'vertical', 'rect'], grille: ['hex', 'none', 'twin', 'bars'], intake: ['wide', 'three', 'slim'], bumper: ['body', 'black'], tail: ['full', 'L', 'split'], bar: .5, grilleW: [.9, 1.3],
+    def: { lamp: 'rect', lampW: 1, lampDy: 0, bar: false, grille: 'rect', grilleW: 1, grilleH: 1, intake: 'wide', bumper: 'body', tail: 'bar', tailDy: 0, plateF: 'center', plateR: 'high' } },
+};
 
 // 얼굴·뒷모습 부품 배치(높이는 벨트라인 아래 또는 지상고 위 거리, 폭은 반폭 hw의 비율)
 export const FACE = {
@@ -38,7 +82,7 @@ export const FACE = {
   plateW: .52, plateH: .11, plateY: .2, // 번호판(52×11cm)
   intakeY0: .11, intakeY1: .17, intakeZ: .5, evIntakeZ: .32,
   tailDrop: .15, tailH: .09, tailZ0: .45, tailZ1: .9, classicTailZ0: .52, classicTailZ1: .82, classicTailH: .12,
-  rearPlateY: .33, diffY0: .11, diffY1: .17, diffZ: .62,
+  rearPlateY: .33, rearPlateLowY: .19, diffY0: .11, diffY1: .17, diffZ: .62,
   bumperY: .17, bumperH: .07, bumperD: .07, bumperInset: .12, // 1970 크롬 범퍼(지상고 위, 끝은 반폭에서 안쪽으로)
   doorGap: .012, doorLift: .002, archLift: .008,
   handleW: .14, handleBack: .12, handleDrop: .1,

@@ -52,7 +52,30 @@ export const config = {
   discontinue: { lastMonthMult: 0.5, recentMonths: 3, wellSelling: 0.7, rep: -2, adviceSales: 10, adviceMonths: 6, adviceDrop: 0.6 }, // 8.6
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
-  rivals: { base: 1, noise: 0.1 }, // 경쟁 차 A = 기본값 + 강약 ± 0.1
+  rivals: { // 7.4·8.4: 경쟁 차 A = 기본값 + 강약 ± 0.1. 4~7년 주기로 새 모델, 주기 중간에 페이스리프트(2단계 단순 규칙, 5단계에서 완성)
+    base: 1, noise: 0.1,
+    cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
+    fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
+    faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
+  },
+  lifecycle: { // 8장
+    facelift: {
+      afterMonths: 18, designWeeks: 4, costShare: 0.25, // 출시 18개월 뒤, 설계 4주, 비용 = 그 세대 개발비의 25%(설계 4주 + 최소 시험 2주에 나눠 낸다)
+      dCap: 0.15, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +15%
+      defectKeep: 0.5, defectRate: 1 / 3, // 남은 결함 × 0.5로 시작, 새 결함은 1/3 속도
+      lifeKeep: 0.4, lateMonths: 60, lateLifeKeep: 0.7, // 수명 나이를 40%로(세대 나이 60개월 이후면 70%로)
+      awareness: 0.1, switchMonthMult: 0.7, // 인지도 +0.1, 전환 달 생산 −30%
+    },
+    fullChange: {
+      afterMonths: 36, sameBodyCost: 0.85, newBodyCost: 1, // 출시 36개월 뒤(또는 단종 상태), 비용 85%(같은 차체) / 100%
+      equityPerReview: 0.03, equityReviewBase: 0.12, equityReviewMax: 0.2, equitySalesDiv: 500000, equitySalesMax: 0.1, equityMax: 0.3, // 자산 = clamp(0.03 × 평론 − 0.12, 0, 0.2) + min(0.1, 누적/50만)
+      recallEquity: -0.05, newBodyEquity: 0.5, revivalMonths: 36, revivalEquity: 0.5, // 리콜 −0.05, 차체 변경 ×0.5, 단종 36개월 넘으면 부활 ×0.5
+      worseReview: -1, betterReview: 0.5, // 전작 비교: 표시 등급 평균이 낮으면 평론 전원 −1, 높으면 +0.5
+      rebuyShare: 0.03, rebuyMonths: 12, rebuyMinQ: 5, // 전 세대 누적 판매의 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 5 미만이면 0)
+    },
+    lookCandidates: 3, // 3D 모양 후보 수
+  },
+  staffGrowth: { min: 1, max: 2, cap: 60 }, // 9.1 최소 구현(3단계 전 임시): 프로젝트를 출시로 마치면 참여 직원 능력 +1~2, 상한 60
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
 };
