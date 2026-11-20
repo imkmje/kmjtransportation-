@@ -393,6 +393,7 @@ export function startApp(): void {
       case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
       case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
       case 'discontinued': toast(e.text, '', '단종'); break;
+      case 'reputation': toast(e.text.replace(/^평판 ([+−][\d.]+)\((.*)\)$/, '$2: 평판 $1'), '', '평판', 5000); break; // 이유를 앞에: "「아리아」 리콜: 평판 −1.5"
       case 'gameOver': sfx('bankrupt'); break; // render()에서 파산 화면을 띄운다
     }
   }
@@ -946,7 +947,7 @@ export function startApp(): void {
     // 혹평 예고: 예상 평점이 혹평 기준 + 0.5 이하면(실제 평론은 ±0.7 안팎) "출시해도 좋습니다" 대신 붉은 경고
     const flopRisk = !!ex && ex.avg <= config.critics.flop + 0.5, rd = ex ? repDelta(ex.avg) : 0;
     const card0 = `<div class="card"><p class="lbl">출시 전 점검</p><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi(`예상 리콜 위험${ib('term:리콜')}`, `연 ${Math.round(adv.recallYear * 100)}<span>%</span>`, adv.level === 'many' ? 'neg' : '')}${ex ? kpi(`예상 평판 변화${ib('term:평판')}`, repWord(rd).replace('평판 ', ''), rd < 0 ? 'neg' : rd > 0 ? 'pos' : '') : ''}</div>
-      ${flopRisk ? `<div class="badbox flop-risk" style="margin-top:10px">예상 평점 ${score(ex!.avg)}점으로 혹평(${config.critics.flop}점 이하) 위험이 큽니다. 혹평이면 평판이 ${-config.critics.flopRep} 더 떨어지고 판매도 부진합니다. 가격을 낮추거나 개발을 더 하는 편이 낫습니다.</div>${adv.level === 'ok' ? '' : defectBox(adv)}` : defectBox(adv)}${reg ? `<div class="badbox reg-why" style="margin-top:10px">${esc(reg)}</div>` : ''}</div>`;
+      ${flopRisk ? `<div class="badbox flop-risk" style="margin-top:10px">예상 평점 ${score(ex!.avg)}점으로 혹평(${config.critics.flop}점 이하) 위험이 큽니다. 혹평이면 평판이 ${(Math.round(-config.critics.flopRep * diffOf(s).repLossMult * 10) / 10).toLocaleString('ko-KR')} 떨어지고 판매도 부진합니다. 가격을 낮추거나 개발을 더 하는 편이 낫습니다.</div>${adv.level === 'ok' ? '' : defectBox(adv)}` : defectBox(adv)}${reg ? `<div class="badbox reg-why" style="margin-top:10px">${esc(reg)}</div>` : ''}</div>`;
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
     const card1 = `<div class="card price-card"><p class="lbl">판매 가격${fl ? '(다시 정하기)' : ''}</p>${priceBlock('lprice', { price: L.price, body: p.body, up,
@@ -980,8 +981,8 @@ export function startApp(): void {
   }
 
   // ----- 리뷰 -----
-  /** 평론 평균 → 출시 때 평판 변화(sim과 같은 식: (평균 − 5) × 1, 명차 +4, 혹평 −3) */
-  const repDelta = (avg: number) => { const c = config.critics, R = config.reputation; return (avg - R.launchBase) * R.launchPer + (avg >= c.masterpiece ? c.masterpieceRep : avg <= c.flop ? c.flopRep : 0); };
+  /** 평론 평균 → 출시 때 평판 변화(sim과 같은 식: 5 넘는 만큼 +, 명차 +4, 혹평 −3 × 난이도 감점 배수) */
+  const repDelta = (avg: number) => { const c = config.critics, R = config.reputation; return Math.max(0, avg - R.launchBase) * R.launchPer + (avg >= c.masterpiece ? c.masterpieceRep : avg <= c.flop ? c.flopRep * diffOf(game!.state).repLossMult : 0); };
   const repWord = (d: number) => `평판 ${d >= 0.05 ? '+' : d <= -0.05 ? '−' : '±'}${(Math.round(Math.abs(d) * 10) / 10).toLocaleString('ko-KR')}`;
   function showReview(g: Generation, repChange = repDelta(g.reviewAvg)): void {
     const s = game!.state, name = nameOf(g), list = config.critics.list, avg = g.reviewAvg, c = config.critics;
@@ -1060,10 +1061,6 @@ export function startApp(): void {
     return tabs + (coTab === 'staff' ? staffTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'research' ? researchTab() : finTab());
   }
 
-  // 유지비 표시는 실제 청구액으로: 난이도 배수(쉬움 ×0.5)와 연구의 공장 유지비 감소를 반영한다(자료값은 보통 난이도 기준)
-  // shortcut: sim의 실제 청구액 조회가 생기면 그것으로 바꿀 것. 공장 몫 = 전체 청구액 − 본사 몫, 그 비율을 다음 등급에도 쓴다
-  const hqBill = (raw: number) => raw * diffOf(game!.state).upkeepMult;
-  const facBill = (raw: number) => { const s = game!.state, f = Q.factoryInfo(s), cur = f.current.upkeep; return cur > 0 ? raw * (f.upkeepTotal - hqBill(Q.hqInfo(s).current.upkeep)) / cur : raw * diffOf(s).upkeepMult; };
   /** 경쟁사가 강한 차급: 점유 점수가 높은 순 최대 3개 + "외 n"(초반에 모두 같으면 "모든 차급 고르게") */
   const rivalStrong = (cells: Record<string, number>): string => {
     const e = Object.entries(cells).sort((a, b) => b[1] - a[1]), top = e.filter(([, v]) => v >= e[0][1] * 0.97);
@@ -1072,14 +1069,14 @@ export function startApp(): void {
   };
   function finTab(): string {
     const s = game!.state, L = s.ledger[s.ledger.length - 1], limit = Q.loanLimit(s), rate = Q.loanRate(s);
-    const hqUp = hqBill(Q.hqInfo(s).current.upkeep), fUp = facBill(Q.factoryInfo(s).current.upkeep);
+    const hqUp = (Q.hqInfo(s).current.upkeep), fUp = (Q.factoryInfo(s).current.upkeep);
     // 막대는 영업 이익(일회성 지출을 뺀 값). 공장 건설 같은 큰 일회성 지출 한 달에 축이 눌리지 않게 따로 점으로 표시
     const led = s.ledger, op = (e: typeof led[number]) => e.profit + (e.oneOff || 0), mx = Math.max(1, ...led.map((e) => Math.abs(op(e))));
     const W = 480, H = 150, X0 = 56, bw = (W - X0) / 24;
     const chart = led.length ? `<svg viewBox="0 0 ${W} ${H + 18}" width="100%" role="img" aria-label="최근 24개월 이익"><line x1="${X0}" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="#d8dde4"/>${led.map((e, i) => { const v = op(e), h = (Math.abs(v) / mx) * (H / 2 - 4), y = v >= 0 ? H / 2 - h : H / 2, x = X0 + i * bw + 2; return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${v >= 0 ? '#12915a' : '#d43c3c'}"><title>${e.year}년 ${e.monthOfYear}월 영업 이익 ${money(v, true)}</title></rect>${e.oneOff > 0 ? `<circle class="oneoff" cx="${(x + (bw - 4) / 2).toFixed(1)}" cy="${H - 4}" r="4" fill="#ff5a1f"><title>${e.year}년 ${e.monthOfYear}월 일회성 지출 ${money(e.oneOff)}</title></circle>` : ''}`; }).join('')}
       <text x="${X0 - 6}" y="12" font-size="11" fill="#8b94a1" text-anchor="end">+${money(mx)}</text><text x="${X0 - 6}" y="${H / 2 + 4}" font-size="11" fill="#8b94a1" text-anchor="end">0</text><text x="${X0 - 6}" y="${H - 2}" font-size="11" fill="#8b94a1" text-anchor="end">−${money(mx)}</text><text x="${W - 2}" y="${H + 14}" font-size="11" fill="#8b94a1" text-anchor="end">${led[led.length - 1].year}년 ${led[led.length - 1].monthOfYear}월</text><text x="${X0}" y="${H + 14}" font-size="11" fill="#8b94a1">${led[0].year}년 ${led[0].monthOfYear}월</text></svg>` : '<p class="hint">첫 달 결산이 끝나면 그래프가 나옵니다.</p>';
-    // shortcut: 장부에는 유지비 합계만 있어 지금 본사 등급의 유지비로 나눠 보인다(그달에 승급했으면 조금 다를 수 있음), sim 장부가 나눠 적게 되면 바꿀 것
-    const hqPart = L ? Math.min(L.upkeep, hqUp) : 0;
+    // 0.5.0 이전 장부에는 본사 몫(upkeepHq)이 없어 지금 본사 등급의 유지비로 나눠 보인다
+    const hqPart = L ? L.upkeepHq ?? Math.min(L.upkeep, hqUp) : 0; // 0.5.1부터 장부에 본사 몫이 따로 있다
     const rows: [string, number][] = L ? [['차 원가', L.cogs], ['직원 월급', L.salaries], ['본사 유지비', hqPart], ['공장 유지비', L.upkeep - hqPart], ['개발비', L.dev], ['광고비', L.marketing], ['대출 이자', L.interest], ['리콜', L.recall], ['일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설)', L.oneOff || 0]] : [];
     const table = L ? `<table class="tbl"><tr><th>${L.year}년 ${L.monthOfYear}월</th><th class="r">금액</th></tr><tr><td>판매 수입 (${num(L.sold)}대)</td><td class="r pos">${money(L.revenue, true)}</td></tr>${rows.filter(([, v]) => v).map(([n, v]) => `<tr><td>${n}</td><td class="r neg">${money(-v)}</td></tr>`).join('')}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td></tr></table>` : '';
     const fin = `<div class="card"><h3>재무</h3><div class="kpis">${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}${kpi('대출', money(s.loan.balance))}${kpi('대출 한도', money(limit))}${kpi(`월 이자${ib('term:대출 이자')}`, `${(rate * 100).toFixed(1)}<span>%</span>`)}</div>
@@ -1142,10 +1139,10 @@ export function startApp(): void {
     const s = game!.state, h = Q.hqInfo(s), c = h.current, n = h.next;
     const steps = `<ol class="lv5">${config.hq.levels.map((l, i) => `<li class="${i + 1 < c.level ? 'done' : i + 1 === c.level ? 'on' : ''}"><b>${i + 1}</b><small>${esc(l.name)}</small></li>`).join('')}</ol>`;
     const cur = `<div class="card hq-cur"><p class="lbl">지금 본사 · ${c.level}등급</p><h2>${esc(c.name)}</h2>${steps}
-      <div class="kpis">${kpi('정원', `${h.staffCount}/${c.staffCap}<span>명</span>`)}${kpi('동시에 개발할 수 있는 차', `${c.teams}<span>대</span>`)}${kpi('옵션 칸', `${c.optionSlots}<span>개</span>`)}${kpi('월 유지비', money(hqBill(c.upkeep)))}</div>
+      <div class="kpis">${kpi('정원', `${h.staffCount}/${c.staffCap}<span>명</span>`)}${kpi('동시에 개발할 수 있는 차', `${c.teams}<span>대</span>`)}${kpi('옵션 칸', `${c.optionSlots}<span>개</span>`)}${kpi('월 유지비', money((c.upkeep)))}</div>
       <p class="note">본사가 클수록 직원을 더 뽑고, 여러 차를 함께 개발하고, 차에 옵션을 더 넣을 수 있습니다. 개발 탭의 사무실도 넓어집니다.</p></div>`;
     const next = n ? `<div class="card hq-next"><p class="lbl">다음 등급 · ${n.level}등급</p><h2>${esc(n.name)}</h2>
-      <table class="tbl" style="margin-top:8px"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">키우면</th></tr>${cmpRow('정원', `${c.staffCap}명`, `${n.staffCap}명`)}${cmpRow('동시에 개발할 수 있는 차', `${c.teams}대`, `${n.teams}대`)}${cmpRow('옵션 칸', `${c.optionSlots}개`, `${n.optionSlots}개`)}${cmpRow('월 유지비', money(hqBill(c.upkeep)), money(hqBill(n.upkeep)), true)}</table>
+      <table class="tbl" style="margin-top:8px"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">키우면</th></tr>${cmpRow('정원', `${c.staffCap}명`, `${n.staffCap}명`)}${cmpRow('동시에 개발할 수 있는 차', `${c.teams}대`, `${n.teams}대`)}${cmpRow('옵션 칸', `${c.optionSlots}개`, `${n.optionSlots}개`)}${cmpRow('월 유지비', money((c.upkeep)), money((n.upkeep)), true)}</table>
       <div class="kpis" style="margin-top:10px">${kpi('승급 비용', money(n.cost))}${kpi('필요한 평판', n.rep ? `${n.rep}<span>이상 (지금 ${Math.floor(s.reputation)})</span>` : '없음')}</div>
       ${h.canUpgrade ? '' : `<div class="badbox" style="margin-top:10px">${esc(h.reason ?? '')}</div>`}
       <button class="go" data-act="upgradeHQ" ${h.canUpgrade ? '' : 'disabled'}>본사 키우기 · ${money(n.cost)}</button></div>`
@@ -1157,10 +1154,10 @@ export function startApp(): void {
     const s = game!.state, f = Q.factoryInfo(s), c = f.current, n = f.next, b = f.building, BM = config.factory.buildMonths;
     const cut = (m: number) => (m < 1 ? `${Math.round((1 - m) * 100)}%` : '없음');
     const build = b ? `<div class="build"><p class="lbl">증설 공사 중 · ${b.level}등급</p><div class="prog"><u style="width:${(Math.min(1, Math.max(0, (BM - b.monthsLeft) / BM)) * 100).toFixed(1)}%"></u></div><p class="hint">${b.monthsLeft}개월 남았습니다.${n ? ` 끝나면 한 달 생산 ${num(n.capacity)}대, 생산 라인 ${n.lines}개가 됩니다.` : ''}</p></div>` : '';
-    const cur = `<div class="card fac-cur"><p class="lbl">지금 공장 · ${c.level}등급</p><div class="kpis">${kpi('한 달 생산', `${num(c.capacity)}<span>대</span>`)}${kpi(`생산 라인${ib('term:생산 라인')}`, `${f.linesUsed}/${c.lines}<span>개 사용</span>`)}${kpi('월 유지비', money(facBill(c.upkeep)))}${kpi('원가 절감', cut(c.costMult))}</div>${build}
+    const cur = `<div class="card fac-cur"><p class="lbl">지금 공장 · ${c.level}등급</p><div class="kpis">${kpi('한 달 생산', `${num(c.capacity)}<span>대</span>`)}${kpi(`생산 라인${ib('term:생산 라인')}`, `${f.linesUsed}/${c.lines}<span>개 사용</span>`)}${kpi('월 유지비', money((c.upkeep)))}${kpi('원가 절감', cut(c.costMult))}</div>${build}
       <p class="note">생산 라인 하나에 차 한 종류를 만듭니다. 주문이 생산량보다 많으면 나머지는 못 팝니다(재고는 없습니다).</p></div>`;
     const next = n ? `<div class="card fac-next"><p class="lbl">${b ? '공사 중인 등급' : '증설하면'} · ${n.level}등급</p>
-      <table class="tbl"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">증설 뒤</th></tr>${cmpRow('한 달 생산', `${num(c.capacity)}대`, `${num(n.capacity)}대`)}${cmpRow('생산 라인', `${c.lines}개`, `${n.lines}개`)}${cmpRow('월 유지비', money(facBill(c.upkeep)), money(facBill(n.upkeep)), true)}${cmpRow('원가 절감', cut(c.costMult), cut(n.costMult))}</table>
+      <table class="tbl"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">증설 뒤</th></tr>${cmpRow('한 달 생산', `${num(c.capacity)}대`, `${num(n.capacity)}대`)}${cmpRow('생산 라인', `${c.lines}개`, `${n.lines}개`)}${cmpRow('월 유지비', money((c.upkeep)), money((n.upkeep)), true)}${cmpRow('원가 절감', cut(c.costMult), cut(n.costMult))}</table>
       <div class="kpis" style="margin-top:10px">${kpi('건설비', money(n.cost))}${kpi('공사 기간', `${BM}<span>개월</span>`)}</div>
       ${f.canExpand ? '' : `<div class="badbox" style="margin-top:10px">${esc(f.reason ?? '')}</div>`}
       <button class="go" data-act="expandFactory" ${f.canExpand ? '' : 'disabled'}>공장 증설 · ${money(n.cost)}</button></div>`
@@ -1559,13 +1556,13 @@ export function startApp(): void {
       }
       case 'upgradeHQ': {
         if (!game) return; const h = Q.hqInfo(game.state); if (!h.next) return;
-        if (!(await ask(`본사를 ${h.next.level}등급 「${h.next.name}」${josa(h.next.name, '으로/로')} 키울까요?\n비용 ${money(h.next.cost)}이 바로 나가고, 매달 유지비가 ${money(hqBill(h.current.upkeep))}에서 ${money(hqBill(h.next.upkeep))}${josa(money(hqBill(h.next.upkeep)), '으로/로')} 늘어납니다.`, '본사 키우기'))) return;
+        if (!(await ask(`본사를 ${h.next.level}등급 「${h.next.name}」${josa(h.next.name, '으로/로')} 키울까요?\n비용 ${money(h.next.cost)}이 바로 나가고, 매달 유지비가 ${money((h.current.upkeep))}에서 ${money((h.next.upkeep))}${josa(money((h.next.upkeep)), '으로/로')} 늘어납니다.`, '본사 키우기'))) return;
         if (run(game.command({ type: 'upgradeHQ' }))) { toast(`본사가 「${h.next.name}」${josa(h.next.name, '으로/로')} 커졌습니다. 정원 ${h.next.staffCap}명, 동시에 개발할 수 있는 차 ${h.next.teams}대.`, 'alert', '본사'); render(); }
         return;
       }
       case 'expandFactory': {
         if (!game) return; const f = Q.factoryInfo(game.state); if (!f.next) return;
-        if (!(await ask(`공장을 ${f.next.level}등급으로 증설할까요?\n건설비 ${money(f.next.cost)}이 바로 나갑니다. 공사는 ${config.factory.buildMonths}개월 걸리고, 그동안은 지금 공장으로 생산합니다. 다 지으면 공장 유지비가 매달 ${money(facBill(f.current.upkeep))}에서 ${money(facBill(f.next.upkeep))}${josa(money(facBill(f.next.upkeep)), '으로/로')} 늘어납니다.`, '증설하기'))) return;
+        if (!(await ask(`공장을 ${f.next.level}등급으로 증설할까요?\n건설비 ${money(f.next.cost)}이 바로 나갑니다. 공사는 ${config.factory.buildMonths}개월 걸리고, 그동안은 지금 공장으로 생산합니다. 다 지으면 공장 유지비가 매달 ${money((f.current.upkeep))}에서 ${money((f.next.upkeep))}${josa(money((f.next.upkeep)), '으로/로')} 늘어납니다.`, '증설하기'))) return;
         if (run(game.command({ type: 'expandFactory' }))) { toast(`공장 증설 공사를 시작했습니다. ${config.factory.buildMonths}개월 뒤 끝납니다.`, 'alert', '공장'); render(); }
         return;
       }
