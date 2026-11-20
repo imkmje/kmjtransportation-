@@ -27,6 +27,7 @@ type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeV
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
 
 const WEEK_MS = 1500; // 1배속: 1주 = 1.5초(설계서 4장)
+const OFFICE_GAP_MS = 1800; // 사무실 점수 연출 최소 간격(점수 글자가 떠 있는 시간)
 const MAX_TICKS_PER_FRAME = 4;
 const DEBUG_KEY = 'car-company-debug';
 const ALL_TABS: [PlanTab, string][] = [['prev', '전 세대'], ['body', '차체'], ['look', '모양'], ['seg', '고객층'], ['power', '동력'], ['opt', '옵션'], ['dir', '개발 방향'], ['budget', '예산·기간']];
@@ -43,6 +44,7 @@ export function startApp(): void {
   let speed = 1, acc = 0, garageIdx = 0, planTab: PlanTab = 'body';
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
+  let officeSent = -Infinity; // 마지막으로 점수·결함 연출을 보낸 시각
   let office: Office | null = null, officeOn = false, officeLast: OfficeView | null = null, officeScores = 0; // officeLast·officeScores: 점검용
   const officeEvents: OfficeEvent[] = []; // 다음에 사무실을 그릴 때 보낼 연출(주간 점수·결함·말풍선)
   const thumbs = new Map<string, string>(); // 모양 후보 썸네일 캐시
@@ -106,7 +108,13 @@ export function startApp(): void {
       $('#fb').hidden = true;
       office ??= createOffice(host);
       office.update(v); officeLast = v; // update → emit 순서
-      if (officeEvents.length) { const ev = officeEvents.splice(0); officeScores += ev.filter((e) => e.kind === 'score').length; office.emit(ev); }
+      // 점수 글자는 약 1.8초 떠 있으므로 그보다 자주 보내지 않는다(빠르기 4배면 한 주가 0.375초라 겹친다). 못 보낸 것은 다음 주 기록이 바꿔 끼운다
+      const now = performance.now(), due = now - officeSent >= OFFICE_GAP_MS, ev = officeEvents.filter((e) => due || e.kind === 'say');
+      if (ev.length) {
+        if (due) officeSent = now;
+        const left = officeEvents.filter((e) => !ev.includes(e)); officeEvents.length = 0; officeEvents.push(...left);
+        officeScores += ev.filter((e) => e.kind === 'score').length; office.emit(ev);
+      }
     } else { const keep = officeEvents.filter((e) => e.kind === 'say').slice(-2); officeEvents.length = 0; officeEvents.push(...keep); } // 주간 점수는 버리고 말풍선만 남긴다
     stageOn();
   }

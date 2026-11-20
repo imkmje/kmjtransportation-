@@ -297,6 +297,7 @@ check('고른 모양 시드가 개발 명령에 들어감', await G(([c, f]) => 
 await tick(1);
 check('개발 탭: 사무실(직원 4명, 설계 중)', await G(() => { const o = window.__car.office; return o.on && o.view?.phase === 'design' && o.view.staff.length === 4 && o.view.staff.every((x) => x.working); }));
 const sc0 = await G(() => window.__car.office.scores);
+await page.waitForTimeout(1900); // 점수 연출은 1.8초에 한 번까지
 await tick(2);
 check('한 주가 지나면 사무실에 점수 연출이 나감', (await G(() => window.__car.office.scores)) > sc0, `${sc0} → ${await G(() => window.__car.office.scores)}`);
 check('사무실 위 글자는 위쪽 가장자리에만(무대 위 1/3 안)', await G(() => { const o = document.querySelector('#ov .ofc').getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect(); return o.bottom <= st.top + st.height / 3; }));
