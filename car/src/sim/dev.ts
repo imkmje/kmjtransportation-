@@ -4,7 +4,7 @@ import { BODIES, POWERTRAINS, OPTIONS, SEGMENTS } from '../data';
 import { salaryOf, zeroStats } from './cars';
 import type { Rng } from './rng';
 import { yearOf } from './time';
-import { STATS, type CarState, type Project, type ProjectSpec, type Staff } from './types';
+import { STATS, type Budget, type CarState, type Project, type ProjectSpec, type Staff, type Stats } from './types';
 
 /** 기획 검증: 문제가 있으면 한국어 이유, 없으면 null */
 export function specError(state: CarState, s: ProjectSpec): string | null {
@@ -30,28 +30,37 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
 export const staffOn = (state: CarState, p: Project): Staff[] => state.staff.filter((s) => s.projectId === p.id);
 
 /** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 */
-export const weeklyDevCost = (state: CarState, p: Project): number =>
-  (staffOn(state, p).reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[p.budget].cost + config.dev.prototypePerWeek;
+export const devCostPerWeek = (team: Staff[], budget: Budget): number =>
+  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek;
+export const weeklyDevCost = (state: CarState, p: Project): number => devCostPerWeek(staffOn(state, p), p.budget);
+
+/** 설계 한 주의 능력치별 점수. rand(): 직원마다 한 번 부르는 난수(0.85~1.15) */
+export function designWeek(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number): Stats {
+  const d = config.dev, week = zeroStats();
+  for (const s of team) {
+    const out = (s.ability / d.abilityDiv) * d.budgets[spec.budget].out * s.condition * rand() * d.scale;
+    const split = d.roleSplit[s.role];
+    for (const k of STATS) week[k] += out * (split[k] ?? 0) * (d.dirBase + spec.direction[k] / d.dirDiv);
+  }
+  return week;
+}
+/** 시험 한 주에 줄어드는 결함 = Σ 테스터 꼼꼼함/10 + Σ 엔지니어 기술/30 */
+export const testCut = (team: Staff[]): number =>
+  team.reduce((a, s) => a + s.ability / (s.role === 'tester' ? config.dev.testerDiv : s.role === 'engineer' ? config.dev.engineerDiv : Infinity), 0);
 
 /** 한 주 진행. 설계가 끝난 주면 true */
 export function stepProject(state: CarState, p: Project, rng: Rng): boolean {
   const d = config.dev, team = staffOn(state, p);
   let designDone = false;
   if (p.phase === 'design') {
-    const week = zeroStats();
-    for (const s of team) {
-      const out = (s.ability / d.abilityDiv) * d.budgets[p.budget].out * s.condition * rng.range(d.randMin, d.randMax) * d.scale;
-      const split = d.roleSplit[s.role];
-      for (const k of STATS) week[k] += out * (split[k] ?? 0) * (d.dirBase + p.direction[k] / d.dirDiv);
-    }
+    const week = designWeek(team, p, () => rng.range(d.randMin, d.randMax));
     let made = 0;
     for (const k of STATS) { p.points[k] += week[k]; made += week[k]; }
     p.defects += made * d.defectPerPoint;
     p.weeksDone++;
     if (p.weeksDone >= p.designWeeks) { p.phase = 'test'; designDone = true; }
   } else {
-    const cut = team.reduce((a, s) => a + s.ability / (s.role === 'tester' ? d.testerDiv : s.role === 'engineer' ? d.engineerDiv : Infinity), 0);
-    p.defects = Math.max(0, p.defects - cut);
+    p.defects = Math.max(0, p.defects - testCut(team));
     p.testWeeks++;
   }
   const cost = weeklyDevCost(state, p);

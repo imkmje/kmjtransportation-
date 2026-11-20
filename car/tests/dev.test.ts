@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game } from '../src/sim/game';
-import { projectPreview } from '../src/sim/queries';
+import { defectAdvice, planPreview, projectPreview } from '../src/sim/queries';
 import { finalStats, zeroStats, partStats, unitCost } from '../src/sim/cars';
 import { weeklyDevCost } from '../src/sim/dev';
 import { config } from '../src/config';
@@ -129,5 +129,32 @@ describe('개발(6장)', () => {
     expect(unitCost('sedanS', 'gasoline', 1, [])).toBe(984);
     expect(unitCost('sedanS', 'gasoline', 2, [])).toBeCloseTo(984 * 1.1, 9);
     expect(unitCost('sedanS', 'gasoline', 3, ['radio'])).toBeCloseTo(984 * 1.22 + 15, 9);
+  });
+});
+
+describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () => {
+  const specs = [SPEC, { ...SPEC, budget: 'high' as const, designWeeks: 16, direction: { P: 4, E: 0, U: 2, D: 4, Q: 0 } }, { ...SPEC, budget: 'low' as const, designWeeks: 8, options: ['radio'] }];
+  it('실제로 개발한 등급이 예상 범위 안에 들고, 개발비는 설계 + 최소 시험 주 만큼', () => {
+    for (const spec of specs) for (let seed = 1; seed <= 12; seed++) {
+      const g = Game.create({ seed }), pv = planPreview(g.state, spec);
+      expect(pv.min).toBeLessThanOrEqual(pv.avg); expect(pv.avg).toBeLessThanOrEqual(pv.max);
+      ok(g.command({ type: 'startProject', ...spec }));
+      const p = g.state.projects[0];
+      while (p.phase === 'design' || p.testWeeks < config.dev.minTestWeeks) g.tick();
+      const at2 = projectPreview(g.state, p.id)!.avg;
+      expect(p.spent).toBeCloseTo(pv.cost, 6);
+      expect(at2).toBeGreaterThanOrEqual(pv.min); expect(at2).toBeLessThanOrEqual(pv.max);
+      for (let i = 0; i < 20; i++) g.tick(); // 시험을 오래 해도 최고치를 넘지 않는다
+      expect(projectPreview(g.state, p.id)!.avg).toBeLessThanOrEqual(pv.max);
+    }
+  });
+  it('결함 안내: 15개 이상 많음, 6~14 조금 더, 5 이하 출시 좋음 + 연 리콜 확률', () => {
+    const { g, pid } = devReady(1);
+    const p = g.state.projects.find((x) => x.id === pid)!;
+    const at = (n: number) => { p.defectEst = n; return defectAdvice(p); };
+    expect(at(15).level).toBe('many'); expect(at(15).text).toContain('평론가 전원이 1점씩');
+    expect(at(14).level).toBe('some'); expect(at(6).level).toBe('some');
+    expect(at(5).level).toBe('ok'); expect(at(0).level).toBe('ok');
+    expect(at(10).recallYear).toBeCloseTo(0.2); expect(at(40).recallYear).toBe(config.recall.maxYear);
   });
 });

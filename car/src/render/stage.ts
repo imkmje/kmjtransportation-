@@ -19,7 +19,8 @@ export class Stage {
   private pop = 1;
   private auto = true;
   private still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  private raf = 0;
+  private raf = 0; // 0이면 그리기 멈춤
+  private loop: (now: number) => void;
   private ro: ResizeObserver;
   private owned: { dispose(): void }[] = [];
   private canvas: HTMLCanvasElement;
@@ -85,9 +86,9 @@ export class Stage {
     canvas.onpointermove = e => { if (drag) { table.rotation.y += (e.clientX - lx) * .008; lx = e.clientX; idle = 2.5; } };
     canvas.onpointerup = canvas.onpointercancel = () => { drag = false; };
     let last = performance.now();
-    const loop = (now: number) => {
+    const loop = this.loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
-      const dt = Math.min(.05, (now - last) / 1000); last = now;
+      const dt = Math.min(.05, Math.max(0, now - last) / 1000); last = now; // 멈췄다 다시 그릴 때 한 번에 튀지 않게 0.05초로 자른다
       if (idle > 0) idle -= dt; else if (!drag && this.auto && !this.still) table.rotation.y += dt * .22;
       this.pop += (1 - this.pop) * Math.min(1, dt * 9);
       const k = .9 + .1 * this.pop; this.carG.scale.set(k, k, k);
@@ -106,9 +107,23 @@ export class Stage {
     cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .62, 0); cam.updateProjectionMatrix();
   }
 
+  /** 그리기 켜기/끄기: 무대가 안 보일 때(회사·기록 탭, 숨은 문서) 끈다 */
+  setActive(on: boolean): void {
+    if (on === this.active) return;
+    if (on) this.raf = requestAnimationFrame(this.loop); else { cancelAnimationFrame(this.raf); this.raf = 0; }
+  }
+  get active(): boolean { return this.raf !== 0; }
+
+  /** 차를 치우고 빈 원판만 남긴다 */
+  clear(): void {
+    while (this.carG.children.length) { const c = this.carG.children.pop()!; disposeCar(c); }
+    this.blob.visible = false;
+  }
+  get empty(): boolean { return !this.carG.children.length; }
+
   setCar(look: CarLook): void {
     const first = !this.carG.children.length;
-    while (this.carG.children.length) { const c = this.carG.children.pop()!; disposeCar(c); }
+    this.clear(); this.blob.visible = true;
     this.carG.add(buildCar(look, this.M));
     const b = BODY[look.bodyId];
     this.blob.scale.set(b.L * 1.25, b.W * 1.7, 1);

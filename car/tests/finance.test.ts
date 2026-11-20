@@ -75,4 +75,21 @@ describe('재무(9.4)', () => {
     g.state.cash = -1;
     expect(g.command({ type: 'bailout' })).toEqual({ ok: false, reason: '구제 금융은 한 번만 받을 수 있습니다.' });
   });
+  it('파산 뒤 구제 금융(9.4): 게임 오버에서도 1회 받으면 다시 진행된다(현금 0·평판 −20·한도 절반·연속 적자 초기화)', () => {
+    const g = Game.create({ seed: 1 }); g.state.cash = -1; g.state.reputation = 50;
+    while (g.state.status === 'playing') g.tick();
+    const w = g.state.week, ledger = g.state.ledger.length;
+    expect(g.state.negMonths).toBe(config.bankruptcy.months);
+    expect(g.command({ type: 'bailout' }).ok).toBe(true);
+    expect(g.state.status).toBe('playing'); expect(g.state.cash).toBe(0); expect(g.state.negMonths).toBe(0);
+    expect(g.state.reputation).toBe(30); expect(loanLimit(g.state)).toBe(100000);
+    expect(g.state.week).toBe(w + 1); // 파산한 달의 정산을 두 번 하지 않는다
+    toMonthEnd(g);
+    expect(g.state.ledger.length).toBe(ledger + 1);
+    expect(g.state.negMonths).toBe(1); // 월급만 나가므로 다시 적자 1개월째
+    g.state.cash = -1;
+    while ((g.state.status as string) === 'playing') g.tick();
+    expect(g.command({ type: 'bailout' })).toEqual({ ok: false, reason: '구제 금융은 한 번만 받을 수 있습니다.' });
+    expect(g.state.status).toBe('gameOver');
+  });
 });

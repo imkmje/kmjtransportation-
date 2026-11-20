@@ -1,12 +1,13 @@
 // 화면이 쓰는 조회 함수(순수 함수, 상태를 바꾸지 않는다)
 import { config } from '../config';
 import { bodyById } from '../data';
-import { avgGrade, finalStats, grade, grades, lifeFactor, standard, unitCost } from './cars';
+import { avgGrade, finalStats, grade, grades, lifeFactor, standard, unitCost, zeroStats } from './cars';
+import { designWeek, devCostPerWeek, testCut } from './dev';
 import { allGens, sellingGens } from './game';
 import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, ageMonths } from './market';
 import { criticScores, mean } from './reviews';
 import { monthOf, yearOf, yearOfMonth } from './time';
-import type { CarState, Generation, Project, Stats } from './types';
+import { STATS, type CarState, type Generation, type Project, type ProjectSpec, type Stats } from './types';
 
 export const projectById = (s: CarState, id: number): Project | undefined => s.projects.find((p) => p.id === id);
 export const generationById = (s: CarState, id: number): Generation | undefined => allGens(s).find((g) => g.id === id);
@@ -29,6 +30,30 @@ export function expectedReviews(s: CarState, projectId: number, price: number): 
   if (!p || !pv) return null;
   const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0);
   return { scores, avg: mean(scores) };
+}
+
+/** 남은 결함(화면에 보이는 "약 N개") 판단: 15개 이상 많음 / 6~14 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
+export function defectAdvice(p: Project): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
+  const c = config.critics, n = p.defectEst, recallYear = Math.min(config.recall.maxYear, n * config.recall.perDefect);
+  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `아직 많습니다: 지금 출시하면 평론가 전원이 ${c.manyDefectsPenalty}점씩 깎고 리콜 위험이 큽니다` };
+  if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다' };
+  return { level: 'ok', recallYear, text: '출시해도 좋습니다' };
+}
+
+/** 기획 미리보기: 지금 쉬는 직원으로 개발하면 받을 표시 등급과 개발비(설계 + 최소 시험).
+ *  min = 주간 난수가 모두 최저·최소 시험 주로 출시, max = 모두 최고·시험으로 결함을 다 없앤 경우. grades·avg는 난수 1.0·최소 시험 */
+export function planPreview(s: CarState, spec: ProjectSpec): { grades: Stats; avg: number; min: number; max: number; cost: number } {
+  const d = config.dev, team = s.staff.filter((x) => x.projectId === null);
+  const y = yearOf(s.week + spec.designWeeks + d.minTestWeeks); // 출시하는 해 기준(해가 바뀌면 등급이 낮아진다)
+  const at = (r: number, defectFree: boolean): Stats => {
+    const w = designWeek(team, spec, () => r), pts = zeroStats();
+    for (const k of STATS) pts[k] = w[k] * spec.designWeeks;
+    const made = STATS.reduce((a, k) => a + pts[k], 0);
+    const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint - testCut(team) * d.minTestWeeks);
+    return finalStats(spec.body, spec.powertrain, spec.tier, spec.options, pts, defects);
+  };
+  const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
+  return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget) * (spec.designWeeks + d.minTestWeeks) };
 }
 
 /** 대당 이익 = 판매가 − 원가 */

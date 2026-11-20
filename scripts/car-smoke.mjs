@@ -23,6 +23,8 @@ const tick = (n) => G((k) => window.__car.tick(k), n);
 const act = async (a, extra = '') => { await page.locator(`[data-act="${a}"]${extra}`).first().click(); };
 const overflow = () => G(() => { const p = document.getElementById('panel'); return Math.max(document.documentElement.scrollWidth - window.innerWidth, document.body.scrollHeight - window.innerHeight, p.scrollWidth - p.clientWidth); }); // 화면 가로 넘침, 본문 세로 스크롤, 패널 안 가로 넘침
 /** 시험이 출시 가능해질 때까지 진행 */
+/** 출시하기: 결함이 많다는 확인 창이 뜨면 "그래도 출시" */
+const launchNow = async () => { await act('doLaunch'); if (await page.locator('#ask').isVisible()) await page.click('#ask-yes'); };
 const untilReady = () => G(() => { const c = window.__car; let i = 0; while (i++ < 60) { const p = c.game.state.projects[0]; if (p.phase === 'test' && p.testWeeks >= 2) break; c.tick(1); } c.render(); });
 
 await page.goto(URL0);
@@ -76,10 +78,24 @@ await shot('dev');
 check('설계 중에는 출시 준비 버튼이 막힘', await page.locator('[data-act="toLaunch"]').isDisabled());
 await untilReady();
 check('시험 2주 뒤 출시 준비 버튼이 열림', !(await page.locator('[data-act="toLaunch"]').isDisabled()));
+check('시험 단계: 결함이 많으면 "아직 많습니다" 경고', (await page.locator('#panel .defect-adv[data-level="many"]').count()) === 1 && (await page.locator('#panel .defect-adv').innerText()).includes('아직 많습니다'), `결함 약 ${await G(() => window.__car.game.state.projects[0].defectEst)}개`);
+await page.waitForTimeout(400);
+await shot('dev-test');
 
 // ---- 출시 ----
 await act('toLaunch');
 check('출시 화면: 결정 중 멈춤, 예상 평점·예상 월 판매', (await G(() => window.__car.held())) && (await page.locator('#panel').innerText()).includes('예상 월 판매'));
+const ltop = await page.locator('#panel .card').first().innerText();
+check('출시 화면 맨 위: 남은 결함·경고·예상 리콜 위험', ltop.includes('남은 결함') && ltop.includes('아직 많습니다') && /연 \d+\s*%/.test(ltop.replace(/\n/g, ' ')), ltop.replace(/\n/g, ' ').slice(0, 80));
+check('예상 월 판매를 쉬운 말로', /한 달에 약 \d+~\d+대 팔릴 것으로 보입니다\(공장 한도 300대\)/.test(await page.locator('#panel .sales-fc').innerText()));
+await page.waitForTimeout(600);
+await shot('launch-many');
+await act('doLaunch');
+check('결함이 많으면 출시 전에 확인 창', (await page.locator('#ask').isVisible()) && (await page.locator('#ask-yes').innerText()) === '그래도 출시' && (await page.locator('#ask-no').innerText()) === '시험 더 하기' && (await page.locator('#ask-text').innerText()).includes('결함'));
+await shot('launch-ask');
+await page.click('#ask-no');
+check('확인 창 "시험 더 하기": 출시하지 않고 개발 화면으로', (await G(() => window.__car.screen)) === 'dev' && (await G(() => window.__car.game.state.nameplates.length)) === 0);
+await act('toLaunch');
 await page.$eval('#lprice', (el) => { el.value = '1300'; el.dispatchEvent(new Event('input', { bubbles: true })); });
 check('가격 슬라이더가 가격 표시를 바꿈', (await page.locator('#lp-out').innerText()).includes('1,300'));
 await act('lset', '[data-k="color"][data-v="#1f4fd1"]');
@@ -88,6 +104,7 @@ check('색·휠 선택이 무대 글자에 반영', (await page.locator('#ov .sp
 await page.waitForTimeout(900);
 await shot('launch');
 await act('doLaunch');
+await page.click('#ask-yes');
 await page.waitForSelector('#sheet:not([hidden])');
 await page.waitForTimeout(4200);
 const rv = await page.locator('#sheet').innerText();
@@ -138,6 +155,7 @@ await page.reload();
 await page.waitForSelector('#title:not([hidden])');
 check('새로 고침 뒤 타이틀에 이어 하기·저장 칸 1', (await page.locator('[data-act="continue"]').count()) === 1 && (await page.locator('[data-act="loadSlot"][data-v="slot1"]').count()) === 1);
 await act('loadSlot', '[data-v="slot1"]');
+await page.waitForFunction(() => window.__car.game); // 불러오기는 비동기(IndexedDB)
 check('저장 칸 1 불러오기: 상태 일치', (await G(() => JSON.stringify(window.__car.game.toJSON()))) === snap);
 check('불러온 뒤에도 출시 사진 유지', await G(() => Object.keys(window.__car.ui.photos).length === 1));
 
@@ -152,7 +170,7 @@ await act('startDev');
 await untilReady();
 await act('toLaunch');
 check('두 번째 차 출시 화면', (await G(() => window.__car.screen)) === 'launch');
-await act('doLaunch');
+await launchNow();
 await page.waitForSelector('#sheet:not([hidden])');
 await act('closeReview');
 check('두 번째 차 출시: 차종 2개, 첫 차는 단종', await G(() => { const n = window.__car.game.state.nameplates; return n.length === 2 && n[0].generations[0].status === 'discontinued' && n[1].generations[0].status === 'onSale'; }));
@@ -176,10 +194,67 @@ for (const [w, h] of [[1366, 1024], [1480, 925], [400, 800]]) {
 }
 await page.setViewportSize({ width: 1366, height: 1024 });
 
+// ---- 무대 그리기: 회사·기록 탭에서는 멈춤 ----
+await page.click('#tabs button[data-tab="company"]');
+const offCo = await G(() => window.__car.stage?.active);
+await page.click('#tabs button[data-tab="garage"]');
+check('무대가 안 보이면(회사 탭) 3D 그리기 멈춤, 차고로 오면 다시 그림', offCo === false && (await G(() => window.__car.stage?.active)) === true);
+
 // ---- 파산 화면(점검용으로 상태를 직접 바꿈) ----
-await G(() => { window.__car.game.state.status = 'gameOver'; window.__car.render(); });
+await G(() => { const s = window.__car.game.state; s.status = 'gameOver'; s.cash = -50000; s.negMonths = 6; window.__car.render(); });
 check('파산 화면: 버틴 기간·낸 차·누적 판매·구제 금융·새 게임', (await page.locator('#title').innerText()).includes('파산') && (await page.locator('#title').innerText()).includes('버틴 기간') && (await page.locator('#title').innerText()).includes('구제 금융') && (await page.locator('#title [data-act="newGame"]').count()) === 1);
+await page.waitForTimeout(300);
 await shot('gameover');
+check('파산 화면: 무대 그리기 멈춤', (await G(() => window.__car.stage?.active)) === false);
+
+// ---- 구제 금융 → 계속 플레이 ----
+const rep0 = await G(() => window.__car.game.state.reputation), wk0 = await G(() => window.__car.game.state.week);
+await act('bailout');
+check('구제 금융 확인 창', await page.locator('#ask').isVisible() && (await page.locator('#ask-text').innerText()).includes('구제 금융'));
+await page.click('#ask-yes');
+check('구제 금융: 파산 화면이 닫히고 현금 0·평판 −20으로 계속', await G(([r]) => { const s = window.__car.game.state; return s.status === 'playing' && s.cash === 0 && s.negMonths === 0 && s.loan.bailoutUsed && s.reputation === Math.max(0, r - 20); }, [rep0]) && (await page.locator('#title').isHidden()) && (await page.locator('#cash').innerText()).includes('0'));
+await tick(8);
+check('구제 금융 뒤 시간이 다시 흐름', (await G(() => window.__car.game.state.week)) >= wk0 + 8 && (await page.locator('#panel').isVisible()));
+await G(() => { const s = window.__car.game.state; s.status = 'gameOver'; s.cash = -1; window.__car.render(); });
+check('두 번째 파산: 구제 금융 버튼 비활성 + 이유', (await page.locator('#title [data-act="bailout"]').isDisabled()) && (await page.locator('#title').innerText()).includes('이미 받았습니다'));
+
+// ---- 시험을 충분히 한 차(시드 1, 균등·12주·보통·표준 동력·기준가): 평론 4.0 이상, 6개월 뒤 월 30대 이상 ----
+await act('newGame');
+await page.fill('#t-co', '시험 모터스');
+await page.click('#title details summary');
+await page.fill('#t-seed', '1');
+await act('startNew');
+await page.click('#speeds button[data-speed="0"]'); // 실제 시간은 멈추고 tick으로만 진행(시드 고정 측정)
+await act('plan');
+await page.locator('[data-act="pick"][data-k="color"][data-v="#1f5c4a"]').click();
+check('기획 차체 단계에 색상 8가지, 고른 색 표시', (await page.locator('#panel [data-act="pick"][data-k="color"]').count()) === 8 && (await G(() => document.querySelector('[data-k="color"][aria-pressed="true"]')?.dataset.v)) === '#1f5c4a');
+await act('startDev');
+await G(() => { const c = window.__car; let i = 0; while (i++ < 80) { const p = c.game.state.projects[0]; if (p.phase === 'test' && p.testWeeks >= 2 && p.defectEst <= 5) break; c.tick(1); } c.render(); });
+check('결함 5개 이하: "출시해도 좋습니다"', (await page.locator('#panel .defect-adv[data-level="ok"]').innerText()).includes('출시해도 좋습니다'), `결함 약 ${await G(() => window.__car.game.state.projects[0].defectEst)}개, 시험 ${await G(() => window.__car.game.state.projects[0].testWeeks)}주`);
+// 저장 → 불러오기 뒤에도 기획 색 유지
+await page.click('#menubtn'); await act('saveSlot', '[data-v="slot2"]'); await page.waitForTimeout(300); await act('closeSheet');
+await page.click('#menubtn'); await act('loadSlot', '[data-v="slot2"]'); await page.click('#ask-yes'); await page.waitForTimeout(300);
+await page.click('#tabs button[data-tab="dev"]');
+await act('toLaunch');
+check('개발 중 차의 기획 색이 불러오기 뒤에도 출시 화면 기본색', (await page.locator('#ov .spec').innerText()).includes('포레스트'));
+await page.waitForTimeout(600);
+await shot('launch-ok');
+await act('doLaunch');
+check('결함이 적으면 확인 창 없이 바로 출시', !(await page.locator('#ask').isVisible()));
+await page.waitForSelector('#sheet:not([hidden])');
+await act('closeReview');
+const good = await G(() => window.__car.game.state.nameplates[0].generations[0]);
+check('충분히 시험한 차: 평론 평균 4.0 이상', good.reviewAvg >= 4, `평론 ${good.reviews.join('/')} 평균 ${good.reviewAvg.toFixed(2)}`);
+await G(() => { const c = window.__car, g = c.game.state.nameplates[0].generations[0]; let i = 0; while (g.sales.length < 7 && i++ < 60) c.tick(1); });
+const good6 = await G(() => window.__car.game.state.nameplates[0].generations[0].sales);
+check('출시 6개월 뒤 월 판매 30대 이상', good6[6] >= 30, `달별 ${good6.join(',')}`);
+
+// ---- 차고가 비면 무대도 빈 원판 ----
+check('판매 중인 차가 있으면 무대에 차가 있음', (await G(() => window.__car.stage?.empty)) === false);
+await act('discontinue'); await page.click('#ask-yes');
+await G(() => { const c = window.__car; c.tick(1); while (c.game.state.week % 4 !== 0) c.tick(1); c.tick(1); });
+check('단종 뒤 차고가 비면 무대에서 차를 치움(빈 원판)', (await G(() => window.__car.stage?.empty)) === true && (await page.locator('#ov').innerText()).includes('판매 중인 차가 없습니다') && (await page.locator('#cv').isVisible()));
+await shot('garage-cleared');
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);

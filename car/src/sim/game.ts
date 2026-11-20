@@ -137,7 +137,7 @@ export class Game {
 
   private exec(cmd: Command): CommandResult {
     const s = this.state;
-    if (s.status !== 'playing') return fail('게임이 끝났습니다.');
+    if (s.status !== 'playing' && cmd?.type !== 'bailout') return fail('게임이 끝났습니다.'); // 9.4: 파산 화면에서도 구제 금융은 받을 수 있다
     switch (cmd?.type) {
       case 'startProject': {
         if (s.projects.length >= config.dev.teams) return fail('개발팀이 모두 바쁩니다. 진행 중인 개발을 끝내거나 취소하세요.');
@@ -198,6 +198,7 @@ export class Game {
         if (s.cash >= 0) return fail('현금이 마이너스일 때만 받을 수 있습니다.');
         s.cash = 0; s.negMonths = 0; s.loan.bailoutUsed = true; s.loan.limitMult *= config.loan.bailoutLimitMult;
         this.addRep(config.bankruptcy.bailoutRep);
+        if (s.status === 'gameOver') { s.status = 'playing'; s.week++; } // 파산한 주는 월말 정산까지 끝났으므로 다음 주부터 이어 간다
         return OK;
       }
       default: return fail('알 수 없는 명령입니다.');

@@ -4,7 +4,7 @@ import type { CarState } from '../sim/types';
 
 /** 저장 데이터 형식 번호(게임 버전·sim 저장 형식과 따로) */
 export const SAVE_FILE_V = 1;
-export interface UiExtra { photos: Record<string, string> } // 세대 id → 출시 때 찍은 사진(작은 JPEG data URL)
+export interface UiExtra { photos: Record<string, string>; colors: Record<string, string> } // photos: 세대 id → 출시 때 찍은 사진(작은 JPEG data URL), colors: 개발 중 프로젝트 id → 기획 때 고른 색(없던 옛 파일은 빈 값)
 export interface SaveData { v: number; when: string; game: CarState; ui: UiExtra }
 export type SlotKey = 'auto' | 'slot1' | 'slot2' | 'slot3';
 export const SLOT_KEYS: SlotKey[] = ['slot1', 'slot2', 'slot3'];
@@ -28,7 +28,7 @@ function req<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest):
   }));
 }
 
-export function makeSave(game: Game, ui: UiExtra): SaveData { return { v: SAVE_FILE_V, when: new Date().toISOString(), game: game.toJSON(), ui: { photos: { ...ui.photos } } }; }
+export function makeSave(game: Game, ui: UiExtra): SaveData { return { v: SAVE_FILE_V, when: new Date().toISOString(), game: game.toJSON(), ui: { photos: { ...ui.photos }, colors: { ...ui.colors } } }; }
 
 export async function put(key: SlotKey, data: SaveData): Promise<boolean> {
   try { await req('readwrite', (s) => s.put(data, key)); return true; } catch { /* localStorage로 */ }
@@ -61,10 +61,11 @@ export function parse(v: unknown): { ok: true; game: Game; ui: UiExtra } | { ok:
   const raw = 'game' in o ? o.game : o; // 게임 상태만 들어 있는 파일도 받는다
   if (typeof o.v === 'number' && o.v > SAVE_FILE_V) return { ok: false, error: '더 새로운 버전에서 저장한 파일입니다' };
   try {
-    const game = Game.fromJSON(raw), photos: Record<string, string> = {};
-    const p = o.ui?.photos;
+    const game = Game.fromJSON(raw), photos: Record<string, string> = {}, colors: Record<string, string> = {};
+    const p = o.ui?.photos, c = o.ui?.colors;
     if (p && typeof p === 'object') for (const [k, x] of Object.entries(p)) if (typeof x === 'string' && x.startsWith('data:image/')) photos[k] = x;
-    return { ok: true, game, ui: { photos } };
+    if (c && typeof c === 'object') for (const [k, x] of Object.entries(c)) if (typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x)) colors[k] = x;
+    return { ok: true, game, ui: { photos, colors } };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : '불러오지 못했습니다' }; }
 }
 export function parseText(text: string): ReturnType<typeof parse> {

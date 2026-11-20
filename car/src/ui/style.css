@@ -107,6 +107,7 @@ h2,h3,p{margin:0}
 .go.dark{background:var(--ink);box-shadow:none}
 .go:disabled{background:#c9ced6;box-shadow:none}
 .warnbox{background:#fff4e5;border:1px solid #f3d4a6;color:#6b4300;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.5;font-weight:600}
+.okbox{background:#e9f7ef;border:1px solid #b9e2c9;color:#0d5c37;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.5;font-weight:600}
 .badbox{background:#fdecec;border:1px solid #f1c2c2;color:#8a1f1f;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.5;font-weight:600}
 /* 패널 아래에 붙는 주 버튼 줄(스크롤해도 보인다) */
 .actbar{position:sticky;bottom:0;z-index:2;margin-top:-12px;padding-top:18px;background:linear-gradient(#e7eaee00,var(--bg) 18px);display:flex;flex-direction:column;gap:8px}

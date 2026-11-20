@@ -26,7 +26,8 @@ export const config = {
       { id: 'design', name: '디자인파', w: { D: 0.7, Q: 0.3 } },
       { id: 'value', name: '가성비파', w: null }, // 전체 평균 × 가격 매력
     ] as { id: string; name: string; w: Partial<Record<'P' | 'E' | 'U' | 'D' | 'Q', number>> | null }[],
-    noise: 0.7, manyDefects: 15, manyDefectsPenalty: 1, min: 1, max: 10,
+    noise: 0.7, manyDefects: 15, manyDefectsPenalty: 1, okDefects: 5, // 결함 15개 이상이면 전원 −1. 5개 이하면 화면에서 "출시해도 좋습니다"
+    min: 1, max: 10,
     valueEps: 1, // 가성비파의 가격 매력 = (기준가 / 판매가)^1 (0.2~2.5)
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
