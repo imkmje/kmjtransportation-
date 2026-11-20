@@ -1,9 +1,9 @@
 // 판매 공식(설계서 7.3). 국내 시장만, 지역 취향은 1. 유행과 시대 사건(11장)의 배수가 들어간다
 import { config } from '../config';
-import { COMPAT, MARKET, RIVALS, SEGMENTS, bodyById } from '../data';
+import { COMPAT, MARKET, RIVALS, SEGMENTS, bodyById, optionById } from '../data';
 import { grades, lifeFactor } from './cars';
 import { salesFleetMult } from './company';
-import { REGION, chargingInfra, eraNow, eraWeights, marketMult, rivalHitAdd, trendOf } from './events';
+import { REGION, chargingInfra, eraNow, eraWeights, marketMult, requiredOptions, rivalHitAdd, trendOf } from './events';
 import { hash01, type Rng } from './rng';
 import { diffOf } from './difficulty';
 import { STATS, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
@@ -38,16 +38,19 @@ export const priceAppeal = (basePrice: number, attract: number, price: number, e
   Math.min(config.market.priceAppealMax, Math.max(config.market.priceAppealMin, ((basePrice * attract) / price) ** eps))
   * Math.min(1, basePrice / price) ** config.market.overpriceExp;
 
+/** 시장 기준가(0.4.2) = 차체 기준가 + 지금 규제 의무 장비의 원가. 모든 회사가 의무 장비를 넣으므로 시장 가격이 그만큼 오른다(가격 매력·가성비 평론·봇 가격에 쓴다) */
+export const basePriceOf = (s: CarState, body: string): number => bodyById(body).basePrice + requiredOptions(s).reduce((a, o) => a + optionById(o).cost, 0);
+
 /** 판매 계산에 필요한 차 한 대의 요약(출시 전 미리보기에도 쓴다). powertrain: 동력 종류(유행·사건 수요 배수, 없으면 배수 1) */
 export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number; powertrain?: string }
 
 /** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림). fleetMult: 영업 직원의 법인·택시 매력 배수(9.1).
  *  w·trend: 사건이 바꾼 고객층 가중치와 유행 계수(생략하면 자료값·1) */
-export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1, w?: Stats, trend = 1): number {
+export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1, w?: Stats, trend = 1, base = bodyById(c.body).basePrice): number {
   const attract = attractiveness(grades(c.stats, Math.floor(year)), c.body, segment, w, trend) * (segment === config.staff.sales.fleetSegment ? fleetMult : 1);
   const eps = SEGMENTS.find((s) => s.id === segment)!.eps;
   const aw = Math.min(1, c.awareness * (segment === c.segment ? config.market.primaryBoost : 1));
-  return attract * priceAppeal(bodyById(c.body).basePrice, attract, c.price, eps) * aw * c.life;
+  return attract * priceAppeal(base, attract, c.price, eps) * aw * c.life;
 }
 
 /** 월 수요(생산 상한 적용 전) = Σ 고객층 칸 월 규모 × 비중 × 점유율. others: 같은 칸의 내 다른 차. year: 소수 연도(monthTime, 시장 규모가 달마다 변한다).
@@ -63,10 +66,10 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
     const w = (mix[seg.id] ?? 0) * (n.seg[seg.id] ?? 1);
     if (w <= 0) continue;
     const ww = eraWeights(seg.w, n);
-    const mine = scoreA(car, seg.id, year, fm, ww, trMine) ** e;
+    const mine = scoreA(car, seg.id, year, fm, ww, trMine, basePriceOf(state, car.body)) ** e;
     let rest = 0;
     for (const r of state.rivals) rest += (((r.cells[car.body] ?? 0) + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e;
-    for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year, fm, ww, tr(o)) ** e;
+    for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year, fm, ww, tr(o), basePriceOf(state, o.body)) ** e;
     if (mine > 0) total += size * w * (mine / (mine + rest));
   }
   if (car.powertrain) total *= (n.pt[car.powertrain] ?? 1) * (car.powertrain === config.events.charging.powertrain ? chargingInfra(state.seed, m) : 1);

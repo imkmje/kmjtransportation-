@@ -6,8 +6,13 @@ import { STATS, type CarState, type Stats } from './types';
 
 export const zeroStats = (): Stats => ({ P: 0, E: 0, U: 0, D: 0, Q: 0 });
 
-/** 5.1 기준(연도) */
-export const standard = (year: number): number => config.grade.base * (1 + config.grade.growth) ** (year - config.time.startYear);
+/** 5.1 기준(연도) = 100 × 구간별 상승률의 곱 */
+export function standard(year: number): number {
+  const { base, growthFrom: from, growthRates: r } = config.grade;
+  let v = base;
+  for (let i = 0; i < from.length; i++) v *= (1 + r[i]) ** Math.max(0, Math.min(year, from[i + 1] ?? Infinity) - from[i]); // 구간별 상승률(0.4.2)
+  return v;
+}
 /** 원점수 → 표시 등급 0~10 */
 export const grade = (raw: number, year: number): number => Math.min(config.grade.max, (config.grade.mid * raw) / standard(year));
 export const grades = (s: Stats, year: number): Stats => { const g = zeroStats(); for (const k of STATS) g[k] = grade(s[k], year); return g; };
@@ -41,11 +46,11 @@ export function unitCost(body: string, powertrain: string, tier: number, options
   return base * costMult + config.market.logistics;
 }
 
-/** 7.3 수명: 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2% */
+/** 7.3 수명: 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6% */
 export function lifeFactor(ageMonths: number): number {
-  const { start, rampMonths, decay } = config.life;
+  const { start, rampMonths, plateauMonths, decay } = config.life;
   if (ageMonths < rampMonths) return start + ((1 - start) * ageMonths) / rampMonths;
-  return (1 - decay) ** (ageMonths - rampMonths);
+  return (1 - decay) ** Math.max(0, ageMonths - plateauMonths);
 }
 
 export const salaryOf = (ability: number): number => config.salary.base + ability * config.salary.perAbility;

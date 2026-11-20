@@ -76,7 +76,7 @@ export function researchError(s: CarState, techId: string): string | null {
   if (t.year - yearOf(s.week) > R.earlyMax) return `${t.year - R.earlyMax}년부터 연구할 수 있습니다.`;
   const pre = missingPre(s, t);
   if (pre.length) { const names = pre.map((x) => `「${x.name}」`).join(', '); return `먼저 ${names}${josa(names, '을/를')} 연구해야 합니다.`; }
-  if (s.research.active.length >= researchSlots(s)) return researchSlots(s) < R.slots[R.slots.length - 1] ? '연구 칸이 찼습니다(본사 4등급부터 2개를 함께 연구할 수 있습니다).' : '연구 칸이 찼습니다.';
+  if (s.research.active.length >= researchSlots(s)) return researchSlots(s) < R.slots[R.slots.length - 1] ? '연구 칸이 찼습니다(본사 등급을 올리면 칸이 늘어납니다).' : '연구 칸이 찼습니다.';
   if (s.cash < researchCost(s, t).money) return '현금이 모자랍니다.';
   return null;
 }

@@ -109,12 +109,12 @@ describe('난이도(0.4.1)', () => {
     const recallCost = (g: Game) => { const gen = allGens(g.state)[0]; gen.editions[0].defects = 20; for (let i = 0; i < 48 * 6; i++) if (g.tick().some((x) => x.kind === 'recall')) return g.state.ledger.at(-1)!.recall / gen.totalSold; return NaN; }; // 리콜 비용 = 그달까지의 누적 판매 × 대당 비용
     expect(recallCost(e)).toBeCloseTo(config.recall.costPerCar * D.easy.recallMult, 6); expect(recallCost(n)).toBeCloseTo(config.recall.costPerCar, 6);
   });
-  it('파산 유예·경고 문구·구제 금융 횟수가 난이도를 따른다(쉬움 18개월·2회, 어려움 6개월·0회)', () => {
+  it('파산 유예·경고 문구·구제 금융 횟수가 난이도를 따른다(쉬움 24개월·2회(0.4.2), 어려움 6개월·0회)', () => {
     const g = Game.create({ seed: 1 }); g.state.cash = -1;
     const w: string[] = [];
     while (g.state.status === 'playing') for (const e of g.tick()) if (e.kind === 'cashWarning') w.push(e.text);
     expect(g.state.negMonths).toBe(D.easy.bankruptcyMonths);
-    expect(w[0]).toBe('현금이 1개월째 마이너스입니다. 18개월이 되면 파산합니다. 대출 한도 50억원이 남아 있습니다.');
+    expect(w[0]).toBe('현금이 1개월째 마이너스입니다. 24개월이 되면 파산합니다. 대출 한도 50억원이 남아 있습니다.');
     ok(g.command({ type: 'bailout' })); expect(g.state.loan.bailoutUsed).toBe(false);
     g.state.cash = -1; ok(g.command({ type: 'bailout' })); expect(g.state.loan.bailoutUsed).toBe(true); expect(g.state.loan.bailouts).toBe(2);
     g.state.cash = -1; expect(g.command({ type: 'bailout' })).toEqual({ ok: false, reason: '구제 금융은 2번까지만 받을 수 있습니다.' });
@@ -126,7 +126,7 @@ describe('난이도(0.4.1)', () => {
   });
   it('difficultyInfo: 세 난이도의 이름·설명·주요 차이', () => {
     expect(difficultyInfo().map((d) => [d.id, d.name, d.cash, d.loanBase, d.bankruptcyMonths, d.bailouts, d.isDefault])).toEqual([
-      ['easy', '쉬움', 500000, 500000, 18, 2, true], ['normal', '보통', 300000, 300000, 12, 1, false], ['hard', '어려움', 220000, 200000, 6, 0, false]]);
+      ['easy', '쉬움', 500000, 500000, 24, 2, true], ['normal', '보통', 300000, 300000, 12, 1, false], ['hard', '어려움', 220000, 200000, 6, 0, false]]);
     for (const d of difficultyInfo()) { expect(d.desc.length).toBeGreaterThan(10); expect(d.desc).not.toContain('!'); }
   });
 });

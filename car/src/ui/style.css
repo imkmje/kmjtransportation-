@@ -571,3 +571,35 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
 #tabs button.has-draft::after{content:"";position:absolute;top:8px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg)}
 .draft-card{border:1.5px solid var(--accent)}
 .draft-line{margin:0;font-size:13.5px;line-height:1.5}
+
+/* ---------- 0.4.2: 판매 가격 조절(출시·차고 공용). 슬라이더는 화면 코드가 손가락을 직접 따라간다(터치 영역 44px, 상위 스크롤과 다투지 않게 touch-action:none) ---------- */
+.px-ctl{display:flex;align-items:center;gap:8px;margin:8px 0 2px}
+.px-step{flex:none;width:48px;height:48px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);font-size:24px;font-weight:700;line-height:1;color:var(--ink);touch-action:none;user-select:none;-webkit-user-select:none;padding:0}
+.px-step:active{background:var(--soft)}
+.px-track{position:relative;flex:1;min-width:0;height:48px;touch-action:none;cursor:pointer}
+.px-track input[type=range]{position:absolute;inset:0;width:100%;height:48px;margin:0;pointer-events:none;-webkit-appearance:none;appearance:none;background:transparent}
+.px-track input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
+.px-track input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+.px-track input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:44px;height:44px;margin-top:-19px;border:0;border-radius:50%;background:radial-gradient(circle,var(--ink) 0 12px,#fff 12.5px 15px,#14171c26 15.5px 16.5px,transparent 17px)}
+.px-track input[type=range]::-moz-range-thumb{width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle,var(--ink) 0 12px,#fff 12.5px 15px,#14171c26 15.5px 16.5px,transparent 17px)}
+.px-base{position:absolute;top:8px;bottom:8px;width:2px;margin-left:-1px;left:calc(22px + var(--base) * (100% - 44px));background:var(--accent);border-radius:1px;pointer-events:none}
+.px-base::after{content:"기준가";position:absolute;top:-13px;left:5px;font-size:10px;font-weight:800;color:var(--accent2);font-style:normal;white-space:nowrap}
+.vsbase{font-size:12.5px;font-weight:800;color:var(--ink2)}
+.px-kpis{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:6px}
+.px-kpis .kpi{padding:8px 10px}
+.px-kpis .kpi b{font-size:clamp(17px,1.7vw,22px)}
+.px-kpis .px-profit b{white-space:normal;overflow:visible}
+.px-note{margin:6px 0 0;font-size:12px}
+.card.price-card .seg{margin-top:4px}
+@media (max-width:420px){.px-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- 0.4.2: 규제 의무 장비(기본 장비 칩·의무 장비 넣기) ---------- */
+.base-eq{background:var(--soft);border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.base-eq .lbl{margin:0 0 6px}
+.base-eq .hint{margin:6px 0 0;font-size:12px}
+.eqs{display:flex;flex-wrap:wrap;gap:6px}
+.eq{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:999px;background:var(--card);border:1.5px solid var(--ink);font-weight:800;font-size:13px}
+.eq::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--pos)}
+.retrofit .lbl{margin-bottom:4px}
+.retrofit .hint{margin:0;font-size:12.5px;line-height:1.5}
+.speeds button,#menubtn{white-space:nowrap}

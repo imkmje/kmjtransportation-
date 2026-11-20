@@ -2,15 +2,15 @@
 import { config } from '../config';
 import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS, bodyById } from '../data';
 import { bodiesAt, optionsAt, salaryOf, unitCost } from './cars';
-import { eraTimeline } from './events';
+import { eraTimeline, optionTech, requiredOptions } from './events';
 import { researchCost, researchError } from './research';
 import { loanLimit } from './finance';
 import { hash01 } from './rng';
 import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, optionSlots, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { Game, allGens, sellingGens } from './game';
-import { REGION, cellMonthly, currentEdition } from './market';
+import { REGION, basePriceOf, cellMonthly, currentEdition } from './market';
 import { planPreview } from './queries';
-import { latestGen, launchAvgGrade } from './lifecycle';
+import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, yearOf } from './time';
 import type { Budget, CarState, Difficulty, Generation, Role, Staff } from './types';
 
@@ -37,13 +37,14 @@ export interface SteadyOptions {
   priceMult: number; // 출시 가격 = 기준가 × 이 값
 }
 const STEADY: SteadyOptions = {
-  budget: 'normal', designWeeks: 12, marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange',
+  budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 28, // 0.4.2: 시험 속도가 약 2.3배 느려져 12 → 28주
+   faceliftMonths: 36, changeMonths: 78, successor: 'fullchange', // 0.4.2: 3년 리프트, 6.5년 풀체인지(8.4 의도한 흐름, 개발이 약 1년이 되어 30·60 → 36·78)
   manage: true, expand: true, gouge: false, research: true,
   sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrowShare: 0, priceMult: 1,
 };
 const B = config.bots;
 
-/** 신중(8.4 의도한 흐름): 보통 예산·12주, 30개월 페이스리프트, 60개월 풀체인지. 경영: 정원까지 채용·쉬는 직원 교육, 여유 현금으로 본사 승급,
+/** 신중(8.4 의도한 흐름): 보통 예산·중간 설계 기간, 36개월 페이스리프트, 78개월 풀체인지. 경영: 정원까지 채용·쉬는 직원 교육, 여유 현금으로 본사 승급,
  *  주문이 한도의 1.3배를 3개월 넘으면 공장 증설, 생산 라인이 늘면 차종을 늘린다(쓸 수 있는 차체 수까지) */
 export function steady(opts: Partial<SteadyOptions> = {}): Bot {
   const o = { ...STEADY, ...opts };
@@ -52,6 +53,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
     step(g) {
       if (o.borrowShare > 0 && g.state.cash < 0) { const room = loanLimit(g.state) * o.borrowShare - g.state.loan.balance; if (room >= 1) g.command({ type: 'borrow', amount: Math.floor(Math.min(room, -g.state.cash + fixedCost(g.state) * 2)) }); }
       for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
+      researchRequired(g); // 0.4.2: 규제 예고가 나오면 의무 장비 기술부터(연구를 안 하는 봇도, 안 하면 개발이 막힌다)
       launchReady(g, o);
       startProjects(g, o);
       const turn = monthOf(g.state.week) % o.manageEvery === 0; // 서툰 플레이는 가끔만 챙긴다
@@ -66,15 +68,15 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
 export const novice = (opts: Partial<SteadyOptions> = {}): Bot => ({
   ...steady({ sloppy: true, launchDefects: B.novice.launchDefects, faceliftShare: 0.5, changeMonths: B.novice.changeMonths, manageEvery: B.novice.manageEvery, expandRatio: B.novice.expandRatio, borrowShare: 0.5, ...opts }), name: 'novice',
 });
-/** 더 서툰 플레이(0.4.1, 쉬움 난이도 점검용): 최소 시험 2주만 하고 출시(결함이 많이 남음), 가격은 기준가의 110%, 광고 0,
+/** 더 서툰 플레이(0.4.1, 쉬움 난이도 점검용): 시험 5주만 하고 출시(결함이 많이 남음, 0.4.2 시간 척도 전의 2주와 같은 양), 가격은 기준가의 110%, 광고 0,
  *  페이스리프트·연구·채용·교육·본사·공장 투자 안 함, 풀체인지는 10년에 한 번, 현금이 음수면 대출 한도 끝까지 빌린다 */
 export const clumsy = (opts: Partial<SteadyOptions> = {}): Bot => ({
-  ...steady({ sloppy: true, launchDefects: Infinity, maxTestWeeks: config.dev.minTestWeeks, priceMult: B.clumsy.priceMult, marketing: 0, faceliftMonths: Infinity, changeMonths: B.clumsy.changeMonths, research: false, manage: false, borrowShare: 1, ...opts }), name: 'clumsy',
+  ...steady({ sloppy: true, launchDefects: Infinity, maxTestWeeks: B.clumsy.testWeeks, priceMult: B.clumsy.priceMult, marketing: 0, faceliftMonths: Infinity, changeMonths: B.clumsy.changeMonths, research: false, manage: false, borrowShare: 1, ...opts }), name: 'clumsy',
 });
-/** 리프트 안 함(16장): 페이스리프트 없이 5년(60개월) 주기 풀체인지 */
-export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, ...opts }), name: 'noFacelift' });
-/** 새 이름만: 페이스리프트·풀체인지 없이 5년(60개월) 주기로 매번 새 차종(전 세대를 단종하고 라인이 비면 출시) */
-export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, successor: 'newName', ...opts }), name: 'newNameOnly' });
+/** 리프트 안 함(16장): 신중과 같은 주기, 페이스리프트만 없다 */
+export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: STEADY.changeMonths, ...opts }), name: 'noFacelift' });
+/** 새 이름만: 페이스리프트·풀체인지 없이 신중과 같은 주기로 매번 새 차종(전 세대를 단종하고 라인이 비면 출시) */
+export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: STEADY.changeMonths, successor: 'newName', ...opts }), name: 'newNameOnly' });
 /** 가격 올리기: 신중과 같되 주문이 밀리면 매달 가격 +5%, 남으면 −5% */
 export const gouger = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ gouge: true, ...opts }), name: 'gouger' });
 /** 확장 안 함: 신중과 같되 본사·공장을 키우지 않는다 */
@@ -91,6 +93,13 @@ const techRank = (s: CarState, id: string): number => {
   const leadsToReq = TECHS.some((t) => t.pre.includes(id) && t.effects.some((x) => x.type === 'option' && req.includes(x.id)));
   return e.some((x) => x.type === 'body' || (x.type === 'option' && req.includes(x.id))) || leadsToReq ? 0 : e.some((x) => x.type === 'ptLevel' && x.id === 'gasoline') ? 1 : e.some((x) => x.type === 'option') ? 2 : 3;
 };
+/** 예고·시행된 규제의 의무 장비를 여는 기술(과 선행)을 현금이 되는 대로 시작한다 */
+function researchRequired(g: Game): void {
+  const s = g.state, need = new Set<string>();
+  const add = (id: string) => { if (need.has(id) || s.research.done.includes(id)) return; need.add(id); for (const q of TECHS.find((t) => t.id === id)!.pre) add(q); };
+  for (const o of regulatedOptions(s, true)) { const t = optionTech(o); if (t) add(t.id); }
+  for (const t of TECHS.filter((x) => need.has(x.id) && !researchError(s, x.id))) g.command({ type: 'startResearch', techId: t.id });
+}
 function research(g: Game, cheapOnly = false): void {
   const s = g.state, y = yearOf(s.week), reserve = fixedCost(s) * B.reserveMonths;
   const cands = TECHS.filter((t) => t.year <= y && !researchError(s, t.id) && s.cash >= researchCost(s, t).money + reserve && (!cheapOnly || researchCost(s, t).money <= s.cash * B.novice.cheapShare))
@@ -105,10 +114,11 @@ const regulatedOptions = (s: CarState, early = false): string[] => {
 /** 옵션 고르기: 쓸 수 있는 규제 옵션 먼저, 나머지는 원가가 기준가의 optionCostShare 이하인 최신 옵션(가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다).
  *  keep을 주면 그 옵션을 남기고 규제 옵션만 끼워 넣는다 */
 function pickOptions(s: CarState, body: string, keep?: string[]): string[] {
-  const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), slots = optionSlots(s);
+  const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), force = requiredOptions(s);
+  const slots = optionSlots(s) - req.filter((o) => !force.includes(o)).length; // 시행된 의무 장비는 옵션 칸을 차지하지 않는다(0.4.2)
   const cheap = optionsAt(s).filter((o) => o.cost <= bodyPrice(body) * B.optionCostShare).map((o) => o.id);
   const rest = keep ? keep.filter((o) => !req.includes(o)) : cheap.filter((o) => !req.includes(o)).reverse();
-  return [...req, ...rest].slice(0, slots);
+  return [...req, ...rest.slice(0, Math.max(0, slots))];
 }
 
 const bodyPrice = (id: string) => bodyById(id).basePrice;
@@ -119,7 +129,7 @@ function monthly(g: Game, o: SteadyOptions): void {
   const s = g.state, reserve = fixedCost(s) * B.reserveMonths;
   const gens = sellingGens(s).filter((x) => x.status === 'onSale');
   if (o.gouge) for (const x of gens) {
-    const ed = currentEdition(x), base = bodyPrice(x.body);
+    const ed = currentEdition(x), base = basePriceOf(s, x.body);
     const price = x.lostSales >= 1 ? Math.min(base * config.price.max, ed.price * (1 + B.gougeStep)) : Math.max(base, ed.price * (1 - B.gougeStep));
     if (Math.round(price) !== ed.price) g.command({ type: 'setPrice', generationId: x.id, price: Math.round(price) });
   }
@@ -129,9 +139,10 @@ function monthly(g: Game, o: SteadyOptions): void {
   const backlogged = demand >= cap * o.expandRatio && last.length === B.expandMonths && last.every((e) => e.sold >= cap * B.boundShare);
   if (o.expand) {
     const nf = config.factory.levels[s.factory.level];
-    if (backlogged && nf && !factoryExpandError(s) && s.cash >= nf.cost + reserve) g.command({ type: 'expandFactory' });
+    const top = s.factory.level + 1 === config.factory.levels.length; // 0.4.2: 마지막 등급(월 유지비 240억)은 그 한도의 75%를 채울 주문이 있을 때만(봇이 증설 뒤 유지비에 무너졌다)
+    if (backlogged && nf && (!top || demand >= nf.capacity * B.expandFill) && !factoryExpandError(s) && s.cash >= nf.cost + reserve) g.command({ type: 'expandFactory' });
     const nh = config.hq.levels[s.hqLevel];
-    if (nh && !hqUpgradeError(s) && s.cash >= nh.cost * B.hqCashMult + reserve) g.command({ type: 'upgradeHQ' });
+    if (nh && !backlogged && !hqUpgradeError(s) && s.cash >= nh.cost * B.hqCashMult + reserve) g.command({ type: 'upgradeHQ' }); // 0.4.2: 주문이 밀리면 공장 증설이 먼저(평판이 올라 본사 승급이 가능해지자 증설 자금을 본사에 썼다)
   }
   // 채용 공고: 정원이 남으면 모자란 직무로(후보는 다음 주에 hireBest가 고른다)
   if (!s.candidates.length && s.staff.length < staffCap(s)) {
@@ -183,14 +194,14 @@ function launchReady(g: Game, o: SteadyOptions): void {
   for (const p of [...s.projects].sort((a, b) => a.id - b.id)) {
     if (!(p.phase === 'test' && p.testWeeks >= config.dev.minTestWeeks && (p.defectEst <= o.launchDefects || p.testWeeks >= o.maxTestWeeks))) continue;
     const launch = (price: number) => g.command({ type: 'launch', projectId: p.id, price, marketing: o.marketing, color: '#c8102e', wheels: 0 });
-    if (p.kind === 'facelift') { // 가격은 그대로(기준가보다 비싸면 가격 매력이 빠르게 떨어진다)
+    if (p.kind === 'facelift') { // 가격은 그대로(기준가보다 비싸면 가격 매력이 빠르게 떨어진다). 의무 장비로 시장 기준가가 올랐으면 거기까지 올린다(0.4.2)
       const gen = allGens(s).find((x) => x.id === p.targetId);
       if (!gen || gen.status !== 'onSale') { g.command({ type: 'cancelProject', projectId: p.id }); continue; }
-      launch(currentEdition(gen).price);
+      launch(Math.max(currentEdition(gen).price, Math.round(basePriceOf(s, gen.body))));
       continue;
     }
-    if (p.kind === 'fullchange') { launch(Math.round(bodyPrice(p.body) * o.priceMult)); continue; } // 같은 생산 라인을 이어받는다
-    if (sellingGens(s).length < linesOf(s)) { launch(Math.round(bodyPrice(p.body) * o.priceMult)); continue; }
+    if (p.kind === 'fullchange') { launch(Math.round(basePriceOf(s, p.body) * o.priceMult)); continue; } // 같은 생산 라인을 이어받는다. 가격은 시장 기준가(의무 장비 원가 포함) 기준
+    if (sellingGens(s).length < linesOf(s)) { launch(Math.round(basePriceOf(s, p.body) * o.priceMult)); continue; }
     // 라인이 없으면 교체 시기가 된 가장 오래된 차를 단종(그달 말 라인이 빈다)
     const old = sellingGens(s).filter((x) => x.status === 'onSale' && m - x.launchMonth >= changeAt(s, o, x)).sort((a, b) => a.launchMonth - b.launchMonth || a.id - b.id)[0];
     if (old && !sellingGens(s).some((x) => x.status === 'ending')) g.command({ type: 'discontinue', generationId: old.id });
@@ -206,7 +217,7 @@ function startProjects(g: Game, o: SteadyOptions): void {
   const targeted = (id: number | null) => s.projects.some((p) => p.targetId === id);
   const npOf = (x: Generation) => s.nameplates.find((n) => n.generations.includes(x))!;
   for (const x of onSale) {
-    if (o.faceliftMonths !== Infinity && hash01(s.seed, 61, x.id) < o.faceliftShare && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && changeAt(s, o, x) === o.changeMonths && x.lostSales < 1 && age(x) < o.changeMonths - B.leadMonths && !targeted(x.id)) { // 약한 차는 리프트 없이 교체, 생산 한도에 묶인 차는 리프트를 미룬다(늘어난 주문을 팔 수 없으므로)
+    if (o.faceliftMonths !== Infinity && hash01(s.seed, 61, x.id) < o.faceliftShare && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && changeAt(s, o, x) === o.changeMonths && age(x) < o.changeMonths - B.leadMonths && !targeted(x.id)) { // 약한 차는 리프트 없이 교체, 생산 한도에 묶인 차는 리프트를 미룬다(늘어난 주문을 팔 수 없으므로)
       g.command({ type: 'startFacelift', generationId: x.id, options: pickOptions(s, x.body, currentEdition(x).options), team: pickTeam(s) }); // 옵션은 그대로(가격을 안 올리므로 원가가 늘면 대당 이익이 준다), 규제 옵션만 넣는다
       return;
     }
@@ -234,11 +245,14 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   };
   // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다
   const last = prev ?? (s.nameplates.length ? latestGen(s.nameplates[s.nameplates.length - 1]) : undefined);
-  const tries = [spec, { ...spec, designWeeks: 16 }, { ...spec, designWeeks: 16, budget: 'high' as Budget }];
-  const staff = s.staff.filter((x) => team.includes(x.id));
-  const pick = o.sloppy ? spec : (last && tries.find((t) => planPreview(s, { ...t, name: '' }, staff).avg >= launchAvgGrade(last))) || tries[last ? tries.length - 1 : 0];
-  if (nameplateId !== null) g.command({ type: 'startFullChange', nameplateId, ...pick, team });
-  else g.command({ type: 'startProject', name: '', ...pick, team });
+  const long = config.dev.designWeeks[2], tries = [spec, { ...spec, designWeeks: long }, { ...spec, designWeeks: long, budget: 'high' as Budget }];
+  // 0.4.2: 풀체인지는 미리보기의 전작 비교(원점수)가 '못하다'가 아니게(모자라면 쉬는 개발 직원 전원을 넣는다), 새 차종은 직전 차의 출시 등급 이상이 되게
+  const all = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week) && !x.lab).map((x) => x.id);
+  const cands = [...tries.map((t) => ({ t, team })), ...(prev && all.length > team.length ? tries.map((t) => ({ t, team: all })) : [])];
+  const okTry = (c: (typeof cands)[number]) => { const pv = planPreview(s, { ...c.t, name: '' }, s.staff.filter((x) => c.team.includes(x.id))); return prev ? compareToPrev(prev, pv.stats, c.t.body) !== 'worse' : pv.avg >= launchAvgGrade(last!); };
+  const pick = o.sloppy ? cands[0] : (last && cands.find(okTry)) || cands[last ? tries.length - 1 : 0];
+  if (nameplateId !== null) g.command({ type: 'startFullChange', nameplateId, ...pick.t, team: pick.team });
+  else g.command({ type: 'startProject', name: '', ...pick.t, team: pick.team });
 }
 
 /** 서툰 개발 방향: 균등하거나 한쪽(성능·디자인 / 실용·연비 / 품질)으로 몰기 */

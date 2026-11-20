@@ -190,6 +190,7 @@ export interface CarState {
   events: EventsState; // 11장 무작위 사건·뉴스(고정 사건은 시드와 날짜로 계산)
   knownCombos: string[]; // 5.5 조합 노트: 출시해 본 "차체:고객층"
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
+  devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
 }
 
 // ---------- 명령 ----------
@@ -203,6 +204,7 @@ export type Command =
   | { type: 'discontinue'; generationId: number }
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
   | { type: 'setMarketing'; generationId: number; marketing: number }
+  | { type: 'retrofit'; generationId: number } // 0.4.2: 판매 중인 차에 지금 의무 장비를 추가(일시 비용 + 원가 상승, 바로 반영)
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'bailout' }
@@ -220,7 +222,10 @@ export type Command =
   // ---------- 연구(10장)·사건(11장) ----------
   | { type: 'startResearch'; techId: string }
   | { type: 'cancelResearch'; techId: string } // 쓴 돈은 돌아오지 않는다
-  | { type: 'resolveEvent'; eventId: number; choice: number };
+  | { type: 'resolveEvent'; eventId: number; choice: number }
+  | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
+/** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
+export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';
 /** 성공하면 events에 그 명령이 낸 소식(출시 기사 등)이 올 수 있다 */
 export type CommandResult = { ok: true; events?: GameEvent[] } | { ok: false; reason: string };
 

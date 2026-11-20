@@ -2,13 +2,15 @@
 import { config } from '../config';
 import { COMPAT, bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
-import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
+import { withRequired, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, sellingGens } from './game';
 import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
-import { carriedEquity, faceliftEligibility, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
-import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
+import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
+export { basePriceOf } from './market';
+import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
 import { diffOf } from './difficulty';
+import { regulationBlock, requiredOptions } from './events';
 export { difficultyInfo } from './difficulty';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
@@ -33,7 +35,7 @@ export function projectPreview(s: CarState, projectId: number): { stats: Stats; 
 export function expectedReviews(s: CarState, projectId: number, price: number): { scores: number[]; avg: number } | null {
   const p = projectById(s, projectId), pv = projectPreview(s, projectId);
   if (!p || !pv) return null;
-  const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0, diffOf(s).manyDefects);
+  const scores = criticScores(pv.stats, yearOf(s.week), basePriceOf(s, p.body), price, p.defects, () => 0, diffOf(s).manyDefects);
   return { scores, avg: mean(scores) };
 }
 
@@ -61,7 +63,7 @@ const idleDevStaff = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId
 
 /** 기획 미리보기: 지금 쉬는 개발 직원(team을 주면 그 팀)으로 개발하면 받을 표시 등급과 개발비(설계 + 최소 시험).
  *  min = 주간 난수가 모두 최저·최소 시험 주로 출시, max = 모두 최고·시험으로 결함을 다 없앤 경우. grades·avg는 난수 1.0·최소 시험 */
-export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idleDevStaff(s)): { grades: Stats; avg: number; min: number; max: number; cost: number } {
+export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idleDevStaff(s)): { stats: Stats; grades: Stats; avg: number; min: number; max: number; cost: number; blockedBy: string | null; required: string[] } {
   const d = config.dev;
   const y = yearOf(s.week + spec.designWeeks + d.minTestWeeks); // 출시하는 해 기준(해가 바뀌면 등급이 낮아진다)
   const level = levelForTier(s, spec.powertrain, spec.tier), speed = 1 + devSpeed(s), cut = 1 - defectCut(s); // 연구: 동력 단계·개발 속도·결함 감소
@@ -70,10 +72,10 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
     for (const k of STATS) pts[k] = w[k] * spec.designWeeks * speed;
     const made = STATS.reduce((a, k) => a + pts[k], 0);
     const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint * cut - testCut(team) * d.minTestWeeks);
-    return finalStats(spec.body, spec.powertrain, level, spec.options, pts, defects);
+    return finalStats(spec.body, spec.powertrain, level, withRequired(s, spec.options), pts, defects); // 의무 장비 포함(0.4.2)
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
-  return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
+  return { blockedBy: regulationBlock(s), required: requiredOptions(s), stats: mid, grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
 }
 
 /** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */
@@ -142,7 +144,7 @@ export function faceliftPreview(s: CarState, generationId: number, spec: { optio
   const dRaw = faceliftWeekByStaff(team, { budget: 'normal', direction: dir }, () => 1).reduce((a, w) => a + w.D, 0) * fl.designWeeks;
   const dCap = fl.dCap * g.editions[0].stats.D, dGain = Math.min(mult.D * dRaw, dCap);
   const defects = Math.max(0, ed.defects * fl.defectKeep + dRaw * d.defectPerPoint * fl.defectRate - testCut(team) * d.minTestWeeks);
-  const stats = finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), spec.options, g.points, defects);
+  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), spec.options, g.points, defects));
   stats.D += dGain;
   const age = lifeAge(g, m), keep = m - g.launchMonth >= fl.lateMonths ? fl.lateLifeKeep : fl.lifeKeep;
   return {
@@ -166,7 +168,7 @@ export function fullChangePreview(s: CarState, nameplateId: number, spec: Omit<P
   return {
     eligibility: fullChangeEligibility(s, nameplateId), ...pv, cost: pv.cost * costMult, costMult,
     equity: eq.equity, equityBase: eq.base, bodyChanged: eq.bodyChanged, revival: eq.revival,
-    prevAvg, compare: pv.avg > prevAvg ? 'better' : pv.avg < prevAvg ? 'worse' : 'same', rebuyPerMonth: rebuyPerMonth(prev),
+    prevAvg, compare: compareToPrev(prev, pv.stats, spec.body), rebuyPerMonth: rebuyPerMonth(prev), // 전작 비교는 원점수로(0.4.2), prevAvg는 화면 참고용
   };
 }
 
@@ -180,7 +182,7 @@ export function lineage(s: CarState, nameplateId: number) {
   }));
 }
 
-export { planEntries, nameplateEquity, lookCandidates, faceliftEligibility, fullChangeEligibility, type PlanEntries, type NameplateEntry, type Eligibility } from './lifecycle';
+export { planEntries, retrofitInfo, type RetrofitInfo, nameplateEquity, lookCandidates, faceliftEligibility, fullChangeEligibility, type PlanEntries, type NameplateEntry, type Eligibility } from './lifecycle';
 
 /** 대출 남은 한도 */
 export { loanLimit, loanRate } from './finance';
@@ -189,7 +191,7 @@ export { grade, grades, avgGrade, standard, unitCost, bodiesAt, powertrainsAt, o
 
 // ---------- 연구(10장)·시대 사건(11장)·조합 노트(5.5) ----------
 export { researchInfo, researchError, researchCost, researchSlots, weeklyResearchPoints, unlockedBodies, unlockedOptions, unlockedPowertrains, powertrainLevels, ptLevel, levelForTier, ptCostAdd, techEffectsText, FIELD_NAMES, type ResearchInfo, type TechRow, type TechStatus } from './research';
-export { activeEvents, eventImpactOn, pendingChoices, newsLog, upcomingEvents, regulationError, chargingInfra, type ActiveEvent } from './events';
+export { activeEvents, eventImpactOn, pendingChoices, newsLog, upcomingEvents, regulationError, regulationBlock, requiredOptions, chargingInfra, type ActiveEvent } from './events';
 
 /** 궁합 기호(◎ 1.2 / ○ 1.0 / △ 0.8 / × 0.6) */
 export const compatMark = (v: number): string => (v >= 1.2 ? '◎' : v >= 1 ? '○' : v >= 0.8 ? '△' : '×');
@@ -286,3 +288,11 @@ export function capacityAdvice(s: CarState): string {
 }
 
 export { hqDef, factoryDef, staffCap, devTeams, optionSlots, capacityOf, linesOf, costMultOf, upkeepOf } from './company';
+
+/** 판매 중인 차의 가격을 price로 바꾸면 이번 달 예상 판매(대, 생산 한도까지). 가격 슬라이더 미리 보기용(배분·재구매·단종 달 보정은 뺀 어림) */
+export function priceForecast(s: CarState, generationId: number, price: number): number | null {
+  const g = generationById(s, generationId);
+  if (!g) return null;
+  const m = monthOf(s.week), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
+  return Math.round(Math.min(capacityOf(s), monthlyDemand(s, { ...toSaleCar(g, m), price }, others, monthTime(m))));
+}

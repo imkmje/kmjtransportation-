@@ -20,36 +20,45 @@ const RIVAL_LOGO: Record<string, string> = { toyoda: 'toyotto', hyundae: 'hyundo
 export const logo = (key: string, z = 26): string =>
   `<svg width="${z}" height="${z}" viewBox="0 0 32 32" aria-hidden="true" style="display:block;flex:none">${LOGO[key] ?? LOGO[RIVAL_LOGO[key]] ?? LOGO.other}</svg>`;
 
-// ---------- 내 회사 로고(사용자가 꾸밈). 새로 그린 단순 도형만 쓴다 ----------
-export const LOGO_SHAPES = { round: '둥근 사각', circle: '원', shield: '방패', hex: '육각', oval: '타원', diamond: '마름모', pill: '알약', square: '사각' } as const;
-export const LOGO_MARKS = { stripes: '사선 줄무늬', hbars: '가로 줄무늬', vbars: '세로 줄무늬', wing: '날개', star: '별', mountain: '산', bolt: '번개', ring: '고리', arrow: '화살표', text: '글자' } as const;
-export const LOGO_BG = ['#14171c', '#1f4fd1', '#c8202f', '#1f5c4a', '#f26a1b', '#eef0f2', '#6b3fa0', '#c9b38a', '#0f7c8c', '#3a3f47'];
-export const LOGO_FG = ['#ff5a1f', '#ffffff', '#f5c518', '#14171c', '#9fd8ff', '#c8202f', '#7ed39b', '#c0c6cf', '#ffb3c1', '#1f4fd1'];
+// ---------- 내 회사 로고(사용자가 꾸밈). 엠블럼 틀 + 안쪽 문양, 2색(바탕·금속색) + 절제된 금속 광택. 새로 그린 도형만 쓴다(실존 상표 모방 금지) ----------
+// 키는 0.4.1 저장 파일과 같게 둔다(이름·그림만 다시). 0.4.2에 날개 배지·바퀴·왕관 추가
+export const LOGO_SHAPES = { circle: '원형', shield: '방패', oval: '타원', round: '둥근 사각', hex: '육각', diamond: '마름모', pill: '가로 배지', square: '팔각', wings: '날개 배지' } as const;
+export const LOGO_MARKS = { text: '이니셜', stripes: '사선', hbars: '가로선', vbars: '그릴', wing: '날개', star: '별빛', mountain: '봉우리', bolt: '번개', ring: '고리', arrow: '화살', wheel: '바퀴', crown: '왕관' } as const;
+export const LOGO_BG = ['#14171c', '#1b2a4a', '#1f4fd1', '#7a1f2b', '#c8202f', '#1f5c4a', '#0f6b78', '#3a3f47', '#efeae0', '#ffffff'];
+export const LOGO_FG = ['#c9ced6', '#ffffff', '#c9a54a', '#b07a4a', '#ff5a1f', '#c8202f', '#14171c', '#1f4fd1', '#9fd8ff', '#7ed39b'];
 export type LogoShape = keyof typeof LOGO_SHAPES;
 export type LogoMark = keyof typeof LOGO_MARKS;
+/** border: 안쪽 가는 테두리(이중 테두리) */
 export interface LogoSpec { shape: LogoShape; bg: string; fg: string; mark: LogoMark; text: string; border: boolean }
-/** 예전 저장·새 게임의 기본 로고(0.4.0까지 쓰던 모양) */
+/** 예전 저장·새 게임의 기본 로고 */
 export const DEFAULT_LOGO: LogoSpec = { shape: 'round', bg: '#14171c', fg: '#ff5a1f', mark: 'stripes', text: '', border: false };
-const SHAPE_D: Record<LogoShape, string> = {
-  round: 'M11 2h10a9 9 0 0 1 9 9v10a9 9 0 0 1-9 9H11a9 9 0 0 1-9-9V11a9 9 0 0 1 9-9z',
-  circle: 'M16 2a14 14 0 1 1 0 28a14 14 0 1 1 0-28z',
-  shield: 'M16 2l12 4v9c0 8-5.5 12.5-12 15C9.5 27.5 4 23 4 15V6z',
-  hex: 'M16 2l12.1 7v14L16 30L3.9 23V9z',
-  oval: 'M16 6c8.3 0 15 4.5 15 10s-6.7 10-15 10S1 21.5 1 16S7.7 6 16 6z',
-  diamond: 'M16 1l15 15l-15 15L1 16z',
-  pill: 'M10 7h12a9 9 0 0 1 0 18H10a9 9 0 0 1 0-18z',
-  square: 'M3 3h26v26H3z',
+/** 틀(64 격자). d: 바깥 테두리 선이 지나는 길, m: 문양 크기 배수, my: 문양 세로 위치 */
+const FRAME: Record<LogoShape, { d: string; m: number; my?: number }> = {
+  circle: { d: 'M32 4a28 28 0 1 1 0 56a28 28 0 1 1 0-56z', m: 1 },
+  shield: { d: 'M32 4C40 7.5 48 8.5 56 8.5V30c0 14-10 23-24 30C18 53 8 44 8 30V8.5C16 8.5 24 7.5 32 4z', m: 0.92, my: 29 },
+  oval: { d: 'M32 12c16 0 28 9 28 20S48 52 32 52S4 43 4 32S16 12 32 12z', m: 0.78 },
+  round: { d: 'M18 5h28a13 13 0 0 1 13 13v28a13 13 0 0 1-13 13H18A13 13 0 0 1 5 46V18A13 13 0 0 1 18 5z', m: 1 },
+  hex: { d: 'M32 3.5l24.7 14.25v28.5L32 60.5L7.3 46.25v-28.5z', m: 0.94 },
+  diamond: { d: 'M32 3l29 29l-29 29L3 32z', m: 0.72 },
+  pill: { d: 'M20 15h24a17 17 0 0 1 0 34H20a17 17 0 0 1 0-34z', m: 0.74 },
+  square: { d: 'M21 5h22l16 16v22L43 59H21L5 43V21z', m: 0.96 },
+  wings: { d: 'M32 11a21 21 0 1 1 0 42a21 21 0 1 1 0-42z', m: 0.74 },
 };
-const MARK_SVG: Record<Exclude<LogoMark, 'text'>, (c: string) => string> = {
-  stripes: (c) => `<path d="M8 21h13M11 16h14M14 11h11" stroke="${c}" stroke-width="3" stroke-linecap="round" fill="none"/>`,
-  hbars: (c) => `<path d="M9 11h14M9 16h14M9 21h14" stroke="${c}" stroke-width="2.6" stroke-linecap="round" fill="none"/>`,
-  vbars: (c) => `<path d="M11 10v12M16 9v14M21 10v12" stroke="${c}" stroke-width="2.6" stroke-linecap="round" fill="none"/>`,
-  wing: (c) => `<path d="M16 21c-2-4-6-6-10-6c3 1 5 3 6 5zM16 21c2-4 6-6 10-6c-3 1-5 3-6 5zM16 22c-1.5-3-5-5-9-4.5c3 1 5 2.5 6 5zM16 22c1.5-3 5-5 9-4.5c-3 1-5 2.5-6 5z" fill="${c}"/><circle cx="16" cy="13" r="2.4" fill="${c}"/>`,
-  star: (c) => `<path d="M16 7.5l2.5 5.3l5.7.7l-4.2 3.9l1.1 5.7L16 20.3l-5.1 2.8l1.1-5.7l-4.2-3.9l5.7-.7z" fill="${c}"/>`,
-  mountain: (c) => `<path d="M6 22l6.5-10l3.5 5l3-4l7 9z" fill="${c}"/>`,
-  bolt: (c) => `<path d="M18 6l-8 11h5l-2 9l8-11h-5z" fill="${c}"/>`,
-  ring: (c) => `<circle cx="16" cy="16" r="6.5" fill="none" stroke="${c}" stroke-width="3"/><circle cx="16" cy="16" r="1.8" fill="${c}"/>`,
-  arrow: (c) => `<path d="M8 20l8-9l8 9" fill="none" stroke="${c}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 23h8" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`,
+// 날개 배지의 양옆 날개(가는 깃 세 줄씩)
+const WINGS = 'M14 24.5C9 24 4.5 23 1.5 21c1.8 3.6 6 5.8 12 6.4zM13.6 30.6C8.7 30.3 4.6 29.4 2 27.8c1.6 3.2 5.5 5 11 5.3zM14 36.5c-4 .1-7.4-.5-10-1.8c1.7 2.8 5 4.3 9.6 4.4zM50 24.5c5-.5 9.5-1.5 12.5-3.5c-1.8 3.6-6 5.8-12 6.4zM50.4 30.6c4.9-.3 9-1.2 11.6-2.8c-1.6 3.2-5.5 5-11 5.3zM50 36.5c4 .1 7.4-.5 10-1.8c-1.7 2.8-5 4.3-9.6 4.4z';
+/** 안쪽 문양(64 격자, 가운데 32·32, 지름 약 28 안) */
+const MARK: Record<Exclude<LogoMark, 'text'>, (c: string) => string> = {
+  stripes: (c) => `<path d="M20.5 41h17l3.5-4.6h-17zM23.8 34.3h20l3.5-4.6h-20zM27 27.6h17l3.5-4.6h-17z" fill="${c}"/>`,
+  hbars: (c) => `<path d="M17 24.6h30v3.2H17zM20 30.4h24v3.2H20zM23 36.2h18v3.2H23z" fill="${c}"/>`,
+  vbars: (c) => `<path d="M21 21h3.4v22H21zM27.6 19h3.4v26h-3.4zM33 19h3.4v26H33zM39.6 21H43v22h-3.4z" fill="${c}"/>`,
+  wing: (c) => `<path d="M30.5 40.5L13 27.5l4.6-.6l12.9 9.4zM30.5 34.8L18 25.4l4.4-.5l8.1 6zM30.5 29.4l-7.4-5.7l4.2-.5l3.2 2.4zM33.5 40.5L51 27.5l-4.6-.6l-12.9 9.4zM33.5 34.8L46 25.4l-4.4-.5l-8.1 6zM33.5 29.4l7.4-5.7l-4.2-.5l-3.2 2.4z" fill="${c}"/><circle cx="32" cy="42.5" r="2.6" fill="${c}"/>`,
+  star: (c) => `<path d="M32 16.5l3.3 12.2L47.5 32l-12.2 3.3L32 47.5l-3.3-12.2L16.5 32l12.2-3.3z" fill="${c}"/><circle cx="32" cy="32" r="2.2" fill="${c}"/>`,
+  mountain: (c) => `<path d="M16 42l11-16l5.2 7.2L38 25l10 17zM27 31.8l-4.6 6.6h8.4zM38 31.2l-4.2 5.8l1 1.4h8.4z" fill="${c}" fill-rule="evenodd"/>`,
+  bolt: (c) => `<path d="M35.5 16L22 34.5h8.2L27 48l15-19.5h-8.4z" fill="${c}"/>`,
+  ring: (c) => `<circle cx="32" cy="32" r="11.5" fill="none" stroke="${c}" stroke-width="3.6"/><circle cx="32" cy="32" r="4" fill="${c}"/>`,
+  arrow: (c) => `<path d="M32 17L47 37.5h-6.6L32 25.6L23.6 37.5H17z" fill="${c}"/><path d="M23 42h18v3.4H23z" fill="${c}"/>`,
+  wheel: (c) => `<circle cx="32" cy="32" r="12.8" fill="none" stroke="${c}" stroke-width="3.2"/><circle cx="32" cy="32" r="3.4" fill="${c}"/><path d="M32 22v6.6M32 35.4V42M23.3 27l5.7 3.3M35 33.7l5.7 3.3M23.3 37l5.7-3.3M35 30.3l5.7-3.3" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`,
+  crown: (c) => `<path d="M18 40l-2-15l8.5 6.5L32 20l7.5 11.5L48 25l-2 15z" fill="${c}"/><path d="M18 43h28v3H18z" fill="${c}"/>`,
 };
 /** 로고 값 검사(저장 파일·화면 입력). 틀린 칸은 기본값으로 */
 export function cleanLogo(v: unknown): LogoSpec {
@@ -62,13 +71,34 @@ export function cleanLogo(v: unknown): LogoSpec {
     border: o.border === true,
   };
 }
-/** 내 회사 로고 SVG(상단바·타이틀·신문·사무실·기록 공용) */
+/** 금속 광택(색과 무관한 흰·검 반투명 그라데이션)을 문서에 한 번만 둔다. 로고마다 id를 만들면 같은 로고가 여러 곳에 있을 때 겹치거나 숨은 칸의 것을 가리킨다 */
+function ensureSheen(): void {
+  if (typeof document === 'undefined' || document.getElementById('clg-defs')) return;
+  const box = document.createElement('div');
+  box.id = 'clg-defs'; box.setAttribute('aria-hidden', 'true'); box.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
+  box.innerHTML = '<svg width="0" height="0"><defs><linearGradient id="clg-sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".48" stop-color="#fff" stop-opacity=".04"/><stop offset=".52" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>'
+    + '<linearGradient id="clg-metal" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset=".62" stop-color="#000" stop-opacity=".12"/><stop offset=".8" stop-color="#fff" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs></svg>';
+  document.body.append(box);
+}
+const lum = (h: string) => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
+/** 내 회사 로고 SVG(상단바·타이틀·신문·사무실·기록 공용). 36px 미만이면 가는 선을 빼고 테두리를 굵게(작게 봐도 뭉개지지 않게) */
 export function logoSvg(spec: LogoSpec, size = 26): string {
-  const L = cleanLogo(spec), d = SHAPE_D[L.shape];
-  const t = [...L.text], fs = t.length > 1 ? 11 : 15;
-  const mark = L.mark === 'text' ? (t.length ? `<text x="16" y="16" dy=".36em" text-anchor="middle" font-size="${fs}" font-weight="800" fill="${L.fg}" font-family="system-ui,'Apple SD Gothic Neo','Malgun Gothic',sans-serif">${esc(t.join(''))}</text>` : '') : MARK_SVG[L.mark](L.fg);
-  const border = L.border ? `<path d="${d}" fill="none" stroke="${L.fg}" stroke-width="1.6" transform="translate(16 16) scale(.84) translate(-16 -16)"/>` : '';
-  return `<svg class="clogo" width="${size}" height="${size}" viewBox="0 0 32 32" aria-hidden="true" style="display:block;flex:none"><path d="${d}" fill="${L.bg}"/>${border}${mark}</svg>`;
+  ensureSheen();
+  const L = cleanLogo(spec), F = FRAME[L.shape], small = size < 36, my = F.my ?? 32;
+  const rim = small ? 4.6 : 3.4, k = F.m * (small ? 1.06 : 1);
+  // 바탕과 금속색이 너무 비슷하면(밝은 바탕에 은색 등) 테두리 바깥에 옅은 선을 둘러 모양이 보이게
+  const edge = Math.abs(lum(L.bg) - lum(L.fg)) < 0.18 || lum(L.bg) > 0.85 ? `<path d="${F.d}" fill="none" stroke="#14171c" stroke-opacity=".28" stroke-width="${rim + 1.6}" stroke-linejoin="round"/>` : '';
+  const wings = L.shape === 'wings' ? `<path d="${WINGS}" fill="${L.fg}"/><path d="${WINGS}" fill="url(#clg-metal)"/>` : '';
+  const inner = L.border && !small ? `<path d="${F.d}" fill="none" stroke="${L.fg}" stroke-width="${1.1 / 0.84}" stroke-opacity=".85" transform="translate(32 ${my}) scale(.84) translate(-32 -${my})"/>` : '';
+  const t = [...L.text], fs = t.length > 1 ? 21 : 29;
+  const glyph = L.mark === 'text'
+    ? (t.length ? `<text x="32" y="32" dy=".35em" text-anchor="middle" font-size="${fs}" font-weight="800" letter-spacing="${t.length > 1 ? -0.6 : 0}" fill="${L.fg}" stroke="${L.fg}" stroke-width=".7" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',system-ui,sans-serif">${esc(t.join(''))}</text>` : '')
+    : MARK[L.mark](L.fg);
+  const mark = glyph ? `<g transform="translate(32 ${my}) scale(${k.toFixed(3)}) translate(-32 -32)">${glyph}<g style="mix-blend-mode:normal" opacity=".9">${glyph.replace(/fill="#[0-9a-fA-F]{6}"/g, 'fill="url(#clg-metal)"').replace(/stroke="#[0-9a-fA-F]{6}"/g, 'stroke="url(#clg-metal)"')}</g></g>` : '';
+  return `<svg class="clogo" data-shape="${L.shape}" data-mark="${L.mark}" width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true" style="display:block;flex:none">`
+    + `${wings}${edge}<path d="${F.d}" fill="${L.bg}" stroke="${L.fg}" stroke-width="${rim}" stroke-linejoin="round"/>`
+    + `<path d="${F.d}" fill="none" stroke="url(#clg-metal)" stroke-width="${rim}" stroke-linejoin="round"/>${inner}${mark}`
+    + `<path d="${F.d}" fill="url(#clg-sheen)"/></svg>`;
 }
 
 /** sim 차 값 → 3D 모양. 렌더에 없는 차체는 중형 세단 모양으로 대신한다. year는 출시(기획) 연도 */
