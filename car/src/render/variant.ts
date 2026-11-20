@@ -47,17 +47,25 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
   const q = rng(Math.imul(look.chassisSeed, 0x85ebca6b) ^ 0x2c1b3c6d), x = () => q();
   const old = era <= 1980, nc = x(), c1 = .45 + .3 * x(), c2 = .15 + .15 * x(), kick = x(), bc = x(), st = x(), sr = x(), rk = x(), cl = x(), bp = x();
   return {
-    crease: nc < (old ? .35 : .15) ? [] : nc < (old ? .9 : .7) ? [c1] : [c1, c2],
-    kick: era >= 2010 ? .02 + .06 * kick : era === 1990 ? .02 * kick : 0,
-    beltChrome: bc < ({ 1970: .85, 1980: .45, 1990: .3, 2010: .3, 2020: .25 }[era] + (id === 'sedanL' ? .3 : 0)),
+    // 2010은 날 선 캐릭터 라인(늘 1~2줄, 뒤로 치켜 오름), 2020은 매끈한 면(없거나 1줄)
+    crease: era === 2010 ? (nc < .45 ? [c1] : [c1, c2]) : era === 2020 ? (nc < .5 ? [] : [c1]) : nc < (old ? .35 : .15) ? [] : nc < (old ? .9 : .7) ? [c1] : [c1, c2],
+    kick: era === 2010 ? .05 + .07 * kick : era === 2020 ? .02 * kick : era === 1990 ? .02 * kick : 0,
+    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .3, 2020: .25 }[era], // 대형 세단은 늘 크롬 띠
     strip: old ? (st < .45 ? (era === 1970 ? 'chrome' : 'dark') : st < .65 ? 'dark' : 'none') : era === 1990 && st < .4 ? 'dark' : 'none',
     sunroof: sr < (id === 'pickup' || id === 'kei' ? .15 : .35),
-    rack: rk < (({ suv: .65, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
-    clad: id === 'suv' ? cl < .8 : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < .3,
+    rack: rk < (({ suv: .85, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
+    clad: id === 'suv' ? cl < (era === 2020 ? .45 : .85) : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < (era === 2020 ? .1 : .3), // 2020은 검은 클래딩이 줄어든다
     blackPillar: era >= 2010 && !b.bed && bp < .35,
   };
 }
 
+const PERSONA: Partial<Record<DevKey, number>>[] = [
+  { len: .7, roof: -.8, belt: -.5, wbr: .6, rake: .6, rear: .3 }, // 낮고 긴 차
+  { len: -.7, roof: .8, belt: .5, wbr: -.5, rake: -.6, rear: -.4 }, // 높고 짧은 차
+  { wedge: .9, belt: .4, rake: .7, cab: -.4, roof: -.3 }, // 쐐기형(긴 보닛)
+  { cab: .8, rake: .5, deck: .5, wbr: .5, roof: .3 }, // 객실이 앞으로 나온 차(짧은 보닛)
+  {}, // 균형
+];
 export type RoofType = 'notch' | 'semi' | 'fast';
 // 뒤 유리 길이(m): 노치백은 .6 이하, 세미 .8~1.0, 패스트백 1.1~1.3(지붕선이 트렁크 끝 가까이 흐른다)
 const REAR: Record<RoofType, (rr: number) => number> = { notch: rr => Math.min(rr, .6), semi: rr => Math.min(1, Math.max(.8, rr * 1.5)), fast: rr => Math.min(1.3, Math.max(1.1, rr * 2.2)) };
@@ -67,6 +75,9 @@ export function chassisOf(look: CarLook): Chassis {
   const b = bodyOf(look.bodyId), keys = Object.keys(VARY) as DevKey[], E = ERA[eraOf(look)], ev = look.powertrain === 'ev';
   const r = rng(look.chassisSeed ?? 0), has = look.chassisSeed != null;
   const dev = Object.fromEntries(keys.map(k => [k, has ? r() * 2 - 1 : 0])) as Record<DevKey, number>;
+  // 성격: 변이 축끼리 함께 움직여 한눈에 다른 차가 되게(낮고 긴 / 높고 짧은 / 쐐기 / 객실 앞쪽 / 균형)
+  const pc = has ? Math.floor(r() * PERSONA.length) : -1;
+  if (pc >= 0) for (const k of keys) dev[k] = Math.max(-1.4, Math.min(1.4, dev[k] * .65 + (PERSONA[pc][k] ?? 0)));
   if (!b.deck) dev.deck = 0;
   // 지붕선 유형: 트렁크 있는 차만(쿠페·스포츠카는 패스트백이 더 흔하다)
   const rt = has ? r() : 0, sporty = look.bodyId === 'coupe' || look.bodyId === 'sports';
@@ -75,13 +86,14 @@ export function chassisOf(look: CarLook): Chassis {
   let rf = b.rf * s * (1 + VARY.rake * dev.rake), rr = b.rr * s * (1 + VARY.rear * dev.rear);
   if (b.deck) rr = REAR[roofType](rr);
   // 전기차는 보닛이 짧다(객실을 앞으로)
-  const cab = VARY.cab * dev.cab + (ev && eraOf(look) >= 2010 ? .15 : 0);
+  const cab = VARY.cab * dev.cab + (ev && eraOf(look) >= 2010 ? .22 : 0);
+  const minCab = roofType === 'notch' ? MIN_CABIN : .8; // 패스트백은 지붕이 짧으면 혹처럼 솟는다
   // 앞유리 아래 끝(보닛 길이)은 객실 이동만 따르고, 기울기는 지붕 앞 끝을 옮긴다. 보닛 .65m·트렁크 최소는 남긴다
   const base = Math.min((b.cF + b.rf) * s + cab, h - .65);
-  const room = base - (-h + tmin) - MIN_CABIN; // 앞뒤 유리가 쓸 수 있는 길이(극단 시드에서 객실이 찌그러지지 않게 유리를 줄인다)
+  const room = base - (-h + tmin) - minCab; // 앞뒤 유리가 쓸 수 있는 길이(극단 시드에서 객실이 찌그러지지 않게 유리를 줄인다)
   if (rr + rf > room) { const k = room / (rr + rf); rr *= k; rf *= k; }
   const cR = Math.max(b.cR * s + cab + VARY.deck * dev.deck, -h + rr + tmin);
-  const cF = Math.max(base - rf, cR + MIN_CABIN);
+  const cF = Math.max(base - rf, cR + minCab);
   const side = sideOf(look, b);
   // 휠 아치: 가장 큰 휠 기준 원(중심 높이 archY). 허리선은 아치 꼭대기보다 BELT_OVER_ARCH 위(부푼 펜더 차체 제외)
   const wr0 = b.wr + E.wrD, archGap = ARCH_GAP + VARY.arch * dev.arch, archY = wr0 + WHEEL_GROW[2], archR = archY + archGap;

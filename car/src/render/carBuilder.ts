@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CarLook } from './look';
-import { FACE, RIM_RATIO, eraStyle, type WheelKind } from './shapes';
+import { FACE, RIM_RATIO, eraOf, eraStyle, type WheelKind } from './shapes';
 import { chassisOf, faceOf } from './variant';
 
 export interface CarMaterials {
@@ -15,19 +15,20 @@ export interface CarMaterials {
   tail: THREE.MeshStandardMaterial;
   chrome: THREE.MeshStandardMaterial;
   plate: THREE.MeshStandardMaterial;
+  gloss: THREE.MeshPhysicalMaterial; // 유광 검정(창 사이 필러·창틀)
 }
 
 // 데칼(표면에 붙인 얇은 면)이 차체와 깊이 싸움을 하지 않게 앞으로 당긴다
 const decalOpts = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
 
 export function createCarMaterials(color: string): CarMaterials {
-  const std = THREE.MeshStandardMaterial, pp = { metalness: .3, roughness: .4, envMapIntensity: .75, clearcoat: 1, clearcoatRoughness: .06 };
+  const std = THREE.MeshStandardMaterial, pp = { metalness: .25, roughness: .42, envMapIntensity: .8, clearcoat: .55, clearcoatRoughness: .12 }; // 약한 클리어코트(장난감 같은 강한 반짝임을 줄인다)
   const paint = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color), ...pp }), crease = new THREE.MeshPhysicalMaterial({ ...pp, ...decalOpts });
   crease.color = paint.color; // 무대가 차체색을 바꾸면(paint.color.lerp) 함께 바뀐다
   return {
     paint, crease,
     glass: new THREE.MeshPhysicalMaterial({ color: 0x24303c, metalness: .45, roughness: .07, envMapIntensity: 1.1, clearcoat: .6 }), // 짙은 청회색 + 약한 반사
-    tire: new std({ color: 0x121417, roughness: .92 }),
+    tire: new std({ color: 0x1b1d20, roughness: .85, envMapIntensity: .3 }), // 고무: 순검정 대신 짙은 회색, 반사 약하게
     rim: new std({ color: 0xd4d9e0, metalness: .95, roughness: .22 }),
     dark: new std({ color: 0x15181c, roughness: .6, metalness: .3 }),
     trim: new std({ color: 0x0e1013, roughness: .8, side: THREE.DoubleSide, ...decalOpts }),
@@ -35,6 +36,7 @@ export function createCarMaterials(color: string): CarMaterials {
     tail: new std({ color: 0xc00000, emissive: 0xd00000, emissiveIntensity: .7, ...decalOpts }),
     chrome: new std({ color: 0xeef1f4, metalness: 1, roughness: .12, ...decalOpts }),
     plate: new std({ color: 0xf4f5f2, roughness: .5, ...decalOpts }),
+    gloss: new THREE.MeshPhysicalMaterial({ color: 0x07090b, roughness: .18, metalness: .1, clearcoat: 1, clearcoatRoughness: .05 }),
   };
 }
 
@@ -46,7 +48,7 @@ export function disposeCar(group: THREE.Object3D): void {
    ring(x)를 함수로 빼 두어 얼굴 데칼·도어 선·아치 테를 같은 곡면 위에 정확히 붙인다. */
 export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const carG = new THREE.Group();
-  const p = chassisOf(look), fc = faceOf(look), sd = p.side;
+  const p = chassisOf(look), fc = faceOf(look), sd = p.side, era = eraOf(look), id = look.bodyId;
   const E0 = eraStyle(look), ek = p.edge ?? 1, E = { ...E0, re: E0.re * ek, rpF: E0.rpF * ek, rpR: E0.rpR * ek };
   const ev = look.powertrain === 'ev', F = FACE;
   let decalMiss = 0; // 데칼 점이 차체 곡면을 못 찾은 횟수(검사용, 0이어야 정상)
@@ -75,7 +77,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   for (let x = -h + .004; x < h - .004;) {
     xs.push(x);
     const near = Math.min(...archEdges.map(e => Math.abs(x - e))), d = Math.min(x + h, h - x);
-    x += near < .09 || d < E.re + .06 ? .024 : .08;
+    x += near < .09 ? .024 : d < E.re + .06 ? .028 : .08;
   }
   xs.push(h - .004);
   xs = [...xs, ...brk.filter(x => Math.abs(x) < h - .01)].sort((a, b) => a - b).filter((x, i, a) => i === 0 || x - a[i - 1] > .004 || i === a.length - 1);
@@ -188,7 +190,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     for (let k = J - 1; k >= 1; k--) pos.push(xs[i], P[k * 2], -P[k * 2 + 1]);
     gs.push(g); yss.push(ys); tops.push(T);
   }
-  const vi = (i: number, r: number) => i * RN + (r % RN), idx: number[][] = [[], [], [], []], sill = p.clr + p.sill;
+  const vi = (i: number, r: number) => i * RN + (r % RN), idx: number[][] = [[], [], [], []], sill = p.clr + p.sill * (era === 2020 ? .55 : 1); // 2020은 검은 하부가 얇다
   for (let i = 0; i < N; i++) for (let r = 0; r < RN; r++) {
     const a = vi(i, r), b = vi(i + 1, r), c = vi(i + 1, r + 1), dd = vi(i, r + 1), k = r < J ? r : RN - 1 - r;
     const cx = (pos[a * 3] + pos[b * 3]) / 2, cy = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[c * 3 + 1] + pos[dd * 3 + 1]) / 4;
@@ -196,13 +198,14 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     const pd = Math.min(...pils.map(px => Math.abs(cx - px)));
     let m = 0;
     if (bedAt(cx) && k >= 19) m = 2; // 짐칸 안쪽 벽·바닥
-    else if (k >= 18 && k <= 21 && gm > .22 && pd > .062) m = 1;
+    else if (k >= 18 && k <= 21 && gm > .22 && pd > .05) m = 1;
     // 앞·뒤 유리: 객실 앞뒤 경사면을 고리의 꼭대기 높이로 고른다(뒤가 곧게 선 SUV·해치백도 유리가 실처럼 얇아지지 않게).
     // 고리 단위로 고르면 유리 위아래 경계가 고리 선을 따라 곧다
-    else if (k >= 25 && h - Math.abs(cx) > E.re * .7 && (cx < p.cR + .02 || cx > p.cF - .02) && tlo > ysm + .15 && thi < p.roof - .03 && !bedAt(cx)) m = 1;
+    else if (k >= 25 && h - Math.abs(cx) > E.re * (p.deck || cx > 0 ? .7 : .3) && (cx < p.cR + .02 || cx > p.cF - .02) && tlo > ysm + (p.deck || cx > 0 ? .15 : .1) && thi < p.roof - .03 && !bedAt(cx)) m = 1;
     else if (sd.blackPillar && k >= 18 && k <= 24 && gm > .22 && cx < p.cR + .12 && cx > p.cR - p.rr * .8) m = 1; // 검은 뒤 필러(떠 있는 지붕)
     // 창틀: 옆 유리 위아래 한 줄(k17·k22)과 필러 양옆 가는 띠, 유리 앞뒤 끝은 검은 고무. 필러 가운데는 차체색으로 남는다
-    else if (k >= 17 && k <= 22 && gm > .19 && (k === 17 || k === 22 || pd > .045 || gm <= .22) && !bedAt(cx)) m = 3;
+    // 창 띠(k17~22)에서 유리가 아닌 곳: 창틀과 창 사이 필러는 유광 검정(A필러·지붕 테두리는 이 띠 밖이라 차체색)
+    else if (k >= 17 && k <= 22 && gm > .19 && !bedAt(cx)) m = 3;
     else if (h - Math.abs(cx) > E.re && (k <= 5 || (k <= 15 && cy < sill))) m = 2; // 둥근 앞뒤 끝은 범퍼라 차체 색(경계가 고리 선을 따라 매끈)
     idx[m].push(a, b, dd, b, c, dd);
   }
@@ -216,7 +219,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   idx.forEach((ix, m) => { geo.addGroup(o, ix.length, m); o += ix.length; });
   geo.setIndex(idx.flat());
   geo.computeVertexNormals();
-  add(geo, [M.paint, M.glass, M.dark, M.trim]);
+  add(geo, [M.paint, M.glass, M.dark, M.gloss]);
 
   // ── 띠 장식: 같은 개수의 점 줄 두 개(A·B)를 이은 얇은 면. 재질별로 한 메시에 모은다 ──
   const strips = new Map<THREE.Material, { pos: number[]; idx: number[] }>();
@@ -423,7 +426,8 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     add(new THREE.BoxGeometry(.006, .075, .15), M.glass, mx - .04, my + .02, sgn * (mz + .12));
     for (let i = 1; i < doors.length; i++) { // 손잡이: 각 문의 뒤 끝 근처
       const x = doors[i] + F.handleBack, y = p.belt - F.handleDrop;
-      add(new THREE.BoxGeometry(F.handleW, .022, .02), M.chrome, x, y, sgn * (sideZ(x, y) + .006));
+      if (era === 2020) add(new THREE.BoxGeometry(F.handleW, .014, .004), M.gloss, x, y, sgn * (sideZ(x, y) + .001)); // 매립형 손잡이: 돌출 없이 선만
+      else add(new THREE.BoxGeometry(F.handleW, .022, .02), M.chrome, x, y, sgn * (sideZ(x, y) + .006));
     }
   });
   // 휠하우스 안쪽(어두운 반원통): 위쪽 반만(바닥 아래로 뚫지 않게), 좌우 바퀴 안쪽에만(보닛 가운데로 솟지 않게)
@@ -449,6 +453,22 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
       add(new THREE.BoxGeometry(rx1 - rx0, .025, .035), M.dark, (rx0 + rx1) / 2, ly, sgn * zr);
       for (const x of lx) { const y0 = topY(x, zr); add(new THREE.BoxGeometry(.06, ly - y0 + .01, .04), M.dark, x, (ly + y0) / 2, sgn * zr); }
     });
+  }
+
+  // ── 차종 고유 디테일 ──
+  if (p.bed != null) { // 픽업: 짐칸 벽 위 레일, 테일게이트 틈(위·양옆)
+    const P = ring((bedF + bedB) / 2).P, yw = P[19 * 2], zw = P[19 * 2 + 1] - .005;
+    pair(sgn => add(new THREE.BoxGeometry(bedF - bedB - .06, .02, .05), M.dark, (bedF + bedB) / 2, yw + .008, sgn * zw));
+    const ty = yw - .035, tb = Math.max(p.bed, p.clr + .2);
+    decal(rect(-fw * .93, fw * .93, ty - .004, ty + .004, 12, 1), M.trim, -1, L2);
+    pair(g => decal(rect(g * fw * .93 - .004, g * fw * .93 + .004, tb, ty, 1, 4), M.trim, -1, L2));
+  }
+  if (id === 'suv') for (const s of [1, -1] as const) decal(rect(-fw * .42, fw * .42, p.clr + .05, p.clr + .12, 8, 2), M.chrome, s, L2); // 스키드 플레이트
+  if (id === 'minivan') sideBand(-h + E.re + .3, p.doors[p.doors.length - 1] - .02, () => p.belt - .035, .011, M.gloss); // 슬라이딩 도어 레일
+  if (id === 'sports') sideBand(-p.wb + ar + .1, -p.wb + ar + .4, () => sill + (p.belt - sill) * .5, .035, M.gloss); // 뒷바퀴 앞 옆 흡기구
+  if (id === 'hatch') { // 지붕 끝 립 스포일러(차체색) + 뒤 와이퍼
+    if (!look.sporty) { const x = p.cR - .03, zw = ring(x).P[26 * 2 + 1]; add(new THREE.BoxGeometry(.12, .025, 2 * zw), M.paint, x - .01, topY(x, 0) - .006, 0); }
+    const wx = p.cR - p.rr * .85; add(new THREE.BoxGeometry(.02, .012, .3), M.gloss, wx, topY(wx, .1) + .012, .1).rotation.y = .25;
   }
 
   // ── 바퀴: 타이어(옆면을 둥글린 회전체) + 림 + 디자인별 스포크. 지오메트리는 4바퀴가 같이 쓴다 ──

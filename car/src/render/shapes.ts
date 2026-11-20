@@ -23,7 +23,7 @@ export const BODY: Record<BodyId, BodyShape> = {
   sedanM: { L: 4.6, W: 1.78, clr: .2, belt: .92, roof: 1.42, cR: -1.05, cF: .55, rr: .55, rf: .7, wr: .33, wb: 1.4, deck: true, sill: .1, doors: [.95, -.25, -.95], archTrim: .03 },
   coupe: { L: 4.5, W: 1.82, clr: .15, belt: .84, roof: 1.26, cR: -.75, cF: .35, rr: .95, rf: .8, wr: .34, wb: 1.38, deck: true, sill: .1, doors: [.92, -.45], archTrim: .03, fenders: true },
   suv: { L: 4.6, W: 1.86, clr: .3, belt: 1.08, roof: 1.72, cR: -1.75, cF: .6, rr: .25, rf: .6, wr: .39, wb: 1.4, deck: false, sill: .2, doors: [.9, -.575, -1.28], archTrim: .07 },
-  sedanL: { L: 5.1, W: 1.88, clr: .18, belt: .9, roof: 1.44, cR: -1.22, cF: .58, rr: .58, rf: .78, wr: .35, wb: 1.5, deck: true, sill: .1, doors: [1.06, -.32, -1.08], archTrim: .03, nose: .17 },
+  sedanL: { L: 5.1, W: 1.88, clr: .18, belt: .9, roof: 1.44, cR: -1.22, cF: .58, rr: .58, rf: .78, wr: .35, wb: 1.5, deck: true, sill: .1, doors: [1.06, -.12, -1.12], archTrim: .03, nose: .17 },
   minivan: { L: 4.8, W: 1.9, clr: .19, belt: .98, roof: 1.72, cR: -2.0, cF: .5, rr: .22, rf: 1.08, wr: .34, wb: 1.5, deck: false, sill: .12, doors: [1.02, 0, -1.0], archTrim: .04, pil: [.4, .8], nose: .15 },
   kei: { L: 3.4, W: 1.48, clr: .15, belt: .86, roof: 1.52, cR: -1.36, cF: .44, rr: .16, rf: .56, wr: .27, wb: 1.14, deck: false, sill: .09, doors: [.76, -.32, -.78], archTrim: .03, pil: [.58], nose: .14, edge: .6 },
   pickup: { L: 5.2, W: 1.9, clr: .3, belt: 1.1, roof: 1.84, cR: -.6, cF: .7, rr: .2, rf: .55, wr: .4, wb: 1.6, deck: false, sill: .18, doors: [1.08, .05, -.66], archTrim: .07, bed: .72, nose: .1, edge: .55 },
@@ -55,9 +55,9 @@ export const ERA: Record<Era, EraStyle> = {
   // 모서리 둥근 비누형: 크게 둥근 끝, 배부른 옆판, 많이 누운 옆 유리
   1990: { re: .32, rpF: .66, rpR: .56, rc: .18, rb: .12, taper: .1, smooth: 4, wedge: .04, faceW: .86, classic: false, tumble: .34, crown: .055, bow: .04, tuck: .09, chin: .08, len: 1, roofD: 0, beltD: 0, wbK: 1, wrD: 0 },
   // 높은 허리선·짧은 오버행·큰 바퀴, 쐐기
-  2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .12, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .022, tuck: .065, chin: .06, len: 1, roofD: .02, beltD: .06, wbK: 1.04, wrD: .025 },
+  2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .12, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .02, tuck: .065, chin: .06, len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .04 },
   // 매끈한 면, 짧은 앞 오버행(전기차는 휠베이스 더 길고 보닛 짧게: variant.chassisOf)
-  2020: { re: .2, rpF: .58, rpR: .44, rc: .11, rb: .07, taper: .05, smooth: 3, wedge: .06, faceW: 1, classic: false, tumble: .3, crown: .035, bow: .026, tuck: .065, chin: .07, len: 1, roofD: 0, beltD: .04, wbK: 1.06, wrD: .02 },
+  2020: { re: .2, rpF: .58, rpR: .44, rc: .11, rb: .07, taper: .05, smooth: 3, wedge: .06, faceW: 1, classic: false, tumble: .32, crown: .05, bow: .032, tuck: .07, chin: .08, len: 1, roofD: 0, beltD: .08, wbK: 1.06, wrD: .03 },
 };
 export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1980 ? 1970 : e < 1990 ? 1980 : e < 2010 ? 1990 : e < 2020 ? 2010 : 2020; };
 export const eraStyle = (look: CarLook): EraStyle => ERA[eraOf(look)];
@@ -68,15 +68,15 @@ export const ARCH_GAP = .055; // 휠 아치와 타이어 사이 기본 여유
 export const VARY = {
   len: .08, // 전체 길이 배율 ±8%(축·객실·도어 위치도 함께 늘어남)
   wid: .03, // 폭 ±m
-  roof: .11, // 지붕 높이 ±m(벨트라인 위 최소 .36m는 지킨다)
-  belt: .07, // 벨트라인 ±m
-  rake: .38, // 앞유리 기울기 길이 배율 ±(유리 아래 끝은 그대로, 지붕 앞 끝이 움직인다)
+  roof: .13, // 지붕 높이 ±m(벨트라인 위 최소 .36m는 지킨다)
+  belt: .08, // 벨트라인 ±m
+  rake: .45, // 앞유리 기울기 길이 배율 ±(유리 아래 끝은 그대로, 지붕 앞 끝이 움직인다)
   rear: .5, // 뒤유리 기울기 길이 배율 ±
-  cab: .25, // 객실 앞뒤 이동 ±m(+면 앞으로)
+  cab: .3, // 객실 앞뒤 이동 ±m(+면 앞으로)
   deck: .14, // 트렁크 길이 ±m(트렁크 있는 차만, +면 길어짐)
   arch: .02, // 휠 아치 여유 ±m
   wedge: .05, // 허리선 쐐기(뒤로 갈수록 올라감) ±m(시대 값에 더한다)
-  wbr: .05, // 휠베이스 배율 ±(오버행 길이가 달라진다)
+  wbr: .07, // 휠베이스 배율 ±(오버행 길이가 달라진다)
 } as const;
 export const MIN_ROOF_GAP = .36; // 지붕 − 벨트라인 최소(옆 창이 사라지지 않게)
 export const MIN_CABIN = .45; // 지붕 길이(cF − cR) 최소
@@ -107,9 +107,9 @@ export const ERA_FACE: Record<Era, EraFace> = {
   1990: { lamp: ['oval', 'rect', 'vertical', 'oval', 'projector'], grille: ['rect', 'bars', 'none', 'mesh', 'kidney'], intake: ['wide', 'slim', 'three', 'fog'], bumper: ['body', 'black'], tail: ['bar', 'L', 'vertical', 'round'], wheel: ['spoke5', 'multi', 'twin5', 'turbine', 'mesh'], bar: 0, grilleW: [.8, 1.1],
     def: { lamp: 'oval', lampW: 1, lampDy: 0, bar: false, grille: 'rect', grilleW: 1, grilleH: 1, intake: 'wide', bumper: 'body', tail: 'bar', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'spoke5' } },
   // 2010: 큰 그릴 + 날카롭게 치켜 올라간 전조등, 라이트 바 없음 / 2020: 작거나 막힌 그릴 + 얇은 전조등과 가로 라이트 바
-  2010: { lamp: ['swept', 'swept', 'rect', 'projector'], grille: ['hex', 'hex', 'twin', 'rect', 'mesh', 'kidney', 'vertical'], intake: ['three', 'wide', 'slim', 'fog'], bumper: ['body', 'black'], tail: ['L', 'split', 'bar', 'vertical'], wheel: ['twin5', 'spoke5', 'multi', 'turbine', 'mesh'], bar: 0, grilleW: [1.2, 1.5],
+  2010: { lamp: ['swept', 'swept', 'rect', 'projector'], grille: ['hex', 'hex', 'twin', 'rect', 'mesh', 'kidney', 'vertical', 'hex'], intake: ['three', 'wide', 'slim', 'fog'], bumper: ['body', 'black'], tail: ['L', 'split', 'bar', 'vertical'], wheel: ['twin5', 'spoke5', 'multi', 'turbine', 'mesh'], bar: 0, grilleW: [1.2, 1.5],
     def: { lamp: 'swept', lampW: 1.1, lampDy: 0, bar: false, grille: 'hex', grilleW: 1.4, grilleH: 1.25, intake: 'three', bumper: 'body', tail: 'L', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'twin5' } },
-  2020: { lamp: ['slim', 'slim', 'vertical', 'swept'], grille: ['none', 'none', 'rect', 'bars', 'mesh', 'kidney'], intake: ['wide', 'three', 'slim'], bumper: ['body', 'black'], tail: ['full', 'full', 'L', 'split'], wheel: ['aero', 'twin5', 'multi', 'spoke5', 'turbine'], bar: .85, grilleW: [.45, .7],
+  2020: { lamp: ['slim', 'slim', 'slim', 'vertical'], grille: ['none', 'none', 'rect', 'bars', 'mesh', 'kidney'], intake: ['slim', 'wide', 'slim'], bumper: ['body', 'body', 'black'], tail: ['full', 'full', 'full', 'L'], wheel: ['aero', 'aero', 'twin5', 'multi', 'turbine'], bar: .85, grilleW: [.45, .7],
     def: { lamp: 'slim', lampW: 1, lampDy: 0, bar: true, grille: 'none', grilleW: .6, grilleH: .8, intake: 'wide', bumper: 'black', tail: 'full', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'twin5' } },
 };
 

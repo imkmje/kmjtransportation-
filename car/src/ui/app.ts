@@ -17,6 +17,7 @@ import * as S from '../io/saves';
 import { BUDGET, MARKETING, ROLE_NAME, ROLE_SKILL, STAT_NAME, TIER_SUB, esc, josa, money, num, score } from './fmt';
 import { DEFAULT_LOGO, LOGO_BG, LOGO_FG, LOGO_MARKS, LOGO_SHAPES, PAINT, WHEELS, cleanLogo, logo, logoSvg, lookOf, paintName, ring, type LogoSpec } from './art';
 import { infoOf } from './glossary';
+import { createSound, type Sfx } from './sound';
 
 type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'company' | 'records';
 type Tab = 'garage' | 'dev' | 'company' | 'records';
@@ -94,9 +95,30 @@ export function startApp(): void {
   const panel = $('#panel'), ov = $('#ov'), sheet = $('#sheet'), sheetBody = $('#sheet-body'), title = $('#title');
   const myLogo = (z = 26) => logoSvg(ui.logo, z);
 
+  // ---------- 소리 ----------
+  const sound = createSound();
+  let skipping = false; // 1년 건너뛰기 동안은 효과음을 내지 않는다
+  /** 효과음 한 곳. 아주 빠름에서는 매주·매달 반복음을 뺀다 */
+  const sfx = (n: Sfx) => { if (!skipping && !(speed >= 4 && (n === 'weekTick' || n === 'monthClose'))) sound.play(n); };
+  // 브라우저는 사용자 조작 안에서만 소리를 켤 수 있다(터치는 pointerup이 조작으로 인정되는 브라우저가 있어 둘 다)
+  for (const ev of ['pointerdown', 'pointerup', 'keydown'] as const) document.addEventListener(ev, () => sound.unlock(), true);
+  // 버튼 소리: 문서 전체 click 하나에서. 탭 전환·스위치·가격 −/+는 따로, 나머지 버튼은 tap
+  document.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('button, [role=button], summary, input[type=checkbox]');
+    if (!b || b.matches(':disabled') || b.classList.contains('px-step')) return;
+    sfx(b.closest('#tabs') || b.getAttribute('role') === 'tab' || b.dataset.act === 'ptab' || b.dataset.act === 'cotab' || b.dataset.act === 'rectab' ? 'tabSwitch'
+      : b.matches('[data-act="autoPause"],[data-act="debug"],[data-act="snd"],#mutebtn,input[type=checkbox]') ? 'toggle' : 'tap');
+  }, true);
+  // 창 열기·닫기: 결과 창과 확인 창의 hidden이 바뀌는 한 곳에서
+  for (const el of [sheet, $('#ask')]) new MutationObserver((ms) => { if ((ms[0].oldValue === null) === el.hidden) sfx(el.hidden ? 'close' : 'open'); }).observe(el, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
+
   // ---------- 알림 ----------
   const keyed = new Map<string, HTMLElement>();
-  /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 바꿔 끼운다(월 결산처럼 자주 오는 것) */
+  const closers = new WeakMap<HTMLElement, () => void>();
+  const TOAST_MAX = 2; // 한 번에 보이는 알림 수. 넘으면 오래된 보통 알림부터 닫는다(중요한 알림은 "+N"으로 접어 둔다)
+  /** 키로 띄운 알림을 닫는다(그 알림이 가리키던 일을 이미 한 경우) */
+  const dropToast = (key: string) => { const t = keyed.get(key); if (t?.isConnected) closers.get(t)?.(); };
+  /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 바꿔 끼운다(월 결산처럼 자주 오는 것). 12초 이상 두는 알림(자동 멈춤·현금 경고·결정 대기·리콜·규제)은 중요한 알림 */
   function toast(text: string, kind: '' | 'alert' | 'bad' = '', head = '', ms = kind ? 9000 : 4000, key = '', open?: { label: string; fn: () => void }): void {
     const box = $('#toasts'), t = document.createElement('div');
     box.style.setProperty('--tt', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`); // 폰: 상단바 바로 아래
@@ -106,10 +128,12 @@ export function startApp(): void {
     if (key) keyed.set(key, t);
     t.className = `toast ${kind}`;
     t.innerHTML = `<div>${head ? `<b>${esc(head)}</b>` : ''}${esc(text)}${open ? `<button class="open">${esc(open.label)}</button>` : ''}</div><button class="x" aria-label="닫기">×</button>`;
-    const close = () => { t.classList.add('out'); foldToasts(); setTimeout(() => { t.remove(); foldToasts(); }, 300); };
+    const close = () => { if (t.classList.contains('out')) return; t.classList.add('out'); foldToasts(); setTimeout(() => { t.remove(); foldToasts(); }, 300); };
+    closers.set(t, close); if (ms >= 12000) t.dataset.imp = '1';
     if (open) (t.querySelector('.open') as HTMLElement).onclick = () => { close(); open.fn(); };
     (t.querySelector('.x') as HTMLElement).onclick = close;
     box.appendChild(t);
+    for (let live = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')], n = live.length; n > TOAST_MAX; n--) { const o = live.find((x) => !x.dataset.imp && !x.classList.contains('out')); if (!o) break; closers.get(o)!(); }
     while (box.querySelectorAll('.toast').length > 6) box.querySelector('.toast')!.remove();
     foldToasts();
     setTimeout(close, ms);
@@ -117,14 +141,14 @@ export function startApp(): void {
   /** 좁은 자리(폰·사무실 칸·무대 없는 화면 오른쪽 위)에서는 알림을 2개만 보이고 나머지는 "+N" 한 줄로 접는다 */
   function foldToasts(): void {
     const box = $('#toasts'), list = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')];
-    const tight = box.classList.contains('corner') || box.classList.contains('inofc') || innerWidth < 900, keep = box.classList.contains('open') ? 99 : tight ? 2 : 3, n = list.length - keep;
+    const keep = box.classList.contains('open') ? 99 : TOAST_MAX, n = list.length - keep;
     list.forEach((t, i) => t.classList.toggle('folded', i < n));
     let more = box.querySelector<HTMLElement>('.more');
     if (n <= 0) { more?.remove(); if (list.length <= 2) box.classList.remove('open'); return; }
     if (!more) { more = document.createElement('button'); more.className = 'more'; more.onclick = () => { box.classList.add('open'); foldToasts(); }; box.prepend(more); }
     more.textContent = `+${n} 알림 더 보기`;
   }
-  const err = (reason: string) => toast(reason, 'bad', '할 수 없습니다');
+  const err = (reason: string) => { sfx('error'); toast(reason, 'bad', '할 수 없습니다'); };
   /** 넓은 사무실 배치(태블릿 가로)에서는 알림을 사무실 칸 오른쪽 위(띠 아래)에 작게, 최대 2개 띄워 사람들과 패널 버튼을 가리지 않는다 */
   function placeToasts(): void {
     const box = $('#toasts'), wide = $('#main').classList.contains('wide') && innerWidth >= 900, corner = $('#main').classList.contains('full') && innerWidth >= 900;
@@ -325,7 +349,7 @@ export function startApp(): void {
   function tickOnce(): void {
     if (!game) return;
     const ev = game.tick();
-    logDev(); weekFresh = true;
+    logDev(); weekFresh = true; sfx('weekTick');
     for (const e of ev) onEvent(e);
   }
   function onEvent(e: GameEvent): void {
@@ -334,32 +358,39 @@ export function startApp(): void {
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
         if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
+        // 큰 흑자 = 10억 이상이면서 최근 24개월 최고 이익인 달(늘 버는 후반에 매달 울리지 않게)
+        sfx(L && L.profit >= 100000 && s.ledger.every((x) => x.profit <= L.profit) ? 'cashIn' : 'monthClose');
         void S.put('auto', S.makeSave(game!, uiSnap())); // 매월 자동 저장
         break;
       }
-      case 'designDone': toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
+      case 'designDone': sfx('designDone'); toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
       case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수·결함만(글자가 겹치지 않게)
         if (weekFresh) { const keep = officeEvents.filter((x) => x.kind === 'say'); officeEvents.length = 0; officeEvents.push(...keep); weekFresh = false; }
         officeEvents.push(...officeFromWeek(e)); break;
       }
-      case 'company': toast(e.text, 'alert', '회사', 7000); break;
-      case 'news': { const k = e.category ?? 'other'; toast(newsLine(e.text), 'alert', NEWS_KIND[k], 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break; }
+      case 'company': if (e.text.startsWith('공장')) sfx('factoryBuilt'); toast(e.text, 'alert', '회사', 7000); break;
+      case 'news': { // 규제 예고·시행은 중요한 알림(오래 둔다)
+        const k = e.category ?? 'other', reg = k === 'regulation' || (k === 'preview' && e.text.includes('규제'));
+        if (reg || k === 'start' || k === 'end' || k === 'preview') sfx(reg ? 'regulation' : 'event');
+        toast(newsLine(e.text), 'alert', NEWS_KIND[k], reg ? 15000 : 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break;
+      }
       case 'choice': // 화면 안 창이 떠 있는 동안 시간이 멈춘다. 자동 멈춤을 끄면 창 대신 알림만
         if (quietChoice) break;
+        sfx('event');
         if (!pauseOn.choice) toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() });
         else if (sheet.hidden && $('#ask').hidden && title.hidden) showChoice();
         break;
       case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
         const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
-        if (w) { waitSeen.add(w.id); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
+        if (w) { waitSeen.add(w.id); sfx('readyToLaunch'); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
         else toast(e.text, 'alert', '조언', 9000);
         break;
       }
-      case 'recall': toast(e.text, 'bad', '리콜'); break;
-      case 'unlock': toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
-      case 'cashWarning': toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
+      case 'recall': sfx('recall'); toast(e.text, 'bad', '리콜', 12000); break;
+      case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
+      case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
       case 'discontinued': toast(e.text, '', '단종'); break;
-      case 'gameOver': break; // render()에서 파산 화면을 띄운다
+      case 'gameOver': sfx('bankrupt'); break; // render()에서 파산 화면을 띄운다
     }
   }
   function logDev(): void {
@@ -373,7 +404,7 @@ export function startApp(): void {
       devLog.set(p.id, list.slice(0, 14)); devPrev.set(p.id, pv.avg);
     }
   }
-  function setSpeed(v: number): void { speed = v; acc = 0; renderTop(); }
+  function setSpeed(v: number): void { speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
   /** 자동 멈춤(설정에서 항목별로 끔): 알림은 늘 띄우고, 켜져 있으면 시간을 멈춘다 */
   function autoPause(k: PauseKey, text: string, head: string, open: { label: string; fn: () => void }): void {
     const stop = pauseOn[k] && speed > 0 && !skipPause;
@@ -409,10 +440,22 @@ export function startApp(): void {
   };
 
   // ---------- 상단바·탭 ----------
+  let musicPaused: boolean | null = null;
+  /** 상단바 스피커 버튼(음소거 켬/끔) */
+  function renderMute(): void {
+    const m = sound.settings().muted, b = $('#mutebtn');
+    if (b.dataset.m === String(m)) return;
+    b.dataset.m = String(m); b.setAttribute('aria-pressed', String(m)); b.setAttribute('aria-label', m ? '소리 켜기(지금 꺼짐)' : '소리 끄기');
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>${m ? '<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+  }
   function renderTop(): void {
     stageOn();
+    const mp = !game || !title.hidden || speed === 0 || game.state.status !== 'playing'; // 배경 음악: 멈춤·처음 화면·파산 화면에서 쉰다
+    if (mp !== musicPaused) { musicPaused = mp; sound.setPaused(mp); }
+    renderMute();
     if (!game) return;
     const s = game.state;
+    sound.setEra(yearOf(s.week));
     $('#co').textContent = s.companyName;
     { const lg = myLogo(26), el = $('#mylogo'); if (el.dataset.k !== lg) { el.innerHTML = lg; el.dataset.k = lg; } }
     $('#date').textContent = game.dateLabel;
@@ -445,6 +488,8 @@ export function startApp(): void {
     if (screen === 'launch' && (!launch || !Q.projectById(s, launch.pid))) screen = 'dev';
     if (screen === 'plan' && !draft) screen = 'dev';
     if (screen === 'lift' && (!lift || !Q.generationById(s, lift.genId))) screen = 'garage';
+    if (screen === 'launch') dropToast('pause-ready'); // 알림이 가리키던 화면에 왔으면 그 알림은 닫는다
+    if (screen === 'company' && coTab === 'staff') dropToast('pause-cands');
     const v: View = screen === 'garage' ? garageView() : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView()
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : recordsView(), look: undefined };
@@ -905,7 +950,7 @@ export function startApp(): void {
     sheet.hidden = false; renderTop();
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches, gap = still ? 0 : 650;
     list.forEach((_, i) => reviewTimers.push(window.setTimeout(() => { const el = sheetBody.querySelector(`.critic[data-i="${i}"]`); el?.classList.remove('wait'); el?.classList.add('pop'); }, gap * (i + 1))));
-    reviewTimers.push(window.setTimeout(() => $('#rv-avg').classList.add('show'), gap * (list.length + 1)));
+    reviewTimers.push(window.setTimeout(() => { $('#rv-avg').classList.add('show'); sfx(avg >= 7 ? 'reviewGood' : avg >= 4.5 ? 'reviewMid' : 'reviewBad'); }, gap * (list.length + 1)));
     reviewTimers.push(window.setTimeout(() => { $('#rv-news').classList.add('show'); sheetBody.querySelector<HTMLElement>('[data-act="closeReview"]')?.focus(); }, gap * (list.length + 2)));
   }
 
@@ -1231,7 +1276,7 @@ export function startApp(): void {
     coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = '';
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = '';
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
-    title.hidden = true; sheet.hidden = true; makeStage(); speed = 1; acc = 0;
+    title.hidden = true; sheet.hidden = true; makeStage(); setSpeed(1);
     $('#toasts').innerHTML = ''; $('#toasts').classList.remove('open'); keyed.clear(); // 전 게임의 알림을 남기지 않는다
     render();
   }
@@ -1267,9 +1312,18 @@ export function startApp(): void {
       <button class="btn" data-act="logoSheet" style="width:100%;margin-top:10px">회사 로고 바꾸기</button>
       <p class="lbl" style="margin-top:14px">자동 멈춤</p><div class="pause-set">${PAUSE_ITEMS.map(([k, n]) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="autoPause" data-v="${k}" aria-pressed="${pauseOn[k]}">${pauseOn[k] ? '켜짐' : '꺼짐'}</button></div>`).join('')}</div>
       <p class="note">켜 둔 항목이 생기면 시간을 멈추고 알림을 띄웁니다. 끄면 알림만 띄우고 시간은 계속 흐릅니다. 이 기기에 저장됩니다.</p>
+      ${soundSet()}
       <div class="toggle" style="margin-top:10px"><span>디버그 표시(화면 속도·주 번호·시드)</span><button class="btn" data-act="debug" aria-pressed="${debugOn}">${debugOn ? '켜짐' : '꺼짐'}</button></div>
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
     sheet.hidden = false; renderTop();
+  }
+  /** 메뉴의 소리 설정: 음량 슬라이더 3개, 음소거, 주 넘김 소리. 값은 sound.set()이 이 기기에 저장한다 */
+  const SND_LEVELS = [['master', '전체 음량'], ['sfx', '효과음'], ['music', '배경 음악']] as const;
+  function soundSet(): string {
+    const st = sound.settings(), sw = (k: 'muted' | 'weekTick', n: string) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="snd" data-v="${k}" aria-pressed="${st[k]}">${st[k] ? '켜짐' : '꺼짐'}</button></div>`;
+    return `<p class="lbl" style="margin-top:14px">소리</p><div class="snd-set">${SND_LEVELS.map(([k, n]) => `<label class="snd-row"><span>${n}</span><input type="range" class="snd-r" data-k="${k}" min="0" max="100" step="5" value="${Math.round(st[k] * 100)}"><b>${Math.round(st[k] * 100)}%</b></label>`).join('')}
+      ${sw('muted', '음소거')}${sw('weekTick', '주 넘김 소리(한 주가 지날 때마다 짧게)')}</div>
+      <p class="note">이 기기에 저장됩니다. 상단바의 스피커 버튼으로도 소리를 끄고 켤 수 있습니다.</p>`;
   }
   // ---------- 개발자 메뉴(시험용): 상단바 로고를 두 번 톡 ----------
   const DEV_CHEATS = [['cash', '현금 +500억'], ['reputation', '평판 +10'], ['finishResearch', '진행 중 연구 즉시 완료'], ['finishDev', '진행 중 개발 즉시 완료'], ['restStaff', '직원 컨디션 회복']] as const;
@@ -1286,7 +1340,10 @@ export function startApp(): void {
   }
 
   // ---------- 조작 ----------
-  function run(r: { ok: true } | { ok: false; reason: string }): boolean { if (!r.ok) err(r.reason); return r.ok; }
+  /** 명령이 성공했을 때의 소리(누른 버튼의 data-act 기준). 실패는 err()가 error 소리 */
+  const ACT_SFX: Record<string, Sfx> = { startDev: 'devStart', startLift: 'devStart', doLaunch: 'launch', hire: 'hire', fire: 'fire', train: 'train', upgradeHQ: 'hqUpgrade', expandFactory: 'cashOut', borrow: 'cashOut', retrofit: 'cashOut' };
+  let curAct = '';
+  function run(r: { ok: true } | { ok: false; reason: string }): boolean { if (!r.ok) err(r.reason); else if (ACT_SFX[curAct]) sfx(ACT_SFX[curAct]); return r.ok; }
   async function act(a: string, el: HTMLElement): Promise<void> {
     const v = el.dataset.v ?? '', s = game?.state;
     switch (a) {
@@ -1494,6 +1551,7 @@ export function startApp(): void {
       case 'import': importFile(); return;
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
+      case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
       case 'closeSheet': sheet.hidden = true; render(); return;
       case 'logoSheet': showLogoSheet(); return;
       case 'devCheat': {
@@ -1503,8 +1561,8 @@ export function startApp(): void {
         toast(`${DEV_CHEATS.find((x) => x[0] === v)?.[1] ?? v} 적용`, '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
       case 'devYear': { // 화면 갱신 없이 48주. 사건 창·자동 멈춤 없이
-        if (!game) return; quietChoice = skipPause = true;
-        try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = false; }
+        if (!game) return; quietChoice = skipPause = skipping = true;
+        try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = skipping = false; }
         toast('48주를 건너뛰었습니다.', '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
       case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); return;
@@ -1519,7 +1577,7 @@ export function startApp(): void {
 
   document.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-act]');
-    if (b && !b.hasAttribute('disabled')) void act(b.dataset.act!, b);
+    if (b && !b.hasAttribute('disabled')) { curAct = b.dataset.act!; void act(curAct, b); }
   });
   document.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement;
@@ -1528,14 +1586,15 @@ export function startApp(): void {
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }
     else if (t.id === 'lprice' && launch) { launch.price = Number(t.value); render(); }
     else if (t.id === 'gprice') { garagePrice.set(Number(t.dataset.gen), Number(t.value)); render(); }
-    else if (t.classList.contains('alloc-r')) { const o = t.parentElement?.querySelector('.alloc-v'); if (o) o.textContent = `${t.value}%`; }
+    else if (t.classList.contains('alloc-r')) { const o = t.parentElement?.querySelector('.alloc-v'); if (o) o.textContent = `${t.value}%`; sfx('sliderTick'); }
+    else if (t.classList.contains('snd-r')) { sound.set({ [t.dataset.k!]: Number(t.value) / 100 }); const o = t.parentElement?.querySelector('b'); if (o) o.textContent = `${t.value}%`; sfx('sliderTick'); }
   });
   // 가격 슬라이더: 손가락 위치를 직접 값으로 바꾼다(브라우저 기본 슬라이더는 작은 손잡이만 잡히고, 패널 스크롤·다시 그리기와 다퉈 놓치기 쉬웠다).
   // −/+ 단추는 한 번에 한 단계, 길게 누르면 연속. 키보드는 기본 슬라이더 그대로
   let pxMove = false, pxRep = 0;
   const setPx = (r: HTMLInputElement, v: number) => {
     const min = Number(r.min), max = Number(r.max), st = Number(r.step) || 1, x = Math.max(min, Math.min(max, min + Math.round((v - min) / st) * st));
-    if (String(x) !== r.value) { r.value = String(x); r.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (String(x) !== r.value) { r.value = String(x); r.dispatchEvent(new Event('input', { bubbles: true })); sfx('sliderTick'); }
   };
   const pxAt = (r: HTMLInputElement, x: number) => { const b = r.getBoundingClientRect(), k = Math.max(0, Math.min(1, (x - b.left - 22) / Math.max(1, b.width - 44))); return Number(r.min) + k * (Number(r.max) - Number(r.min)); }; // 22: 손잡이 반지름(CSS 44px)
   document.addEventListener('pointerdown', (e) => {
@@ -1569,6 +1628,7 @@ export function startApp(): void {
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
   for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); });
   $('#menubtn').addEventListener('click', () => void showMenu());
+  $('#mutebtn').addEventListener('click', () => { sound.set({ muted: !sound.settings().muted }); renderMute(); });
   { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 350) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
@@ -1587,7 +1647,7 @@ export function startApp(): void {
     get draft() { return draft; }, get lift() { return lift; }, get launch() { return launch; }, get planTab() { return planTab; },
     genLook: (id: number) => { const g = game && Q.generationById(game.state, id); return g ? genLook(g) : null; },
     get tip() { return tip.hidden ? null : { key: tip.dataset.key, hover: tipHover, text: tip.innerText }; },
-    setSpeed, render, held: isHeld, toast,
+    setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
   };
 
