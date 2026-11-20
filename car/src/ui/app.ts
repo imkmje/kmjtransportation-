@@ -46,9 +46,7 @@ const EV = config.events.charging.powertrain;
 const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.querySelector<T>(s)!;
 /** 용어 설명 단추(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
 const ib = (key: string, label = key.slice(key.indexOf(':') + 1)) => `<span class="ib" role="button" tabindex="0" data-info="${esc(key)}" aria-label="${esc(label)} 설명"></span>`;
-/** 개발 진행 상황(sim 0.4.1에서 추가 예정). 아직 없으면 null */
-type ProjStatus = { phase: string; waiting: boolean; weeklyCost: number; costNote: string };
-const projectStatus = (s: unknown, id: number): ProjStatus | null => { const f = (Q as unknown as Record<string, unknown>).projectStatus; return typeof f === 'function' ? (f(s, id) as ProjStatus | null) : null; };
+
 
 export function startApp(): void {
   let game: Game | null = null;
@@ -142,7 +140,7 @@ export function startApp(): void {
     if (key.startsWith('tech:') && game) {
       const t = Q.researchInfo(game.state).fields.flatMap((f) => f.techs).find((x) => x.id === key.slice(5));
       const base = infoOf(key);
-      if (t) return { title: t.name, text: `${base?.text ?? t.desc} 효과: ${t.effects}. ${t.year}년 기술.` };
+      if (t) return { title: t.name, text: base ? `${base.text} (${t.year}년 기술)` : `${t.desc} 효과: ${t.effects}. ${t.year}년 기술.` };
     }
     return infoOf(key);
   }
@@ -238,7 +236,7 @@ export function startApp(): void {
   function officeView(p?: Project): OfficeView {
     const s = game!.state;
     return {
-      level: Math.min(5, Math.max(1, s.hqLevel)) as OfficeView['level'], phase: p ? p.phase : 'rest', budget: p?.budget ?? 'normal',
+      level: Math.min(5, Math.max(1, s.hqLevel)) as OfficeView['level'], phase: p && !p.waiting ? p.phase : 'rest', // 출시 대기면 쉬는 모습 budget: p?.budget ?? 'normal',
       // 교육·휴식 중이면 일하지 않는 자세. 영업 직원은 프로젝트 없이도 일하는 중
       staff: Q.staffInfo(s).map((x) => ({ id: String(x.id), name: x.name, role: x.role, condition: x.condition, working: x.status === 'working' || x.status === 'sales' })),
       projectName: p ? `${p.name}${p.kind === 'facelift' ? ' 페이스리프트' : ''}` : undefined,
@@ -302,6 +300,7 @@ export function startApp(): void {
   const isHeld = (): boolean => !game || !title.hidden || !sheet.hidden || !$('#ask').hidden || deciding() || game.state.status !== 'playing';
   const decisionHeld = (): boolean => !!game && title.hidden && (!sheet.hidden || !$('#ask').hidden || deciding());
 
+  const waitSeen = new Set<number>(); // 출시 대기 알림을 띄운 프로젝트
   let quietChoice = false; // 점검용 __car.tick: 사건 창을 띄우지 않는다(popups를 주면 띄움)
   let weekFresh = false; // 한 주에 여러 프로젝트의 주간 기록이 오면 모두 모은다
   function tickOnce(): void {
@@ -327,7 +326,12 @@ export function startApp(): void {
       case 'company': toast(e.text, 'alert', '회사', 7000); break;
       case 'news': { const k = e.category ?? 'other'; toast(newsLine(e.text), 'alert', NEWS_KIND[k], 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break; }
       case 'choice': if (!quietChoice && sheet.hidden && $('#ask').hidden && title.hidden) showChoice(); break; // 화면 안 창이 떠 있는 동안 시간이 멈춘다
-      case 'advice': toast(e.text, 'alert', '조언', 9000); break;
+      case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
+        const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
+        if (w) { waitSeen.add(w.id); toast(e.text, 'alert', `「${w.name}」 출시 대기`, 20000, '', { label: '출시 준비', fn: () => openLaunch(w.id) }); }
+        else toast(e.text, 'alert', '조언', 9000);
+        break;
+      }
       case 'recall': toast(e.text, 'bad', '리콜'); break;
       case 'unlock': toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
       case 'cashWarning': toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
@@ -760,9 +764,9 @@ export function startApp(): void {
       <p class="hint team-line">만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}</p>
       <div class="prog ${p.phase === 'test' ? 'test' : ''}"><u style="width:${pct.toFixed(1)}%"></u></div>
       <p class="lbl" style="margin-top:12px">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}</div>`;
-    const ps = projectStatus(s, p.id), wait = !!ps?.waiting;
-    const costLine = ps ? `<p class="hint cost-line" style="margin-top:8px">${wait ? '개발비가 더 들지 않습니다' : `주마다 약 ${money(ps.weeklyCost)}`}${ps.costNote ? ` · ${esc(ps.costNote)}` : ''}</p>` : '';
-    const card2 = `<div class="card"><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>${costLine}
+    const ps = Q.projectStatus(s, p.id), wait = !!ps?.waiting;
+    const costLine = ps && !wait ? `<p class="hint cost-line" style="margin-top:8px">${esc(ps.costNote)}</p>` : '';
+    const card2 = `<div class="card"><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}${ps ? kpi('주마다 드는 개발비', wait ? '0원' : `약 ${money(ps.weeklyCost)}`) : ''}</div>${costLine}
       ${wait ? '<div class="okbox wait-badge" style="margin-top:10px"><b>출시 대기</b> · 개발비가 들지 않습니다</div>' : ''}
       ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}
       <button class="go${wait && ready ? ' pulse' : ''}" data-act="toLaunch" ${ready ? '' : 'disabled'}>${ready ? '출시 준비 →' : p.phase === 'design' ? '설계가 끝나면 시험을 시작합니다' : `시험 ${minT}주 뒤 출시할 수 있습니다`}</button>
@@ -805,6 +809,16 @@ export function startApp(): void {
       ${free ? '' : `<div class="badbox" style="margin-top:10px">생산 라인이 모두 차 있습니다(공장 라인 ${Q.linesOf(s)}개). 차고에서 판매 중인 차를 단종하면 그달 말부터 라인이 빕니다. 공장을 증설하면 라인이 늘어납니다.</div><button class="btn" data-act="tab" data-v="garage" style="width:100%;margin-top:8px">차고로 가서 단종하기</button>`}
       <div class="row" style="margin-top:12px"><button class="btn" data-act="devHome">← 개발 화면으로</button><button class="go" data-act="doLaunch" ${free && !reg ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div></div>`;
     return { ov: ovh, panel: card0 + card1 + card2 + card3 + card4, look };
+  }
+
+  /** 출시 준비 화면 열기. 고르던 값(가격·광고·색·휠)이 있으면 그대로 */
+  function openLaunch(pid: number): void {
+    const s = game!.state, p = Q.projectById(s, pid); if (!p) return;
+    devSel = pid;
+    if (launch?.pid === p.id) { go('launch'); return; }
+    const g = p.kind === 'facelift' ? Q.generationById(s, p.targetId ?? -1) : undefined, e = g && currentEdition(g); // 페이스리프트: 지금 가격·색·휠·광고에서 시작
+        launch = e ? { pid: p.id, price: e.price, marketing: g!.marketing, color: e.color, wheels: e.wheels } : { pid: p.id, price: bodyById(p.body).basePrice, marketing: 1, color: ui.colors[p.id] ?? PAINT[0][1], wheels: 1 };
+    go('launch');
   }
 
   // ----- 리뷰 -----
@@ -1258,13 +1272,7 @@ export function startApp(): void {
         if (run(game.command({ type: 'cancelProject', projectId: p.id }))) { delete ui.colors[p.id]; if (launch?.pid === p.id) launch = null; toast('개발을 취소했습니다'); go('dev'); }
         return;
       }
-      case 'toLaunch': {
-        const p = s && curProj(); if (!p) return;
-        const g = p.kind === 'facelift' ? Q.generationById(s!, p.targetId ?? -1) : undefined, e = g && currentEdition(g); // 페이스리프트: 지금 가격·색·휠·광고에서 시작
-        if (launch?.pid === p.id) { go('launch'); return; } // 고르던 값(가격·광고·색·휠) 그대로
-        launch = e ? { pid: p.id, price: e.price, marketing: g!.marketing, color: e.color, wheels: e.wheels } : { pid: p.id, price: bodyById(p.body).basePrice, marketing: 1, color: ui.colors[p.id] ?? PAINT[0][1], wheels: 1 };
-        go('launch'); return;
-      }
+      case 'toLaunch': { const p = s && curProj(); if (p) openLaunch(p.id); return; }
       case 'lset': if (!launch) return; (launch as unknown as Record<string, unknown>)[el.dataset.k!] = el.dataset.k === 'color' ? v : Number(v); render(); return;
       case 'doLaunch': {
         if (!game || !launch) return;
