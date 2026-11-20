@@ -278,6 +278,7 @@ await page.click('#tabs button[data-tab="dev"]');
 await page.waitForTimeout(300);
 check('개발 탭(개발 없음): 쉬는 사무실 + [신차 기획]', await G(() => { const o = window.__car.office; return o.on && o.view?.phase === 'rest' && o.view.staff.length === 4; }) && (await page.locator('#office:not([hidden]) svg').count()) >= 1 && (await page.locator('#ov [data-act="plan"]').count()) === 1 && (await page.locator('#cv').isHidden()));
 check('사무실이 보이면 3D 무대 그리기 멈춤', (await G(() => window.__car.stage?.active)) === false);
+await page.waitForTimeout(800);
 await shot('office-rest');
 await act('plan');
 check('기획 첫 화면(차종 있음): 3갈래, 풀체인지·손보기는 남은 개월과 함께 흐림', (await page.locator('.choice').count()) === 3 && (await page.locator('.choice[data-v="new"]').isEnabled()) && (await page.locator('.choice[data-v="full"]').isDisabled()) && /앞으로 \d+개월/.test(await page.locator('.choice[data-v="full"]').innerText()) && /앞으로 \d+개월/.test(await page.locator('.np .why').first().innerText()));
@@ -300,6 +301,7 @@ const sc0 = await G(() => window.__car.office.scores);
 await page.waitForTimeout(1900); // 점수 연출은 1.8초에 한 번까지
 await tick(2);
 check('한 주가 지나면 사무실에 점수 연출이 나감', (await G(() => window.__car.office.scores)) > sc0, `${sc0} → ${await G(() => window.__car.office.scores)}`);
+check('사무실 칸에 위쪽 띠 높이(--office-top-inset)를 넣음', await G(() => { const v = parseFloat(document.getElementById('office').style.getPropertyValue('--office-top-inset')), h = document.querySelector('#ov .ofc').getBoundingClientRect().height; return v > 0 && Math.abs(v - h) <= 1; }));
 check('사무실 위 글자는 위쪽 가장자리에만(무대 위 1/3 안)', await G(() => { const o = document.querySelector('#ov .ofc').getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect(); return o.bottom <= st.top + st.height / 3; }));
 await page.waitForTimeout(1200);
 await shot('office-design');

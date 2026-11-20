@@ -105,7 +105,7 @@ export function startApp(): void {
     const host = $('#office');
     host.hidden = !v; $<HTMLCanvasElement>('#cv').hidden = !stage || !!v;
     if (v) {
-      $('#fb').hidden = true;
+      $('#fb').hidden = true; setOfficeInset();
       office ??= createOffice(host);
       office.update(v); officeLast = v; // update → emit 순서
       // 점수 글자는 약 1.8초 떠 있으므로 그보다 자주 보내지 않는다(빠르기 4배면 한 주가 0.375초라 겹친다). 못 보낸 것은 다음 주 기록이 바꿔 끼운다
@@ -118,6 +118,12 @@ export function startApp(): void {
     } else { const keep = officeEvents.filter((e) => e.kind === 'say').slice(-2); officeEvents.length = 0; officeEvents.push(...keep); } // 주간 점수는 버리고 말풍선만 남긴다
     stageOn();
   }
+  /** 사무실 모듈이 위쪽 띠 아래 공간의 가운데에 맞추도록 띠의 실제 높이를 알려 준다 */
+  function setOfficeInset(): void {
+    const band = document.querySelector<HTMLElement>('#ov .ofc');
+    $('#office').style.setProperty('--office-top-inset', `${band ? Math.round(band.getBoundingClientRect().height) : 0}px`);
+  }
+  addEventListener('resize', () => { if (officeOn) setOfficeInset(); }); // 사무실의 크기 감시(ResizeObserver)보다 먼저 돈다
   function officeView(p?: Project): OfficeView {
     const s = game!.state;
     return {
@@ -271,9 +277,9 @@ export function startApp(): void {
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : recordsView(), look: undefined };
     $('#main').classList.toggle('full', v.look === undefined && !v.office);
+    if (v.ov !== lastOv) { ov.innerHTML = v.ov; lastOv = v.ov; } // 띠 높이를 사무실보다 먼저 정한다(--office-top-inset)
     showOffice(v.office ?? null);
     if (v.look !== undefined && !v.office) showLook(v.look);
-    if (v.ov !== lastOv) { ov.innerHTML = v.ov; lastOv = v.ov; }
     const ae = document.activeElement as HTMLElement | null;
     const busy = !!ae && panel.contains(ae) && (ae.matches('input[type=text]') || (dragging && ae.matches('input[type=range]')));
     if (!busy && v.panel !== lastPanel) { const y = panel.scrollTop; panel.innerHTML = v.panel; panel.scrollTop = y; lastPanel = v.panel; }
