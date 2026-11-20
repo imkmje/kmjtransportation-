@@ -1000,6 +1000,12 @@ await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act
   await tp.setViewportSize({ width: 1366, height: 1024 }); await tp.waitForTimeout(300);
   check('가격 화면(1366×1024): 스크롤 없이 한 화면', await inView());
   if (process.argv[2]) await tp.screenshot({ path: process.argv[2].replace('.png', '-price-1366x1024.png') });
+  await tp.setViewportSize({ width: 1024, height: 768 });
+  await tp.locator('[data-act="doLaunch"]').tap(); if (await tp.locator('#ask').isVisible()) await tp.tap('#ask-yes');
+  await tp.waitForSelector('#sheet:not([hidden])'); await TG(() => document.querySelector('#sheet [data-act="closeReview"]').click());
+  await TG(() => window.__car.tick(8)); await tp.tap('#tabs button[data-tab="garage"]'); await tp.waitForTimeout(300);
+  check('차고 가격 카드(1024×768): 패널 맨 위, 스크롤 없이 슬라이더·기준가 대비·예상 월 판매·예상 월 이익', (await TG(() => document.querySelector('#panel > .card')?.classList.contains('price-card') && !!document.getElementById('gprice'))) && await inView());
+  if (process.argv[2]) await tp.screenshot({ path: process.argv[2].replace('.png', '-garage-price-1024x768.png') });
   await tctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
