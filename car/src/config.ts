@@ -165,7 +165,7 @@ export const config = {
   difficulty: {
     easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 18, rivalMult: 0.88, upkeepMult: 0.8, prototypeMult: 0.8, recallMult: 0.6, manyDefects: 20, bailouts: 2 },
     normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1 },
-    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.08, upkeepMult: 1.15, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
+    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
   },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },

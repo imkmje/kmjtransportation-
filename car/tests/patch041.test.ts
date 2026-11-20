@@ -1,7 +1,13 @@
 // 0.4.1 긴급 수정: 출시 대기(결함을 다 잡으면 개발비 0), 설명 필드(info), 문구 용어
 import { describe, it, expect } from 'vitest';
 import { Game, allGens } from '../src/sim/game';
-import { projectStatus, researchInfo } from '../src/sim/queries';
+import { defectAdvice, difficultyInfo, loanLimit, projectStatus, researchInfo, upkeepOf } from '../src/sim/queries';
+import { weeklyDevCost } from '../src/sim/dev';
+import { criticScores } from '../src/sim/reviews';
+import { monthlyDemand } from '../src/sim/market';
+import { clumsy, idle, novice, steady, type Bot } from '../src/sim/bots';
+import { monthOf } from '../src/sim/time';
+import type { Difficulty } from '../src/sim/types';
 import { BODIES, OPTIONS, POWERTRAINS, SEGMENTS, TECHS, RANDOM_EVENTS, ERA_EVENTS } from '../src/data';
 import { config } from '../src/config';
 import { SPEC, ok } from './util';
@@ -74,5 +80,78 @@ describe('설명 필드와 용어(0.4.1)', () => {
     const texts = [...TECHS.flatMap((t) => [t.name, t.desc]), ...ERA_EVENTS.flatMap((e) => [e.warn, e.start, e.end]), ...RANDOM_EVENTS.flatMap((e) => [e.text, ...e.choices.flatMap((c) => [c.label, c.result])])];
     for (const t of texts) { expect(t).not.toContain('!'); expect(t).not.toMatch(/봐주는|알려진 정도|환율 보험|숨 잘 쉬는/); }
     expect(RANDOM_EVENTS.find((e) => e.id === 'fx')!.choices[0].label).toBe('환 헤지');
+  });
+});
+
+describe('난이도(0.4.1)', () => {
+  const D = config.difficulty;
+  it('새 게임 기본은 쉬움, 예전 저장(필드 없음)은 보통. 시작 현금·대출 한도·유지비가 표대로', () => {
+    const e = Game.create({ seed: 1 }).state, n = Game.create({ difficulty: 'normal', seed: 1 }).state, h = Game.create({ difficulty: 'hard', seed: 1 }).state;
+    expect(e.difficulty).toBe('easy'); expect(e.cash).toBe(D.easy.cash); expect(n.cash).toBe(D.normal.cash); expect(h.cash).toBe(D.hard.cash);
+    expect(loanLimit(e)).toBe(D.easy.loanBase); expect(loanLimit(n)).toBe(D.normal.loanBase); expect(loanLimit(h)).toBe(D.hard.loanBase);
+    expect(upkeepOf(e)).toBeCloseTo(upkeepOf(n) * D.easy.upkeepMult, 9); expect(upkeepOf(h)).toBeCloseTo(upkeepOf(n) * D.hard.upkeepMult, 9);
+    const old = JSON.parse(JSON.stringify(e)); delete old.difficulty;
+    const loaded = Game.fromJSON(old).state;
+    expect(loaded.difficulty).toBeUndefined(); expect(loanLimit(loaded)).toBe(D.normal.loanBase);
+    expect(() => Game.create({ seed: 1, difficulty: 'nightmare' as never })).toThrow();
+  });
+  it('시제차 비용·평론 감점 기준·리콜 비용·경쟁 차 세기가 난이도를 따른다', () => {
+    const mk = (d: 'easy' | 'normal') => { const g = Game.create({ difficulty: d, seed: 1 }); ok(g.command({ type: 'startProject', ...SPEC })); return g; };
+    const e = mk('easy'), n = mk('normal'), pe = e.state.projects[0], pn = n.state.projects[0];
+    expect(weeklyDevCost(n.state, pn) - weeklyDevCost(e.state, pe)).toBeCloseTo(config.dev.prototypePerWeek * (1 - D.easy.prototypeMult), 6);
+    const stats = { P: 100, E: 100, U: 100, D: 100, Q: 100 };
+    expect(criticScores(stats, 1970, 1200, 1200, 17, () => 0, D.easy.manyDefects)[0]).toBeGreaterThan(criticScores(stats, 1970, 1200, 1200, 17, () => 0, D.normal.manyDefects)[0]);
+    pe.defectEst = 17; expect(defectAdvice(pe, e.state).level).toBe('some'); expect(defectAdvice(pe, n.state).level).toBe('many');
+    const car = { body: 'sedanS', segment: 'worker', stats, price: 1200, awareness: 0.3, life: 1, powertrain: 'gasoline' };
+    expect(monthlyDemand(e.state, car, [], 1975)).toBeGreaterThan(monthlyDemand(n.state, car, [], 1975)); // 쉬움은 경쟁 차가 약하다
+    // 리콜 비용: 쉬움은 보통의 60%
+    for (const g of [e, n]) { const s = g.state; while (s.projects[0].phase === 'design' || s.projects[0].testWeeks < 2) g.tick(); ok(g.command({ type: 'launch', projectId: s.projects[0].id, price: 1200, marketing: 1, color: 'red', wheels: 0 })); }
+    const recallCost = (g: Game) => { const gen = allGens(g.state)[0]; gen.editions[0].defects = 20; for (let i = 0; i < 48 * 6; i++) if (g.tick().some((x) => x.kind === 'recall')) return g.state.ledger.at(-1)!.recall / gen.totalSold; return NaN; }; // 리콜 비용 = 그달까지의 누적 판매 × 대당 비용
+    expect(recallCost(e)).toBeCloseTo(config.recall.costPerCar * D.easy.recallMult, 6); expect(recallCost(n)).toBeCloseTo(config.recall.costPerCar, 6);
+  });
+  it('파산 유예·경고 문구·구제 금융 횟수가 난이도를 따른다(쉬움 18개월·2회, 어려움 6개월·0회)', () => {
+    const g = Game.create({ seed: 1 }); g.state.cash = -1;
+    const w: string[] = [];
+    while (g.state.status === 'playing') for (const e of g.tick()) if (e.kind === 'cashWarning') w.push(e.text);
+    expect(g.state.negMonths).toBe(D.easy.bankruptcyMonths);
+    expect(w[0]).toBe('현금이 1개월째 마이너스입니다. 18개월이 되면 파산합니다. 대출 한도 50억원이 남아 있습니다.');
+    ok(g.command({ type: 'bailout' })); expect(g.state.loan.bailoutUsed).toBe(false);
+    g.state.cash = -1; ok(g.command({ type: 'bailout' })); expect(g.state.loan.bailoutUsed).toBe(true); expect(g.state.loan.bailouts).toBe(2);
+    g.state.cash = -1; expect(g.command({ type: 'bailout' })).toEqual({ ok: false, reason: '구제 금융은 2번까지만 받을 수 있습니다.' });
+    const h = Game.create({ seed: 1, difficulty: 'hard' }); h.state.cash = -1;
+    expect(h.state.loan.bailoutUsed).toBe(true);
+    expect(h.command({ type: 'bailout' })).toEqual({ ok: false, reason: '이 난이도에서는 구제 금융을 받을 수 없습니다.' });
+    while (h.state.status === 'playing') h.tick();
+    expect(h.state.negMonths).toBe(D.hard.bankruptcyMonths);
+  });
+  it('difficultyInfo: 세 난이도의 이름·설명·주요 차이', () => {
+    expect(difficultyInfo().map((d) => [d.id, d.name, d.cash, d.loanBase, d.bankruptcyMonths, d.bailouts, d.isDefault])).toEqual([
+      ['easy', '쉬움', 500000, 500000, 18, 2, true], ['normal', '보통', 300000, 300000, 12, 1, false], ['hard', '어려움', 220000, 200000, 6, 0, false]]);
+    for (const d of difficultyInfo()) { expect(d.desc.length).toBeGreaterThan(10); expect(d.desc).not.toContain('!'); }
+  });
+});
+
+describe('난이도 균형(0.4.1, 시드 20개)', () => {
+  const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+  const median = (xs: number[]) => { const v = [...xs].sort((a, b) => a - b); return (v[9] + v[10]) / 2; };
+  /** years년 돌려 살아 있는 판 수·현금 중앙값·파산 달 */
+  const run = (bot: () => Bot, d: Difficulty, years: number) => SEEDS.map((seed) => {
+    const g = Game.create({ seed, difficulty: d }), b = bot();
+    for (let w = 0; w < years * 48 && g.state.status === 'playing'; w++) { b.step(g); g.tick(); }
+    return { alive: g.state.status === 'playing', cash: g.state.cash, month: monthOf(g.state.week) };
+  });
+  const alive = (rs: { alive: boolean }[]) => rs.filter((r) => r.alive).length;
+  it('쉬움: novice 10년 생존 95% 이상·20년 90% 이상, clumsy 10년 70% 이상, idle은 15년 안에 파산', () => {
+    const n10 = run(() => novice(), 'easy', 10), n20 = run(() => novice(), 'easy', 20), c10 = run(() => clumsy(), 'easy', 10), id = run(() => idle, 'easy', 15);
+    console.log(`쉬움: novice 10년 ${alive(n10)}/20, 20년 ${alive(n20)}/20, clumsy 10년 ${alive(c10)}/20, idle 파산 달 중앙값 ${median(id.map((r) => r.month))}`);
+    expect(alive(n10)).toBeGreaterThanOrEqual(19); expect(alive(n20)).toBeGreaterThanOrEqual(18);
+    expect(alive(c10)).toBeGreaterThanOrEqual(14);
+    for (const r of id) { expect(r.alive).toBe(false); expect(r.month).toBeLessThan(15 * 12); }
+  });
+  it('어려움: steady 10년 생존 50~85%. novice 10년 현금 중앙값 쉬움 > 보통 > 어려움', () => {
+    const st = run(() => steady(), 'hard', 10), cash = (['easy', 'normal', 'hard'] as const).map((d) => median(run(() => novice(), d, 10).map((r) => r.cash)));
+    console.log(`어려움 steady 10년 ${alive(st)}/20, novice 10년 현금 중앙값 쉬움 ${Math.round(cash[0] / 1e4)}억 / 보통 ${Math.round(cash[1] / 1e4)}억 / 어려움 ${Math.round(cash[2] / 1e4)}억`);
+    expect(alive(st)).toBeGreaterThanOrEqual(10); expect(alive(st)).toBeLessThanOrEqual(17);
+    expect(cash[0]).toBeGreaterThan(cash[1]); expect(cash[1]).toBeGreaterThan(cash[2]);
   });
 });
