@@ -6,7 +6,7 @@ import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Stat, type Stats } from '../sim/types';
+import { STATS, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook, distinctFaces } from '../render/variant';
@@ -18,6 +18,7 @@ import { BUDGET, MARKETING, ROLE_NAME, ROLE_SKILL, STAT_NAME, TIER_SUB, esc, jos
 import { DEFAULT_LOGO, LOGO_BG, LOGO_FG, LOGO_MARKS, LOGO_SHAPES, PAINT, WHEELS, cleanLogo, logo, logoSvg, lookOf, paintName, ring, type LogoSpec } from './art';
 import { infoOf } from './glossary';
 import { createSound, type Sfx } from './sound';
+import { testCut } from '../sim/dev';
 
 type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'company' | 'records';
 type Tab = 'garage' | 'dev' | 'company' | 'records';
@@ -81,7 +82,6 @@ export function startApp(): void {
   const thumbs = new Map<string, string>(); // 모양 후보 썸네일 캐시
   const garagePrice = new Map<number, number>(); // 차고 가격 슬라이더(적용 전 값)
   const devLog = new Map<number, string[]>(), devPrev = new Map<number, number>();
-  const defRate = new Map<number, number[]>(); // 프로젝트별 최근 4주의 결함 순감소(남은 기간 어림용)
   let stage: Stage | null = null, lookKey = '';
   let debugOn = (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
   const pauseOn = ((): Record<PauseKey, boolean> => { // 기본 모두 켬. 저장값이 깨졌으면 켬
@@ -369,7 +369,7 @@ export function startApp(): void {
       case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수·결함만(글자가 겹치지 않게)
         if (weekFresh) { const keep = officeEvents.filter((x) => x.kind === 'say'); officeEvents.length = 0; officeEvents.push(...keep); weekFresh = false; }
         officeEvents.push(...officeFromWeek(e));
-        defRate.set(e.projectId, [e.defectsRemoved - e.defectsAdded, ...(defRate.get(e.projectId) ?? [])].slice(0, 4)); break;
+        break;
       }
       case 'company': if (e.text.startsWith('공장')) sfx('factoryBuilt'); toast(e.text, 'alert', '회사', 7000); break;
       case 'news': { // 규제 예고·시행은 중요한 알림(오래 둔다)
@@ -900,19 +900,19 @@ export function startApp(): void {
   }
 
   /** 진행 단계(설계 → 시험 → 결함 잡기), 출시까지 남은 기간 어림, 팀 컨디션 */
-  function devSteps(p: Project, pct: number, team: { condition: number }[]): string {
+  function devSteps(p: Project, pct: number, team: Staff[]): string {
     const minT = config.dev.minTestWeeks, wait = !!p.waiting, test = p.phase === 'test', fix = test && p.testWeeks >= minT;
     const cls = (done: boolean, on: boolean) => (done ? 'done' : on ? 'on' : '');
     const steps = `<ol class="steps" aria-label="개발 단계"><li class="${cls(test, !test)}" style="--p:${pct.toFixed(0)}%">1 설계<b>${p.weeksDone}/${p.designWeeks}주</b></li>
       <li class="${cls(fix, test && !fix)}" style="--p:${((p.testWeeks / minT) * 100).toFixed(0)}%">2 시험<b>${test ? `${Math.min(p.testWeeks, minT)}/${minT}주` : `최소 ${minT}주`}</b></li>
       <li class="${cls(wait, fix && !wait)}" style="--p:50%">3 결함 잡기<b>${wait ? '끝' : `약 ${num(p.defectEst)}개 남음`}</b></li></ol>`;
-    const r = defRate.get(p.id) ?? [], rate = r.length ? r.reduce((a, x) => a + x, 0) / r.length : 0;
+    const rate = testCut(team, game!.state.week), ok = config.critics.okDefects; // 시험 주당 결함 감소(sim과 같은 식)
+    const fixLine = (n: number) => rate <= 0 ? '시험할 테스터·엔지니어가 없어 결함이 줄지 않습니다' : `결함 ${ok}개 이하까지 약 <b>${Math.ceil(Math.max(0, n - ok) / rate)}주</b> · 0개까지 약 <b>${Math.ceil(n / rate)}주</b>${ib('term:출시 기준 결함', '출시 기준 결함')}`;
     const mins = (w: number) => { const m = Math.round((w * WEEK_MS) / 60000); return m >= 1 ? ` · 보통 빠르기로 약 ${m}분` : ''; };
     const left = p.designWeeks - p.weeksDone + minT;
     const eta = wait ? '<b>출시 대기</b> · 언제든 출시할 수 있습니다'
-      : !test ? `출시까지 최소 <b>${left}주</b>(설계 ${p.designWeeks - p.weeksDone}주 + 시험 ${minT}주)${mins(left)}`
-      : !fix ? `시험 <b>${minT - p.testWeeks}주</b> 뒤 출시할 수 있습니다`
-      : rate > 0.05 ? `지난 몇 주 속도면 결함을 다 잡기까지 약 <b>${Math.ceil(p.defectEst / rate)}주</b>${mins(Math.ceil(p.defectEst / rate))}` : '결함이 줄어드는 속도를 재는 중입니다';
+      : !test ? `출시까지 최소 <b>${left}주</b>(설계 ${p.designWeeks - p.weeksDone}주 + 시험 ${minT}주)${mins(left)}${rate > 0 ? ` · 시험에서 결함이 한 주 약 ${(Math.round(rate * 10) / 10).toLocaleString('ko-KR')}개씩 줄어듭니다` : ''}`
+      : `${fix ? '' : `시험 <b>${minT - p.testWeeks}주</b> 뒤 출시할 수 있습니다 · `}${fixLine(p.defectEst)}${rate > 0 ? mins(Math.ceil(p.defectEst / rate)) : ''}`;
     const avg = team.length ? team.reduce((a, x) => a + x.condition, 0) / team.length : 0, w = condWord(avg);
     const cond = team.length ? `<div class="team-cond">팀 컨디션 <span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(avg * 100)}%"></u></span><b>${w}</b>${w === '지침' ? '<span>· 회사 탭 직원 화면에서 휴식을 줄 수 있습니다</span>' : ''}</div>` : '';
     return `${steps}<p class="eta"><span>${eta}</span></p>${cond}`;
