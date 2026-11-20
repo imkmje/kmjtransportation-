@@ -32,10 +32,11 @@ export const config = {
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
   market: { // 7.3
-    scale: 2.1, // 시장 규모 배수(보정용). 2단계 조정 1.15 → 2.1: 연 규모를 달마다 기하 보간하자 1970년대 시장이 직선 보간의 1/2~1/4로 줄어서
+    scale: 0.5, // 시장 규모 배수(보정용). 2단계 1.15 → 2.1(기하 보간으로 1970년대 시장이 줄어서). 3단계 2.1 → 0.5: 공장 증설로 생산 한도가 풀리자
+    // 1990년 주문이 5등급 공장(월 2만 대)의 3배를 넘어서, 경쟁 차 기본 A(rivals.base)를 함께 낮춰 1970년대 판매는 그대로 두고 후반 시장만 줄였다
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
-    overpriceExp: 0, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
+    overpriceExp: 10, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -51,11 +52,13 @@ export const config = {
   factory: { // 9.3 공장. capacity·lines·upkeep·costMult는 1등급 값(화면 호환용), sim은 levels를 쓴다
     capacity: 300, lines: 1, upkeep: 5000, costMult: 1,
     levels: [ // 월 생산, 생산 라인(동시 차종), 건설비, 월 유지비, 원가 배수
+      // 3단계 봇 측정으로 조정(설계서 9.3 표: 건설비 8억/50억/250억/1,200억, 유지비 0.5/1.5/4/10/25억, 원가 배수 1/.95/.9/.85/.8).
+      // 대당 이익이 판매가의 약 10%라 원가 배수 0.8이면 이익이 3배가 되어 돈이 폭발했다 → 배수를 완만하게, 건설비·유지비를 올림
       { capacity: 300, lines: 1, cost: 0, upkeep: 5000, costMult: 1 },
-      { capacity: 1000, lines: 2, cost: 80000, upkeep: 15000, costMult: 0.95 },
-      { capacity: 3000, lines: 3, cost: 500000, upkeep: 40000, costMult: 0.9 },
-      { capacity: 8000, lines: 5, cost: 2500000, upkeep: 100000, costMult: 0.85 },
-      { capacity: 20000, lines: 8, cost: 12000000, upkeep: 250000, costMult: 0.8 },
+      { capacity: 1000, lines: 2, cost: 300000, upkeep: 15000, costMult: 0.99 },
+      { capacity: 3000, lines: 3, cost: 1500000, upkeep: 60000, costMult: 0.98 },
+      { capacity: 8000, lines: 5, cost: 4000000, upkeep: 150000, costMult: 0.97 },
+      { capacity: 20000, lines: 8, cost: 20000000, upkeep: 400000, costMult: 0.96 },
     ],
     buildMonths: 6, // 증설 공사 6개월
   },
@@ -93,7 +96,7 @@ export const config = {
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
   rivals: { // 7.4·8.4: 경쟁 차 A = 기본값 + 강약 ± 0.1. 4~7년 주기로 새 모델, 주기 중간에 페이스리프트(2단계 단순 규칙, 5단계에서 완성)
-    base: 1, noise: 0.1,
+    base: 0.45, noise: 0.1, // 3단계 조정 1 → 0.45(시장 규모 배수와 함께, 위 market.scale 설명)
     cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
@@ -117,13 +120,14 @@ export const config = {
   },
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
     reserveMonths: 6, // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
-    expandRatio: 1.3, expandMonths: 3, // 주문이 한도의 1.3배를 3개월 넘으면 공장 증설
+    expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
     hqCashMult: 6, // 본사 승급: 현금이 승급비 × 6 + 여유분 이상일 때
     tier2Cash: 500000, tier3Cash: 5000000, // 채용 공고 등급: 현금 50억 이상 2등급, 500억 이상 3등급
     salesShare: 0.2, // 정원 중 영업 직원 비율
     leadMonths: 5, // 후속 차 개발을 시작하는 시점(교체 몇 개월 전)
     modelsPerBody: 1, // 차종 수 상한 = 쓸 수 있는 차체 수 × 이 값(생산 라인 수 이내)
     gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
+    weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
   },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },

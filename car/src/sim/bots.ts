@@ -30,23 +30,17 @@ const STEADY: SteadyOptions = {
 };
 const B = config.bots;
 
-/** 봇이 판마다 기억하는 것(주문이 한도를 넘은 연속 달 수). 같은 봇을 여러 판에 써도 섞이지 않게 게임별로 */
-interface Memo { month: number; overMonths: number }
-
 /** 신중(8.4 의도한 흐름): 보통 예산·12주, 30개월 페이스리프트, 60개월 풀체인지. 경영: 정원까지 채용·쉬는 직원 교육, 여유 현금으로 본사 승급,
  *  주문이 한도의 1.3배를 3개월 넘으면 공장 증설, 생산 라인이 늘면 차종을 늘린다(쓸 수 있는 차체 수까지) */
 export function steady(opts: Partial<SteadyOptions> = {}): Bot {
-  const o = { ...STEADY, ...opts }, memo = new WeakMap<Game, Memo>();
-  return {
+  const o = { ...STEADY, ...opts };
+  return { // 봇은 기억을 두지 않는다(저장 → 불러오기 뒤 새 봇으로 이어도 같은 결과)
     name: 'steady',
     step(g) {
-      const s = g.state, m = monthOf(s.week);
-      let me = memo.get(g);
-      if (!me) memo.set(g, (me = { month: -1, overMonths: 0 }));
       launchReady(g, o);
       startProjects(g, o);
       hireBest(g);
-      if (me.month !== m) { me.month = m; monthly(g, o, me); } // 달마다 한 번(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
+      if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
 }
@@ -63,7 +57,7 @@ const bodyPrice = (id: string) => bodyById(id).basePrice;
 const fixedCost = (s: CarState) => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + upkeepOf(s);
 
 /** 달마다: 가격(gouge), 공장 증설, 본사 승급, 채용, 교육 */
-function monthly(g: Game, o: SteadyOptions, me: Memo): void {
+function monthly(g: Game, o: SteadyOptions): void {
   const s = g.state, reserve = fixedCost(s) * B.reserveMonths;
   const gens = sellingGens(s).filter((x) => x.status === 'onSale');
   if (o.gouge) for (const x of gens) {
@@ -72,11 +66,12 @@ function monthly(g: Game, o: SteadyOptions, me: Memo): void {
     if (Math.round(price) !== ed.price) g.command({ type: 'setPrice', generationId: x.id, price: Math.round(price) });
   }
   if (!o.manage) return;
-  const demand = gens.reduce((a, x) => a + x.lastDemand, 0);
-  me.overMonths = demand > capacityOf(s) * B.expandRatio ? me.overMonths + 1 : 0;
+  // 주문이 밀린 지 3개월: 지난 3개월 모두 한도까지 팔았고(장부 판매 ≥ 한도의 97%), 지난달 주문이 한도의 1.3배 이상
+  const cap = capacityOf(s), demand = gens.reduce((a, x) => a + x.lastDemand, 0), last = s.ledger.slice(-B.expandMonths);
+  const backlogged = demand >= cap * B.expandRatio && last.length === B.expandMonths && last.every((e) => e.sold >= cap * B.boundShare);
   if (o.expand) {
     const nf = config.factory.levels[s.factory.level];
-    if (me.overMonths >= B.expandMonths && nf && !factoryExpandError(s) && s.cash >= nf.cost + reserve && g.command({ type: 'expandFactory' }).ok) me.overMonths = 0;
+    if (backlogged && nf && !factoryExpandError(s) && s.cash >= nf.cost + reserve) g.command({ type: 'expandFactory' });
     const nh = config.hq.levels[s.hqLevel];
     if (nh && !hqUpgradeError(s) && s.cash >= nh.cost * B.hqCashMult + reserve) g.command({ type: 'upgradeHQ' });
   }
@@ -107,6 +102,10 @@ function neededRole(s: CarState): Role {
   return (['designer', 'engineer', 'tester', 'sales'] as Role[]).sort((a, b) => (have(a) - want[a]) - (have(b) - want[b]))[0];
 }
 
+/** 약한 차(지난달 수요가 라인 하나 몫 생산량의 weakShare 미만)는 풀체인지 가능 시점(36개월)에 바로 교체한다 */
+const changeAt = (s: CarState, o: SteadyOptions, x: Generation): number =>
+  x.lastDemand < (capacityOf(s) / Math.max(1, sellingGens(s).length)) * B.weakShare ? Math.min(o.changeMonths, config.lifecycle.fullChange.afterMonths) : o.changeMonths;
+
 /** 새 프로젝트 팀: 개발팀이 하나면 쉬는 개발 직원 전원, 여럿이면 개발 직원 수 ÷ 팀 수만큼 직무를 고르게 */
 function pickTeam(s: CarState): number[] {
   const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week)).sort((a, b) => a.id - b.id);
@@ -126,18 +125,17 @@ function launchReady(g: Game, o: SteadyOptions): void {
   for (const p of [...s.projects].sort((a, b) => a.id - b.id)) {
     if (!(p.phase === 'test' && p.testWeeks >= config.dev.minTestWeeks && (p.defectEst <= o.launchDefects || p.testWeeks >= o.maxTestWeeks))) continue;
     const launch = (price: number) => g.command({ type: 'launch', projectId: p.id, price, marketing: o.marketing, color: '#c8102e', wheels: 0 });
-    if (p.kind === 'facelift') { // 늘어난 원가(옵션·동력 단계)만큼 가격을 올려 대당 이익을 지킨다
+    if (p.kind === 'facelift') { // 가격은 그대로(기준가보다 비싸면 가격 매력이 빠르게 떨어진다)
       const gen = allGens(s).find((x) => x.id === p.targetId);
       if (!gen || gen.status !== 'onSale') { g.command({ type: 'cancelProject', projectId: p.id }); continue; }
-      const ed = currentEdition(gen), up = unitCost(p.body, p.powertrain, p.tier, p.options) - unitCost(p.body, p.powertrain, ed.tier, ed.options);
-      launch(Math.min(bodyPrice(p.body) * config.price.max, Math.round(ed.price + Math.max(0, up))));
+      launch(currentEdition(gen).price);
       continue;
     }
     if (p.kind === 'fullchange') { launch(bodyPrice(p.body)); continue; } // 같은 생산 라인을 이어받는다
     if (sellingGens(s).length < linesOf(s)) { launch(bodyPrice(p.body)); continue; }
-    // 라인이 없으면: 새 이름 봇은 교체 시기가 된 가장 오래된 차를 단종(그달 말 라인이 빈다)
-    const old = sellingGens(s).filter((x) => x.status === 'onSale' && m - x.launchMonth >= o.changeMonths).sort((a, b) => a.launchMonth - b.launchMonth || a.id - b.id)[0];
-    if (o.successor === 'newName' && old && !sellingGens(s).some((x) => x.status === 'ending')) g.command({ type: 'discontinue', generationId: old.id });
+    // 라인이 없으면 교체 시기가 된 가장 오래된 차를 단종(그달 말 라인이 빈다)
+    const old = sellingGens(s).filter((x) => x.status === 'onSale' && m - x.launchMonth >= changeAt(s, o, x)).sort((a, b) => a.launchMonth - b.launchMonth || a.id - b.id)[0];
+    if (old && !sellingGens(s).some((x) => x.status === 'ending')) g.command({ type: 'discontinue', generationId: old.id });
   }
 }
 
@@ -150,16 +148,16 @@ function startProjects(g: Game, o: SteadyOptions): void {
   const targeted = (id: number | null) => s.projects.some((p) => p.targetId === id);
   const npOf = (x: Generation) => s.nameplates.find((n) => n.generations.includes(x))!;
   for (const x of onSale) {
-    if (o.faceliftMonths !== Infinity && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && age(x) < o.changeMonths - B.leadMonths && !targeted(x.id)) {
+    if (o.faceliftMonths !== Infinity && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && age(x) < changeAt(s, o, x) - B.leadMonths && !targeted(x.id)) {
       g.command({ type: 'startFacelift', generationId: x.id, options: opts, team: pickTeam(s) });
       return;
     }
   }
   if (o.successor === 'fullchange') for (const x of onSale) {
     const np = npOf(x);
-    if (age(x) >= o.changeMonths - B.leadMonths && latestGen(np) === x && !targeted(np.id)) { start(g, o, np.id, x); return; }
+    if (age(x) >= changeAt(s, o, x) - B.leadMonths && latestGen(np) === x && !targeted(np.id)) { start(g, o, np.id, x); return; }
   }
-  const aged = o.successor === 'newName' ? onSale.filter((x) => age(x) >= o.changeMonths - B.leadMonths).length : 0;
+  const aged = o.successor === 'newName' ? onSale.filter((x) => age(x) >= changeAt(s, o, x) - B.leadMonths).length : 0;
   const newProjects = s.projects.filter((p) => p.kind === 'new').length;
   const want = Math.min(linesOf(s), bodiesAt(year).length * B.modelsPerBody);
   if (onSale.length - aged + newProjects < Math.max(1, want)) start(g, o, null, undefined);
