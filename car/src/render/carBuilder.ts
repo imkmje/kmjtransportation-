@@ -107,7 +107,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const surfX = (y: number, z: number, s: 1 | -1) => {
     let lo = p.wb + ar + .01, hi = h - .004;
     if (inside(ring(s * hi).P, y, z)) return s * hi;
-    if (!inside(ring(s * lo).P, y, z)) { decalMiss++; (carG.userData.mp ??= []).push([s, +y.toFixed(3), +z.toFixed(3), +(y - p.belt).toFixed(3), +(Math.abs(z) / hw).toFixed(2)]); return s * lo; }
+    if (!inside(ring(s * lo).P, y, z)) { decalMiss++; return s * lo; }
     for (let it = 0; it < 14; it++) { const m = (lo + hi) / 2; if (inside(ring(s * m).P, y, z)) lo = m; else hi = m; }
     return s * lo;
   };
@@ -239,7 +239,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   if (fc.bumper === 'black' && !E.classic) for (const s of [1, -1] as const) decal(rect(-fw * .8, fw * .8, p.clr + .06, p.clr + .22, 24, 6), M.trim, s, F.lift * 1.5);
   if (!ev) {
     const gz = Math.min(fw * (E.classic ? F.classicGrilleZ : F.grilleZ) * fc.grilleW, lampIn - .04), fr = F.grilleFrame;
-    const g1 = lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * fc.grilleH, plateTop + .03);
+    const g1 = fc.bar ? Math.min(lampY + F.grilleUp, lampTop - F.barH - .015) : lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * fc.grilleH, plateTop + .03);
     const framed = (z0: number, z1: number, y0: number, y1: number) => { decal(rect(z0 - fr, z1 + fr, y0 - fr, y1 + fr, 8, 3), M.chrome, 1); decal(rect(z0, z1, y0, y1, 8, 3), M.trim, 1, L2); };
     switch (fc.grille) {
       case 'hex': { // 위는 좁고 가운데가 가장 넓고 아래로 범퍼까지 내려오는 육각

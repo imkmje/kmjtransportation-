@@ -4,6 +4,8 @@ import { COMPAT, MARKET, SEGMENTS, bodyById } from '../data';
 import { bodiesAt, optionsAt, unitCost } from './cars';
 import { Game, allGens, sellingGens } from './game';
 import { REGION, cellMonthly, currentEdition } from './market';
+import { planPreview } from './queries';
+import { latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, yearOf } from './time';
 import type { Budget, Generation } from './types';
 
@@ -45,14 +47,22 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
             body, segment, powertrain: 'gasoline', tier: 2, options: optionsAt(year).slice(-config.dev.maxOptions).map((x) => x.id),
             direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: o.budget, designWeeks: o.designWeeks,
           };
-          if (o.successor === 'fullchange' && np) g.command({ type: 'startFullChange', nameplateId: np.id, ...spec });
-          else g.command({ type: 'startProject', name: '', ...spec });
+          // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다(세 봇 같은 규칙)
+          const prev = np ? latestGen(np) : undefined, tries = [spec, { ...spec, designWeeks: 16 }, { ...spec, designWeeks: 16, budget: 'high' as Budget }];
+          const pick = (prev && tries.find((t) => planPreview(s, { ...t, name: '' }).avg >= launchAvgGrade(prev))) || tries[prev ? tries.length - 1 : 0];
+          if (o.successor === 'fullchange' && np) g.command({ type: 'startFullChange', nameplateId: np.id, ...pick });
+          else g.command({ type: 'startProject', name: '', ...pick });
         }
         return;
       }
       if (p.phase === 'test' && p.testWeeks >= config.dev.minTestWeeks && (p.defectEst <= o.launchDefects || p.testWeeks >= o.maxTestWeeks)) {
         const launch = (price: number) => g.command({ type: 'launch', projectId: p.id, price, marketing: o.marketing, color: '#c8102e', wheels: 0 });
-        if (p.kind === 'facelift') { if (onSale) launch(currentEdition(onSale).price); else g.command({ type: 'cancelProject', projectId: p.id }); return; }
+        if (p.kind === 'facelift') { // 늘어난 원가(옵션·동력 단계)만큼 가격을 올려 대당 이익을 지킨다
+          if (!onSale) { g.command({ type: 'cancelProject', projectId: p.id }); return; }
+          const ed = currentEdition(onSale), up = unitCost(p.body, p.powertrain, p.tier, p.options) - unitCost(p.body, p.powertrain, ed.tier, ed.options);
+          launch(Math.min(bodyPrice(p.body) * config.price.max, Math.round(ed.price + Math.max(0, up))));
+          return;
+        }
         if (p.kind === 'fullchange') { launch(bodyPrice(p.body)); return; } // 같은 생산 라인을 이어받는다
         if (onSale && age >= o.changeMonths) g.command({ type: 'discontinue', generationId: onSale.id });
         if (!sellingGens(s).length) launch(bodyPrice(p.body));
