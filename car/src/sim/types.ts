@@ -11,19 +11,8 @@ export interface BodyDef { id: string; name: string; info: string; year: number;
 export interface PowertrainDef { id: string; name: string; info: string; year: number; split: { P: number; E: number }; costAdd: number; startLevel: number; minCostAdd?: number; tiers: { name: string; costAdd: number }[] }
 export interface OptionDef { id: string; name: string; info: string; year: number; U: number; D: number; Q: number; cost: number }
 export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
-/** 지역 취향(7.5): 차체·동력별 매력 배수(없으면 1), 가격 민감도 배수(ε에 곱함), 품질 기준(품질 등급이 min보다 낮으면 1등급당 per씩 매력 감점, 하한 floor) */
-export interface RegionTaste { body: Record<string, number>; pt: Record<string, number>; eps: number; quality?: { min: number; per: number; floor: number } }
-/** 지역 시장(7.3·7.5). trend: 차체·동력의 연대별 유행 계수(없으면 1). unlock: 진출 조건(평판·비용), logistics: 대당 물류비(기준가 대비 비율) */
-export interface RegionMarket {
-  name: string; info: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]>;
-  taste: RegionTaste; unlock: { rep: number; cost: number }; logistics: number;
-}
-/** 경쟁사(7.4). strength: 지역 × 차체 강약(null = 그 차체를 만들지 않음), enter: 지역 진출 연도(없으면 from), price: 기준가 대비 가격 수준, sport: 성격 가산(−는 실용, +는 스포티),
- *  pt: 연대별 동력 구성(years에 맞춘 비중, 새 모델의 동력을 뽑을 때 쓴다) */
-export interface RivalDef {
-  id: string; name: string; trait: string; intro: string; info: string; from: number; until: number | null; enter?: Record<string, number>;
-  price: number; sport: number; strength: Record<string, Record<string, number | null>>; pt: { years: number[]; mix: Record<string, number[]> };
-}
+export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
+export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
 
 /** 연구 분야 5개(10장) */
 export type TechField = 'powertrain' | 'body' | 'electronics' | 'production' | 'eco';
@@ -41,15 +30,15 @@ export interface TechDef {
 export type EraEffect =
   | { type: 'statWeight'; stat: Stat; mult: number } // 모든 고객층의 그 능력치 가중치 배수(가중치 합 1로 다시 맞춘다)
   | { type: 'bodyDemand'; bodies: string[]; mult: number } // 차체 칸 수요 배수
-  | { type: 'ptDemand'; powertrain: string; mult: number; region?: string } // 그 동력 차의 수요 배수(region이 있으면 그 지역에만 더 곱한다)
+  | { type: 'ptDemand'; powertrain: string; mult: number } // 그 동력 차의 수요 배수
   | { type: 'segDemand'; segment: string; mult: number } // 고객층 비중 배수
   | { type: 'marketSize'; region: string; mult: number } // 지역 시장 규모 배수('all' = 전 지역)
   | { type: 'trend'; id: string; add: number; perYear?: number } // 유행 가산(perYear: 시작부터 해마다 더하는 값)
   | { type: 'loanRate'; mult: number }
   | { type: 'production'; mult: number } // 전 공장 생산 배수
-  | { type: 'regulation'; region: string; options?: string[]; powertrains?: string[]; graceMonths: number; stopSaleMonths?: number } // 유예 뒤 옵션이 없거나 그 동력이면 그 지역에 신규 출시 불가. stopSaleMonths: 시작 뒤 이 개월이 지나면 그 동력 차는 그 지역 판매 중단
+  | { type: 'regulation'; region: string; options?: string[]; powertrains?: string[]; graceMonths: number } // 유예 뒤 옵션이 없거나 그 동력이면 신규 출시 불가
   | { type: 'charging' } // 충전 인프라가 이 사건부터 쌓인다
-  | { type: 'exportEase'; regions: string[]; rep: number; costMult: number }; // 그 지역 진출 조건 완화: 필요한 평판 + rep(음수), 비용 × costMult
+  | { type: 'exportEase'; mult: number }; // 수출 지역 해금 조건 완화(5단계 수출 전까지 효과 없음)
 export interface EraEventDef { id: string; name: string; year: number; month: number; months: number | null; warn: string; start: string; end: string; effects: EraEffect[] }
 /** 무작위 사건 선택지 효과 */
 export type ChoiceEffect =
@@ -59,11 +48,11 @@ export type ChoiceEffect =
   | { type: 'awarenessMult'; value: number } // 대상 차 인지도 배수
   | { type: 'condition'; value: number } // 전 직원 컨디션 가산
   | { type: 'fixDefects'; costShare: number } // 대상 차 결함 수리(누적 판매 × 리콜 대당 비용 × costShare), 리콜 위험 0
-  | { type: 'mod'; mod: 'production' | 'cost' | 'fx'; value: number; months: number } // 기간 배수(생산·원가·수출 차 원가). value 0이면 사건이 정한 값(환율)
+  | { type: 'mod'; mod: 'production' | 'cost'; value: number; months: number } // 기간 배수(생산·원가). value 0이면 사건이 정한 값(환율)
   | { type: 'hire'; abilityMin: number; abilityMax: number }; // 인재 영입(정원 안에서)
 export interface RandomEventDef {
   id: string; name: string; text: string; // text의 {car}는 대상 차 이름
-  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell' | 'exportCar'; // rivalCell: 무작위로 뜨지 않고 경쟁사 히트작이 내 차가 있는 칸에서 나올 때 뜬다. exportCar: 해외에서 파는 차가 있을 때
+  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell';
   choices: { label: string; result: string; effects: ChoiceEffect[] }[];
   defaultChoice: number;
   onFire?: { type: 'rivalHit'; add: number; months: number } | { type: 'fxRoll'; good: number; bad: number; goodShare: number }; // 사건이 뜰 때 바로 생기는 일
@@ -130,10 +119,7 @@ export interface Generation {
   equity: number; // 출시 때 이어받은 차종 자산(인지도 가산, 0~0.3)
   rebuy: number; // 기존 고객 재구매: 첫 12개월 동안 매달 더해지는 수요(대)
   marketing: number; // 0~3
-  awareness: number; // 국내 인지도 0~1
-  regions: string[]; // 판매 지역(5단계, 진출 순서). 예전 세대는 ['domestic']
-  foreignAwareness: Record<string, number>; // 해외 지역별 인지도(한 번이라도 판 지역)
-  markets: Record<string, RegionSale>; // 지역별 판매(한 번이라도 판 지역). 세대의 sales·totalSold·lastDemand·lostSales는 전 지역 합계
+  awareness: number; // 인지도 0~1
   status: 'onSale' | 'ending' | 'discontinued';
   endMonth: number | null; // 단종한 달(월 번호)
   editions: Edition[];
@@ -150,29 +136,15 @@ export interface Generation {
 /** 차종: 이름이 같은 세대들의 묶음 */
 export interface Nameplate { id: number; name: string; generations: Generation[] }
 
-/** 경쟁 차 한 대(칸 하나): n번째 모델, start 달에 출시, cycle개월 뒤 교체, base = 새 차일 때의 기본 A.
- *  name·price(만원)·sport(성격 0 실용 ~ 1 스포티)·pt(동력): 5단계. hit: 히트작이면 효과가 끝나는 달. response: 플레이어 독점에 맞선 대응 신차 */
-export interface RivalModel { n: number; start: number; cycle: number; base: number; name: string; price: number; sport: number; pt: string; hit?: number; response?: boolean }
-/** cells: 국내 칸(차체)별 지금 A(화면 호환용, 사건 배수 전). models: 칸 "지역:차체"별 지금 모델(그 칸에서 철수했거나 아직 진출 전이면 없음) */
-export interface RivalState { id: string; name: string; cells: Record<string, number>; models: Record<string, RivalModel> }
-/** 세대의 지역별 판매(지난달 수요·판매·못 판 대수, 누적 판매) */
-export interface RegionSale { demand: number; sold: number; lost: number; total: number }
-/** 시장 상태(5단계). open: 진출한 지역(연 순서, domestic 포함), openedMonth: 진출한 달. 칸 키는 "지역:차체".
- *  share: 지난달 플레이어 점유율(판 칸만), dominance: 점유율 35% 이상 연속 달 수, response: 대응 신차를 준비하는 경쟁사 ID,
- *  yearUnits: 올해 칸별 회사별 판매(대, 'me' = 플레이어, 판 칸만), exportUnits: 누적 수출 대수, exportSteps: 평판을 받은 수출 단계 수, hits: 최근 히트작 */
-export interface MarketState {
-  open: string[]; openedMonth: Record<string, number>;
-  share: Record<string, number>; dominance: Record<string, number>; response: Record<string, string>;
-  yearUnits: Record<string, Record<string, number>>; exportUnits: number; exportSteps: number;
-  hits: { rival: string; cell: string; month: number; name: string }[];
-}
+/** 경쟁 차 한 대(칸 하나): n번째 모델, start 달에 출시, cycle개월 뒤 교체, base = 새 차일 때의 기본 A */
+export interface RivalModel { n: number; start: number; cycle: number; base: number }
+export interface RivalState { id: string; name: string; cells: Record<string, number>; models: Record<string, RivalModel> } // cells: 칸(차체)별 지금 점유 점수 A
 
 export interface LedgerEntry {
   month: number; year: number; monthOfYear: number;
   revenue: number; cogs: number; salaries: number; upkeep: number; dev: number; marketing: number; interest: number; recall: number;
   oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
-  regionSold?: Record<string, number>; // 지역별 판매(5단계, 예전 기록은 없음 = 국내)
 }
 
 /** 연구 상태(10장). done: 완료한 기술 ID(반복 기술은 여러 번), active: 진행 중(시작 순), early: 등장 연도보다 먼저 완료해 "세계 최초"를 아직 쓰지 않은 기술 */
@@ -184,8 +156,7 @@ export interface ResearchState {
 /** 무작위 사건의 답을 기다리는 선택(4주 뒤 기본 선택) */
 export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null }
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
-/** rivalHit는 4단계 저장에만 있다(5단계에서 경쟁 차 모델의 hit로 옮긴다). fx: 수출 차의 원가 배수(환율) */
-export interface EventMod { kind: 'production' | 'cost' | 'rivalHit' | 'fx'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
+export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
 /** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
 export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'other';
 export interface NewsItem { week: number; text: string; category?: NewsCategory } // category가 없는 예전 항목은 'other'로 본다
@@ -194,7 +165,7 @@ export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news:
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
-  saveVersion: 5;
+  saveVersion: 4;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -219,7 +190,6 @@ export interface CarState {
   events: EventsState; // 11장 무작위 사건·뉴스(고정 사건은 시드와 날짜로 계산)
   knownCombos: string[]; // 5.5 조합 노트: 출시해 본 "차체:고객층"
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
-  market: MarketState; // 5단계 지역·경쟁
 }
 
 // ---------- 명령 ----------
@@ -229,10 +199,7 @@ export type Command =
   | { type: 'startFacelift'; generationId: number; options: string[]; tier?: number; faceSeed?: number; team?: number[] }
   | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }
-  // regions: 판매 지역(생략하면 새 차종은 국내만, 풀체인지는 전 세대의 지역, 페이스리프트는 바꾸지 않음)
-  | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2; regions?: string[] }
-  | { type: 'openRegion'; region: string }
-  | { type: 'setRegions'; generationId: number; regions: string[] }
+  | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
   | { type: 'discontinue'; generationId: number }
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
   | { type: 'setMarketing'; generationId: number; marketing: number }

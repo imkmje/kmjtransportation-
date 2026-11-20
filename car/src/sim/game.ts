@@ -119,62 +119,38 @@ export class Game {
   /** 월말 정산: 판매·인지도·리콜·재무·장부·파산 */
   private monthEnd(ev: GameEvent[]): void {
     const s = this.state, m = monthOf(s.week), year = yearOf(s.week), wpm = config.time.weeksPerMonth, LC = config.lifecycle;
-    updateRivals(s, m, ev); // 경쟁 차가 낡거나 새 모델로 바뀐다(진출·철수·히트작·대응 신차)
-    const gens = sellingGens(s), t = monthTime(m), M = s.market;
-    // 7.3·7.5 지역별 수요: 칸(지역 × 차체)마다 그 칸에서 파는 내 차들을 함께 계산한다(지역·차체 순)
-    const regDemand: Record<string, number>[] = gens.map(() => ({}));
-    const cells: { key: string; region: string; size: number; idx: number[]; rivals: { id: string; units: number }[] }[] = [];
-    for (const region of REGIONS) for (const body of [...new Set(gens.map((g) => g.body))].sort()) {
-      const idx = gens.flatMap((g, i) => (g.body === body && g.regions.includes(region) ? [i] : []));
-      if (!idx.length) continue;
-      const cs = cellSales(s, region, body, idx.map((i) => toSaleCar(gens[i], m, region)), t);
-      idx.forEach((i, k) => { regDemand[i][region] = cs.mine[k]; });
-      cells.push({ key: cellKey(region, body), region, size: cs.size, idx, rivals: cs.rivals });
-    }
+    updateRivals(s.rivals, s.seed, m); // 경쟁 차가 낡거나 새 모델로 바뀐다
+    const gens = sellingGens(s), cars = gens.map((g) => toSaleCar(g, m));
     const demand = gens.map((g, i) => {
-      const rd = regDemand[i];
-      let mult = 1;
-      if (g.launchMonth === m) mult *= (m * wpm + wpm - g.launchWeek) / wpm; // 출시 달은 판매한 주만큼
+      let d = monthlyDemand(s, cars[i], cars.filter((_, j) => j !== i), monthTime(m));
+      if (g.rebuy > 0 && m - g.launchMonth < LC.fullChange.rebuyMonths) d += g.rebuy; // 기존 고객 재구매(풀체인지 첫 12개월)
+      if (g.launchMonth === m) d *= (m * wpm + wpm - g.launchWeek) / wpm; // 출시 달은 판매한 주만큼
       const ed = currentEdition(g);
-      if (ed.kind === 'facelift' && monthOf(ed.launchWeek) === m) mult *= LC.facelift.switchMonthMult; // 페이스리프트 전환 달 생산 −30%
-      if (g.status === 'ending') mult *= config.discontinue.lastMonthMult; // 단종 달: 재고 처분
-      if (g.rebuy > 0 && m - g.launchMonth < LC.fullChange.rebuyMonths) { const r0 = g.regions.includes(REGION) ? REGION : g.regions[0]; rd[r0] = (rd[r0] ?? 0) + g.rebuy; } // 기존 고객 재구매(풀체인지 첫 12개월, 국내 우선)
-      for (const r of Object.keys(rd)) rd[r] *= mult;
-      return Object.values(rd).reduce((a, x) => a + x, 0);
+      if (ed.kind === 'facelift' && monthOf(ed.launchWeek) === m) d *= LC.facelift.switchMonthMult; // 페이스리프트 전환 달 생산 −30%
+      if (g.status === 'ending') d *= config.discontinue.lastMonthMult; // 단종 달: 재고 처분
+      return d;
     });
-    // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로. 한 차의 생산은 지역에 수요 비례로 나눈다
+    // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로
     const cap = capacityOf(s), manual = gens.reduce((a, g) => a + (g.allocShare ?? 0), 0), autoCap = Math.max(0, cap * (1 - manual));
     const autoTotal = gens.reduce((a, g, i) => a + (g.allocShare === null ? demand[i] : 0), 0);
-    const fill = autoTotal > autoCap ? autoCap / autoTotal : 1, fx = fxMult(s);
-    let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0, exported = 0;
-    const regionSold: Record<string, number> = {};
-    const soldIn: Record<string, number>[] = gens.map(() => ({}));
+    const fill = autoTotal > autoCap ? autoCap / autoTotal : 1;
+    let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
     gens.forEach((g, i) => {
       const n = Math.round(g.allocShare === null ? demand[i] * fill : Math.min(demand[i], cap * g.allocShare));
       const ed = currentEdition(g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s), ptCostAdd(s, g.powertrain));
-      const mk = config.awareness.marketingCost[g.marketing], rs = REGIONS.filter((r) => g.regions.includes(r) || regDemand[i][r] !== undefined);
-      let left = n, extra = 0; // extra: 물류비 + 환율(수출 차만)
-      rs.forEach((r, k) => {
-        const d = regDemand[i][r] ?? 0, nr = k === rs.length - 1 ? left : Math.min(left, demand[i] > 0 ? Math.round((n * d) / demand[i]) : 0);
-        left -= nr; soldIn[i][r] = nr; regionSold[r] = (regionSold[r] ?? 0) + nr;
-        if (r !== REGION) { extra += nr * (MARKET[r].logistics * bodyById(g.body).basePrice + uc * (fx - 1)); exported += nr; }
-        const prev = g.markets[r];
-        g.markets[r] = { demand: d, sold: nr, lost: Math.max(0, d - nr), total: (prev?.total ?? 0) + nr };
-      });
+      const mk = config.awareness.marketingCost[g.marketing];
       g.lastDemand = demand[i]; g.lostSales = Math.max(0, demand[i] - n);
       g.sales.push(n); g.totalSold += n; sold += n;
-      revenue += n * ed.price; cogs += n * uc + extra; marketing += mk;
-      g.profit += n * (ed.price - uc) - extra - mk;
-      for (const r of g.regions) { // 인지도: 지역마다 목표값으로(해외는 목표가 낮다)
-        const target = awarenessTarget(s.reputation, g.marketing, grade(ed.stats.Q, year), r), aw = awarenessIn(g, r);
-        setAwarenessIn(g, r, aw + (target - aw) * (config.awareness.rate + salesAwarenessBonus(s))); // 영업 직원이 수렴을 빠르게(9.1)
-      }
+      revenue += n * ed.price; cogs += n * uc; marketing += mk;
+      g.profit += n * (ed.price - uc) - mk;
+      const target = awarenessTarget(s.reputation, g.marketing, grade(ed.stats.Q, year));
+      g.awareness += (target - g.awareness) * (config.awareness.rate + salesAwarenessBonus(s)); // 영업 직원이 수렴을 빠르게(9.1)
       if (ed.defects > 0) { // 6.3 리콜: 연 확률 min(40%, 결함 × 2%)을 달로 나눠 굴린다
         const pYear = Math.min(config.recall.maxYear, ed.defects * config.recall.perDefect);
         if (this.rng.next() < 1 - (1 - pYear) ** (1 / config.time.monthsPerYear)) {
           const cost = g.totalSold * config.recall.costPerCar * diffOf(s).recallMult;
           recall += cost; g.profit -= cost; g.recalls++;
-          scaleAwareness(g, config.recall.awarenessMult); ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
+          g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
           this.addRep(config.recall.rep);
           ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜 실시. 수리비 ${Math.round(cost).toLocaleString()}만원이 들고 평판이 ${-config.recall.rep} 떨어졌습니다.` });
         }
@@ -184,12 +160,11 @@ export class Game {
         ev.push({ kind: 'advice', id: g.id, text: `「${this.nameOf(g)}」 판매가 ${dc.adviceMonths}개월째 월 ${dc.adviceSales}대 미만입니다. 단종을 권합니다.` });
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
-    this.marketMonth(cells, soldIn, exported, m, ev);
     const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
     const upkeep = upkeepOf(s), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
     const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, regionSold };
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
     s.ledger.push(e);
     if (s.ledger.length > config.ledgerMonths) s.ledger.splice(0, s.ledger.length - config.ledgerMonths);
     ev.push({ kind: 'monthEnd', text: `${monthLabel(m)} 결산: 판매 ${sold}대, 이익 ${Math.round(profit).toLocaleString()}만원` });
@@ -207,48 +182,6 @@ export class Game {
         ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
       }
     } else s.negMonths = 0;
-  }
-
-  /** 시장 정산(7.4·12장): 칸별 점유율·독점 감시(대응 신차), 연간 칸 판매, 누적 수출 단계 평판, 연말 지역 1위 평판 */
-  private marketMonth(cells: { key: string; region: string; size: number; idx: number[]; rivals: { id: string; units: number }[] }[], soldIn: Record<string, number>[], exported: number, m: number, ev: GameEvent[]): void {
-    const s = this.state, M = s.market, R = config.rivals;
-    const live = new Set(cells.map((c) => c.key));
-    for (const k of Object.keys(M.share)) if (!live.has(k)) { delete M.share[k]; M.dominance[k] = 0; }
-    for (const c of cells) {
-      const mine = c.idx.reduce((a, i) => a + (soldIn[i][c.region] ?? 0), 0), share = c.size > 0 ? mine / c.size : 0;
-      M.share[c.key] = share;
-      const yu = (M.yearUnits[c.key] ??= {});
-      yu.me = (yu.me ?? 0) + mine;
-      for (const r of c.rivals) yu[r.id] = (yu[r.id] ?? 0) + r.units;
-      M.dominance[c.key] = share >= R.responseShare ? (M.dominance[c.key] ?? 0) + 1 : 0;
-      if (M.dominance[c.key] >= R.responseMonths && !M.response[c.key]) { // 쉬운 독점 방지: 그 칸에 가장 강한 회사가 다음 교체 때 대응 신차
-        const [region, body] = c.key.split(':');
-        const best = s.rivals.filter((r) => r.models[c.key]).map((r) => ({ r, v: RIVALS.find((d) => d.id === r.id)?.strength[region]?.[body] ?? 0 })).sort((a, b) => b.v - a.v || (a.r.id < b.r.id ? -1 : 1))[0];
-        if (best) {
-          M.response[c.key] = best.r.id;
-          const nm = best.r.name;
-          addNews(s, ev, `[경쟁사 대응] ${nm}${josa(nm, '이/가')} ${MARKET[region].name} ${bodyById(body).name} 시장에서 우리 회사의 점유율이 1년 넘게 ${Math.round(R.responseShare * 100)}%를 넘자 대응 신차를 준비합니다. 다음 모델 교체 때 경쟁이 거세집니다.`, 'other');
-        }
-      }
-    }
-    // 누적 수출 단계(1만·10만·100만 대)마다 평판 +3
-    const P = config.reputation;
-    M.exportUnits += exported;
-    while (M.exportSteps < P.exportSteps.length && M.exportUnits >= P.exportSteps[M.exportSteps]) {
-      const n = P.exportSteps[M.exportSteps]; M.exportSteps++;
-      this.addRep(P.exportStepRep);
-      addNews(s, ev, `[수출] 누적 수출이 ${n.toLocaleString()}대를 넘었습니다. 평판이 ${P.exportStepRep} 올랐습니다.`, 'other');
-    }
-    // 연말: 지역마다 연간 판매 1위인 칸이 하나라도 있으면 평판 +1(연 최대 cellTopMax)
-    if (m % config.time.monthsPerYear === config.time.monthsPerYear - 1) {
-      const won = REGIONS.filter((region) => Object.entries(M.yearUnits).some(([k, yu]) => k.startsWith(`${region}:`) && (yu.me ?? 0) > 0 && Object.entries(yu).every(([id, v]) => id === 'me' || v < (yu.me ?? 0)))).slice(0, P.cellTopMax);
-      if (won.length) {
-        this.addRep(P.cellTop * won.length);
-        const names = won.map((r) => MARKET[r].name).join('·');
-        addNews(s, ev, `[연말 결산] ${names}에서 연간 판매 1위 차급을 차지해 평판이 ${P.cellTop * won.length} 올랐습니다.`, 'other');
-      }
-      M.yearUnits = {};
-    }
   }
 
   private nameOf(g: Generation): string { return this.state.nameplates.find((n) => n.generations.includes(g))?.name ?? ''; }

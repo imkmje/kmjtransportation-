@@ -1,160 +1,41 @@
 {
   "domestic": {
     "name": "국내",
-    "info": "우리 회사가 처음 차를 파는 내수 시장. 1970년대에는 작지만 1980년대 마이카 붐과 함께 빠르게 커진다. 물류비가 들지 않고, 외국 브랜드는 1980년대 후반 수입 자유화 뒤에야 들어온다.",
-    "years": [1970,1980,1990,2000,2010,2020,2030],
-    "annual": [20000,141421,1000000,1216440,1479727,1800000,1800000],
+    "years": [1970, 1980, 1990, 2000, 2010, 2020, 2030],
+    "annual": [20000, 141421, 1000000, 1216440, 1479727, 1800000, 1800000],
     "bodyShare": {
-      "sedanS": [0.6,0.36,0.165,0.12,0.1,0.095,0.085],
-      "hatch": [0.15,0.2,0.18,0.15,0.145,0.12,0.105],
-      "sedanM": [0.25,0.4,0.38,0.28,0.23,0.2,0.19],
-      "coupe": [0,0.02,0.025,0.02,0.02,0.02,0.02],
-      "sedanL": [0,0.02,0.04,0.05,0.05,0.045,0.04],
-      "minivan": [0,0,0.06,0.08,0.07,0.06,0.06],
-      "kei": [0,0,0.08,0.1,0.09,0.09,0.08],
-      "suv": [0,0,0.04,0.12,0.2,0.27,0.32],
-      "pickup": [0,0,0.02,0.05,0.06,0.07,0.07],
-      "sports": [0,0,0.01,0.03,0.035,0.03,0.03]
+      "sedanS":  [0.60, 0.36, 0.165, 0.12, 0.10, 0.095, 0.085],
+      "hatch":   [0.15, 0.20, 0.18, 0.15, 0.145, 0.12, 0.105],
+      "sedanM":  [0.25, 0.40, 0.38, 0.28, 0.23, 0.20, 0.19],
+      "coupe":   [0, 0.02, 0.025, 0.02, 0.02, 0.02, 0.02],
+      "sedanL":  [0, 0.02, 0.04, 0.05, 0.05, 0.045, 0.04],
+      "minivan": [0, 0, 0.06, 0.08, 0.07, 0.06, 0.06],
+      "kei":     [0, 0, 0.08, 0.10, 0.09, 0.09, 0.08],
+      "suv":     [0, 0, 0.04, 0.12, 0.20, 0.27, 0.32],
+      "pickup":  [0, 0, 0.02, 0.05, 0.06, 0.07, 0.07],
+      "sports":  [0, 0, 0.01, 0.03, 0.035, 0.03, 0.03]
     },
     "mix": {
-      "sedanS": {"youth":0.25,"family":0.2,"worker":0.3,"rich":0.02,"fleet":0.18,"enthusiast":0.05},
-      "hatch": {"youth":0.4,"family":0.2,"worker":0.25,"rich":0.02,"fleet":0.05,"enthusiast":0.08},
-      "sedanM": {"youth":0.08,"family":0.3,"worker":0.22,"rich":0.15,"fleet":0.2,"enthusiast":0.05},
-      "coupe": {"youth":0.35,"family":0.02,"worker":0.08,"rich":0.2,"fleet":0,"enthusiast":0.35},
-      "sedanL": {"youth":0.02,"family":0.15,"worker":0.08,"rich":0.45,"fleet":0.28,"enthusiast":0.02},
-      "minivan": {"youth":0.03,"family":0.6,"worker":0.1,"rich":0.05,"fleet":0.2,"enthusiast":0.02},
-      "kei": {"youth":0.35,"family":0.1,"worker":0.35,"rich":0.02,"fleet":0.15,"enthusiast":0.03},
-      "suv": {"youth":0.15,"family":0.35,"worker":0.2,"rich":0.15,"fleet":0.05,"enthusiast":0.1},
-      "pickup": {"youth":0.1,"family":0.15,"worker":0.15,"rich":0.05,"fleet":0.45,"enthusiast":0.1},
-      "sports": {"youth":0.15,"family":0,"worker":0.02,"rich":0.38,"fleet":0,"enthusiast":0.45}
+      "sedanS": { "youth": 0.25, "family": 0.2, "worker": 0.3, "rich": 0.02, "fleet": 0.18, "enthusiast": 0.05 },
+      "hatch": { "youth": 0.4, "family": 0.2, "worker": 0.25, "rich": 0.02, "fleet": 0.05, "enthusiast": 0.08 },
+      "sedanM": { "youth": 0.08, "family": 0.3, "worker": 0.22, "rich": 0.15, "fleet": 0.2, "enthusiast": 0.05 },
+      "coupe": { "youth": 0.35, "family": 0.02, "worker": 0.08, "rich": 0.2, "fleet": 0, "enthusiast": 0.35 },
+      "sedanL": { "youth": 0.02, "family": 0.15, "worker": 0.08, "rich": 0.45, "fleet": 0.28, "enthusiast": 0.02 },
+      "minivan": { "youth": 0.03, "family": 0.6, "worker": 0.1, "rich": 0.05, "fleet": 0.2, "enthusiast": 0.02 },
+      "kei": { "youth": 0.35, "family": 0.1, "worker": 0.35, "rich": 0.02, "fleet": 0.15, "enthusiast": 0.03 },
+      "suv": { "youth": 0.15, "family": 0.35, "worker": 0.2, "rich": 0.15, "fleet": 0.05, "enthusiast": 0.1 },
+      "pickup": { "youth": 0.1, "family": 0.15, "worker": 0.15, "rich": 0.05, "fleet": 0.45, "enthusiast": 0.1 },
+      "sports": { "youth": 0.15, "family": 0, "worker": 0.02, "rich": 0.38, "fleet": 0, "enthusiast": 0.45 }
     },
     "trend": {
-      "coupe": [1,1.05,1.1,1,0.95,0.9,0.9],
-      "minivan": [1,1,1,1.1,1.05,0.95,0.9],
-      "kei": [1,1,1.05,1,1,1,1],
-      "suv": [1,1,1,1.05,1.1,1.15,1.15],
-      "sports": [1,1,1,1.05,1,1,1],
-      "diesel": [1,1,1,1.05,1.1,0.95,0.85],
-      "hybrid": [1,1,1,1,1.05,1.1,1.1],
-      "ev": [1,1,1,1,1,1.1,1.2]
-    },
-    "taste": {"body":{},"pt":{},"eps":1},
-    "unlock": {"rep":0,"cost":0},
-    "logistics": 0
-  },
-  "asia": {
-    "name": "아시아",
-    "info": "인구가 많고 소득이 빠르게 오르는 시장. 1970년에는 작지만 2010년대에 세계 최대 시장으로 커진다. 값싼 소형차와 경차를 선호하고 가격에 민감하다.",
-    "years": [1970,1980,1990,2000,2010,2020,2030],
-    "annual": [300000,700000,1800000,4500000,12000000,22000000,30000000],
-    "bodyShare": {
-      "sedanS": [0.45,0.38,0.3,0.25,0.2,0.16,0.14],
-      "hatch": [0.2,0.2,0.18,0.17,0.16,0.14,0.13],
-      "sedanM": [0.2,0.2,0.2,0.19,0.18,0.16,0.15],
-      "coupe": [0.02,0.02,0.02,0.02,0.02,0.02,0.02],
-      "sedanL": [0.03,0.04,0.05,0.05,0.05,0.05,0.05],
-      "minivan": [0.02,0.03,0.05,0.06,0.07,0.07,0.07],
-      "kei": [0.05,0.08,0.1,0.1,0.1,0.1,0.1],
-      "suv": [0,0.01,0.03,0.08,0.14,0.22,0.26],
-      "pickup": [0.03,0.04,0.05,0.05,0.05,0.05,0.05],
-      "sports": [0,0,0.02,0.03,0.03,0.03,0.03]
-    },
-    "mix": {
-      "sedanS": {"youth":0.227,"family":0.182,"worker":0.343,"rich":0.015,"fleet":0.188,"enthusiast":0.045},
-      "hatch": {"youth":0.375,"family":0.187,"worker":0.293,"rich":0.016,"fleet":0.054,"enthusiast":0.075},
-      "sedanM": {"youth":0.075,"family":0.283,"worker":0.259,"rich":0.12,"fleet":0.216,"enthusiast":0.047},
-      "coupe": {"youth":0.353,"family":0.02,"worker":0.101,"rich":0.172,"fleet":0,"enthusiast":0.354},
-      "sedanL": {"youth":0.02,"family":0.151,"worker":0.101,"rich":0.384,"fleet":0.324,"enthusiast":0.02},
-      "minivan": {"youth":0.029,"family":0.572,"worker":0.119,"rich":0.041,"fleet":0.22,"enthusiast":0.019},
-      "kei": {"youth":0.316,"family":0.09,"worker":0.396,"rich":0.015,"fleet":0.156,"enthusiast":0.027},
-      "suv": {"youth":0.145,"family":0.337,"worker":0.242,"rich":0.123,"fleet":0.056,"enthusiast":0.097},
-      "pickup": {"youth":0.091,"family":0.137,"worker":0.171,"rich":0.039,"fleet":0.471,"enthusiast":0.091},
-      "sports": {"youth":0.158,"family":0,"worker":0.026,"rich":0.341,"fleet":0,"enthusiast":0.475}
-    },
-    "trend": {
-      "kei": [1.1,1.1,1.15,1.1,1.05,1,1],
-      "suv": [1,1,1,1.05,1.15,1.2,1.2],
-      "ev": [1,1,1,1,1.05,1.2,1.3]
-    },
-    "taste": {"body":{"kei":1.2,"sedanS":1.15,"hatch":1.1,"sedanM":1,"minivan":1,"suv":0.95,"pickup":0.9,"coupe":0.85,"sedanL":0.85,"sports":0.8},"pt":{"hybrid":0.95,"diesel":0.95},"eps":1.25},
-    "unlock": {"rep":25,"cost":50000},
-    "logistics": 0.03
-  },
-  "europe": {
-    "name": "유럽",
-    "info": "역사가 긴 성숙 시장으로, 규모는 크지만 성장이 느리다. 해치백과 디젤을 선호하고 품질 기준이 높아 품질 등급이 낮은 차는 잘 팔리지 않는다. 배출가스 규제가 가장 앞서 2032년에 내연기관 신차를 금지한다.",
-    "years": [1970,1980,1990,2000,2010,2020,2030],
-    "annual": [8000000,9500000,11000000,12500000,13000000,14000000,15000000],
-    "bodyShare": {
-      "sedanS": [0.3,0.25,0.2,0.16,0.13,0.11,0.1],
-      "hatch": [0.3,0.33,0.35,0.35,0.33,0.3,0.28],
-      "sedanM": [0.22,0.22,0.22,0.2,0.18,0.16,0.15],
-      "coupe": [0.05,0.05,0.04,0.04,0.03,0.03,0.03],
-      "sedanL": [0.06,0.06,0.06,0.06,0.06,0.05,0.05],
-      "minivan": [0.03,0.04,0.06,0.08,0.08,0.07,0.06],
-      "kei": [0.02,0.02,0.02,0.03,0.03,0.03,0.03],
-      "suv": [0,0.01,0.02,0.05,0.13,0.22,0.27],
-      "pickup": [0.01,0.01,0.01,0.01,0.01,0.01,0.01],
-      "sports": [0.01,0.01,0.02,0.02,0.02,0.02,0.02]
-    },
-    "mix": {
-      "sedanS": {"youth":0.27,"family":0.188,"worker":0.281,"rich":0.019,"fleet":0.186,"enthusiast":0.056},
-      "hatch": {"youth":0.425,"family":0.185,"worker":0.231,"rich":0.019,"fleet":0.051,"enthusiast":0.089},
-      "sedanM": {"youth":0.088,"family":0.288,"worker":0.211,"rich":0.144,"fleet":0.211,"enthusiast":0.058},
-      "coupe": {"youth":0.359,"family":0.018,"worker":0.071,"rich":0.178,"fleet":0,"enthusiast":0.374},
-      "sedanL": {"youth":0.022,"family":0.145,"worker":0.077,"rich":0.435,"fleet":0.298,"enthusiast":0.023},
-      "minivan": {"youth":0.034,"family":0.583,"worker":0.097,"rich":0.049,"fleet":0.214,"enthusiast":0.023},
-      "kei": {"youth":0.374,"family":0.093,"worker":0.326,"rich":0.019,"fleet":0.154,"enthusiast":0.034},
-      "suv": {"youth":0.165,"family":0.333,"worker":0.191,"rich":0.143,"fleet":0.053,"enthusiast":0.115},
-      "pickup": {"youth":0.106,"family":0.139,"worker":0.139,"rich":0.046,"fleet":0.459,"enthusiast":0.111},
-      "sports": {"youth":0.155,"family":0,"worker":0.018,"rich":0.342,"fleet":0,"enthusiast":0.485}
-    },
-    "trend": {
-      "diesel": [1,1.05,1.15,1.3,1.3,0.95,0.8],
-      "hatch": [1,1.05,1.05,1.05,1,1,1],
-      "ev": [1,1,1,1,1.05,1.2,1.35]
-    },
-    "taste": {"body":{"hatch":1.2,"sedanS":1.05,"coupe":1.05,"sports":1.05,"sedanM":1,"sedanL":1,"minivan":1,"kei":0.85,"suv":0.9,"pickup":0.6},"pt":{"diesel":1.2,"ev":1.05},"eps":1,"quality":{"min":5,"per":0.12,"floor":0.4}},
-    "unlock": {"rep":45,"cost":300000},
-    "logistics": 0.06
-  },
-  "northAmerica": {
-    "name": "북미",
-    "info": "세계에서 가장 크고 소득이 높은 자동차 시장. 큰 차를 선호해 대형 세단, 픽업, SUV가 많이 팔리고 디젤은 거의 팔리지 않는다. 가격에는 비교적 둔감하다.",
-    "years": [1970,1980,1990,2000,2010,2020,2030],
-    "annual": [10000000,11500000,13000000,14500000,15000000,16500000,17000000],
-    "bodyShare": {
-      "sedanS": [0.15,0.17,0.14,0.1,0.08,0.06,0.05],
-      "hatch": [0.05,0.07,0.06,0.04,0.04,0.03,0.03],
-      "sedanM": [0.3,0.3,0.28,0.24,0.2,0.15,0.13],
-      "coupe": [0.1,0.08,0.05,0.04,0.03,0.02,0.02],
-      "sedanL": [0.3,0.25,0.18,0.12,0.1,0.07,0.06],
-      "minivan": [0,0.02,0.08,0.1,0.08,0.06,0.05],
-      "kei": [0,0,0,0,0,0,0],
-      "suv": [0.02,0.03,0.1,0.2,0.28,0.38,0.42],
-      "pickup": [0.07,0.07,0.1,0.14,0.17,0.21,0.22],
-      "sports": [0.01,0.01,0.01,0.02,0.02,0.02,0.02]
-    },
-    "mix": {
-      "sedanS": {"youth":0.247,"family":0.237,"worker":0.266,"rich":0.023,"fleet":0.178,"enthusiast":0.049},
-      "hatch": {"youth":0.392,"family":0.236,"worker":0.221,"rich":0.023,"fleet":0.049,"enthusiast":0.079},
-      "sedanM": {"youth":0.075,"family":0.339,"worker":0.187,"rich":0.163,"fleet":0.189,"enthusiast":0.047},
-      "coupe": {"youth":0.342,"family":0.023,"worker":0.07,"rich":0.224,"fleet":0,"enthusiast":0.341},
-      "sedanL": {"youth":0.018,"family":0.165,"worker":0.066,"rich":0.476,"fleet":0.257,"enthusiast":0.018},
-      "minivan": {"youth":0.027,"family":0.644,"worker":0.081,"rich":0.051,"fleet":0.179,"enthusiast":0.018},
-      "kei": {"youth":0.355,"family":0.121,"worker":0.319,"rich":0.023,"fleet":0.152,"enthusiast":0.03},
-      "suv": {"youth":0.14,"family":0.391,"worker":0.168,"rich":0.161,"fleet":0.047,"enthusiast":0.093},
-      "pickup": {"youth":0.098,"family":0.176,"worker":0.132,"rich":0.056,"fleet":0.44,"enthusiast":0.098},
-      "sports": {"youth":0.142,"family":0,"worker":0.017,"rich":0.414,"fleet":0,"enthusiast":0.427}
-    },
-    "trend": {
-      "suv": [1,1,1.05,1.15,1.2,1.25,1.25],
-      "pickup": [1.05,1.05,1.1,1.15,1.15,1.15,1.1],
-      "diesel": [0.8,0.8,0.8,0.8,0.8,0.7,0.6],
-      "ev": [1,1,1,1,1.05,1.15,1.25]
-    },
-    "taste": {"body":{"pickup":1.3,"suv":1.25,"sedanL":1.2,"minivan":1.15,"sedanM":1.05,"sports":1.05,"coupe":1,"sedanS":0.85,"hatch":0.75,"kei":0.5},"pt":{"diesel":0.7,"gasoline":1.05},"eps":0.9},
-    "unlock": {"rep":60,"cost":800000},
-    "logistics": 0.07
+      "coupe":    [1, 1.05, 1.1, 1, 0.95, 0.9, 0.9],
+      "minivan":  [1, 1, 1, 1.1, 1.05, 0.95, 0.9],
+      "kei":      [1, 1, 1.05, 1, 1, 1, 1],
+      "suv":      [1, 1, 1, 1.05, 1.1, 1.15, 1.15],
+      "sports":   [1, 1, 1, 1.05, 1, 1, 1],
+      "diesel":   [1, 1, 1, 1.05, 1.1, 0.95, 0.85],
+      "hybrid":   [1, 1, 1, 1, 1.05, 1.1, 1.1],
+      "ev":       [1, 1, 1, 1, 1, 1.1, 1.2]
+    }
   }
 }
