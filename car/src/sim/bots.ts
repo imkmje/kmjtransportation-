@@ -60,10 +60,10 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
     },
   };
 }
-/** 리프트 안 함(16장): 신중과 같지만 페이스리프트를 하지 않고 풀체인지만 */
-export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, ...opts }), name: 'noFacelift' });
-/** 새 이름만: 페이스리프트·풀체인지 없이 교체 때마다 새 차종(전 세대를 단종하고 라인이 비면 출시) */
-export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, successor: 'newName', ...opts }), name: 'newNameOnly' });
+/** 리프트 안 함(16장): 페이스리프트 없이 5년(60개월) 주기 풀체인지 */
+export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, ...opts }), name: 'noFacelift' });
+/** 새 이름만: 페이스리프트·풀체인지 없이 5년(60개월) 주기로 매번 새 차종(전 세대를 단종하고 라인이 비면 출시) */
+export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, successor: 'newName', ...opts }), name: 'newNameOnly' });
 const bodyPrice = (id: string) => bodyById(id).basePrice;
 /** 쓸 수 있는 차체 중 (칸 규모 × 기준가 대당 이익)이 가장 큰 것 */
 const bestBody = (year: number): string =>
