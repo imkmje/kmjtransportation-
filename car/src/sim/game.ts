@@ -15,6 +15,13 @@ export interface GameOptions { seed: number; companyName?: string }
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 const OK: CommandResult = { ok: true };
+const priceError = (body: string, price: number): string | null => {
+  const base = bodyById(body).basePrice;
+  return !Number.isFinite(price) || price < base * config.price.min - 1e-6 || price > base * config.price.max + 1e-6
+    ? `가격은 기준가(${base.toLocaleString()}만원)의 ${config.price.min}~${config.price.max}배 사이여야 합니다.` : null;
+};
+const marketingError = (m: number): string | null =>
+  !Number.isInteger(m) || m < 0 || m >= config.awareness.marketingCost.length ? `마케팅 등급은 0~${config.awareness.marketingCost.length - 1} 중에서 고르세요.` : null;
 
 /** 판매 중(생산 라인을 차지하는) 세대: 단종 신청한 달까지 포함 */
 export const sellingGens = (s: CarState): Generation[] =>
@@ -164,6 +171,15 @@ export class Game {
         g.status = 'ending'; g.endMonth = monthOf(s.week);
         return OK;
       }
+      case 'setPrice':
+      case 'setMarketing': {
+        const g = allGens(s).find((x) => x.id === cmd.generationId);
+        if (!g || g.status !== 'onSale') return fail('판매 중인 차가 아닙니다.');
+        const bad = cmd.type === 'setPrice' ? priceError(g.body, cmd.price) : marketingError(cmd.marketing);
+        if (bad) return fail(bad);
+        if (cmd.type === 'setPrice') currentEdition(g).price = cmd.price; else g.marketing = cmd.marketing;
+        return OK;
+      }
       case 'borrow': {
         if (!Number.isFinite(cmd.amount) || cmd.amount <= 0) return fail('빌릴 금액이 올바르지 않습니다.');
         if (s.loan.balance + cmd.amount > loanLimit(s) + 1e-6) return fail('대출 한도를 넘습니다.');
@@ -200,10 +216,8 @@ export class Game {
     if (!p) return fail('없는 개발 프로젝트입니다.');
     if (p.phase !== 'test' || p.testWeeks < config.dev.minTestWeeks) return fail(`시험을 최소 ${config.dev.minTestWeeks}주 해야 출시할 수 있습니다.`);
     if (sellingGens(s).length >= config.factory.lines) return fail('생산 라인이 없습니다. 기존 차를 단종하세요.');
-    const base = bodyById(p.body).basePrice;
-    if (!Number.isFinite(cmd.price) || cmd.price < base * config.price.min - 1e-6 || cmd.price > base * config.price.max + 1e-6)
-      return fail(`가격은 기준가(${base.toLocaleString()}만원)의 ${config.price.min}~${config.price.max}배 사이여야 합니다.`);
-    if (!Number.isInteger(cmd.marketing) || cmd.marketing < 0 || cmd.marketing >= config.awareness.marketingCost.length) return fail('마케팅 등급은 0~3 중에서 고르세요.');
+    const base = bodyById(p.body).basePrice, bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing);
+    if (bad) return fail(bad);
     if (cmd.wheels !== 0 && cmd.wheels !== 1 && cmd.wheels !== 2) return fail('바퀴 모양은 0~2 중에서 고르세요.');
     if (typeof cmd.color !== 'string') return fail('색상을 고르세요.');
     const year = yearOf(s.week), month = monthOf(s.week);

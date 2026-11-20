@@ -96,6 +96,8 @@ export type Command =
   | { type: 'cancelProject'; projectId: number }
   | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
   | { type: 'discontinue'; generationId: number }
+  | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
+  | { type: 'setMarketing'; generationId: number; marketing: number }
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'bailout' };

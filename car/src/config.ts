@@ -50,7 +50,7 @@ export const config = {
   discontinue: { lastMonthMult: 0.5, recentMonths: 3, wellSelling: 0.7, rep: -2, adviceSales: 10, adviceMonths: 6, adviceDrop: 0.6 }, // 8.6
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
-  rivals: { noise: 0.1 }, // 경쟁 차 A = 1.0 + 강약 ± 0.1
+  rivals: { base: 1, noise: 0.1 }, // 경쟁 차 A = 기본값 + 강약 ± 0.1
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
 };

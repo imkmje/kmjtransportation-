@@ -77,11 +77,11 @@ export function awarenessStart(reputation: number, reviewAvg: number): number {
   return Math.min(1, Math.max(0, a.base + reputation / a.repDiv + (reviewAvg - config.grade.mid) * a.reviewPer));
 }
 
-/** 경쟁사 3곳: 칸마다 A = 1.0 + 강약 ± 난수(1단계는 게임 시작 때 한 번 정하고 고정) */
+/** 경쟁사 3곳: 칸마다 A = 기본값 + 강약 ± 난수(1단계는 게임 시작 때 한 번 정하고 고정) */
 export function initRivals(rng: Rng): RivalState[] {
   return [...RIVALS].sort((a, b) => (a.id < b.id ? -1 : 1)).map((r) => {
     const cells: Record<string, number> = {};
-    for (const body of Object.keys(r.cells).sort()) cells[body] = 1 + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
+    for (const body of Object.keys(r.cells).sort()) cells[body] = config.rivals.base + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
     return { id: r.id, name: r.name, cells };
   });
 }

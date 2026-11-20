@@ -191,3 +191,30 @@ describe('단종(8.6)과 생산 라인', () => {
     expect(advice(gen)).toContain('정점의 55%');
   });
 });
+
+describe('출시 뒤 조정: setPrice / setMarketing', () => {
+  it('가격 변경은 기준가 0.6~2.0배만, 다음 월말 정산부터 반영', () => {
+    const { g, gen } = launched(1);
+    g.state.cash = 1e9;
+    toMonthEnd(g);
+    expect(g.command({ type: 'setPrice', generationId: gen.id, price: 2500 }).ok).toBe(false);
+    expect(g.command({ type: 'setPrice', generationId: gen.id, price: 700 })).toEqual({ ok: false, reason: '가격은 기준가(1,200만원)의 0.6~2배 사이여야 합니다.' });
+    ok(g.command({ type: 'setPrice', generationId: gen.id, price: 1500 }));
+    expect(g.state.ledger.at(-1)!.revenue).toBe(gen.sales.at(-1)! * 1200); // 지난 정산은 그대로
+    toMonthEnd(g);
+    expect(g.state.ledger.at(-1)!.revenue).toBe(gen.sales.at(-1)! * 1500);
+  });
+  it('마케팅 등급 변경: 0~3, 다음 정산의 비용과 목표 인지도에 반영', () => {
+    const { g, gen } = launched(1);
+    expect(g.command({ type: 'setMarketing', generationId: gen.id, marketing: 4 })).toEqual({ ok: false, reason: '마케팅 등급은 0~3 중에서 고르세요.' });
+    ok(g.command({ type: 'setMarketing', generationId: gen.id, marketing: 3 }));
+    toMonthEnd(g);
+    expect(g.state.ledger.at(-1)!.marketing).toBe(config.awareness.marketingCost[3]);
+  });
+  it('판매 중이 아닌 차(단종 신청·없는 ID)는 조정할 수 없다', () => {
+    const { g, gen } = launched(1);
+    expect(g.command({ type: 'setPrice', generationId: 999, price: 1200 })).toEqual({ ok: false, reason: '판매 중인 차가 아닙니다.' });
+    ok(g.command({ type: 'discontinue', generationId: gen.id }));
+    expect(g.command({ type: 'setMarketing', generationId: gen.id, marketing: 0 }).ok).toBe(false);
+  });
+});
