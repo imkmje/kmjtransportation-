@@ -1,6 +1,6 @@
 /* 쿼터뷰 사무실(실제 사무실 비율). 반복 동작은 작고 느린 transform 애니메이션만 쓴다(SVG 필터 없음). */
 .office{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
-.office>svg{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;
+.office>svg{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;
   font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif}
 .office>svg.drag{cursor:grabbing}
 .office text{font-family:inherit}
@@ -56,11 +56,6 @@
 .office .tagpop b{font-weight:700;font-size:13px}
 .office .tagpop i{display:block;height:4px;border-radius:2px;background:#e3e7ec;margin-top:3px;overflow:hidden}
 .office .tagpop i s{display:block;height:100%;background:#7fa88a}
-/* 확대 버튼 */
-.office .zoom{position:absolute;left:10px;bottom:10px;display:flex;gap:4px;background:#ffffffd9;border:1px solid #d8dde4;border-radius:12px;padding:3px}
-.office .zoom button{border:0;background:transparent;border-radius:9px;min-height:40px;min-width:44px;padding:0 10px;font:inherit;font-size:12px;font-weight:700;color:#5b6470;cursor:pointer}
-.office .zoom button[aria-pressed="true"]{background:#14171c;color:#fff}
-.office .zoom button:focus-visible{outline:3px solid #ff5a1f;outline-offset:1px}
 
 /* 점수와 말풍선: 작고 조용하게 */
 .office .pop{transform-box:view-box;animation:office-rise 2.6s ease-out forwards;pointer-events:none}

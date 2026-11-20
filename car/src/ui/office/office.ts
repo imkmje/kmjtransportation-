@@ -249,12 +249,9 @@ export function createOffice(host: HTMLElement): Office {
   const world = document.createElementNS(NS, 'g');
   const fx = document.createElementNS(NS, 'g'), fxBub = document.createElementNS(NS, 'g');
   svg.append(world, fx, fxBub);
-  const zoomBar = document.createElement('div');
-  zoomBar.className = 'zoom';
-  zoomBar.innerHTML = '<button type="button" data-z="fit" aria-pressed="true">전체 보기</button><button type="button" data-z="near" aria-pressed="false">가까이 보기</button>';
   const tagPop = document.createElement('div');
   tagPop.className = 'tagpop'; tagPop.hidden = true;
-  root.append(svg, zoomBar, tagPop);
+  root.append(svg, tagPop);
   host.append(root);
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -265,7 +262,7 @@ export function createOffice(host: HTMLElement): Office {
   const slots = new Map<number, SVGGElement>();
   const spotTaken = new Map<Spot, string>();
   let vb = { x: 0, y: 0, w: 1, h: 1 };
-  let cam = { cx: 0, cy: 0, s: 1, mode: 'fit' as 'fit' | 'near' | 'free' };
+  let cam = { cx: 0, cy: 0, s: 1, mode: 'auto' as 'auto' | 'free' };   // auto=기본 화면(가까이), free=사용자가 옮긴 뒤
   let hostW = 1, hostH = 1, fitS = 1;
   let active = true, disposed = false, raf = 0, idle = 0, last = 0, nextErrand = 0, nextTalk = 0;
   const bubbles: { id: string; g: SVGGElement }[] = [];
@@ -514,58 +511,56 @@ export function createOffice(host: HTMLElement): Office {
     walkTo(a, spotPlace(s));
   }
 
-  // ---------- 카메라(전체 보기·가까이 보기·끌기·확대) ----------
-  const maxS = () => Math.max(fitS * 4, 2.4);
+  // ---------- 카메라: 기본은 일하는 구역을 가까이, 한 손가락 끌기·두 손가락 확대, 두 번 톡 → 기본 화면 ----------
+  const maxS = () => Math.max(fitS, hostH / 6 / 58);          // 사람(키 58단위)이 화면 높이의 1/6
   function applyCam() {
     const vw = hostW / cam.s, vh = hostH / cam.s;
     const cx = vw >= vb.w ? vb.x + vb.w / 2 : Math.max(vb.x + vw / 2, Math.min(vb.x + vb.w - vw / 2, cam.cx));
     const cy = vh >= vb.h ? vb.y + vb.h / 2 : Math.max(vb.y + vh / 2, Math.min(vb.y + vb.h - vh / 2, cam.cy));
     cam.cx = cx; cam.cy = cy;
     svg.setAttribute('viewBox', `${f(cx - vw / 2)} ${f(cy - vh / 2)} ${f(vw)} ${f(vh)}`);
-    zoomBar.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.z === cam.mode)));
   }
-  function setMode(mode: 'fit' | 'near') {
-    cam.mode = mode;
-    if (mode === 'fit') { cam.s = fitS; cam.cx = vb.x + vb.w / 2; cam.cy = vb.y + vb.h / 2; }
-    else {
-      cam.s = Math.min(maxS(), Math.max(fitS * 1.8, 1.25));
-      // 일하는 사람들 쪽으로
-      const all = [...actors.values()], st = all.filter((a) => a.home.kind === 'spot');
-      const busy = all.filter((a) => view && view.phase !== 'rest' && a.staff.working);
-      const list = st.length ? st : busy.length ? busy : all;   // 시험실·스튜디오에 서서 일하는 사람이 있으면 그쪽
-      if (list.length) { const ps = list.map((a) => a.home.kind === 'spot' ? P(a.home.x, a.home.y, 0.9) : P(a.x, a.y, 0.9)); cam.cx = ps.reduce((s, p) => s + p[0], 0) / ps.length; cam.cy = ps.reduce((s, p) => s + p[1], 0) / ps.length; }
-      else { const z = room?.zones.find((q) => q.kind === 'office'); if (z) [cam.cx, cam.cy] = P(z.x + z.w / 2, z.y + z.d / 2); }
-    }
+  /** 기본 화면: 일하는 사람들이 있는 곳이 무대를 채우게(무대가 세로로 길어도 빈 여백 없이) */
+  function setDefault() {
+    cam.mode = 'auto';
+    const all = [...actors.values()], st = all.filter((a) => a.home.kind === 'spot');
+    const busy = all.filter((a) => view && view.phase !== 'rest' && a.staff.working);
+    const list = st.length >= 2 ? [...st, ...busy] : busy.length ? busy : all;
+    const ps = list.map((a) => P(a.home.x, a.home.y, 0.9));
+    if (!ps.length) { const z = room?.zones.find((q) => q.kind === 'office'); if (z) ps.push(P(z.x, z.y), P(z.x + z.w, z.y + z.d)); }
+    const xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]), pad = 90;
+    const bw = Math.max(...xs) - Math.min(...xs) + pad * 2, bh = Math.max(...ys) - Math.min(...ys) + pad * 2;
+    const cover = Math.max(hostW / vb.w, hostH / vb.h);
+    cam.s = Math.max(fitS, Math.min(maxS(), Math.max(cover, Math.min(hostW / bw, hostH / bh, maxS() * 0.55))));
+    cam.cx = (Math.max(...xs) + Math.min(...xs)) / 2; cam.cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     applyCam();
   }
   function measure() {
     const r = root.getBoundingClientRect();
     if (!r.width || !r.height) return;
     hostW = r.width; hostH = r.height;
-    const compact = hostW < 480;
-    zoomBar.querySelectorAll('button').forEach((b) => (b.textContent = b.dataset.z === 'fit' ? (compact ? '전체' : '전체 보기') : (compact ? '가까이' : '가까이 보기')));
     fitS = Math.min(hostW / vb.w, hostH / vb.h);
-    if (cam.mode === 'free') { cam.s = Math.max(fitS, Math.min(maxS(), cam.s)); applyCam(); } else setMode(cam.mode);
+    if (cam.mode === 'free') { cam.s = Math.max(fitS, Math.min(maxS(), cam.s)); applyCam(); } else setDefault();
   }
   const ro = new ResizeObserver(measure);
   ro.observe(root);
-  zoomBar.addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest('button'); if (b) setMode(b.dataset.z as 'fit' | 'near'); });
-  zoomBar.addEventListener('pointerdown', (e) => e.stopPropagation());
 
   const ptrs = new Map<number, [number, number]>();
-  let dragDist = 0, pinch0 = 0, s0 = 1;
+  let dragDist = 0, pinch0 = 0, s0 = 1, w0: [number, number] = [0, 0], lastTap = { t: 0, x: 0, y: 0 };
   const toWorld = (px: number, py: number): [number, number] => { const r = svg.getBoundingClientRect(); return [cam.cx + (px - r.left - r.width / 2) / cam.s, cam.cy + (py - r.top - r.height / 2) / cam.s]; };
-  function zoomAt(px: number, py: number, s: number) {
-    const [wx, wy] = toWorld(px, py);
-    const ns = Math.max(fitS, Math.min(maxS(), s));
-    cam.cx = wx - (wx - cam.cx) * (cam.s / ns); cam.cy = wy - (wy - cam.cy) * (cam.s / ns); cam.s = ns; cam.mode = 'free';
-    applyCam();
+  /** 화면 점 (px,py) 아래에 세계 점 w가 오도록 배율 s로 맞춘다 */
+  function pinTo(w: [number, number], px: number, py: number, s: number) {
+    const r = svg.getBoundingClientRect();
+    cam.s = Math.max(fitS, Math.min(maxS(), s));
+    cam.cx = w[0] - (px - r.left - r.width / 2) / cam.s; cam.cy = w[1] - (py - r.top - r.height / 2) / cam.s;
+    cam.mode = 'free'; applyCam();
   }
+  const pinchStart = () => { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1; s0 = cam.s; w0 = toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); dragDist = 99; };
   svg.addEventListener('pointerdown', (e) => {
     svg.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, [e.clientX, e.clientY]);
     if (ptrs.size === 1) dragDist = 0;
-    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); s0 = cam.s; }
+    if (ptrs.size === 2) pinchStart();
     svg.classList.add('drag');
   });
   svg.addEventListener('pointermove', (e) => {
@@ -573,16 +568,27 @@ export function createOffice(host: HTMLElement): Office {
     if (!p) return;
     const dx = e.clientX - p[0], dy = e.clientY - p[1];
     ptrs.set(e.pointerId, [e.clientX, e.clientY]);
-    if (ptrs.size === 1) { dragDist += Math.abs(dx) + Math.abs(dy); if (dragDist > 6) { cam.cx -= dx / cam.s; cam.cy -= dy / cam.s; cam.mode = 'free'; applyCam(); } }
-    else if (ptrs.size === 2 && pinch0) { dragDist = 99; const [a, b] = [...ptrs.values()]; zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, s0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0); }
+    if (ptrs.size === 1) { dragDist += Math.abs(dx) + Math.abs(dy); if (dragDist > 8) { cam.cx -= dx / cam.s; cam.cy -= dy / cam.s; cam.mode = 'free'; applyCam(); } }
+    else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinTo(w0, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, s0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0); }
   });
   const up = (e: PointerEvent) => {
     if (!ptrs.has(e.pointerId)) return;
     ptrs.delete(e.pointerId);
-    if (!ptrs.size) { svg.classList.remove('drag'); if (dragDist <= 6 && e.type === 'pointerup') tap(e.clientX, e.clientY); }
+    if (ptrs.size === 2) pinchStart();
+    if (ptrs.size) return;
+    svg.classList.remove('drag');
+    if (dragDist > 8 || e.type !== 'pointerup') return;
+    // 조금만 움직였으면 누르기. 0.35초 안에 같은 곳을 두 번 누르면 기본 화면으로
+    const now = performance.now();
+    if (now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) { lastTap.t = 0; tagPop.hidden = true; setDefault(); return; }
+    lastTap = { t: now, x: e.clientX, y: e.clientY };
+    tap(e.clientX, e.clientY);
   };
   svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
-  svg.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+  svg.addEventListener('wheel', (e) => { e.preventDefault(); pinTo(toWorld(e.clientX, e.clientY), e.clientX, e.clientY, cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+  // iOS 사파리의 화면 확대 몸짓 막기(touch-action:none과 함께)
+  root.addEventListener('gesturestart', (e) => e.preventDefault());
+  svg.addEventListener('dblclick', (e) => e.preventDefault());
 
   // 사람 누르기 → 이름표(이름·직무·컨디션)
   function tap(px: number, py: number) {
@@ -670,10 +676,13 @@ export function createOffice(host: HTMLElement): Office {
     update(v) {
       if (disposed) return;
       const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name]).sort(), v.carSvg ?? '']);
-      const lvChanged = !view || view.level !== v.level;
+      const lvChanged = !view || view.level !== v.level, phaseChanged = !!view && view.phase !== v.phase;
       view = v;
-      if (key !== structKey) { structKey = key; build(v); if (lvChanged) cam.mode = 'fit'; measure(); }
+      const rebuilt = key !== structKey;
+      if (rebuilt) { structKey = key; build(v); if (lvChanged) cam.mode = 'auto'; }
       applyState(v);
+      // 사용자가 옮기거나 확대한 뒤에는 그대로 둔다(등급이 바뀌면 다시 맞춤)
+      if (rebuilt) measure(); else if (phaseChanged && cam.mode === 'auto') setDefault();
       run();
     },
     emit(events) {
