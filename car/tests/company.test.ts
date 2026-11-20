@@ -33,9 +33,12 @@ function hireOne(g: Game, role: Staff['role'] = 'designer', tier: 1 | 2 | 3 = 1)
 }
 
 describe('채용(9.1)', () => {
-  it('정원이 차 있으면 공고 거부(본사 1등급 정원 4), 본사를 올리면 된다', () => {
+  it('본사 1등급에서 2명을 더 채용할 수 있고(정원 6, 시작 직원 4명, 0.5.0), 정원이 차면 공고 거부, 본사를 올리면 된다', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
-    expect(reason(g.command({ type: 'postJob', role: 'designer', tier: 1 }))).toBe('정원(4명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.');
+    expect(g.state.staff.length).toBe(4);
+    for (let i = 0; i < 2; i++) { ok(g.command({ type: 'postJob', role: 'designer', tier: 1 })); ok(g.command({ type: 'hire', candidateId: g.state.candidates[0].id })); ok(g.command({ type: 'dismissCandidates' })); }
+    expect(g.state.staff.length).toBe(6);
+    expect(reason(g.command({ type: 'postJob', role: 'designer', tier: 1 }))).toBe('정원(6명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.');
     g.state.cash = 1e7;
     ok(g.command({ type: 'upgradeHQ' }));
     ok(g.command({ type: 'postJob', role: 'designer', tier: 1 }));
@@ -282,7 +285,7 @@ describe('팀 배치와 영업(9.1)', () => {
 });
 
 describe('본사(9.2)와 동시 개발(6.4)', () => {
-  it('등급별 정원 4/8/12/16/20, 개발팀 1/1/2/2/3, 옵션 슬롯 2/2/3/4/4, 승급비·평판 조건, 최고 등급', () => {
+  it('등급별 정원 6/8/12/16/20(0.5.0: 1등급 4 → 6), 개발팀 1/1/2/2/3, 옵션 슬롯 2/2/3/4/4, 승급비·평판 조건, 최고 등급', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     const got = [];
     s.cash = 0;
@@ -297,7 +300,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
       ok(g.command({ type: 'upgradeHQ' }));
       expect(cash - s.cash).toBe(next.cost); expect(s.hqLevel).toBe(lv + 1);
     }
-    expect(got).toEqual([[4, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4]]);
+    expect(got).toEqual([[6, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4]]);
     expect([50000, 400000, 3000000, 15000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억
     expect([20, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
@@ -336,7 +339,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
   it('hqInfo: 지금·다음 등급, 승급 가능 여부와 이유', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
     const i = hqInfo(g.state);
-    expect(i.current).toMatchObject({ level: 1, name: '창고 공장', staffCap: 4, teams: 1, optionSlots: 2 });
+    expect(i.current).toMatchObject({ level: 1, name: '창고 공장', staffCap: 6, teams: 1, optionSlots: 2 });
     expect(i.next).toMatchObject({ level: 2, name: '소형 사옥', cost: 50000, staffCap: 8 });
     expect(i.canUpgrade).toBe(true); expect(i.staffCount).toBe(4);
     g.state.cash = 1e9; ok(g.command({ type: 'upgradeHQ' }));
@@ -457,7 +460,10 @@ describe('조회 함수(화면용)', () => {
   });
   it('hiringInfo: 정원·공고비·후보와 남은 주', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
-    expect(hiringInfo(g.state)).toMatchObject({ staffCount: 4, capacity: 4, full: true, canPost: false, candidates: [] });
+    expect(hiringInfo(g.state)).toMatchObject({ staffCount: 4, capacity: 6, full: false, canPost: true, candidates: [] });
+    g.state.hqLevel = 1; g.state.staff.push(...g.state.staff.slice(0, 2).map((x, i) => ({ ...x, id: 100 + i })));
+    expect(hiringInfo(g.state)).toMatchObject({ staffCount: 6, capacity: 6, full: true, canPost: false });
+    g.state.staff = g.state.staff.slice(0, 4);
     expect(hiringInfo(g.state).tiers.map((t) => t.cost)).toEqual([500, 2000, 10000]);
     g.state.cash = 1e7; ok(g.command({ type: 'upgradeHQ' })); ok(g.command({ type: 'postJob', role: 'designer', tier: 1 }));
     g.tick();

@@ -48,7 +48,7 @@ export const config = {
     // 1990년 주문이 5등급 공장(월 2만 대)의 3배를 넘어서, 경쟁 차 기본 A(rivals.base)를 함께 낮춰 1970년대 판매는 그대로 두고 후반 시장만 줄였다
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
-    overpriceExp: 20, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
+    overpriceExp: 6, overpriceHardAt: 1.08, overpriceHardExp: 20, // 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^6 × (기준가 × 1.08/판매가)^20(108% 넘는 부분만, 가격 올리기 봇이 유리해지지 않게). 0.5.0: 지수 20 하나였을 때 108%만 받아도 판매가 1/20로 줄었다(자르기 뒤에 곱한다)
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -72,15 +72,15 @@ export const config = {
       { capacity: 1000, lines: 2, cost: 170000, upkeep: 16000, costMult: 0.99 },
       // 4단계 보정: 3~5등급 유지비 5.2/18.6/52.5억 → 15.6/84/240억(연구로 차체·동력이 좋아져 1980년대 이익이 커진 만큼, 큰 공장을 굴리는 비용을 올림)
       { capacity: 3000, lines: 3, cost: 3200000, upkeep: 220000, costMult: 0.98 },
-      { capacity: 8000, lines: 5, cost: 22000000, upkeep: 840000, costMult: 0.97 },
-      { capacity: 20000, lines: 8, cost: 70000000, upkeep: 2400000, costMult: 0.96 },
+      { capacity: 8000, lines: 5, cost: 22000000, upkeep: 1100000, costMult: 0.97 },
+      { capacity: 20000, lines: 8, cost: 70000000, upkeep: 3000000, costMult: 0.96 },
     ],
     buildMonths: 6, // 증설 공사 6개월
   },
   hq: { // 9.2 본사. upkeep은 1등급 값(화면 호환용)
     upkeep: 500,
     levels: [ // 이름, 승급비, 평판 조건, 정원, 개발팀, 옵션 슬롯, 월 유지비(유지비는 설계서에 없어 정한 후보값). 0.4.2: 3등급 평판 조건 30 → 20(신중 봇의 10년 평판 중앙값이 쉬움 24·보통 22)
-      { name: '창고 공장', cost: 0, rep: 0, staff: 4, teams: 1, options: 2, upkeep: 500 },
+      { name: '창고 공장', cost: 0, rep: 0, staff: 6, teams: 1, options: 2, upkeep: 500 },
       { name: '소형 사옥', cost: 50000, rep: 0, staff: 8, teams: 1, options: 2, upkeep: 1500 },
       { name: '본사 빌딩', cost: 400000, rep: 20, staff: 12, teams: 2, options: 3, upkeep: 5000 },
       { name: '연구 단지', cost: 3000000, rep: 55, staff: 16, teams: 2, options: 4, upkeep: 15000 },
@@ -154,7 +154,8 @@ export const config = {
     novice: { launchDefects: 10, changeMonths: 96, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 8년(0.4.2: 7.5 → 8년, 신중이 6.5년이 되어), 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
   },
   research: { // 10장 연구
-    pointsDiv: 10, // 프로젝트·교육·휴식에 없는 엔지니어 1명이 매주 능력 / 10 점
+    pointsDiv: 10, // 교육·휴식 중이 아닌 엔지니어 1명이 매주 능력 / 10 점(개발에 배치되어 있으면 그 30%)
+    projectShare: 0.3, // 0.5.0: 개발 중인 엔지니어도 연구 점수의 30%를 낸다(창업 직후 전원 개발이라 연구가 0이었다)
     labMult: 1.5, labHq: 4, // 전담 연구원(본사 4등급부터): 산출 × 1.5
     slots: [3, 4, 5, 6, 6], // 본사 등급별 동시 연구 수. 0.4.2: 1/1/1/2/2 → 3/4/5/6/6(사용자 피드백: 연구 두 개는 박하다). 주간 점수는 시작 순으로 채우므로 칸이 늘어도 전체 속도는 같다
     earlyRate: 0.25, earlyMax: 4, // 등장 연도보다 먼저: 비용 × (1 + 0.25 × 앞당긴 햇수), 최대 4년
@@ -182,6 +183,7 @@ export const config = {
     hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
   },
   devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
+  forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
 };

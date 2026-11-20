@@ -390,7 +390,7 @@ describe('직원 경험(9.1)과 경쟁 차 교체(8.4)', () => {
 });
 
 describe('시장 규모(7.3, 7.5): 달마다 매끄럽게, 연도 사이는 비율 보간', () => {
-  it('연초에도 전달 대비 +15% 이내, 기준점(1970·1990·2020)은 3단계와 같은 연 규모', () => {
+  it('연초에도 전달 대비 +15% 이내, 기준점(1970·1990)은 3단계와 같은 연 규모, 2020년은 115만(0.5.0 시장 포화: 180만 → 115만)', () => {
     const bodies = Object.keys(MARKET.domestic.bodyShare);
     const total = (m: number) => bodies.reduce((a, b) => a + cellMonthly(b, monthTime(m)), 0);
     for (let m = 1; m < 12 * 60; m++) {
@@ -398,7 +398,7 @@ describe('시장 규모(7.3, 7.5): 달마다 매끄럽게, 연도 사이는 비�
       for (const b of ['sedanS', 'hatch', 'sedanM']) expect(cellMonthly(b, monthTime(m)) / cellMonthly(b, monthTime(m - 1))).toBeLessThan(1.15);
     }
     const annual = (y: number) => (total((y - 1970) * 12) * 12) / config.market.scale; // 칸 비중의 합이 1이므로 모든 칸의 합 = 연 규모
-    expect(annual(1970)).toBeCloseTo(20000, 6); expect(annual(1990)).toBeCloseTo(1e6, 3); expect(annual(2020)).toBeCloseTo(1.8e6, 3);
+    expect(annual(1970)).toBeCloseTo(20000, 6); expect(annual(1990)).toBeCloseTo(1e6, 3); expect(annual(2020)).toBeCloseTo(1.15e6, 3);
     expect(annual(1980)).toBeCloseTo(20000 * Math.sqrt(50), 0); // 비율 보간: 1970과 1990의 기하 평균
   });
 });

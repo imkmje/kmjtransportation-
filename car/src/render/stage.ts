@@ -14,6 +14,7 @@ export class Stage {
   private table = new THREE.Group();
   private carG = new THREE.Group();
   private blob: THREE.Mesh;
+  private contact: THREE.Mesh;
   private M: CarMaterials;
   private target = new THREE.Color();
   private pop = 1;
@@ -53,6 +54,8 @@ export class Stage {
     key.position.set(4, 9, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
     Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 1, far: 25 });
     key.shadow.bias = -.0004; key.shadow.radius = 3; scene.add(key);
+    // 림 라이트: 뒤 위에서 차 윤곽(지붕선·어깨)을 밝혀 바닥과 떨어져 보이게(그림자 없음, 비용 거의 없음)
+    const rim = new THREE.DirectionalLight(0xdfe9ff, .55 * LEGACY); rim.position.set(-6, 5, -7); scene.add(rim);
 
     // 회전 무대
     scene.add(table);
@@ -74,6 +77,12 @@ export class Stage {
     gr.addColorStop(0, 'rgba(10,14,20,.55)'); gr.addColorStop(1, 'rgba(10,14,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
     this.blob = new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1)), keep(new THREE.MeshBasicMaterial({ map: keep(new THREE.CanvasTexture(c2)), transparent: true, depthWrite: false })));
     this.blob.rotation.x = -Math.PI / 2; this.blob.position.y = .004; table.add(this.blob);
+    // 접촉 그림자: 차 바로 밑의 좁고 진한 그림자(바퀴·차체가 바닥에 닿아 보이게)
+    const c3 = document.createElement('canvas'); c3.width = c3.height = 128;
+    const g3 = c3.getContext('2d')!, gr3 = g3.createRadialGradient(64, 64, 20, 64, 64, 64);
+    gr3.addColorStop(0, 'rgba(6,8,12,.7)'); gr3.addColorStop(.6, 'rgba(6,8,12,.35)'); gr3.addColorStop(1, 'rgba(6,8,12,0)'); g3.fillStyle = gr3; g3.fillRect(0, 0, 128, 128);
+    this.contact = new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1)), keep(new THREE.MeshBasicMaterial({ map: keep(new THREE.CanvasTexture(c3)), transparent: true, depthWrite: false })));
+    this.contact.rotation.x = -Math.PI / 2; this.contact.position.y = .005; this.blob.parent!.add(this.contact);
     table.add(this.carG);
     this.M = createCarMaterials('#ffffff');
 
@@ -117,7 +126,7 @@ export class Stage {
   /** 차를 치우고 빈 원판만 남긴다 */
   clear(): void {
     while (this.carG.children.length) { const c = this.carG.children.pop()!; disposeCar(c); }
-    this.blob.visible = false;
+    this.blob.visible = this.contact.visible = false;
   }
   get empty(): boolean { return !this.carG.children.length; }
 
@@ -126,7 +135,7 @@ export class Stage {
     this.clear(); this.blob.visible = true;
     this.carG.add(buildCar(look, this.M));
     const b = chassisOf(look);
-    this.blob.scale.set(b.L * 1.25, b.W * 1.7, 1);
+    this.blob.scale.set(b.L * 1.25, b.W * 1.7, 1); this.contact.scale.set(b.L * 1.02, b.W * 1.08, 1); this.contact.visible = true;
     this.pop = this.still ? 1 : 0;
     this.setColor(look.color);
     if (first) this.M.paint.color.copy(this.target);
@@ -145,9 +154,9 @@ export class Stage {
       yaw: 무대 회전(기본 앞 3/4, 0=옆, −π/2=정면, π/2=뒷면). fit: 보이는 폭(m)을 고정해 여러 차의 실제 크기를 비교할 때 */
   renderThumb(look: CarLook, w: number, h: number, yaw = -.65, fit?: number): string {
     const { R, table, carG, blob } = this, M = createCarMaterials(look.color), car = buildCar(look, M), c = chassisOf(look);
-    const old = { pr: R.getPixelRatio(), size: R.getSize(new THREE.Vector2()), yaw: table.rotation.y, vis: blob.visible, sc: blob.scale.clone() };
+    const { contact } = this, old = { pr: R.getPixelRatio(), size: R.getSize(new THREE.Vector2()), yaw: table.rotation.y, vis: blob.visible, sc: blob.scale.clone(), cv: contact.visible, cs: contact.scale.clone() };
     carG.visible = false; table.add(car); table.rotation.y = yaw;
-    blob.visible = true; blob.scale.set(c.L * 1.25, c.W * 1.7, 1);
+    blob.visible = true; blob.scale.set(c.L * 1.25, c.W * 1.7, 1); contact.visible = true; contact.scale.set(c.L * 1.02, c.W * 1.08, 1);
     // 보이는 폭(길이·폭을 각도로 섞음)에 맞춰 거리를 정한다: 정면 사진도 차가 작아지지 않게
     const ext = fit ?? Math.max(2.6, Math.abs(Math.cos(yaw)) * c.L + Math.abs(Math.sin(yaw)) * c.W);
     const cam = new THREE.PerspectiveCamera(28, w / h, .1, 100), d = Math.max(ext * 1.4, ext * 2 * h / w) + Math.abs(Math.sin(yaw)) * (c.L - c.W) / 2; // 정면·뒷면이면 가까운 끝까지의 거리를 더한다
@@ -159,7 +168,7 @@ export class Stage {
       url = this.canvas.toDataURL('image/png');
     } finally {
       table.remove(car); disposeCar(car); for (const m of Object.values(M)) m.dispose();
-      carG.visible = true; table.rotation.y = old.yaw; blob.visible = old.vis; blob.scale.copy(old.sc);
+      carG.visible = true; table.rotation.y = old.yaw; blob.visible = old.vis; blob.scale.copy(old.sc); contact.visible = old.cv; contact.scale.copy(old.cs);
       R.setPixelRatio(old.pr); R.setSize(old.size.x, old.size.y, false);
       R.render(this.scene, this.cam); // 화면에 보이기 전에 본 장면으로 다시 그린다
     }

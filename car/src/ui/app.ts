@@ -6,7 +6,7 @@ import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Stat, type Stats } from '../sim/types';
+import { STATS, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook, distinctFaces } from '../render/variant';
@@ -17,6 +17,8 @@ import * as S from '../io/saves';
 import { BUDGET, MARKETING, ROLE_NAME, ROLE_SKILL, STAT_NAME, TIER_SUB, esc, josa, money, num, score } from './fmt';
 import { DEFAULT_LOGO, LOGO_BG, LOGO_FG, LOGO_MARKS, LOGO_SHAPES, PAINT, WHEELS, cleanLogo, logo, logoSvg, lookOf, paintName, ring, type LogoSpec } from './art';
 import { infoOf } from './glossary';
+import { createSound, type Sfx } from './sound';
+import { testCut } from '../sim/dev';
 
 type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'company' | 'records';
 type Tab = 'garage' | 'dev' | 'company' | 'records';
@@ -48,7 +50,7 @@ for (const t of TECHS) for (const e of t.effects) if (e.type === 'body' || e.typ
 const EV = config.events.charging.powertrain;
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.querySelector<T>(s)!;
-/** 용어 설명 단추(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
+/** 용어 설명 버튼(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
 const ib = (key: string, label = key.slice(key.indexOf(':') + 1)) => `<span class="ib" role="button" tabindex="0" data-info="${esc(key)}" aria-label="${esc(label)} 설명"></span>`;
 
 
@@ -87,16 +89,37 @@ export function startApp(): void {
     return Object.fromEntries(PAUSE_ITEMS.map(([k]) => [k, o[k] !== false])) as Record<PauseKey, boolean>;
   })();
   const candSeen = new Set<number>(); // 알림을 띄운 채용 후보
-  let pxHold: HTMLInputElement | null = null; // 손가락·−/+ 단추로 조절 중인 가격 슬라이더(그동안 패널을 다시 그리지 않고 숫자만 바꾼다)
+  let pxHold: HTMLInputElement | null = null; // 손가락·−/+ 버튼으로 조절 중인 가격 슬라이더(그동안 패널을 다시 그리지 않고 숫자만 바꾼다)
   let titleMode: 'home' | 'new' = 'home', gameOverShown = false, reviewTimers: number[] = [];
   let lastPanel = '', lastOv = '', dragging = false;
 
   const panel = $('#panel'), ov = $('#ov'), sheet = $('#sheet'), sheetBody = $('#sheet-body'), title = $('#title');
   const myLogo = (z = 26) => logoSvg(ui.logo, z);
 
+  // ---------- 소리 ----------
+  const sound = createSound();
+  let skipping = false; // 1년 건너뛰기 동안은 효과음을 내지 않는다
+  /** 효과음 한 곳. 아주 빠름에서는 매주·매달 반복음을 뺀다 */
+  const sfx = (n: Sfx) => { if (!skipping && !(speed >= 4 && (n === 'weekTick' || n === 'monthClose'))) sound.play(n); };
+  // 브라우저는 사용자 조작 안에서만 소리를 켤 수 있다(터치는 pointerup이 조작으로 인정되는 브라우저가 있어 둘 다)
+  for (const ev of ['pointerdown', 'pointerup', 'keydown'] as const) document.addEventListener(ev, () => sound.unlock(), true);
+  // 버튼 소리: 문서 전체 click 하나에서. 탭 전환·스위치·가격 −/+는 따로, 나머지 버튼은 tap
+  document.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('button, [role=button], summary, input[type=checkbox]');
+    if (!b || b.matches(':disabled') || b.classList.contains('px-step')) return;
+    sfx(b.closest('#tabs') || b.getAttribute('role') === 'tab' || b.dataset.act === 'ptab' || b.dataset.act === 'cotab' || b.dataset.act === 'rectab' ? 'tabSwitch'
+      : b.matches('[data-act="autoPause"],[data-act="debug"],[data-act="snd"],#mutebtn,input[type=checkbox]') ? 'toggle' : 'tap');
+  }, true);
+  // 창 열기·닫기: 결과 창과 확인 창의 hidden이 바뀌는 한 곳에서
+  for (const el of [sheet, $('#ask')]) new MutationObserver((ms) => { if ((ms[0].oldValue === null) === el.hidden) sfx(el.hidden ? 'close' : 'open'); }).observe(el, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
+
   // ---------- 알림 ----------
   const keyed = new Map<string, HTMLElement>();
-  /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 바꿔 끼운다(월 결산처럼 자주 오는 것) */
+  const closers = new WeakMap<HTMLElement, () => void>();
+  const TOAST_MAX = 2; // 한 번에 보이는 알림 수. 넘으면 오래된 보통 알림부터 닫는다(중요한 알림은 "+N"으로 접어 둔다)
+  /** 키로 띄운 알림을 닫는다(그 알림이 가리키던 일을 이미 한 경우) */
+  const dropToast = (key: string) => { const t = keyed.get(key); if (t?.isConnected) closers.get(t)?.(); };
+  /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 바꿔 끼운다(월 결산처럼 자주 오는 것). 12초 이상 두는 알림(자동 멈춤·현금 경고·결정 대기·리콜·규제)은 중요한 알림 */
   function toast(text: string, kind: '' | 'alert' | 'bad' = '', head = '', ms = kind ? 9000 : 4000, key = '', open?: { label: string; fn: () => void }): void {
     const box = $('#toasts'), t = document.createElement('div');
     box.style.setProperty('--tt', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`); // 폰: 상단바 바로 아래
@@ -106,10 +129,12 @@ export function startApp(): void {
     if (key) keyed.set(key, t);
     t.className = `toast ${kind}`;
     t.innerHTML = `<div>${head ? `<b>${esc(head)}</b>` : ''}${esc(text)}${open ? `<button class="open">${esc(open.label)}</button>` : ''}</div><button class="x" aria-label="닫기">×</button>`;
-    const close = () => { t.classList.add('out'); foldToasts(); setTimeout(() => { t.remove(); foldToasts(); }, 300); };
+    const close = () => { if (t.classList.contains('out')) return; t.classList.add('out'); foldToasts(); setTimeout(() => { t.remove(); foldToasts(); }, 300); };
+    closers.set(t, close); if (ms >= 12000) t.dataset.imp = '1';
     if (open) (t.querySelector('.open') as HTMLElement).onclick = () => { close(); open.fn(); };
     (t.querySelector('.x') as HTMLElement).onclick = close;
     box.appendChild(t);
+    for (let live = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')], n = live.length; n > TOAST_MAX; n--) { const o = live.find((x) => !x.dataset.imp && !x.classList.contains('out')); if (!o) break; closers.get(o)!(); }
     while (box.querySelectorAll('.toast').length > 6) box.querySelector('.toast')!.remove();
     foldToasts();
     setTimeout(close, ms);
@@ -117,22 +142,23 @@ export function startApp(): void {
   /** 좁은 자리(폰·사무실 칸·무대 없는 화면 오른쪽 위)에서는 알림을 2개만 보이고 나머지는 "+N" 한 줄로 접는다 */
   function foldToasts(): void {
     const box = $('#toasts'), list = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')];
-    const tight = box.classList.contains('corner') || box.classList.contains('inofc') || innerWidth < 900, keep = box.classList.contains('open') ? 99 : tight ? 2 : 3, n = list.length - keep;
+    const keep = box.classList.contains('open') ? 99 : TOAST_MAX, n = list.length - keep;
     list.forEach((t, i) => t.classList.toggle('folded', i < n));
     let more = box.querySelector<HTMLElement>('.more');
     if (n <= 0) { more?.remove(); if (list.length <= 2) box.classList.remove('open'); return; }
     if (!more) { more = document.createElement('button'); more.className = 'more'; more.onclick = () => { box.classList.add('open'); foldToasts(); }; box.prepend(more); }
     more.textContent = `+${n} 알림 더 보기`;
   }
-  const err = (reason: string) => toast(reason, 'bad', '할 수 없습니다');
+  const err = (reason: string) => { sfx('error'); toast(reason, 'bad', '할 수 없습니다'); };
   /** 넓은 사무실 배치(태블릿 가로)에서는 알림을 사무실 칸 오른쪽 위(띠 아래)에 작게, 최대 2개 띄워 사람들과 패널 버튼을 가리지 않는다 */
   function placeToasts(): void {
     const box = $('#toasts'), wide = $('#main').classList.contains('wide') && innerWidth >= 900, corner = $('#main').classList.contains('full') && innerWidth >= 900;
     box.classList.toggle('inofc', wide); box.classList.toggle('corner', corner); // 무대 없는 화면(회사·기록): 오른쪽 위(상단바 아래)
     if (corner) box.style.setProperty('--ct', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`);
     foldToasts();
-    if (!wide) return;
-    const st = $('#stage').getBoundingClientRect(), band = document.querySelector<HTMLElement>('#ov .ofc')?.getBoundingClientRect();
+    const st = $('#stage').getBoundingClientRect();
+    if (!wide) { box.style.setProperty('--tw', `${Math.round(Math.max(260, Math.min(400, st.width - 200)))}px`); return; } // 무대 왼쪽 아래, 오른쪽 아래 평점 원(약 170px)을 비켜 간다
+    const band = document.querySelector<HTMLElement>('#ov .ofc')?.getBoundingClientRect();
     box.style.setProperty('--ot', `${Math.round((band?.bottom ?? st.top) + 8)}px`);
     box.style.setProperty('--or', `${Math.round(innerWidth - st.right + 12)}px`);
   }
@@ -325,7 +351,7 @@ export function startApp(): void {
   function tickOnce(): void {
     if (!game) return;
     const ev = game.tick();
-    logDev(); weekFresh = true;
+    logDev(); weekFresh = true; sfx('weekTick');
     for (const e of ev) onEvent(e);
   }
   function onEvent(e: GameEvent): void {
@@ -334,32 +360,40 @@ export function startApp(): void {
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
         if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
+        // 큰 흑자 = 10억 이상이면서 최근 24개월 최고 이익인 달(늘 버는 후반에 매달 울리지 않게)
+        sfx(L && L.profit >= 100000 && s.ledger.every((x) => x.profit <= L.profit) ? 'cashIn' : 'monthClose');
         void S.put('auto', S.makeSave(game!, uiSnap())); // 매월 자동 저장
         break;
       }
-      case 'designDone': toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
+      case 'designDone': sfx('designDone'); toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
       case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수·결함만(글자가 겹치지 않게)
         if (weekFresh) { const keep = officeEvents.filter((x) => x.kind === 'say'); officeEvents.length = 0; officeEvents.push(...keep); weekFresh = false; }
-        officeEvents.push(...officeFromWeek(e)); break;
+        officeEvents.push(...officeFromWeek(e));
+        break;
       }
-      case 'company': toast(e.text, 'alert', '회사', 7000); break;
-      case 'news': { const k = e.category ?? 'other'; toast(newsLine(e.text), 'alert', NEWS_KIND[k], 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break; }
+      case 'company': if (e.text.startsWith('공장')) sfx('factoryBuilt'); toast(e.text, 'alert', '회사', 7000); break;
+      case 'news': { // 규제 예고·시행은 중요한 알림(오래 둔다)
+        const k = e.category ?? 'other', reg = k === 'regulation' || (k === 'preview' && e.text.includes('규제'));
+        if (reg || k === 'start' || k === 'end' || k === 'preview') sfx(reg ? 'regulation' : 'event');
+        toast(newsLine(e.text), 'alert', NEWS_KIND[k], reg ? 15000 : 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break;
+      }
       case 'choice': // 화면 안 창이 떠 있는 동안 시간이 멈춘다. 자동 멈춤을 끄면 창 대신 알림만
         if (quietChoice) break;
+        sfx('event');
         if (!pauseOn.choice) toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() });
         else if (sheet.hidden && $('#ask').hidden && title.hidden) showChoice();
         break;
       case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
         const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
-        if (w) { waitSeen.add(w.id); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
+        if (w) { waitSeen.add(w.id); sfx('readyToLaunch'); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
         else toast(e.text, 'alert', '조언', 9000);
         break;
       }
-      case 'recall': toast(e.text, 'bad', '리콜'); break;
-      case 'unlock': toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
-      case 'cashWarning': toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
+      case 'recall': sfx('recall'); toast(e.text, 'bad', '리콜', 12000); break;
+      case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
+      case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
       case 'discontinued': toast(e.text, '', '단종'); break;
-      case 'gameOver': break; // render()에서 파산 화면을 띄운다
+      case 'gameOver': sfx('bankrupt'); break; // render()에서 파산 화면을 띄운다
     }
   }
   function logDev(): void {
@@ -373,7 +407,7 @@ export function startApp(): void {
       devLog.set(p.id, list.slice(0, 14)); devPrev.set(p.id, pv.avg);
     }
   }
-  function setSpeed(v: number): void { speed = v; acc = 0; renderTop(); }
+  function setSpeed(v: number): void { speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
   /** 자동 멈춤(설정에서 항목별로 끔): 알림은 늘 띄우고, 켜져 있으면 시간을 멈춘다 */
   function autoPause(k: PauseKey, text: string, head: string, open: { label: string; fn: () => void }): void {
     const stop = pauseOn[k] && speed > 0 && !skipPause;
@@ -409,10 +443,23 @@ export function startApp(): void {
   };
 
   // ---------- 상단바·탭 ----------
+  let musicPaused: boolean | null = null;
+  /** 상단바 스피커 버튼(음소거 켬/끔) */
+  function renderMute(): void {
+    const m = sound.settings().muted, b = $('#mutebtn');
+    if (b.dataset.m === String(m)) return;
+    b.dataset.m = String(m); b.setAttribute('aria-pressed', String(m)); b.setAttribute('aria-label', m ? '소리 켜기(지금 꺼짐)' : '소리 끄기');
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>${m ? '<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+  }
   function renderTop(): void {
     stageOn();
+    const mp = !game || !title.hidden || speed === 0 || game.state.status !== 'playing'; // 배경 음악: 멈춤·처음 화면·파산 화면에서 쉰다
+    if (mp !== musicPaused) { musicPaused = mp; sound.setPaused(mp); }
+    renderMute();
+    if (!sheet.hidden) requestAnimationFrame(() => markMore(sheetBody)); // 창 내용을 바꾼 뒤 renderTop()을 부른다
     if (!game) return;
     const s = game.state;
+    sound.setEra(yearOf(s.week));
     $('#co').textContent = s.companyName;
     { const lg = myLogo(26), el = $('#mylogo'); if (el.dataset.k !== lg) { el.innerHTML = lg; el.dataset.k = lg; } }
     $('#date').textContent = game.dateLabel;
@@ -445,6 +492,8 @@ export function startApp(): void {
     if (screen === 'launch' && (!launch || !Q.projectById(s, launch.pid))) screen = 'dev';
     if (screen === 'plan' && !draft) screen = 'dev';
     if (screen === 'lift' && (!lift || !Q.generationById(s, lift.genId))) screen = 'garage';
+    if (screen === 'launch') dropToast('pause-ready'); // 알림이 가리키던 화면에 왔으면 그 알림은 닫는다
+    if (screen === 'company' && coTab === 'staff') dropToast('pause-cands');
     const v: View = screen === 'garage' ? garageView() : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView()
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : recordsView(), look: undefined };
@@ -461,7 +510,14 @@ export function startApp(): void {
       else patchLive(v.panel);
     }
     if (tipHover && tipAnchor && !tipAnchor.isConnected) hideTip();
+    markMore(panel);
   }
+  /** 아래로 더 볼 내용이 있으면 .more(아래쪽 흐림 표시) */
+  function markMore(el: HTMLElement): void { el.classList.toggle('more', el.scrollHeight - el.scrollTop - el.clientHeight > 8); }
+  panel.addEventListener('scroll', () => markMore(panel), { passive: true });
+  sheetBody.addEventListener('scroll', () => markMore(sheetBody), { passive: true });
+  title.addEventListener('scroll', () => markMore(title), { passive: true });
+  addEventListener('resize', () => { markMore(panel); if (!sheet.hidden) markMore(sheetBody); });
   /** 조절 중에는 data-live 칸(id로 짝)만 새 내용으로 바꿔 끼운다(슬라이더 자신은 그대로 두어 손가락이 놓치지 않게) */
   function patchLive(html: string): void {
     const t = document.createElement('template'); t.innerHTML = html;
@@ -474,7 +530,7 @@ export function startApp(): void {
   const specLine = (body: string, pt: string, tier: number, seg: string) => `${bodyById(body).name} · ${powertrainById(pt).name} ${tierName(pt, tier)} · ${segName(seg)}용`;
   const statBars = (g: Stats) => STATS.map((k) => `<div class="stat"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><div class="track"><u style="width:${Math.min(100, g[k] * 10).toFixed(1)}%"></u></div><b>${score(g[k])}</b></div>`).join('');
   const kpi = (label: string, value: string, cls = '', box = '') => `<div class="kpi${box ? ` ${box}` : ''}"><small>${label}</small><b class="${cls}">${value.replace(/(만원|억)$/, '<span>$1</span>')}</b></div>`; // 단위는 작게
-  /** 판매 가격 조절(출시·차고 공용): 가격·기준가 대비, −/+ 단추와 슬라이더, 대당 이익·예상 월 판매·예상 월 이익을 한 덩어리로(태블릿 가로에서 스크롤 없이) */
+  /** 판매 가격 조절(출시·차고 공용): 가격·기준가 대비, −/+ 버튼과 슬라이더, 대당 이익·예상 월 판매·예상 월 이익을 한 덩어리로(태블릿 가로에서 스크롤 없이) */
   // body: 차체 기준가(가격 허용 범위, sim 검사와 같게), 기준가 표시·눈금·대비 %는 시장 기준가(차체 + 의무 장비 원가, 판매·평론 계산 기준)
   const priceBlock = (id: string, o: { price: number; body: string; up: number; sales: string; profit: string; pcls: string; gen?: number }) => {
     const b = bodyById(o.body).basePrice, ref = Q.basePriceOf(game!.state, o.body), min = Math.ceil(b * config.price.min), max = Math.floor(b * config.price.max), d = Math.round((o.price / ref - 1) * 100);
@@ -530,8 +586,8 @@ export function startApp(): void {
     const devCard = s.projects.map((p) => `<div class="card"><p class="lbl">개발 중</p><h2>${esc(p.name)}</h2><p class="hint">${p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`} · 남은 결함 약 ${p.defectEst}개</p><div class="row" style="margin-top:10px"><button class="btn" data-act="devSel" data-id="${p.id}">개발 화면 보기</button></div></div>`).join('');
     if (!gens.length) {
       const any = allGens(s).length > 0;
-      const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 몇 주에 걸쳐 차를 설계합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
-      const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(몇 주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
+      const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 1년 가까이 설계와 시험을 합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
+      const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(${config.dev.designWeeks[0]}~${config.dev.designWeeks[config.dev.designWeeks.length - 1]}주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '<p class="hint" style="margin-top:6px">개발을 기다리는 동안 회사 탭에서 직원을 뽑거나 연구를 시작할 수 있습니다.</p>' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
       return { ov: ovh, panel: intro + devCard, look: null };
     }
     garageIdx = ((garageIdx % gens.length) + gens.length) % gens.length;
@@ -552,7 +608,7 @@ export function startApp(): void {
     const card2 = ending ? '' : `<div class="card price-card"><p class="lbl">판매 가격</p>${priceBlock('gprice', { price, body: g.body, up, sales: `약 ${num(gn)}<span>대</span>`, profit: money(gpr, true), pcls: gpr >= 0 ? 'pos' : 'neg', gen: g.id })}
       <p class="hint px-note">이번 달 어림입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>
       <div class="row" id="gprice-apply" data-live style="margin-top:8px"><button class="btn ink" data-act="setPrice" data-id="${g.id}" ${price === e.price ? 'disabled' : ''}>가격 바꾸기</button><span class="hint">지금 가격 ${num(e.price)}만원 · 다음 결산부터 반영</span></div>
-      <hr><p class="lbl">광고${ib('term:광고')}(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="setMk" data-id="${g.id}" data-v="${i}" aria-pressed="${g.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div></div>`;
+      <hr><p class="lbl">광고${ib('term:광고')} · 매달 광고비가 듭니다</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="setMk" data-id="${g.id}" data-v="${i}" aria-pressed="${g.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div></div>`;
     const np = Q.nameplateOf(s, g.id)!, fl = elig(Q.faceliftEligibility(s, g.id)), fc = elig(Q.fullChangeEligibility(s, np.id)), rf = Q.retrofitInfo(s, g.id);
     const blk = Q.planEntries(s).blockedBy, why = (k: string, e: { ok: boolean; reason: string | null }) => e.ok || e.reason === blk ? '' : `<p class="note why" data-for="${k === '페이스리프트' ? 'lift' : 'full'}">${k}: ${esc(e.reason ?? '')}</p>`; // 규제로 막힌 이유는 아래 한 번만
     const rfNames = rf.options.map((o) => esc(optionById(o).name)).join('·');
@@ -827,21 +883,48 @@ export function startApp(): void {
     // 넓은 화면에서는 사무실 아래에 [진행·능력치] [결함·개발비·버튼] [주간 기록] 세 칸으로 나란히
     const team = s.staff.filter((x) => x.projectId === p.id);
     const card1 = `<div class="card"><p class="lbl">${kindLabel(p)} · ${p.phase === 'design' ? '설계 단계' : '시험 단계'}</p><h2>${esc(p.name)}<small>${phase}</small></h2>
-      <p class="hint team-line">만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}</p>
-      <div class="prog ${p.phase === 'test' ? 'test' : ''}"><u style="width:${pct.toFixed(1)}%"></u></div>
+      <p class="hint team-line">${p.waiting && !team.length ? '출시 대기 중이라 팀이 풀려났습니다. 엔지니어는 연구를 합니다.' : `만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}`}</p>
+      ${devSteps(p, pct, team)}
       <p class="lbl" style="margin-top:12px">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}</div>`;
     const ps = Q.projectStatus(s, p.id), wait = !!ps?.waiting;
     const costLine = ps && !wait ? `<p class="hint cost-line" style="margin-top:8px">${esc(ps.costNote)}</p>` : '';
-    const card2 = `<div class="card"><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>${costLine}
+    // 태블릿 가로(1024×768)에서 [출시 준비]가 스크롤 없이 보이게 버튼을 수치 바로 아래에 둔다
+    const card2 = `<div class="card"><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>
       ${wait ? '<div class="okbox wait-badge" style="margin-top:10px"><b>출시 대기</b> · 개발비가 들지 않습니다</div>' : ''}
-      ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}
       <button class="go${wait && ready ? ' pulse' : ''}" data-act="toLaunch" ${ready ? '' : 'disabled'}>${ready ? '출시 준비 →' : p.phase === 'design' ? '설계가 끝나면 시험을 시작합니다' : `시험 ${minT}주 뒤 출시할 수 있습니다`}</button>
-      <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:8px">개발 취소</button>
+      ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}${costLine}
+      <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:10px">개발 취소</button>
       ${p.phase === 'test' && !wait ? '<p class="note">시험을 길게 할수록 결함이 줄어 리콜 위험이 낮아지지만 그동안 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.</p>' : ''}</div>`;
-    const card3 = `<div class="card"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 단추로 시간을 진행합니다.</p>'}</div>`;
+    const card3 = `<div class="card">${waitTodo(free)}<p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.</p>'}</div>`;
     return { ov: ovh, panel: draftCard() + chips + card1 + card2 + card3, office: officeView(p) };
   }
 
+  /** 진행 단계(설계 → 시험 → 결함 잡기), 출시까지 남은 기간 어림, 팀 컨디션 */
+  function devSteps(p: Project, pct: number, team: Staff[]): string {
+    const minT = config.dev.minTestWeeks, wait = !!p.waiting, test = p.phase === 'test', fix = test && p.testWeeks >= minT;
+    const cls = (done: boolean, on: boolean) => (done ? 'done' : on ? 'on' : '');
+    const steps = `<ol class="steps" aria-label="개발 단계"><li class="${cls(test, !test)}" style="--p:${pct.toFixed(0)}%">1 설계<b>${p.weeksDone}/${p.designWeeks}주</b></li>
+      <li class="${cls(fix, test && !fix)}" style="--p:${((p.testWeeks / minT) * 100).toFixed(0)}%">2 시험<b>${test ? `${Math.min(p.testWeeks, minT)}/${minT}주` : `최소 ${minT}주`}</b></li>
+      <li class="${cls(wait, fix && !wait)}" style="--p:50%">3 결함 잡기<b>${wait ? '끝' : `약 ${num(p.defectEst)}개 남음`}</b></li></ol>`;
+    const rate = testCut(team, game!.state.week), ok = config.critics.okDefects; // 시험 주당 결함 감소(sim과 같은 식)
+    const fixLine = (n: number) => rate <= 0 ? '시험할 테스터·엔지니어가 없어 결함이 줄지 않습니다' : `결함 ${ok}개 이하까지 약 <b>${Math.ceil(Math.max(0, n - ok) / rate)}주</b> · 0개까지 약 <b>${Math.ceil(n / rate)}주</b>${ib('term:출시 기준 결함', '출시 기준 결함')}`;
+    const mins = (w: number) => { const m = Math.round((w * WEEK_MS) / 60000); return m >= 1 ? ` · 보통 빠르기로 약 ${m}분` : ''; };
+    const left = p.designWeeks - p.weeksDone + minT;
+    const eta = wait ? '<b>출시 대기</b> · 언제든 출시할 수 있습니다'
+      : !test ? `출시까지 최소 <b>${left}주</b>(설계 ${p.designWeeks - p.weeksDone}주 + 시험 ${minT}주)${mins(left)}${rate > 0 ? ` · 시험에서 결함이 한 주 약 ${(Math.round(rate * 10) / 10).toLocaleString('ko-KR')}개씩 줄어듭니다` : ''}`
+      : `${fix ? '' : `시험 <b>${minT - p.testWeeks}주</b> 뒤 출시할 수 있습니다 · `}${fixLine(p.defectEst)}`;
+    const avg = team.length ? team.reduce((a, x) => a + x.condition, 0) / team.length : 0, w = condWord(avg);
+    const cond = team.length ? `<div class="team-cond">팀 컨디션 <span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(avg * 100)}%"></u></span><b>${w}</b>${w === '지침' ? '<span>· 회사 탭 직원 화면에서 휴식을 줄 수 있습니다</span>' : ''}</div>` : '';
+    return `${steps}<p class="eta"><span>${eta}</span></p>${cond}`;
+  }
+  /** 개발을 기다리는 동안 할 수 있는 일: 채용, 연구, 다음 차 기획 */
+  function waitTodo(free: boolean): string {
+    const s = game!.state, h = Q.hiringInfo(s), r = Q.researchInfo(s);
+    const b = (act: string, v: string, name: string, sub: string) => `<button class="btn" data-act="${act}" data-v="${v}"><span>${name}<small>${sub}</small></span><span aria-hidden="true">→</span></button>`;
+    return `<p class="lbl">기다리는 동안</p><div class="wait-todo">${b('goCo', 'staff', '직원 채용', h.candidates.length ? `후보 ${h.candidates.length}명이 기다립니다` : h.full ? `정원 ${h.staffCount}/${h.capacity}명이 찼습니다` : `정원 ${h.staffCount}/${h.capacity}명 · 공고를 낼 수 있습니다`)}
+      ${b('goCo', 'research', '연구', r.pointsPerWeek <= 0 ? '일할 수 있는 엔지니어가 없어 지금은 연구 점수가 0입니다' : r.used < r.slots ? `연구 칸 ${r.slots - r.used}개가 비어 있습니다 · 개발 중에도 연구가 조금씩 됩니다` : `연구 ${r.used}개 진행 중 · 한 주 ${pts1(r.pointsPerWeek)}점`)}
+      ${draft || lift ? b('resumePlan', '', '다음 차 기획', '기획 중인 초안을 이어서 합니다') : free ? b('plan', '', '다음 차 기획', '비어 있는 개발팀이 있습니다') : sellingGens(s).length ? b('tab', 'garage', '판매 중인 차 살피기', '가격·광고를 조정합니다') : b('goCo', 'hq', '본사', '본사를 키우면 정원과 개발팀이 늘어납니다')}</div>`;
+  }
   /** 결함 안내 한 줄(시험 단계·출시 화면) */
   const defectBox = (a: ReturnType<typeof Q.defectAdvice>) => `<div class="${a.level === 'many' ? 'badbox' : a.level === 'some' ? 'warnbox' : 'okbox'} defect-adv" data-level="${a.level}" style="margin-top:10px">${esc(a.text)}</div>`;
 
@@ -859,16 +942,16 @@ export function startApp(): void {
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
     const card1 = `<div class="card price-card"><p class="lbl">판매 가격${fl ? '(다시 정하기)' : ''}</p>${priceBlock('lprice', { price: L.price, body: p.body, up,
-      sales: fc ? `${fc.min === fc.max ? num(fc.min) : `${num(fc.min)}~${num(fc.max)}`}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? [...new Set(pr.map((x) => money(x, true)))].join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
-      ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b> 팔릴 것으로 보입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
-      ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
+      sales: fc ? `${fc.min === fc.max ? num(fc.min) : `${num(fc.min)}~${num(fc.max)}`}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? [...new Set(pr.map((x) => `<span class="nw">${money(x, true).replace(/(만원|억)$/, '<span>$1</span>')}</span>`))].join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
+      ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>출시 ${config.forecast.months}개월째 기준 어림: 한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b>(±${Math.round(config.forecast.spread * 100)}%, 공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
+      ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고${ib('term:광고')} · 매달 광고비가 듭니다</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
     const card2 = `<div class="card"><p class="lbl">색상${fl ? '(그대로 두거나 바꾸기)' : ''}</p>${paints('lset', L.color)}
       <p class="lbl" style="margin-top:14px">휠</p><div class="opts">${WHEELS.map((w, i) => `<button class="opt" data-act="lset" data-k="wheels" data-v="${i}" aria-pressed="${L.wheels === i}" style="min-height:0"><svg viewBox="0 0 80 42" aria-hidden="true"><circle cx="40" cy="21" r="${13 + i * 3}" fill="none" stroke="currentColor" stroke-width="${5 - i}"/><circle cx="40" cy="21" r="2.5" fill="currentColor"/></svg><b>${w.name}</b><small>${w.sub} · 겉모습만</small></button>`).join('')}</div></div>`;
     const critics = config.critics.list;
     const card3 = ex ? `<div class="card"><p class="lbl">예상 평론</p>
       ${critics.map((c, i) => `<div class="stat"><span>${c.name}${ib(`critic:${c.id}`, c.name)}</span><div class="track"><u style="width:${ex.scores[i] * 10}%"></u></div><b>${score(ex.scores[i])}</b></div>`).join('')}
       <div class="kpis" style="margin-top:10px">${kpi('예상 평점', score(ex.avg))}</div>
-      <p class="note">예상 월 판매의 적은 쪽은 인지도가 낮은 출시 직후, 많은 쪽은 몇 달 뒤 인지도가 오른 뒤의 예상입니다. 실제 평론 점수는 예상과 0.7점 안팎 차이가 날 수 있습니다.${prev ? ' 풀체인지는 전작과 비교해 평론이 조금 오르내립니다.' : ''}</p></div>` : '';
+      <p class="note">예상 월 판매는 인지도가 어느 정도 오른 출시 ${config.forecast.months}개월째를 기준으로 한 어림이며 ±${Math.round(config.forecast.spread * 100)}% 범위로 보입니다. 출시 직후는 이보다 적게 팔립니다. 실제 평론 점수는 예상과 0.7점 안팎 차이가 날 수 있습니다.${prev ? ' 풀체인지는 전작과 비교해 평론이 조금 오르내립니다.' : ''}</p></div>` : '';
     const sum = fl ? `새 얼굴로 바꿔 내놓습니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 결함 약 ${num(p.defectEst)}개. 평론가는 다시 평가하지 않고 신문에 기사가 납니다.`
       : `이 조건으로 출시합니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 광고 ${MARKETING[L.marketing]} · 예상 평점 ${ex ? score(ex.avg) : '—'} · 월 ${fc ? `${num(fc.min)}~${num(fc.max)}대` : '—'} · 결함 약 ${num(p.defectEst)}개`;
     const card4 = `<div class="card launch-go"><p class="lbl">출시 요약</p><p class="hint launch-sum">${sum}</p>
@@ -905,7 +988,7 @@ export function startApp(): void {
     sheet.hidden = false; renderTop();
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches, gap = still ? 0 : 650;
     list.forEach((_, i) => reviewTimers.push(window.setTimeout(() => { const el = sheetBody.querySelector(`.critic[data-i="${i}"]`); el?.classList.remove('wait'); el?.classList.add('pop'); }, gap * (i + 1))));
-    reviewTimers.push(window.setTimeout(() => $('#rv-avg').classList.add('show'), gap * (list.length + 1)));
+    reviewTimers.push(window.setTimeout(() => { $('#rv-avg').classList.add('show'); sfx(avg >= 7 ? 'reviewGood' : avg >= 4.5 ? 'reviewMid' : 'reviewBad'); }, gap * (list.length + 1)));
     reviewTimers.push(window.setTimeout(() => { $('#rv-news').classList.add('show'); sheetBody.querySelector<HTMLElement>('[data-act="closeReview"]')?.focus(); }, gap * (list.length + 2)));
   }
 
@@ -995,7 +1078,7 @@ export function startApp(): void {
     if (staffSel !== null && !rows.some((x) => x.id === staffSel)) staffSel = null;
     const pname = (id: number | null) => s.projects.find((p) => p.id === id)?.name ?? '';
     const lab = new Set(s.staff.filter((x) => x.lab).map((x) => x.id));
-    const doing = (x: Q.StaffRow) => x.status === 'working' ? `「${esc(pname(x.projectId))}」 개발` : x.status === 'training' ? `교육 중 · ${x.weeksLeft}주 남음` : x.status === 'resting' ? `휴식 중 · ${x.weeksLeft}주 남음` : x.status === 'sales' ? '영업' : lab.has(x.id) ? '전담 연구원' : x.role === 'engineer' ? '쉬는 중 · 연구' : '쉬는 중';
+    const doing = (x: Q.StaffRow) => x.status === 'working' ? `「${esc(pname(x.projectId))}」 개발${x.role === 'engineer' ? ` · 연구 ${Math.round(config.research.projectShare * 100)}%` : ''}` : x.status === 'training' ? `교육 중 · ${x.weeksLeft}주 남음` : x.status === 'resting' ? `휴식 중 · ${x.weeksLeft}주 남음` : x.status === 'sales' ? '영업' : lab.has(x.id) ? '전담 연구원' : x.role === 'engineer' ? '쉬는 중 · 연구' : '쉬는 중';
     const abil = (x: Q.StaffRow) => `<span class="abil2" title="능력 ${x.ability} · 잠재력 ${x.potential}"><u style="width:${x.ability}%"></u><em style="left:${x.potential}%"></em></span><b>${x.ability}</b>${x.atPotential ? '<small class="cap">더 못 큼</small>' : ''}`;
     const cond = (c: number) => { const w = condWord(c); return `<span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(c * 100)}%"></u></span>${w}`; };
     const list = ROLE_ORDER.map((r) => {
@@ -1004,7 +1087,7 @@ export function startApp(): void {
     }).join('');
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
     const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>
-      <div class="srow head" aria-hidden="true"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div>${list}
+      <div class="srow head" aria-hidden="true"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
       <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다.</p></div>`;
     const x = rows.find((y) => y.id === staffSel);
     let card2 = '';
@@ -1018,7 +1101,7 @@ export function startApp(): void {
         <p class="lbl" style="margin-top:14px">교육</p><button class="btn ink" data-act="train" data-id="${x.id}" ${x.canTrain ? '' : 'disabled'} style="width:100%">교육 보내기 · ${money(x.trainCost)} <small>(능력 +${T.gainMin}~${T.gainMax}, ${T.weeks}주 동안 일 못 함)</small></button>${x.canTrain ? '' : `<p class="note why">${esc(x.trainReason ?? '')}</p>`}
         <p class="lbl" style="margin-top:14px">휴식</p><div class="row">${[2, 4].map((w) => `<button class="btn" data-act="rest" data-id="${x.id}" data-v="${w}" ${x.status === 'training' ? 'disabled' : ''}>${w}주 쉬기</button>`).join('')}</div><p class="note">쉬는 동안 일하지 않고 컨디션이 회복됩니다. 개발에서 빠지지는 않습니다.</p>
         <p class="lbl" style="margin-top:14px">개발 배치</p>${assign}${x.role !== 'engineer' ? '' : lab.has(x.id) ? `<p class="hint" style="margin-top:8px">전담 연구원입니다. 개발에 넣지 않고 연구 점수를 1.5배로 냅니다.</p><button class="btn" data-act="assign" data-id="${x.id}" data-v="" style="width:100%;margin-top:6px">연구소에서 빼기</button>`
-          : s.hqLevel >= config.research.labHq ? `<button class="btn lab-btn" data-act="assign" data-id="${x.id}" data-v="lab" style="width:100%;margin-top:8px">전담 연구원으로 <small>(연구 점수 1.5배, 개발에는 못 넣음)</small></button>` : `<p class="note">본사 ${config.research.labHq}등급부터 전담 연구원으로 둘 수 있습니다. 개발에 넣지 않은 엔지니어는 그냥 두어도 연구합니다.</p>`}
+          : s.hqLevel >= config.research.labHq ? `<button class="btn lab-btn" data-act="assign" data-id="${x.id}" data-v="lab" style="width:100%;margin-top:8px">전담 연구원으로 <small>(연구 점수 1.5배, 개발에는 못 넣음)</small></button>` : `<p class="note">본사 ${config.research.labHq}등급부터 전담 연구원으로 둘 수 있습니다. 엔지니어는 그냥 두어도 연구합니다(개발 중이면 ${Math.round(config.research.projectShare * 100)}% 속도).</p>`}
         <hr><button class="btn danger" data-act="fire" data-id="${x.id}" style="width:100%">해고 · 퇴직금 ${money(x.severance)}</button>
         <button class="btn" data-act="staffSel" data-id="${x.id}" style="width:100%;margin-top:8px">닫기</button></div>`;
     }
@@ -1070,7 +1153,7 @@ export function startApp(): void {
     }).join('');
     const prod = `<div class="card fac-prod"><h3>차종별 생산</h3>${f.cars.length ? `<div class="advice" style="margin:0 0 10px">${esc(Q.capacityAdvice(s))}</div>${rows}
       <p class="hint" style="margin-top:8px">직접 정한 몫 합계 <b class="alloc-sum">${Math.round(manualSum * 100)}%</b> (100%를 넘을 수 없습니다. 나머지는 자동인 차가 주문에 맞춰 나눕니다)</p>${allocWhy ? `<div class="badbox alloc-why" style="margin-top:8px">${esc(allocWhy)}</div>` : ''}
-      <p class="note">막대: 진한 부분은 만든 차, 주황 부분은 주문을 받고도 못 만든 차입니다.</p>` : '<p class="hint">판매 중인 차가 없습니다.</p>'}</div>`;
+      <p class="note">막대: 진한 부분은 만든 차, 주황 부분은 주문을 받고도 못 만든 차입니다.</p>` : '<p class="hint">판매 중인 차가 없습니다. 차를 출시하면 여기서 차종별 생산량과 못 판 주문을 봅니다.</p>'}</div>`;
     return `<div class="cols">${cur}${next}${prod}</div>`;
   }
 
@@ -1097,12 +1180,12 @@ export function startApp(): void {
   function researchTab(): string {
     const s = game!.state, r = Q.researchInfo(s), engs = s.staff.filter((x) => x.role === 'engineer'), labN = s.staff.filter((x) => x.lab).length;
     const back = draft || lift ? `<button class="btn ink back-plan" data-act="backPlan" style="width:100%;margin-top:10px">← 기획으로 돌아가기</button>` : '';
-    const zero = r.pointsPerWeek > 0 ? '' : `<div class="warnbox r-zero" style="margin-top:10px">${engs.length ? '엔지니어가 모두 개발 중이거나 교육·휴식 중이라 지금 연구 점수가 0입니다. 직원 탭이나 개발 기획에서 엔지니어 한두 명을 개발에서 빼면 연구가 진행됩니다.' : '엔지니어가 없어 연구 점수가 0입니다. 직원 탭에서 엔지니어를 뽑으세요.'}</div>`;
+    const zero = r.pointsPerWeek > 0 ? '' : `<div class="warnbox r-zero" style="margin-top:10px">${engs.length ? '엔지니어가 모두 교육·휴식 중이라 지금 연구 점수가 0입니다. 교육·휴식이 끝나면 다시 연구합니다.' : '엔지니어가 없어 연구 점수가 0입니다. 직원 탭에서 엔지니어를 뽑으세요.'}</div>`;
     const act = r.active.map((a) => `<div class="ract"><div class="prod-h"><b>${esc(a.name)}</b><small>${num(a.points)} / ${num(a.need)}점 · ${a.weeksLeft === null ? '연구 점수가 없어 멈춤' : `약 ${a.weeksLeft}주 남음`}</small></div><div class="prog"><u style="width:${((a.points / Math.max(1, a.need)) * 100).toFixed(1)}%"></u></div><button class="btn" data-act="techSel" data-v="${a.techId}">자세히 · 취소</button></div>`).join('');
-    const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">개발에 넣지 않은 엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
+    const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
       <div class="kpis" style="margin-top:10px">${kpi('한 주 연구 점수', `${pts1(r.pointsPerWeek)}<span>점</span>`)}${kpi('연구 칸', `${r.used}/${r.slots}<span>개 사용</span>`)}${kpi('완료한 기술', `${r.doneCount}<span>개</span>`)}${kpi('전담 연구원', `${labN}<span>명</span>`)}</div>
       ${zero}${act ? `<p class="lbl" style="margin-top:12px">진행 중인 연구</p>${act}` : '<p class="hint" style="margin-top:10px">진행 중인 연구가 없습니다. 아래에서 "가능" 표시가 있는 기술을 눌러 시작합니다.</p>'}
-      <p class="note">개발에 넣지 않은 엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있습니다.`} 본사 등급이 오르면 연구 칸이 늘어납니다(지금 ${r.slots}칸). 점수는 먼저 시작한 연구부터 채웁니다. 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
+      <p class="note">엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 개발에 들어간 엔지니어는 그 ${Math.round(config.research.projectShare * 100)}%만 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있습니다.`} 본사 등급이 오르면 연구 칸이 늘어납니다(지금 ${r.slots}칸). 점수는 먼저 시작한 연구부터 채웁니다. 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
     const fields = r.fields.map((f) => `<div class="card rfield" data-field="${f.id}"><h3>${esc(f.name)} <small class="hint">${f.techs.filter((t) => t.status === 'done' || t.count).length}/${f.techs.length} 완료</small></h3><div class="techs">${f.techs.map(techCard).join('')}</div></div>`).join('');
     return `<div class="research">${sum}${fields}</div>`;
   }
@@ -1221,7 +1304,7 @@ export function startApp(): void {
       <details><summary>자세히: 시드(같은 시드면 같은 판)</summary><input class="namein" id="t-seed" type="text" inputmode="numeric" placeholder="비우면 무작위" autocomplete="off"></details>
       <button class="go" data-act="startNew">회사 세우기 <span aria-hidden="true">→</span></button><button class="btn" data-act="titleHome">돌아가기</button>`;
     title.innerHTML = `<div class="inner"><div class="gname">${logoSvg(DEFAULT_LOGO, 64)}카 컴퍼니</div><p class="tag">1970년, 직원 4명의 작은 공장에서 시작합니다. 차를 기획·개발·출시해 판매하며 회사를 키웁니다.</p>${titleMode === 'new' ? form : home}<p class="note">게임 이름은 가칭입니다. 경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것입니다.</p></div><div class="ver">v${CAR_VERSION}</div>`;
-    title.className = 'cover'; title.hidden = false;
+    title.className = 'cover'; title.hidden = false; markMore(title);
     if (titleMode === 'new') $('#t-co').focus();
     renderTop();
   }
@@ -1231,7 +1314,7 @@ export function startApp(): void {
     coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = '';
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = '';
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
-    title.hidden = true; sheet.hidden = true; makeStage(); speed = 1; acc = 0;
+    title.hidden = true; sheet.hidden = true; makeStage(); setSpeed(1);
     $('#toasts').innerHTML = ''; $('#toasts').classList.remove('open'); keyed.clear(); // 전 게임의 알림을 남기지 않는다
     render();
   }
@@ -1267,9 +1350,18 @@ export function startApp(): void {
       <button class="btn" data-act="logoSheet" style="width:100%;margin-top:10px">회사 로고 바꾸기</button>
       <p class="lbl" style="margin-top:14px">자동 멈춤</p><div class="pause-set">${PAUSE_ITEMS.map(([k, n]) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="autoPause" data-v="${k}" aria-pressed="${pauseOn[k]}">${pauseOn[k] ? '켜짐' : '꺼짐'}</button></div>`).join('')}</div>
       <p class="note">켜 둔 항목이 생기면 시간을 멈추고 알림을 띄웁니다. 끄면 알림만 띄우고 시간은 계속 흐릅니다. 이 기기에 저장됩니다.</p>
+      ${soundSet()}
       <div class="toggle" style="margin-top:10px"><span>디버그 표시(화면 속도·주 번호·시드)</span><button class="btn" data-act="debug" aria-pressed="${debugOn}">${debugOn ? '켜짐' : '꺼짐'}</button></div>
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
     sheet.hidden = false; renderTop();
+  }
+  /** 메뉴의 소리 설정: 음량 슬라이더 3개, 음소거, 주 넘김 소리. 값은 sound.set()이 이 기기에 저장한다 */
+  const SND_LEVELS = [['master', '전체 음량'], ['sfx', '효과음'], ['music', '배경 음악']] as const;
+  function soundSet(): string {
+    const st = sound.settings(), sw = (k: 'muted' | 'weekTick', n: string) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="snd" data-v="${k}" aria-pressed="${st[k]}">${st[k] ? '켜짐' : '꺼짐'}</button></div>`;
+    return `<p class="lbl" style="margin-top:14px">소리</p><div class="snd-set">${SND_LEVELS.map(([k, n]) => `<label class="snd-row"><span>${n}</span><input type="range" class="snd-r" data-k="${k}" min="0" max="100" step="5" value="${Math.round(st[k] * 100)}"><b>${Math.round(st[k] * 100)}%</b></label>`).join('')}
+      ${sw('muted', '음소거')}${sw('weekTick', '주 넘김 소리(한 주가 지날 때마다 짧게)')}</div>
+      <p class="note">이 기기에 저장됩니다. 상단바의 스피커 버튼으로도 소리를 끄고 켤 수 있습니다.</p>`;
   }
   // ---------- 개발자 메뉴(시험용): 상단바 로고를 두 번 톡 ----------
   const DEV_CHEATS = [['cash', '현금 +500억'], ['reputation', '평판 +10'], ['finishResearch', '진행 중 연구 즉시 완료'], ['finishDev', '진행 중 개발 즉시 완료'], ['restStaff', '직원 컨디션 회복']] as const;
@@ -1286,7 +1378,10 @@ export function startApp(): void {
   }
 
   // ---------- 조작 ----------
-  function run(r: { ok: true } | { ok: false; reason: string }): boolean { if (!r.ok) err(r.reason); return r.ok; }
+  /** 명령이 성공했을 때의 소리(누른 버튼의 data-act 기준). 실패는 err()가 error 소리 */
+  const ACT_SFX: Record<string, Sfx> = { startDev: 'devStart', startLift: 'devStart', doLaunch: 'launch', hire: 'hire', fire: 'fire', train: 'train', upgradeHQ: 'hqUpgrade', expandFactory: 'cashOut', borrow: 'cashIn', repay: 'cashOut', retrofit: 'cashOut' };
+  let curAct = '';
+  function run(r: { ok: true } | { ok: false; reason: string }): boolean { if (!r.ok) err(r.reason); else if (ACT_SFX[curAct]) sfx(ACT_SFX[curAct]); return r.ok; }
   async function act(a: string, el: HTMLElement): Promise<void> {
     const v = el.dataset.v ?? '', s = game?.state;
     switch (a) {
@@ -1345,7 +1440,7 @@ export function startApp(): void {
         if (!run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1] as Project;
         ui.colors[p.id] = color; devPrev.set(p.id, 0); draft = null; devSel = p.id;
-        toast(`「${p.name}」 개발을 시작했습니다. 위쪽 빠르기 단추로 시간을 진행합니다.`); go('dev'); return;
+        toast(`「${p.name}」 개발을 시작했습니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.`); go('dev'); return;
       }
       case 'cancelDev': {
         const p = s && curProj(); if (!p || !game) return;
@@ -1494,6 +1589,7 @@ export function startApp(): void {
       case 'import': importFile(); return;
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
+      case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
       case 'closeSheet': sheet.hidden = true; render(); return;
       case 'logoSheet': showLogoSheet(); return;
       case 'devCheat': {
@@ -1503,8 +1599,8 @@ export function startApp(): void {
         toast(`${DEV_CHEATS.find((x) => x[0] === v)?.[1] ?? v} 적용`, '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
       case 'devYear': { // 화면 갱신 없이 48주. 사건 창·자동 멈춤 없이
-        if (!game) return; quietChoice = skipPause = true;
-        try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = false; }
+        if (!game) return; quietChoice = skipPause = skipping = true;
+        try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = skipping = false; }
         toast('48주를 건너뛰었습니다.', '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
       case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); return;
@@ -1519,7 +1615,7 @@ export function startApp(): void {
 
   document.addEventListener('click', (e) => {
     const b = (e.target as Element).closest<HTMLElement>('[data-act]');
-    if (b && !b.hasAttribute('disabled')) void act(b.dataset.act!, b);
+    if (b && !b.hasAttribute('disabled')) { curAct = b.dataset.act!; void act(curAct, b); }
   });
   document.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement;
@@ -1528,14 +1624,15 @@ export function startApp(): void {
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }
     else if (t.id === 'lprice' && launch) { launch.price = Number(t.value); render(); }
     else if (t.id === 'gprice') { garagePrice.set(Number(t.dataset.gen), Number(t.value)); render(); }
-    else if (t.classList.contains('alloc-r')) { const o = t.parentElement?.querySelector('.alloc-v'); if (o) o.textContent = `${t.value}%`; }
+    else if (t.classList.contains('alloc-r')) { const o = t.parentElement?.querySelector('.alloc-v'); if (o) o.textContent = `${t.value}%`; sfx('sliderTick'); }
+    else if (t.classList.contains('snd-r')) { sound.set({ [t.dataset.k!]: Number(t.value) / 100 }); const o = t.parentElement?.querySelector('b'); if (o) o.textContent = `${t.value}%`; sfx('sliderTick'); }
   });
   // 가격 슬라이더: 손가락 위치를 직접 값으로 바꾼다(브라우저 기본 슬라이더는 작은 손잡이만 잡히고, 패널 스크롤·다시 그리기와 다퉈 놓치기 쉬웠다).
-  // −/+ 단추는 한 번에 한 단계, 길게 누르면 연속. 키보드는 기본 슬라이더 그대로
+  // −/+ 버튼은 한 번에 한 단계, 길게 누르면 연속. 키보드는 기본 슬라이더 그대로
   let pxMove = false, pxRep = 0;
   const setPx = (r: HTMLInputElement, v: number) => {
     const min = Number(r.min), max = Number(r.max), st = Number(r.step) || 1, x = Math.max(min, Math.min(max, min + Math.round((v - min) / st) * st));
-    if (String(x) !== r.value) { r.value = String(x); r.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (String(x) !== r.value) { r.value = String(x); r.dispatchEvent(new Event('input', { bubbles: true })); sfx('sliderTick'); }
   };
   const pxAt = (r: HTMLInputElement, x: number) => { const b = r.getBoundingClientRect(), k = Math.max(0, Math.min(1, (x - b.left - 22) / Math.max(1, b.width - 44))); return Number(r.min) + k * (Number(r.max) - Number(r.min)); }; // 22: 손잡이 반지름(CSS 44px)
   document.addEventListener('pointerdown', (e) => {
@@ -1569,6 +1666,7 @@ export function startApp(): void {
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
   for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); });
   $('#menubtn').addEventListener('click', () => void showMenu());
+  $('#mutebtn').addEventListener('click', () => { sound.set({ muted: !sound.settings().muted }); renderMute(); });
   { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 350) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
@@ -1587,7 +1685,7 @@ export function startApp(): void {
     get draft() { return draft; }, get lift() { return lift; }, get launch() { return launch; }, get planTab() { return planTab; },
     genLook: (id: number) => { const g = game && Q.generationById(game.state, id); return g ? genLook(g) : null; },
     get tip() { return tip.hidden ? null : { key: tip.dataset.key, hover: tipHover, text: tip.innerText }; },
-    setSpeed, render, held: isHeld, toast,
+    setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
   };
 

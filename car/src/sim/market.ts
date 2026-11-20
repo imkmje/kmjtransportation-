@@ -33,10 +33,10 @@ export function attractiveness(g: Stats, body: string, segment: string, w?: Stat
   return STATS.reduce((a, k) => a + ww[k] * (g[k] / config.grade.mid), 0) * (COMPAT[body]?.[segment] ?? 1) * trend;
 }
 
-/** 가격 매력 = (기준가 × 매력 / 판매가)^ε, 0.2~2.5. 기준가보다 비싸면 (기준가/판매가)^overpriceExp를 더 곱한다(자르기 뒤, 3단계 추가 계수) */
+/** 가격 매력 = (기준가 × 매력 / 판매가)^ε, 0.2~2.5. 기준가보다 비싸면 (기준가/판매가)^6, 기준가의 108%(overpriceHardAt)를 넘으면 그 넘는 부분에 ^20을 더 곱한다(자르기 뒤, 0.5.0) */
 export const priceAppeal = (basePrice: number, attract: number, price: number, eps: number): number =>
   Math.min(config.market.priceAppealMax, Math.max(config.market.priceAppealMin, ((basePrice * attract) / price) ** eps))
-  * Math.min(1, basePrice / price) ** config.market.overpriceExp;
+  * Math.min(1, basePrice / price) ** config.market.overpriceExp * Math.min(1, (basePrice * config.market.overpriceHardAt) / price) ** config.market.overpriceHardExp;
 
 /** 시장 기준가(0.4.2) = 차체 기준가 + 지금 규제 의무 장비의 원가. 모든 회사가 의무 장비를 넣으므로 시장 가격이 그만큼 오른다(가격 매력·가성비 평론·봇 가격에 쓴다) */
 export const basePriceOf = (s: CarState, body: string): number => bodyById(body).basePrice + requiredOptions(s).reduce((a, o) => a + optionById(o).cost, 0);
