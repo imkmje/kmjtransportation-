@@ -6,6 +6,7 @@ import { salaryOf, zeroStats } from './cars';
 import { conditionMult, isAway, optionSlots } from './company';
 import type { Rng } from './rng';
 import { diffOf } from './difficulty';
+import { regulationError, requiredOptions } from './events';
 import { STATS, type Budget, type CarState, type Project, type ProjectSpec, type Staff, type Stats } from './types';
 
 /** 기획 검증: 문제가 있으면 한국어 이유, 없으면 null */
@@ -17,7 +18,10 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
   if (!pt || !unlockedIds(state, 'powertrain').has(pt.id)) return '아직 쓸 수 없는 동력입니다(연구가 필요합니다).';
   if (!Number.isInteger(s.tier) || s.tier < 1 || s.tier > pt.tiers.length) return `동력 등급은 1~${pt.tiers.length} 중에서 고르세요.`;
   if (!Array.isArray(s.options)) return '옵션 목록이 올바르지 않습니다.';
-  if (s.options.length > optionSlots(state)) return `옵션은 최대 ${optionSlots(state)}개까지 고를 수 있습니다(본사 등급을 올리면 늘어납니다).`;
+  const reg = regulationError(state, s); // 0.4.2: 의무 장비 기술을 연구하지 않았으면 개발을 시작할 수 없다
+  if (reg) return reg;
+  const req = requiredOptions(state); // 의무 장비는 옵션 칸을 차지하지 않는다
+  if (s.options.filter((o) => !req.includes(o)).length > optionSlots(state)) return `옵션은 ${req.length ? '의무 장비 말고 ' : ''}최대 ${optionSlots(state)}개까지 고를 수 있습니다(본사 등급을 올리면 늘어납니다).`;
   if (new Set(s.options).size !== s.options.length) return '같은 옵션을 두 번 고를 수 없습니다.';
   const opts = unlockedIds(state, 'option');
   if (s.options.some((id) => !OPTIONS.some((x) => x.id === id) || !opts.has(id))) return '아직 쓸 수 없는 옵션입니다(연구가 필요합니다).';
@@ -30,6 +34,9 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
 }
 
 export const staffOn = (state: CarState, p: Project): Staff[] => state.staff.filter((s) => s.projectId === p.id);
+
+/** 기획 옵션 + 지금 의무 장비(빠진 것만 뒤에 붙인다, 0.4.2) */
+export const withRequired = (state: CarState, options: string[]): string[] => [...options, ...requiredOptions(state).filter((o) => !options.includes(o))];
 
 /** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 직원 몫 비율 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
 export const devCostPerWeek = (team: Staff[], budget: Budget, protoMult = 1): number =>

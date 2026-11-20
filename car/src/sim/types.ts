@@ -203,6 +203,7 @@ export type Command =
   | { type: 'discontinue'; generationId: number }
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
   | { type: 'setMarketing'; generationId: number; marketing: number }
+  | { type: 'retrofit'; generationId: number } // 0.4.2: 판매 중인 차에 지금 의무 장비를 추가(일시 비용 + 원가 상승, 바로 반영)
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'bailout' }

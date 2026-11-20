@@ -2,7 +2,12 @@
 export const config = {
   time: { startYear: 1970, weeksPerMonth: 4, monthsPerYear: 12 }, // 4장: 1 tick = 1주, 4주 = 1개월, 48주 = 1년
   start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35, potentialMin: 50, potentialMax: 75 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
-  reputation: { min: 0, max: 100 },
+  reputation: { // 9.5
+    min: 0, max: 100,
+    // 0.4.2: 평판을 올릴 길이 명차(+4)뿐이라 리콜(−5)에 깎여 30년 뒤 중앙값이 0이었다(본사 3등급 조건 30에 닿지 못함). 두 가지를 더한다(시상식은 아직 없음)
+    launchBase: 5, launchPer: 1.5, // 신차·풀체인지 출시: 평판 += (평론 평균 − 5) × 1.5(명차·실패작 가감과 별도)
+    yearSoldDiv: 2500, yearMax: 3, // 12월 결산: 평판 += min(3, 그해 판매 대수 / 2,500)
+  },
   grade: { base: 100, growth: 0.045, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × (1 + growth)^(연도 − 1970), 표시 = 5 × 원점수 / 기준. 3단계 조정 3.5% → 4.5%(설계 결정 d, 허용 3~5%)
   powertrain: { base: 40, growth: 1.22 }, // 5.3: 동력 점수 = 40 × 1.22^(단계 − 1)
   salary: { base: 250, perAbility: 12 }, // 9.1: 월급 = 250 + 능력 × 12
@@ -13,7 +18,7 @@ export const config = {
     roleSplit: { designer: { D: 0.6, U: 0.4 }, engineer: { P: 0.5, E: 0.5 }, tester: { Q: 1 } } as Record<string, Partial<Record<'P' | 'E' | 'U' | 'D' | 'Q', number>>>,
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
-    designWeeks: [20, 28, 36], minTestWeeks: 4, // 0.4.2 시간 척도(신차 개발 약 40~60주): 8/12/16 → 20/28/36주, 최소 시험 2 → 4주
+    designWeeks: [20, 28, 36], minTestWeeks: 2, // 0.4.2 시간 척도(신차 개발 약 40~60주): 8/12/16 → 20/28/36주
     prototypePerWeek: 2150, staffCostShare: 0.43, // 0.4.2: 설계가 12 → 28주로 늘어 주당 시제차 비용 5000 → 2150, 주간 개발비의 직원 몫도 × 0.43(총 개발비는 그대로).
     // 시제차 비용(주당). 0.4.1 난이도 완화 5600 → 5000(첫 차 개발비 약 10.6억). 4단계 5800 → 5600(경쟁사 난수 순서가 바뀌어 첫 차 개발비 중앙값이 12억을 조금 넘어서). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
     defectPerPoint: 1 / 12, testerDiv: 23, engineerDiv: 70, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/23 + 기술/70(0.4.2 시간 척도: 10·30 → 23·70, 시험 기간도 약 2.3배)
@@ -113,6 +118,7 @@ export const config = {
     facelift: {
       afterMonths: 18, designWeeks: 12, costShare: 0.4, // 출시 18개월 뒤, 설계 12주(0.4.2 시간 척도: 4 → 12, 리프트 전체 약 16~28주), 비용 = 그 세대 개발비의 40%(설계 4주 + 최소 시험 2주에 나눠 낸다). 설계서 25% → 40%(설계자 허용 25~40%, 리프트가 필수가 되지 않게, 3단계 봇 측정)
       dCap: 0.1, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +10%(설계서 +15% → 허용 8~15% 안)
+      refresh: 0.025, // 0.4.2: 디자인 밖의 능력치(성능·연비·실용·품질)도 × 1.06(연식 변경 개선). 기준 상승으로 해마다 등급이 낮아지는 만큼을 약 1.3년 되돌린다(리프트 이익이 너무 작아서)
       defectKeep: 0.5, defectRate: 1 / 3, // 남은 결함 × 0.5로 시작, 새 결함은 1/3 속도
       lifeKeep: 0.6, lateMonths: 60, lateLifeKeep: 0.8, // 수명 나이를 60%로(세대 나이 60개월 이후면 80%로). 설계서 40%/70% → 허용 45~65%/75~85% 안
       awareness: 0.06, switchMonthMult: 0.7, // 인지도 +0.06(설계서 +0.1 → 허용 0.04~0.10 안), 전환 달 생산 −30%
@@ -124,6 +130,7 @@ export const config = {
       worseReview: -1, betterReview: 0.5, // 전작 비교: 표시 등급 평균이 낮으면 평론 전원 −1, 높으면 +0.5
       rebuyShare: 0.03, rebuyMonths: 12, rebuyMinQ: 5, // 전 세대 누적 판매의 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 5 미만이면 0)
     },
+    retrofit: { costShare: 0.05, min: 5000 }, // 0.4.2 의무 장비 추가: 일시 비용 = 그 세대 개발비 × 5%(최소 5,000만원). 대당 원가는 장비 원가만큼 오른다
     lookCandidates: 3, // 3D 모양 후보 수
   },
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
@@ -139,12 +146,12 @@ export const config = {
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
     clumsy: { priceMult: 1.1, changeMonths: 120 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년
-    novice: { launchDefects: 10, changeMonths: 90, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 7.5년, 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
+    novice: { launchDefects: 10, changeMonths: 96, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 8년(0.4.2: 7.5 → 8년, 신중이 6.5년이 되어), 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
   },
   research: { // 10장 연구
     pointsDiv: 10, // 프로젝트·교육·휴식에 없는 엔지니어 1명이 매주 능력 / 10 점
     labMult: 1.5, labHq: 4, // 전담 연구원(본사 4등급부터): 산출 × 1.5
-    slots: [1, 1, 1, 2, 2], // 본사 등급별 동시 연구 수
+    slots: [3, 4, 5, 6, 6], // 본사 등급별 동시 연구 수. 0.4.2: 1/1/1/2/2 → 3/4/5/6/6(사용자 피드백: 연구 두 개는 박하다). 주간 점수는 시작 순으로 채우므로 칸이 늘어도 전체 속도는 같다
     earlyRate: 0.25, earlyMax: 4, // 등장 연도보다 먼저: 비용 × (1 + 0.25 × 앞당긴 햇수), 최대 4년
     lateYears: 8, lateMult: 0.5, // 등장 연도 + 8년이 지나면 비용 × 0.5
     repeatGrowth: 1.5, // 반복 기술(차세대)은 할 때마다 비용 × 1.5

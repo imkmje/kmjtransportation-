@@ -84,13 +84,14 @@ describe('출시와 평론(7.1~7.2)', () => {
     for (let i = 0; i < 4; i++) expect(dirty[i]).toBeCloseTo(clean[i] - 1, 9);
     expect(criticScores(st, 1970, 1200, 900, 0, () => 0)[3]).toBeGreaterThan(clean[3]);
   });
-  it('명차(평균 8 이상)는 평판 +4, 평균 4 이하는 평판 −3', () => {
+  it('명차(평균 8 이상)는 평판 +4, 평균 4 이하는 평판 −3, 여기에 (평론 평균 − 5) × 1.5(0.4.2)', () => {
     const a = devReady(1); a.g.state.projects[0].points = { P: 400, E: 400, U: 400, D: 400, Q: 400 };
     ok(a.g.command({ type: 'launch', projectId: a.pid, price: 1200, marketing: 0, color: 'red', wheels: 0 }));
-    expect(allGens(a.g.state)[0].masterpiece).toBe(true); expect(a.g.state.reputation).toBe(14);
+    const R = config.reputation, ga = allGens(a.g.state)[0];
+    expect(ga.masterpiece).toBe(true); expect(a.g.state.reputation).toBeCloseTo(Math.min(100, 14 + (ga.reviewAvg - R.launchBase) * R.launchPer), 9);
     const b = devReady(1); b.g.state.projects[0].points = { P: 0, E: 0, U: 0, D: 0, Q: 0 };
     ok(b.g.command({ type: 'launch', projectId: b.pid, price: 1200, marketing: 0, color: 'red', wheels: 0 }));
-    expect(b.g.state.reputation).toBe(7);
+    expect(b.g.state.reputation).toBeCloseTo(Math.max(0, 7 + (allGens(b.g.state)[0].reviewAvg - R.launchBase) * R.launchPer), 9);
   });
   it('출시 검증: 시험 2주 미만·가격 범위·마케팅·바퀴', () => {
     const { g, pid } = devReady(1, 1);
@@ -135,7 +136,7 @@ describe('리콜(6.3)', () => {
           recalled++;
           const l = g.state.ledger.at(-1)!;
           expect(l.recall).toBe(gen.totalSold * config.recall.costPerCar);
-          expect(g.state.reputation).toBe(Math.max(0, rep - 5));
+          expect(g.state.reputation).toBeGreaterThanOrEqual(Math.max(0, rep - 5)); expect(g.state.reputation).toBeLessThanOrEqual(Math.max(0, rep - 5) + config.reputation.yearMax); // 12월이면 연간 판매 평판(0.4.2)이 더해진다
           expect(gen.editions[0].defects).toBe(0);
           expect(gen.awareness).toBeCloseTo(awNoRecall * 0.8, 9);
         }
@@ -148,13 +149,13 @@ describe('리콜(6.3)', () => {
 describe('단종(8.6)과 생산 라인', () => {
   it('판매 중인 차가 있으면 새 차 출시는 거부(개발 시작은 허용)', () => {
     const { g } = launched(1);
-    ok(g.command({ type: 'startProject', name: '둘째', body: 'sedanS', segment: 'youth', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'low', designWeeks: 8 }));
-    for (let i = 0; i < 10; i++) g.tick();
+    ok(g.command({ type: 'startProject', name: '둘째', body: 'sedanS', segment: 'youth', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'low', designWeeks: config.dev.designWeeks[0] }));
+    for (let i = 0; i < config.dev.designWeeks[0] + 2; i++) g.tick();
     expect(g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 0, color: 'red', wheels: 0 })).toEqual({ ok: false, reason: '빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.' });
   });
   it('단종: 그 달 말까지 판매(마지막 달 ×0.5), 다음 달부터 라인이 비어 새 차를 낼 수 있다', () => {
     const { g, gen } = launched(1);
-    ok(g.command({ type: 'startProject', name: '둘째', body: 'sedanS', segment: 'youth', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'low', designWeeks: 8 }));
+    ok(g.command({ type: 'startProject', name: '둘째', body: 'sedanS', segment: 'youth', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'low', designWeeks: config.dev.designWeeks[0] }));
     while (g.state.projects[0].testWeeks < 2 || g.state.week % 4 !== 1) g.tick();
     ok(g.command({ type: 'discontinue', generationId: gen.id }));
     expect(gen.status).toBe('ending'); expect(gen.endMonth).toBe(monthOf(g.state.week));

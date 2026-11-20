@@ -8,9 +8,9 @@ import { capacityOf, costMultOf } from '../src/sim/company';
 import { loanRate } from '../src/sim/finance';
 import { chargingInfra, eraNow, eraStart, eraTimeline, marketMult, randomMonths, regulationError } from '../src/sim/events';
 import { monthlyDemand, type SaleCar } from '../src/sim/market';
-import { activeEvents, comboMark, comboNotes, eventImpactOn, newsLog, pendingChoices } from '../src/sim/queries';
+import { requiredOptions, activeEvents, comboMark, comboNotes, eventImpactOn, newsLog, pendingChoices } from '../src/sim/queries';
 import { josa } from '../src/sim/josa';
-import { levelForTier, powertrainLevels, ptCostAdd, ptLevel, researchCost, researchInfo, unlockedBodies, unlockedOptions, unlockedPowertrains, weeklyResearchPoints } from '../src/sim/research';
+import { levelForTier, powertrainLevels, ptCostAdd, ptLevel, researchCost, researchError, researchInfo, unlockedBodies, unlockedOptions, unlockedPowertrains, weeklyResearchPoints } from '../src/sim/research';
 import { monthOf, monthTime } from '../src/sim/time';
 import { BODIES, COMPAT, ERA_EVENTS, MARKET, OPTIONS, POWERTRAINS, RANDOM_EVENTS, SEGMENTS, TECHS, techById } from '../src/data';
 import { config } from '../src/config';
@@ -88,7 +88,7 @@ describe('해금은 연구로만(10장)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
     const now = (s: CarState) => [unlockedBodies(s).map((b) => b.id), unlockedPowertrains(s).map((p) => p.id), unlockedOptions(s).map((o) => o.id)];
     expect(now(g.state)).toEqual([['sedanS'], ['gasoline'], []]);
-    g.state.week = 30 * WPY;
+    g.state.week = 20 * WPY; // 1990년(안전 규제 시행 전. 시행 뒤에는 ABS·에어백 연구 없이 개발을 시작할 수 없다)
     expect(now(g.state)).toEqual([['sedanS'], ['gasoline'], []]);
     expect(reason(g.command({ type: 'startProject', ...SPEC, powertrain: 'diesel' }))).toBe('아직 쓸 수 없는 동력입니다(연구가 필요합니다).');
     grant(g, 'pw_diesel', 'bd_suv', 'el_radio');
@@ -113,16 +113,17 @@ describe('연구 진행(10장)', () => {
     ok(g.command({ type: 'startProject', ...SPEC }));
     expect(weeklyResearchPoints(s)).toBe(0);
   });
-  it('선행·현금·연구 칸(1개)·중복을 확인하고, 취소하면 돈은 돌아오지 않는다', () => {
+  it('선행·현금·연구 칸(본사 1등급 3개, 0.4.2)·중복을 확인하고, 취소하면 돈은 돌아오지 않는다', () => {
     const g = gameAt(1982);
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_coupe' }))).toBe('먼저 「해치백 차체」를 연구해야 합니다.');
     expect(reason(g.command({ type: 'startResearch', techId: 'nope' }))).toBe('없는 기술입니다.');
     ok(g.command({ type: 'startResearch', techId: 'bd_hatch' }));
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_hatch' }))).toBe('이미 연구 중인 기술입니다.');
-    expect(reason(g.command({ type: 'startResearch', techId: 'bd_sedanM' }))).toContain('연구 칸이 찼습니다');
+    ok(g.command({ type: 'startResearch', techId: 'bd_sedanM' })); ok(g.command({ type: 'startResearch', techId: 'pr_line' }));
+    expect(reason(g.command({ type: 'startResearch', techId: 'el_radio' }))).toBe('연구 칸이 찼습니다(본사 등급을 올리면 칸이 늘어납니다).');
     const cash = g.state.cash;
     ok(g.command({ type: 'cancelResearch', techId: 'bd_hatch' }));
-    expect(g.state.cash).toBe(cash); expect(g.state.research.active).toEqual([]);
+    expect(g.state.cash).toBe(cash); expect(g.state.research.active.map((x) => x.techId)).toEqual(['bd_sedanM', 'pr_line']);
     expect(reason(g.command({ type: 'cancelResearch', techId: 'bd_hatch' }))).toBe('진행 중인 연구가 아닙니다.');
     g.state.cash = 0;
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_hatch' }))).toBe('현금이 모자랍니다.');
@@ -130,10 +131,12 @@ describe('연구 진행(10장)', () => {
     g.state.cash = 1e9;
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_hatch' }))).toBe('이미 연구한 기술입니다.');
   });
-  it('본사 4등급부터 연구 칸 2개, 점수는 시작 순으로 채운다', () => {
-    const g = gameAt(1982); g.state.hqLevel = 4;
+  it('연구 칸은 본사 등급마다 3/4/5/6/6개(0.4.2), 점수는 시작 순으로 채운다', () => {
+    expect(config.research.slots).toEqual([3, 4, 5, 6, 6]);
+    const g = gameAt(1982); g.state.hqLevel = 5;
     ok(g.command({ type: 'startResearch', techId: 'bd_hatch' })); ok(g.command({ type: 'startResearch', techId: 'bd_sedanM' }));
-    expect(reason(g.command({ type: 'startResearch', techId: 'pr_line' }))).toBe('연구 칸이 찼습니다.');
+    for (const t of TECHS.filter((x) => !researchError(g.state, x.id)).slice(0, 4)) ok(g.command({ type: 'startResearch', techId: t.id }));
+    expect(reason(g.command({ type: 'startResearch', techId: TECHS.find((x) => researchError(g.state, x.id) === '연구 칸이 찼습니다.')!.id }))).toBe('연구 칸이 찼습니다.');
     g.tick();
     const [a, b] = g.state.research.active, ppw = weeklyResearchPoints(g.state);
     expect(a.points).toBeCloseTo(Math.min(ppw, a.need), 9); expect(b.points).toBeCloseTo(Math.max(0, ppw - a.need), 9);
@@ -283,22 +286,34 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
     g.state.week = sp.start * 4 + 4;
     expect(activeEvents(g.state).events.find((x) => x.id === 'oil1')).toMatchObject({ name: '1차 오일쇼크', monthsLeft: 35 });
   });
-  it('안전 규제: 발표 뒤 36개월 유예, 그 뒤 ABS·에어백이 없는 신차는 출시 거부(이유), 넣으면 된다', () => {
+  it('안전 규제(0.4.2): 36개월 유예 뒤 ABS·에어백은 의무 장비. 연구했으면 자동으로 들어가 옵션 칸을 차지하지 않고, 안 했으면 개발 시작·출시가 거부된다', () => {
     const seed = 1, sp = eraTimeline(seed).find((x) => x.def.id === 'safety')!;
-    const launchAt = (month: number, options: string[]) => {
-      const g = Game.create({ difficulty: 'normal', seed }); g.state.cash = 1e9; g.state.week = month * 4 - 24; g.state.hqLevel = 3; grant(g, 'bd_airbag', 'el_radio');
-      ok(g.command({ type: 'startProject', ...SPEC, options }));
-      const p = toTest(g);
-      return g.command({ type: 'launch', projectId: p.id, ...LAUNCH });
-    };
-    expect(launchAt(sp.start + 30, []).ok).toBe(true); // 유예 중
-    expect(reason(launchAt(sp.start + 40, ['radio']))).toBe('안전 규제: 이제 ABS·에어백이 없는 차는 출시할 수 없습니다. 이 차는 그대로 낼 수 없으니 개발을 취소하고 신차 기획을 다시 하면서 옵션에 ABS·에어백을 넣으세요.');
-    expect(launchAt(sp.start + 40, ['abs', 'airbag', 'radio']).ok).toBe(true);
-    const s = Game.create({ difficulty: 'normal', seed }).state; s.week = (sp.start + 40) * 4;
-    expect(regulationError(s, { options: ['abs'], powertrain: 'gasoline' })).toBe('안전 규제: 이제 에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서 에어백을 넣으세요.'); // 기획 중(kind 없음)
-    expect(activeEvents(s).requiredOptions).toEqual(['abs', 'airbag']);
-    s.week = (sp.start + 12 * 60) * 4; // 2032 유럽 내연기관 규제는 국내에 영향 없음
-    expect(regulationError(s, { options: ['abs', 'airbag'], powertrain: 'gasoline' })).toBeNull();
+    const at = (month: number, research = true) => { const g = Game.create({ difficulty: 'normal', seed }); g.state.cash = 1e9; g.state.week = month * 4; if (research) grant(g, 'bd_airbag', 'el_radio', 'el_aircon'); return g; };
+    const BLOCK = '안전 규제로 ABS·에어백이 의무 장비가 되었습니다. 「ABS」, 「에어백」 연구가 필요합니다.';
+    // 유예 중: 의무 아님(넣지 않아도 출시), 자동으로 넣지도 않는다
+    const a = at(sp.start + 30 - 12);
+    ok(a.command({ type: 'startProject', ...SPEC, options: [] }));
+    expect(a.state.projects[0].options).toEqual([]);
+    // 유예 중에 시작해 시행 뒤에 출시하면 그때 의무 장비를 넣는다
+    a.state.week = (sp.start + 40) * 4; let p = toTest(a);
+    ok(a.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
+    expect(allGens(a.state)[0].editions[0].options).toEqual(['abs', 'airbag']);
+    // 시행 뒤: 본사 1등급(옵션 칸 2개)에서도 옵션 2개 + 의무 장비 2개
+    const b = at(sp.start + 40);
+    expect(requiredOptions(b.state)).toEqual(['abs', 'airbag']); expect(activeEvents(b.state).requiredOptions).toEqual(['abs', 'airbag']);
+    ok(b.command({ type: 'startProject', ...SPEC, options: ['radio', 'aircon'] }));
+    expect(b.state.projects[0].options).toEqual(['radio', 'aircon', 'abs', 'airbag']);
+    expect(reason(b.command({ type: 'startProject', ...SPEC, options: ['radio', 'aircon', 'abs'] }))).toContain('개발팀이 모두 바쁩니다');
+    p = toTest(b); ok(b.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
+    // 연구하지 않았으면 기획 단계에서 거부(이유에 필요한 기술), 출시도 거부
+    const c = at(sp.start + 40, false);
+    expect(regulationError(c.state, { powertrain: 'gasoline' })).toBe(BLOCK);
+    expect(reason(c.command({ type: 'startProject', ...SPEC }))).toBe(BLOCK);
+    const d = at(sp.start + 30); ok(d.command({ type: 'startProject', ...SPEC })); d.state.research.done = d.state.research.done.filter((x) => x !== 'bd_airbag');
+    d.state.week = (sp.start + 40) * 4; p = toTest(d);
+    expect(reason(d.command({ type: 'launch', projectId: p.id, ...LAUNCH }))).toBe('안전 규제로 ABS·에어백이 의무 장비가 되었습니다. 「에어백」 연구가 필요합니다.');
+    const s = c.state; s.week = (sp.start + 12 * 60) * 4; grant(c, 'bd_airbag'); // 2032 유럽 내연기관 규제는 국내에 영향 없음
+    expect(regulationError(s, { powertrain: 'gasoline' })).toBeNull();
   });
 });
 

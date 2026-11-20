@@ -27,27 +27,27 @@ describe('보정 목표(6.2): 1970년·초기 직원·보통 예산·12주·균�
 describe('개발(6장)', () => {
   it('설계 기간이 끝나면 시험으로 넘어가고 알림이 뜬다', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
-    ok(g.command({ type: 'startProject', ...SPEC, designWeeks: 8 }));
-    for (let i = 0; i < 7; i++) expect(g.tick().some((e) => e.kind === 'designDone')).toBe(false);
+    ok(g.command({ type: 'startProject', ...SPEC, designWeeks: config.dev.designWeeks[0] }));
+    for (let i = 0; i < config.dev.designWeeks[0] - 1; i++) expect(g.tick().some((e) => e.kind === 'designDone')).toBe(false);
     expect(g.tick().some((e) => e.kind === 'designDone')).toBe(true);
     expect(g.state.projects[0].phase).toBe('test');
   });
-  it('설계 중 결함은 매주 그 주 점수/12만큼 늘고, 시험 중에는 꼼꼼함/10 + 기술/30만큼 줄어든다', () => {
+  it('설계 중 결함은 매주 그 주 점수/12만큼 늘고, 시험 중에는 꼼꼼함/testerDiv + 기술/engineerDiv만큼 줄어든다', () => {
     const g = Game.create({ difficulty: 'normal', seed: 3 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0];
     const sum = (s: typeof p.points) => s.P + s.E + s.U + s.D + s.Q;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < SPEC.designWeeks; i++) {
       const d0 = p.defects, pts0 = sum(p.points);
       g.tick();
       expect(p.defects - d0).toBeCloseTo((sum(p.points) - pts0) / 12, 9);
       expect(p.defects).toBeGreaterThan(d0);
     }
-    const cut = g.state.staff.reduce((a, s) => a + (s.role === 'tester' ? s.ability / 10 : s.role === 'engineer' ? s.ability / 30 : 0), 0);
+    const cut = g.state.staff.reduce((a, s) => a + (s.role === 'tester' ? s.ability / config.dev.testerDiv : s.role === 'engineer' ? s.ability / config.dev.engineerDiv : 0), 0);
     const d0 = p.defects;
     g.tick();
     expect(d0 - p.defects).toBeCloseTo(Math.min(d0, cut), 9);
-    for (let i = 0; i < 40; i++) g.tick();
+    for (let i = 0; i < 80; i++) g.tick();
     expect(p.defects).toBe(0); // 0 아래로는 내려가지 않는다
   });
   it('화면용 결함 수는 실제의 ±15% 안(반올림)', () => {
@@ -79,18 +79,18 @@ describe('개발(6장)', () => {
     const pts = (budget: 'low' | 'normal' | 'high') => { const p = devReady(4, 0, { budget }).g.state.projects[0]; return { s: p.points.P + p.points.E + p.points.U + p.points.D + p.points.Q, spent: p.spent }; };
     const lo = pts('low'), no = pts('normal'), hi = pts('high');
     expect(hi.s / no.s).toBeCloseTo(1.25, 6); expect(lo.s / no.s).toBeCloseTo(0.8, 6);
-    const proto = config.dev.prototypePerWeek * 12;
+    const proto = config.dev.prototypePerWeek * SPEC.designWeeks;
     expect((hi.spent - proto) / (no.spent - proto)).toBeCloseTo(2, 6);
     expect((lo.spent - proto) / (no.spent - proto)).toBeCloseTo(0.5, 6);
   });
-  it('주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용, 월말에 현금에서 나간다', () => {
+  it('주간 개발비 = 참여 직원 월급 합 ÷ 4 × 직원 몫 비율 × 비용 배수 + 시제차 비용, 월말에 현금에서 나간다', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0], salary = g.state.staff.reduce((a, s) => a + 250 + s.ability * 12, 0);
-    expect(weeklyDevCost(g.state, p)).toBeCloseTo(salary / 4 + config.dev.prototypePerWeek, 9);
+    expect(weeklyDevCost(g.state, p)).toBeCloseTo((salary / 4) * config.dev.staffCostShare + config.dev.prototypePerWeek, 9);
     for (let i = 0; i < 4; i++) g.tick();
     const l = g.state.ledger[0];
-    expect(l.dev).toBeCloseTo((salary / 4 + config.dev.prototypePerWeek) * 4, 6);
+    expect(l.dev).toBeCloseTo(((salary / 4) * config.dev.staffCostShare + config.dev.prototypePerWeek) * 4, 6);
     expect(l.salaries).toBe(salary);
     expect(g.state.cash).toBeCloseTo(config.start.cash - l.dev - salary - config.factory.upkeep - config.hq.upkeep, 6);
   });
@@ -134,7 +134,7 @@ describe('개발(6장)', () => {
 });
 
 describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () => {
-  const specs = [SPEC, { ...SPEC, budget: 'high' as const, designWeeks: 16, direction: { P: 4, E: 0, U: 2, D: 4, Q: 0 } }, { ...SPEC, budget: 'low' as const, designWeeks: 8, options: ['radio'] }];
+  const specs = [SPEC, { ...SPEC, budget: 'high' as const, designWeeks: config.dev.designWeeks[2], direction: { P: 4, E: 0, U: 2, D: 4, Q: 0 } }, { ...SPEC, budget: 'low' as const, designWeeks: config.dev.designWeeks[0], options: ['radio'] }];
   it('실제로 개발한 등급이 예상 범위 안에 들고, 개발비는 설계 + 최소 시험 주 만큼', () => {
     for (const spec of specs) for (let seed = 1; seed <= 12; seed++) {
       const g = Game.create({ difficulty: 'normal', seed });

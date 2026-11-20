@@ -1,12 +1,12 @@
 // 시대 사건(설계서 11장). 고정 사건은 시드와 날짜만으로 계산한다(상태 없음): 시작 달 = 자료 연·월 ± 1년(시드 해시).
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
 import { config } from '../config';
-import { ERA_EVENTS, MARKET, RANDOM_EVENTS, optionById, powertrainById, bodyById, segmentById } from '../data';
+import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, segmentById } from '../data';
 import { grades } from './cars';
 import { josa } from './josa';
 import { hash01 } from './rng';
 import { monthOf, monthLabel, yearOf, yearOfMonth } from './time';
-import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type ProjectKind, type Stat, type Stats } from './types';
+import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type Stat, type Stats, type TechDef } from './types';
 
 const E = config.events, MPY = config.time.monthsPerYear;
 export const REGION = 'domestic';
@@ -82,16 +82,24 @@ type Regulation = Extract<EraEffect, { type: 'regulation' }>;
 export const regulationsNow = (seed: number, m: number): { name: string; rule: Regulation }[] =>
   eraTimeline(seed).flatMap((sp) => sp.def.effects.filter((e): e is Regulation => e.type === 'regulation' && e.region === REGION && m >= sp.start + e.graceMonths).map((rule) => ({ name: sp.def.name, rule })));
 const optNames = (ids: string[]) => ids.map((o) => optionById(o).name).join('·');
-const PLAN_NAME: Record<ProjectKind, string> = { new: '신차', facelift: '페이스리프트', fullchange: '풀체인지' };
-/** 규제 때문에 신규 출시를 못 하는 이유(없으면 null). kind가 있으면 이미 개발 중인 차(출시 화면), 없으면 기획 중인 차 */
-export function regulationError(s: CarState, car: { options: string[]; powertrain: string; kind?: ProjectKind }): string | null {
+/** 0.4.2: 지금 국내 규제로 의무인 장비(옵션 ID). 기본 장비로 보고 옵션 칸을 차지하지 않는다(원가·능력치는 그대로 들어간다) */
+export const requiredOptions = (s: CarState): string[] => [...new Set(regulationsNow(s.seed, monthOf(s.week)).flatMap((r) => r.rule.options ?? []))];
+/** 옵션을 여는 기술(없으면 처음부터 쓸 수 있는 옵션) */
+export const optionTech = (id: string): TechDef | undefined => TECHS.find((t) => !t.repeatable && t.effects.some((e) => e.type === 'option' && e.id === id));
+/** 의무 장비를 여는 기술 중 아직 연구하지 않은 것 때문에 개발·출시·장비 추가를 못 하는 이유(없으면 null) */
+export function regulationBlock(s: CarState): string | null {
   for (const { name, rule } of regulationsNow(s.seed, monthOf(s.week))) {
-    const missing = (rule.options ?? []).filter((o) => !car.options.includes(o)), list = optNames(missing);
-    if (missing.length) return `${name}: 이제 ${list}${josa(list, '이/가')} 없는 차는 출시할 수 없습니다. ${car.kind
-      ? `이 차는 그대로 낼 수 없으니 개발을 취소하고 ${PLAN_NAME[car.kind]} 기획을 다시 하면서 옵션에 ${list}${josa(list, '을/를')} 넣으세요.`
-      : `옵션 단계에서 ${list}${josa(list, '을/를')} 넣으세요.`}`;
-    if (rule.powertrains?.includes(car.powertrain)) { const pt = powertrainById(car.powertrain).name; return `${name}: 이제 ${pt}차는 출시할 수 없습니다.`; }
+    const techs = (rule.options ?? []).map(optionTech).filter((t): t is TechDef => !!t && !s.research.done.includes(t.id));
+    if (techs.length) { const list = optNames(rule.options ?? []), n = techs.map((t) => `「${t.name}」`).join(', '); return `${name}${josa(name, '으로/로')} ${list}${josa(list, '이/가')} 의무 장비가 되었습니다. ${n} 연구가 필요합니다.`; }
   }
+  return null;
+}
+/** 규제 때문에 신규 개발·출시를 못 하는 이유(없으면 null): 의무 장비 기술 미연구, 금지된 동력. 의무 장비 자체는 자동으로 들어가므로 이유가 아니다(0.4.2) */
+export function regulationError(s: CarState, car: { powertrain: string }): string | null {
+  const block = regulationBlock(s);
+  if (block) return block;
+  for (const { name, rule } of regulationsNow(s.seed, monthOf(s.week)))
+    if (rule.powertrains?.includes(car.powertrain)) { const pt = powertrainById(car.powertrain).name; return `${name}: 이제 ${pt}차는 출시할 수 없습니다.`; }
   return null;
 }
 

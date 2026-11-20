@@ -583,11 +583,12 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
 .px-track input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:44px;height:44px;margin-top:-19px;border:0;border-radius:50%;background:radial-gradient(circle,var(--ink) 0 12px,#fff 12.5px 15px,#14171c26 15.5px 16.5px,transparent 17px)}
 .px-track input[type=range]::-moz-range-thumb{width:44px;height:44px;border:0;border-radius:50%;background:radial-gradient(circle,var(--ink) 0 12px,#fff 12.5px 15px,#14171c26 15.5px 16.5px,transparent 17px)}
 .px-base{position:absolute;top:8px;bottom:8px;width:2px;margin-left:-1px;left:calc(22px + var(--base) * (100% - 44px));background:var(--accent);border-radius:1px;pointer-events:none}
-.px-base::after{content:"기준가";position:absolute;top:-8px;left:5px;font-size:10px;font-weight:800;color:var(--accent2);font-style:normal;white-space:nowrap}
+.px-base::after{content:"기준가";position:absolute;top:-13px;left:5px;font-size:10px;font-weight:800;color:var(--accent2);font-style:normal;white-space:nowrap}
 .vsbase{font-size:12.5px;font-weight:800;color:var(--ink2)}
 .px-kpis{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:6px}
 .px-kpis .kpi{padding:8px 10px}
 .px-kpis .kpi b{font-size:clamp(17px,1.7vw,22px)}
+.px-kpis .px-profit b{white-space:normal;overflow:visible}
 .px-note{margin:6px 0 0;font-size:12px}
 .card.price-card .seg{margin-top:4px}
 @media (max-width:420px){.px-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -1,4 +1,5 @@
 // 테스트 공용 도우미(테스트 파일이 아니라 직접 실행되지 않는다)
+import { config } from '../src/config';
 import { Game, allGens } from '../src/sim/game';
 import { TECHS, techById } from '../src/data';
 import type { Generation, ProjectSpec } from '../src/sim/types';
@@ -9,7 +10,7 @@ export function grant(g: Game, ...ids: string[]): void {
   for (const id of ids.length ? ids : TECHS.filter((t) => !t.repeatable).map((t) => t.id)) add(id);
 }
 
-export const SPEC: ProjectSpec = { name: '테스트카', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 12 };
+export const SPEC: ProjectSpec = { name: '테스트카', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] };
 
 export function ok(r: { ok: boolean; reason?: string }): void { if (!r.ok) throw new Error(r.reason); }
 

@@ -77,7 +77,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     expect(dev).toBeGreaterThanOrEqual(60000); expect(dev).toBeLessThanOrEqual(120000);
   });
   it('1a) 평론 5~6점대 첫 차의 개발비 회수 중앙값 5~18개월(0.4.1 난이도 완화로 하한 7 → 5, 측정 6)', () => {
-    const rs = SEEDS.map((s) => firstCar(steady({ designWeeks: 16 }), s, 48)).filter((r) => r.review >= 5 && r.review < 7);
+    const rs = SEEDS.map((s) => firstCar(steady({ designWeeks: config.dev.designWeeks[2] }), s, 48)).filter((r) => r.review >= 5 && r.review < 7);
     const m = median(rs.map((r) => r.payback ?? 999));
     console.log(`평론 5~6점대 ${rs.length}판, 회수 개월: ${rs.map((r) => r.payback).join(',')} → 중앙값 ${m}`);
     expect(rs.length).toBeGreaterThanOrEqual(10);
@@ -95,7 +95,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     expect(id.every((r) => !r.survived && r.months < 120)).toBe(true);
   });
   it('1d) 실패작(절약·8주·시험 2주로 출시, 평론 3.5 이하) 하나만 팔면 36개월 안에 현금이 음수가 되거나 대출이 필요하다', () => {
-    const flop = steady({ budget: 'low', designWeeks: 8, launchDefects: Infinity, maxTestWeeks: 2, changeMonths: Infinity, faceliftMonths: Infinity });
+    const flop = steady({ budget: 'low', designWeeks: config.dev.designWeeks[0], launchDefects: Infinity, maxTestWeeks: config.dev.minTestWeeks, changeMonths: Infinity, faceliftMonths: Infinity });
     for (const r of SEEDS.map((s) => firstCar(flop, s, 36))) { expect(r.review).toBeLessThanOrEqual(3.5); expect(r.minCash < 0 || r.loan > 0).toBe(true); }
   });
   it('2) 신중: 10년 생존 70% 이상, 20년 생존 60% 이상, 10년 현금 중앙값 20~200억. 10) 10년 생존은 0.3.0(16판)보다 2판 넘게 줄지 않음', () => {

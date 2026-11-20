@@ -3,8 +3,10 @@ import { config } from '../config';
 import { avgGrade, grade } from './cars';
 import { currentEdition } from './market';
 import { hash32 } from './rng';
+import { regulationBlock, requiredOptions } from './events';
+import { optionById } from '../data';
 import { monthOf, yearOf } from './time';
-import type { CarState, Generation, Nameplate } from './types';
+import { STATS, type CarState, type Generation, type Nameplate, type Stats } from './types';
 
 const L = config.lifecycle;
 const gens = (s: CarState): Generation[] => s.nameplates.flatMap((n) => n.generations);
@@ -16,6 +18,22 @@ const genAge = (s: CarState, g: Generation): number => monthOf(s.week) - g.launc
 export interface Eligibility { ok: boolean; reason: string | null; monthsLeft: number }
 const yes: Eligibility = { ok: true, reason: null, monthsLeft: 0 };
 const no = (reason: string, monthsLeft = 0): Eligibility => ({ ok: false, reason, monthsLeft });
+/** 0.4.2: 규제 의무 장비의 기술을 연구하지 않았으면 새 개발을 시작할 수 없다 */
+const regulated = (s: CarState): Eligibility => { const b = regulationBlock(s); return b ? no(b) : yes; };
+
+/** 페이스리프트의 연식 개선(0.4.2): 디자인 밖의 능력치 × (1 + refresh). 디자인은 디자이너 점수(상한 dCap)로 따로 오른다 */
+export function faceliftRefresh(st: Stats): Stats { for (const k of STATS) if (k !== 'D') st[k] *= 1 + L.facelift.refresh; return st; }
+
+/** 0.4.2 의무 장비 추가(retrofit): 판매 중인 세대의 지금 판에 빠진 의무 장비, 일시 비용, 대당 원가 상승. 할 수 없으면 reason */
+export interface RetrofitInfo { needed: boolean; options: string[]; cost: number; unitCostAdd: number; ok: boolean; reason: string | null }
+export function retrofitInfo(s: CarState, generationId: number): RetrofitInfo {
+  const g = gens(s).find((x) => x.id === generationId);
+  const ed = g ? g.editions[g.editions.length - 1] : undefined, options = ed ? requiredOptions(s).filter((o) => !ed.options.includes(o)) : [];
+  const cost = g ? Math.max(L.retrofit.min, g.devCost * L.retrofit.costShare) : 0, unitCostAdd = options.reduce((a, o) => a + optionById(o).cost, 0);
+  const reason = !g ? '없는 세대입니다.' : g.status !== 'onSale' ? '판매 중인 세대만 장비를 추가할 수 있습니다.' : !options.length ? '추가할 의무 장비가 없습니다.'
+    : regulationBlock(s) ?? (s.cash < cost ? '현금이 모자랍니다.' : null);
+  return { needed: options.length > 0 && g?.status === 'onSale', options, cost, unitCostAdd, ok: reason === null, reason };
+}
 
 /** 페이스리프트 가능 여부(8.2): 판매 중, 출시 18개월 뒤, 세대당 1회, 이미 진행 중이 아님 */
 export function faceliftEligibility(s: CarState, generationId: number): Eligibility {
@@ -26,7 +44,7 @@ export function faceliftEligibility(s: CarState, generationId: number): Eligibil
   if (s.projects.some((p) => p.kind === 'facelift' && p.targetId === g.id)) return no('이 세대의 페이스리프트를 이미 개발하고 있습니다.');
   const left = L.facelift.afterMonths - genAge(s, g);
   if (left > 0) return no(`출시 후 ${L.facelift.afterMonths}개월이 지나야 합니다. 앞으로 ${left}개월 남았습니다.`, left);
-  return yes;
+  return regulated(s);
 }
 
 /** 풀체인지 가능 여부(8.3): 현 세대 출시 36개월 뒤이거나 단종(신청 포함) 상태, 다음 세대를 이미 개발 중이 아님 */
@@ -35,10 +53,10 @@ export function fullChangeEligibility(s: CarState, nameplateId: number): Eligibi
   if (!n || !n.generations.length) return no('없는 차종입니다.');
   if (s.projects.some((p) => p.kind === 'fullchange' && p.targetId === n.id)) return no('이 차종의 풀체인지(다음 세대)를 이미 개발하고 있습니다.');
   const g = latestGen(n);
-  if (g.status !== 'onSale') return yes;
+  if (g.status !== 'onSale') return regulated(s);
   const left = L.fullChange.afterMonths - genAge(s, g);
   if (left > 0) return no(`출시 후 ${L.fullChange.afterMonths}개월이 지나야 합니다. 앞으로 ${left}개월 남았습니다.`, left);
-  return yes;
+  return regulated(s);
 }
 
 /** 차종 자산(8.3, 0~0.3) = clamp(0.03 × 전 세대 평론 − 0.12, 0, 0.2) + min(0.1, 차종 누적 판매/50만), 전 세대에 리콜이 있었으면 −0.05 */
@@ -98,8 +116,9 @@ export interface NameplateEntry {
   equity: number; // 차종 자산(이름값, 0~0.3)
   fullChange: Eligibility; facelift: Eligibility;
 }
-export interface PlanEntries { newModel: { ok: true }; nameplates: NameplateEntry[] }
-/** [신차 기획] 첫 화면: 새 차종(항상 가능) + 차종별 풀체인지·페이스리프트 가능 여부와 이유. 차종 ID 순 */
+/** blockedBy: 규제 의무 장비의 기술을 연구하지 않아 어떤 개발도 시작할 수 없는 이유(0.4.2, 없으면 null). newModel도 같은 이유로 막힌다 */
+export interface PlanEntries { newModel: Eligibility; blockedBy: string | null; nameplates: NameplateEntry[] }
+/** [신차 기획] 첫 화면: 새 차종(규제 기술 미연구가 아니면 가능) + 차종별 풀체인지·페이스리프트 가능 여부와 이유. 차종 ID 순 */
 export function planEntries(s: CarState): PlanEntries {
   const nameplates = [...s.nameplates].filter((n) => n.generations.length).sort((a, b) => a.id - b.id).map((n): NameplateEntry => {
     const g = latestGen(n);
@@ -109,5 +128,5 @@ export function planEntries(s: CarState): PlanEntries {
       fullChange: fullChangeEligibility(s, n.id), facelift: faceliftEligibility(s, g.id),
     };
   });
-  return { newModel: { ok: true }, nameplates };
+  return { newModel: regulated(s), blockedBy: regulationBlock(s), nameplates };
 }

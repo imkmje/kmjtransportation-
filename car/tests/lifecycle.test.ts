@@ -16,7 +16,7 @@ import { config } from '../src/config';
 import { SPEC, grant, launched, ok, toMonthEnd } from './util';
 
 const FL = config.lifecycle.facelift;
-const FULL: Omit<ProjectSpec, 'name'> = { body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 8 };
+const FULL: Omit<ProjectSpec, 'name'> = { body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[0] };
 const LAUNCH = { price: 1200, marketing: 1, color: 'red', wheels: 0 as const };
 
 /** 첫 차를 출시하고 세대 나이 months개월까지 진행(파산하지 않게 현금을 넉넉히) */
@@ -38,7 +38,7 @@ describe('페이스리프트(8.2)', () => {
     while (monthOf(g.state.week) - gen.launchMonth < 18) g.tick();
     expect(g.command({ type: 'startFacelift', generationId: 999, options: [] })).toEqual({ ok: false, reason: '없는 세대입니다.' });
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
-    expect(g.state.projects[0].kind).toBe('facelift'); expect(g.state.projects[0].designWeeks).toBe(4);
+    expect(g.state.projects[0].kind).toBe('facelift'); expect(g.state.projects[0].designWeeks).toBe(FL.designWeeks);
     const b = aged(18, 2);
     ok(b.g.command({ type: 'discontinue', generationId: b.gen.id }));
     expect(reason(b.g.command({ type: 'startFacelift', generationId: b.gen.id, options: [] }))).toContain('판매 중인 세대만');
@@ -55,12 +55,12 @@ describe('페이스리프트(8.2)', () => {
     expect(gen.editions[1].tier).toBe(3); expect(gen.editions[1].options).toEqual(['radio']);
     expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }))).toContain('이미 페이스리프트를 했습니다');
   });
-  it('비용: 설계 4주 + 시험 2주면 그 세대 개발비 × 비용 비율(config, 설계자 허용 25~40%)', () => {
+  it('비용: 설계 주 + 최소 시험 주면 그 세대 개발비 × 비용 비율(config, 설계자 허용 25~40%)', () => {
     expect(FL.costShare).toBeGreaterThanOrEqual(0.25); expect(FL.costShare).toBeLessThanOrEqual(0.4);
     const { g, gen } = aged(20);
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
     const p = toTest(g);
-    expect(p.weeksDone).toBe(4);
+    expect(p.weeksDone).toBe(FL.designWeeks);
     expect(p.spent).toBeCloseTo(gen.devCost * FL.costShare, 6);
     expect(faceliftPreview(g.state, gen.id, { options: [] })!.cost).toBeCloseTo(gen.devCost * FL.costShare, 6);
   });
@@ -140,7 +140,7 @@ describe('풀체인지(8.3)', () => {
       const pv = fullChangePreview(g.state, g.state.nameplates[0].id, spec)!;
       ok(g.command({ type: 'startFullChange', nameplateId: g.state.nameplates[0].id, ...spec }));
       const p = toTest(g);
-      expect(p.spent).toBeCloseTo(devCostPerWeek(team, 'normal') * (8 + 2) * mult, 6);
+      expect(p.spent).toBeCloseTo(devCostPerWeek(team, 'normal') * (FULL.designWeeks + config.dev.minTestWeeks) * mult, 6);
       expect(pv.cost).toBeCloseTo(p.spent, 6); expect(pv.costMult).toBe(mult);
     }
   });
@@ -259,7 +259,7 @@ describe('풀체인지(8.3)', () => {
 
 describe('기획 첫 화면(8.7)과 조언', () => {
   it('planEntries: 새 차종은 항상 가능, 차종별 가능 여부·이유·남은 개월', () => {
-    expect(planEntries(Game.create({ difficulty: 'normal', seed: 1 }).state)).toEqual({ newModel: { ok: true }, nameplates: [] });
+    expect(planEntries(Game.create({ difficulty: 'normal', seed: 1 }).state)).toEqual({ newModel: { ok: true, reason: null, monthsLeft: 0 }, blockedBy: null, nameplates: [] });
     const { g, gen } = aged(10);
     const left18 = 18 - (monthOf(g.state.week) - gen.launchMonth), left36 = left18 + 18;
     const e = planEntries(g.state).nameplates[0];
@@ -332,7 +332,7 @@ describe('주간 개발 기록 이벤트(devWeek)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 4 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0];
-    for (let w = 0; w < 16; w++) {
+    for (let w = 0; w < SPEC.designWeeks + 4; w++) {
       const pts = { ...p.points }, d0 = p.defects;
       const e = g.tick().find((x) => x.kind === 'devWeek');
       if (!e || e.kind !== 'devWeek') throw new Error('devWeek 없음');
@@ -340,16 +340,16 @@ describe('주간 개발 기록 이벤트(devWeek)', () => {
       expect(e.staff.map((x) => x.id)).toEqual(g.state.staff.filter((x) => x.projectId === p.id).map((x) => x.id));
       for (const k of STATS) expect(e.staff.reduce((a, x) => a + x.stats[k], 0)).toBeCloseTo(p.points[k] - pts[k], 9);
       expect(e.defectsAdded - e.defectsRemoved).toBeCloseTo(p.defects - d0, 9);
-      if (w >= 12) expect(e.staff.every((x) => STATS.every((k) => x.stats[k] === 0))).toBe(true);
+      if (w >= SPEC.designWeeks) expect(e.staff.every((x) => STATS.every((k) => x.stats[k] === 0))).toBe(true);
     }
   });
   it('난수 호출 순서는 1단계와 같다(설계 주: 직원마다 1번 + 결함 추정 1번, 시험 주: 결함 추정 1번)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 6 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const r = new Rng(0); r.setState(g.state.rng);
-    for (let w = 0; w < 14; w++) {
+    for (let w = 0; w < SPEC.designWeeks + 2; w++) {
       g.tick();
-      const n = w < 12 ? g.state.staff.length + 1 : 1;
+      const n = w < SPEC.designWeeks ? g.state.staff.length + 1 : 1;
       for (let i = 0; i < n; i++) r.next();
       expect(g.state.rng).toBe(r.getState());
     }

@@ -2,7 +2,7 @@
 import { config } from '../config';
 import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS, bodyById } from '../data';
 import { bodiesAt, optionsAt, salaryOf, unitCost } from './cars';
-import { eraTimeline } from './events';
+import { eraTimeline, optionTech, requiredOptions } from './events';
 import { researchCost, researchError } from './research';
 import { loanLimit } from './finance';
 import { hash01 } from './rng';
@@ -37,13 +37,13 @@ export interface SteadyOptions {
   priceMult: number; // 출시 가격 = 기준가 × 이 값
 }
 const STEADY: SteadyOptions = {
-  budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange',
+  budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 36, changeMonths: 78, successor: 'fullchange', // 0.4.2: 3년 리프트, 6.5년 풀체인지(8.4 의도한 흐름, 개발이 약 1년이 되어 30·60 → 36·78)
   manage: true, expand: true, gouge: false, research: true,
   sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrowShare: 0, priceMult: 1,
 };
 const B = config.bots;
 
-/** 신중(8.4 의도한 흐름): 보통 예산·12주, 30개월 페이스리프트, 60개월 풀체인지. 경영: 정원까지 채용·쉬는 직원 교육, 여유 현금으로 본사 승급,
+/** 신중(8.4 의도한 흐름): 보통 예산·중간 설계 기간, 36개월 페이스리프트, 78개월 풀체인지. 경영: 정원까지 채용·쉬는 직원 교육, 여유 현금으로 본사 승급,
  *  주문이 한도의 1.3배를 3개월 넘으면 공장 증설, 생산 라인이 늘면 차종을 늘린다(쓸 수 있는 차체 수까지) */
 export function steady(opts: Partial<SteadyOptions> = {}): Bot {
   const o = { ...STEADY, ...opts };
@@ -52,6 +52,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
     step(g) {
       if (o.borrowShare > 0 && g.state.cash < 0) { const room = loanLimit(g.state) * o.borrowShare - g.state.loan.balance; if (room >= 1) g.command({ type: 'borrow', amount: Math.floor(Math.min(room, -g.state.cash + fixedCost(g.state) * 2)) }); }
       for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
+      researchRequired(g); // 0.4.2: 규제 예고가 나오면 의무 장비 기술부터(연구를 안 하는 봇도, 안 하면 개발이 막힌다)
       launchReady(g, o);
       startProjects(g, o);
       const turn = monthOf(g.state.week) % o.manageEvery === 0; // 서툰 플레이는 가끔만 챙긴다
@@ -71,10 +72,10 @@ export const novice = (opts: Partial<SteadyOptions> = {}): Bot => ({
 export const clumsy = (opts: Partial<SteadyOptions> = {}): Bot => ({
   ...steady({ sloppy: true, launchDefects: Infinity, maxTestWeeks: config.dev.minTestWeeks, priceMult: B.clumsy.priceMult, marketing: 0, faceliftMonths: Infinity, changeMonths: B.clumsy.changeMonths, research: false, manage: false, borrowShare: 1, ...opts }), name: 'clumsy',
 });
-/** 리프트 안 함(16장): 페이스리프트 없이 5년(60개월) 주기 풀체인지 */
-export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, ...opts }), name: 'noFacelift' });
-/** 새 이름만: 페이스리프트·풀체인지 없이 5년(60개월) 주기로 매번 새 차종(전 세대를 단종하고 라인이 비면 출시) */
-export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, successor: 'newName', ...opts }), name: 'newNameOnly' });
+/** 리프트 안 함(16장): 신중과 같은 주기, 페이스리프트만 없다 */
+export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: STEADY.changeMonths, ...opts }), name: 'noFacelift' });
+/** 새 이름만: 페이스리프트·풀체인지 없이 신중과 같은 주기로 매번 새 차종(전 세대를 단종하고 라인이 비면 출시) */
+export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: STEADY.changeMonths, successor: 'newName', ...opts }), name: 'newNameOnly' });
 /** 가격 올리기: 신중과 같되 주문이 밀리면 매달 가격 +5%, 남으면 −5% */
 export const gouger = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ gouge: true, ...opts }), name: 'gouger' });
 /** 확장 안 함: 신중과 같되 본사·공장을 키우지 않는다 */
@@ -91,6 +92,13 @@ const techRank = (s: CarState, id: string): number => {
   const leadsToReq = TECHS.some((t) => t.pre.includes(id) && t.effects.some((x) => x.type === 'option' && req.includes(x.id)));
   return e.some((x) => x.type === 'body' || (x.type === 'option' && req.includes(x.id))) || leadsToReq ? 0 : e.some((x) => x.type === 'ptLevel' && x.id === 'gasoline') ? 1 : e.some((x) => x.type === 'option') ? 2 : 3;
 };
+/** 예고·시행된 규제의 의무 장비를 여는 기술(과 선행)을 현금이 되는 대로 시작한다 */
+function researchRequired(g: Game): void {
+  const s = g.state, need = new Set<string>();
+  const add = (id: string) => { if (need.has(id) || s.research.done.includes(id)) return; need.add(id); for (const q of TECHS.find((t) => t.id === id)!.pre) add(q); };
+  for (const o of regulatedOptions(s, true)) { const t = optionTech(o); if (t) add(t.id); }
+  for (const t of TECHS.filter((x) => need.has(x.id) && !researchError(s, x.id))) g.command({ type: 'startResearch', techId: t.id });
+}
 function research(g: Game, cheapOnly = false): void {
   const s = g.state, y = yearOf(s.week), reserve = fixedCost(s) * B.reserveMonths;
   const cands = TECHS.filter((t) => t.year <= y && !researchError(s, t.id) && s.cash >= researchCost(s, t).money + reserve && (!cheapOnly || researchCost(s, t).money <= s.cash * B.novice.cheapShare))
@@ -105,10 +113,11 @@ const regulatedOptions = (s: CarState, early = false): string[] => {
 /** 옵션 고르기: 쓸 수 있는 규제 옵션 먼저, 나머지는 원가가 기준가의 optionCostShare 이하인 최신 옵션(가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다).
  *  keep을 주면 그 옵션을 남기고 규제 옵션만 끼워 넣는다 */
 function pickOptions(s: CarState, body: string, keep?: string[]): string[] {
-  const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), slots = optionSlots(s);
+  const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), force = requiredOptions(s);
+  const slots = optionSlots(s) - req.filter((o) => !force.includes(o)).length; // 시행된 의무 장비는 옵션 칸을 차지하지 않는다(0.4.2)
   const cheap = optionsAt(s).filter((o) => o.cost <= bodyPrice(body) * B.optionCostShare).map((o) => o.id);
   const rest = keep ? keep.filter((o) => !req.includes(o)) : cheap.filter((o) => !req.includes(o)).reverse();
-  return [...req, ...rest].slice(0, slots);
+  return [...req, ...rest.slice(0, Math.max(0, slots))];
 }
 
 const bodyPrice = (id: string) => bodyById(id).basePrice;

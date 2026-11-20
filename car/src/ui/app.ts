@@ -474,11 +474,11 @@ export function startApp(): void {
   const statBars = (g: Stats) => STATS.map((k) => `<div class="stat"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><div class="track"><u style="width:${Math.min(100, g[k] * 10).toFixed(1)}%"></u></div><b>${score(g[k])}</b></div>`).join('');
   const kpi = (label: string, value: string, cls = '', box = '') => `<div class="kpi${box ? ` ${box}` : ''}"><small>${label}</small><b class="${cls}">${value.replace(/(만원|억)$/, '<span>$1</span>')}</b></div>`; // 단위는 작게
   /** 판매 가격 조절(출시·차고 공용): 가격·기준가 대비, −/+ 단추와 슬라이더, 대당 이익·예상 월 판매·예상 월 이익을 한 덩어리로(태블릿 가로에서 스크롤 없이) */
-  const priceBlock = (id: string, o: { price: number; base: number; up: number; sales: string; profit: string; pos: boolean; gen?: number }) => {
+  const priceBlock = (id: string, o: { price: number; base: number; up: number; sales: string; profit: string; pcls: string; gen?: number }) => {
     const min = Math.ceil(o.base * config.price.min), max = Math.floor(o.base * config.price.max), d = Math.round((o.price / o.base - 1) * 100);
     return `<div class="pricerow" id="${id}-row" data-live><b id="${id}-out">${num(o.price)}<span>만원</span></b><span class="vsbase">기준가 ${num(o.base)}만원 대비 ${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)}%</span></div>
       <div class="px-ctl"><button class="px-step" data-step="-1" aria-label="가격 10만원 내리기">−</button><div class="px-track" style="--base:${((o.base - min) / Math.max(1, max - min)).toFixed(3)}"><input type="range" class="px-r" id="${id}"${o.gen === undefined ? '' : ` data-gen="${o.gen}"`} min="${min}" max="${max}" step="10" value="${o.price}" aria-label="판매 가격(만원)"><i class="px-base" aria-hidden="true"></i></div><button class="px-step" data-step="1" aria-label="가격 10만원 올리기">+</button></div>
-      <div class="kpis px-kpis" id="${id}-kpis" data-live>${kpi('대당 이익', money(o.up, true), o.up >= 0 ? 'pos' : 'neg')}${kpi('예상 월 판매', o.sales, '', 'px-sales')}${kpi('예상 월 이익', o.profit, o.pos ? 'pos' : 'neg', 'px-profit')}</div>`;
+      <div class="kpis px-kpis" id="${id}-kpis" data-live>${kpi('대당 이익', money(o.up, true), o.up >= 0 ? 'pos' : 'neg')}${kpi('예상 월 판매', o.sales, '', 'px-sales')}${kpi('예상 월 이익', o.profit, o.pcls, 'px-profit')}</div>`;
   };
   /** 예상 월 이익 = 판매 × 대당 이익 − 광고비(직원 월급·본사 유지비는 빼고) */
   const monthProfit = (n: number, up: number, mk: number) => n * up - config.awareness.marketingCost[mk];
@@ -547,7 +547,7 @@ export function startApp(): void {
       <p class="hint">${Math.round(lb * 100)}% · 출시 뒤 시간이 지날수록 판매가 줄어듭니다.</p>
       ${adviceLine(g)}${orderLine(g)}${Q.eventImpactOn(s, g.id).map((t) => `<div class="warnbox ev-line" style="margin-top:8px">${esc(t)}</div>`).join('')}</div>`;
     const gn = Q.priceForecast(s, g.id, price) ?? 0, gpr = monthProfit(gn, up, g.marketing);
-    const card2 = ending ? '' : `<div class="card price-card"><p class="lbl">판매 가격</p>${priceBlock('gprice', { price, base, up, sales: `약 ${num(gn)}<span>대</span>`, profit: money(gpr, true), pos: gpr >= 0, gen: g.id })}
+    const card2 = ending ? '' : `<div class="card price-card"><p class="lbl">판매 가격</p>${priceBlock('gprice', { price, base, up, sales: `약 ${num(gn)}<span>대</span>`, profit: money(gpr, true), pcls: gpr >= 0 ? 'pos' : 'neg', gen: g.id })}
       <p class="hint px-note">이번 달 어림입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>
       <div class="row" id="gprice-apply" data-live style="margin-top:8px"><button class="btn ink" data-act="setPrice" data-id="${g.id}" ${price === e.price ? 'disabled' : ''}>가격 바꾸기</button><span class="hint">지금 가격 ${num(e.price)}만원 · 다음 결산부터 반영</span></div>
       <hr><p class="lbl">광고${ib('term:광고')}(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="setMk" data-id="${g.id}" data-v="${i}" aria-pressed="${g.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div></div>`;
@@ -852,7 +852,7 @@ export function startApp(): void {
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
     const card1 = `<div class="card price-card"><p class="lbl">판매 가격${fl ? '(다시 정하기)' : ''}</p>${priceBlock('lprice', { price: L.price, base, up,
-      sales: fc ? `${num(fc.min)}~${num(fc.max)}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? pr.map((x) => money(x, true)).join('~') : '—', pos: !pr || pr[pr.length - 1] >= 0 })}
+      sales: fc ? `${num(fc.min)}~${num(fc.max)}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? pr.map((x) => money(x, true)).join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
       ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b> 팔릴 것으로 보입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
       ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
     const card2 = `<div class="card"><p class="lbl">색상${fl ? '(그대로 두거나 바꾸기)' : ''}</p>${paints('lset', L.color)}
@@ -1174,15 +1174,15 @@ export function startApp(): void {
   /** 지금 꾸미는 로고: 새 게임 화면이면 초안, 게임 중이면 이 게임의 로고 */
   const logoTarget = (): LogoSpec => (!title.hidden && titleMode === 'new' ? logoDraft : ui.logo);
   function logoMaker(L: LogoSpec): string {
-    const sw = (k: 'bg' | 'fg', list: string[]) => `<div class="lg-sw" role="group" aria-label="${k === 'bg' ? '바탕색' : '무늬색'}">${list.map((c) => `<button class="lg-c" data-act="lg" data-k="${k}" data-v="${c}" aria-pressed="${L[k] === c}" aria-label="${c}"><i style="background:${c}"></i></button>`).join('')}</div>`;
+    const sw = (k: 'bg' | 'fg', list: string[]) => `<div class="lg-sw" role="group" aria-label="${k === 'bg' ? '바탕색' : '금속색'}">${list.map((c) => `<button class="lg-c" data-act="lg" data-k="${k}" data-v="${c}" aria-pressed="${L[k] === c}" aria-label="${c}"><i style="background:${c}"></i></button>`).join('')}</div>`;
     const shapes = (Object.keys(LOGO_SHAPES) as (keyof typeof LOGO_SHAPES)[]).map((k) => `<button class="lg-o" data-act="lg" data-k="shape" data-v="${k}" aria-pressed="${L.shape === k}" title="${LOGO_SHAPES[k]}">${logoSvg({ ...L, shape: k }, 34)}<small>${LOGO_SHAPES[k]}</small></button>`).join('');
     const marks = (Object.keys(LOGO_MARKS) as (keyof typeof LOGO_MARKS)[]).map((k) => `<button class="lg-o" data-act="lg" data-k="mark" data-v="${k}" aria-pressed="${L.mark === k}" title="${LOGO_MARKS[k]}">${logoSvg({ ...L, mark: k, text: k === 'text' && !L.text ? '가' : L.text }, 34)}<small>${LOGO_MARKS[k]}</small></button>`).join('');
-    return `<div class="logo-maker"><div class="lg-head"><div class="lg-prev" aria-label="로고 미리 보기">${logoSvg(L, 72)}</div><div class="lg-side"><b>회사 로고</b><button class="btn" data-act="lgRand">무작위</button><label class="lg-bd"><input type="checkbox" id="lg-border" ${L.border ? 'checked' : ''}> 테두리</label></div></div>
-      <p class="lbl">바탕 모양</p><div class="lg-grid">${shapes}</div>
+    return `<div class="logo-maker"><div class="lg-head"><div class="lg-prev" aria-label="로고 미리 보기">${logoSvg(L, 72)}</div><div class="lg-side"><b>회사 로고</b><button class="btn" data-act="lgRand">무작위</button><label class="lg-bd"><input type="checkbox" id="lg-border" ${L.border ? 'checked' : ''}> 안쪽 테두리</label></div></div>
+      <p class="lbl">엠블럼 틀</p><div class="lg-grid">${shapes}</div>
       <p class="lbl">바탕색</p>${sw('bg', LOGO_BG)}
-      <p class="lbl">무늬</p><div class="lg-grid">${marks}</div>
-      ${L.mark === 'text' ? `<label class="lbl" for="lg-text">글자(한두 글자, 한글·영문)</label><input class="namein lg-text" id="lg-text" type="text" maxlength="2" value="${esc(L.text)}" placeholder="가" autocomplete="off">` : ''}
-      <p class="lbl">무늬색</p>${sw('fg', LOGO_FG)}</div>`;
+      <p class="lbl">안쪽 문양</p><div class="lg-grid">${marks}</div>
+      ${L.mark === 'text' ? `<label class="lbl" for="lg-text">이니셜(한두 글자, 한글·영문)</label><input class="namein lg-text" id="lg-text" type="text" maxlength="2" value="${esc(L.text)}" placeholder="가" autocomplete="off">` : ''}
+      <p class="lbl">금속색(테두리·문양)</p>${sw('fg', LOGO_FG)}</div>`;
   }
   /** 로고를 바꾼 뒤: 만들기 칸만 다시 그리고(입력 중인 회사 이름은 그대로) 상단바도 바꾼다 */
   function logoChanged(light = false): void {

@@ -1,11 +1,11 @@
 // 카 컴퍼니 게임 본체: 상태, 1주 진행(tick), 명령(command), 저장(toJSON/fromJSON)
 import { config } from '../config';
-import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, techById } from '../data';
+import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
 import { avgGrade, defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
-import { specError, stepProject } from './dev';
+import { specError, stepProject, withRequired } from './dev';
 import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
-import { carriedEquity, faceliftEligibility, fullChangeEligibility, lookCandidates, latestGen, launchAvgGrade, nameplateById, rebuyPerMonth } from './lifecycle';
+import { carriedEquity, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, launchAvgGrade, nameplateById, rebuyPerMonth } from './lifecycle';
 import { awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
 import { addNews, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
@@ -168,6 +168,10 @@ export class Game {
     s.ledger.push(e);
     if (s.ledger.length > config.ledgerMonths) s.ledger.splice(0, s.ledger.length - config.ledgerMonths);
     ev.push({ kind: 'monthEnd', text: `${monthLabel(m)} 결산: 판매 ${sold}대, 이익 ${Math.round(profit).toLocaleString()}만원` });
+    if ((m + 1) % config.time.monthsPerYear === 0) { // 0.4.2 연간 판매 실적만큼 평판(9.5)
+      const R = config.reputation, yearSold = s.ledger.slice(-config.time.monthsPerYear).reduce((a, x) => a + x.sold, 0), gain = Math.min(R.yearMax, yearSold / R.yearSoldDiv);
+      if (gain > 0) this.addRep(gain);
+    }
     const b = s.factory.build; // 9.3 증설 공사: doneMonth 달부터 새 등급
     if (b && m + 1 >= b.doneMonth) {
       s.factory = { level: b.level, build: null };
@@ -255,6 +259,14 @@ export class Game {
         const bad = cmd.type === 'setPrice' ? priceError(g.body, cmd.price) : marketingError(cmd.marketing);
         if (bad) return fail(bad);
         if (cmd.type === 'setPrice') currentEdition(g).price = cmd.price; else g.marketing = cmd.marketing;
+        return OK;
+      }
+      case 'retrofit': { // 0.4.2 의무 장비 추가: 일시 비용, 지금 판에 장비를 넣고 능력치(차체 배수 × 장비 점수, 품질은 결함 감점)를 더한다
+        const info = retrofitInfo(s, cmd.generationId);
+        if (!info.ok) return fail(info.reason!);
+        const g = allGens(s).find((x) => x.id === cmd.generationId)!, ed = currentEdition(g), mult = bodyById(g.body).mult;
+        this.spend(info.cost);
+        for (const o of info.options) { const d = optionById(o); ed.options.push(o); ed.stats.U += mult.U * d.U; ed.stats.D += mult.D * d.D; ed.stats.Q += mult.Q * d.Q * defectQMult(ed.defects); }
         return OK;
       }
       case 'borrow': {
@@ -456,7 +468,7 @@ export class Game {
     const s = this.state, id = s.nextId++;
     const p: Project = {
       id, startWeek: s.week, kind, targetId, chassisSeed, faceSeed, name: spec.name,
-      body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, level: levelForTier(s, spec.powertrain, spec.tier), options: [...spec.options],
+      body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, level: levelForTier(s, spec.powertrain, spec.tier), options: withRequired(s, spec.options), // 의무 장비는 자동으로 넣는다(0.4.2)
       direction: { ...spec.direction }, budget: spec.budget, designWeeks: spec.designWeeks,
       phase: 'design', weeksDone: 0, testWeeks: 0, points: zeroStats(), defects: 0, defectEst: 0, spent: 0,
     };
@@ -486,16 +498,17 @@ export class Game {
     if (bad) return fail(bad);
     if (cmd.wheels !== 0 && cmd.wheels !== 1 && cmd.wheels !== 2) return fail('바퀴 모양은 0~2 중에서 고르세요.');
     if (typeof cmd.color !== 'string') return fail('색상을 고르세요.');
-    const reg = regulationError(s, p); // 11장 규제: 유예가 끝나면 필수 옵션이 없는 신차는 출시 불가
+    const reg = regulationError(s, p); // 11장 규제: 의무 장비 기술을 연구하지 않았거나 금지된 동력이면 출시 불가
     if (reg) return fail(reg);
+    p.options = withRequired(s, p.options); // 개발 중에 규제가 시행됐으면 의무 장비를 넣어 출시한다(0.4.2)
     const year = yearOf(s.week), month = monthOf(s.week), events: GameEvent[] = [];
     const edition = (stats: Stats, kind: Edition['kind'], headline: string | null): Edition =>
       ({ id: s.nextId++, kind, launchWeek: s.week, tier: p.tier, level: p.level, options: [...p.options], stats, defects: p.defects, price: cmd.price, color: cmd.color, wheels: cmd.wheels, faceSeed: p.faceSeed, headline });
 
     if (liftGen) { // 8.2 페이스리프트: 새 판, 평론 재평가 없음
       const fl = config.lifecycle.facelift, g = liftGen;
-      const stats = finalStats(g.body, g.powertrain, p.level, p.options, g.points, p.defects);
-      stats.D += Math.min(bodyById(g.body).mult.D * p.points.D, fl.dCap * g.editions[0].stats.D); // 디자이너 점수(상한: 원래 D의 +15%)
+      const stats = faceliftRefresh(finalStats(g.body, g.powertrain, p.level, p.options, g.points, p.defects));
+      stats.D += Math.min(bodyById(g.body).mult.D * p.points.D, fl.dCap * g.editions[0].stats.D); // 디자이너 점수(상한: 원래 D의 +10%)
       const age = month - g.lifeMonth, late = month - g.launchMonth >= fl.lateMonths;
       g.lifeMonth = month - age * (late ? fl.lateLifeKeep : fl.lifeKeep); // 수명 나이를 40%로(늦으면 70%로)
       g.awareness = Math.min(1, g.awareness + fl.awareness);
@@ -526,6 +539,7 @@ export class Game {
       }
       const avg = mean(reviews);
       if (avg >= c.masterpiece) this.addRep(c.masterpieceRep); else if (avg <= c.flop) this.addRep(c.flopRep);
+      this.addRep((avg - config.reputation.launchBase) * config.reputation.launchPer); // 0.4.2: 평론만큼 평판이 오르내린다
       const gen: Generation = {
         id: s.nextId++, number: prev ? prev.number + 1 : 1, body: p.body, segment: p.segment, powertrain: p.powertrain,
         launchWeek: s.week, launchMonth: month, lifeMonth: month, chassisSeed: p.chassisSeed, points: { ...p.points }, equity, rebuy,
