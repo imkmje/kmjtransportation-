@@ -51,7 +51,7 @@
 .office .tag{pointer-events:none}
 .office .tags-tap .tag{display:none}
 .office .tags-tap .tag.on{display:inline}
-.office .tag text{font-size:var(--tfs,15px);font-weight:800}
+.office .tag{font-size:var(--tfs,15px);font-weight:800}
 /* 결함 배지 */
 .office .bugi{transform-box:fill-box;transform-origin:center}
 .office .bugi.ping{animation:ping .5s ease-out}

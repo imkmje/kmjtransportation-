@@ -23,14 +23,15 @@ export const BODY: Record<BodyId, BodyShape> = {
 export const WHEEL_GROW = [0, .03, .06] as const;
 
 // 시대 스타일: 끝 둥글림(re: 위아래, rpF/rpR: 평면 앞뒤), 지붕·바닥 모서리 반경, 앞뒤 좁아짐,
-// smooth: 옆선 문지르기 횟수(많을수록 둥근 지붕선), wedge: 벨트라인이 뒤로 갈수록 올라가는 양(쐐기)
+// smooth: 옆선 문지르기 횟수(많을수록 둥근 지붕선), wedge: 벨트라인이 뒤로 갈수록 올라가는 양(쐐기),
+// faceW: 앞뒤 램프·범퍼 데칼이 쓰는 폭 비율(앞뒤가 많이 둥글면 모서리 밖으로 나가지 않게 좁힌다)
 export type Era = 1970 | 1990 | 2010 | 2020;
-export interface EraStyle { re: number; rpF: number; rpR: number; rc: number; rb: number; taper: number; smooth: number; wedge: number; classic: boolean }
+export interface EraStyle { re: number; rpF: number; rpR: number; rc: number; rb: number; taper: number; smooth: number; wedge: number; faceW: number; classic: boolean }
 export const ERA: Record<Era, EraStyle> = {
-  1970: { re: .09, rpF: .2, rpR: .16, rc: .045, rb: .03, taper: .02, smooth: 1, wedge: .07, classic: true }, // 각진 상자, 크롬 범퍼
-  1990: { re: .3, rpF: .62, rpR: .52, rc: .16, rb: .1, taper: .09, smooth: 4, wedge: .04, classic: false }, // 둥근 비누
-  2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .13, classic: false }, // 쐐기
-  2020: { re: .2, rpF: .55, rpR: .42, rc: .11, rb: .07, taper: .05, smooth: 2, wedge: .07, classic: false }, // 매끈
+  1970: { re: .09, rpF: .2, rpR: .16, rc: .045, rb: .03, taper: .02, smooth: 1, wedge: .07, faceW: 1, classic: true }, // 각진 상자, 크롬 범퍼
+  1990: { re: .3, rpF: .62, rpR: .52, rc: .16, rb: .1, taper: .09, smooth: 4, wedge: .04, faceW: .88, classic: false }, // 둥근 비누
+  2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .13, faceW: 1, classic: false }, // 쐐기
+  2020: { re: .2, rpF: .55, rpR: .42, rc: .11, rb: .07, taper: .05, smooth: 2, wedge: .07, faceW: 1, classic: false }, // 매끈
 };
 export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1990 ? 1970 : e < 2010 ? 1990 : e < 2020 ? 2010 : 2020; };
 export const eraStyle = (look: CarLook): EraStyle => ERA[eraOf(look)];

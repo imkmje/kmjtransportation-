@@ -50,7 +50,7 @@ describe('균형 봇(시드 20개, 설계자 보정 목표 2026-11-20)', () => {
     expect(cash).toBeGreaterThanOrEqual(300000); expect(cash).toBeLessThanOrEqual(1500000);
   });
   it('5) 실패작(절약·8주·시험 2주로 출시, 평론 3.5 이하) 하나만 팔면 36개월 안에 현금이 음수가 되거나 대출이 필요하다', () => {
-    const flop = steady({ budget: 'low', designWeeks: 8, launchDefects: Infinity, maxTestWeeks: 2, cycleYears: 100 });
+    const flop = steady({ budget: 'low', designWeeks: 8, launchDefects: Infinity, maxTestWeeks: 2, changeMonths: Infinity, faceliftMonths: Infinity });
     const rs = SEEDS.map((s) => firstCar(flop, s, 36));
     console.log(`실패작 평론: ${rs.map((r) => r.review.toFixed(1)).join(',')}, 최저 현금(억): ${rs.map((r) => Math.round(r.minCash / 10000)).join(',')}`);
     for (const r of rs) { expect(r.review).toBeLessThanOrEqual(3.5); expect(r.minCash < 0 || r.loan > 0).toBe(true); }

@@ -13,7 +13,7 @@ export const config = {
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
     designWeeks: [8, 12, 16], minTestWeeks: 2,
-    prototypePerWeek: 4000, // 시제차 비용(주당). 12주 설계 + 시험이면 개발비 약 8.5억이 되도록(설계자 결정 6~12억)
+    prototypePerWeek: 5500, // 시제차 비용(주당). 2단계 조정 4000 → 5500: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 5개월로 짧아져서, 개발비를 약 11억(설계자 결정 6~12억 안)으로
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
@@ -32,7 +32,7 @@ export const config = {
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
   market: { // 7.3
-    scale: 1.15, // 시장 규모 배수(보정용, 설계서 연 규모 × 1.15)
+    scale: 3.0, // 시장 규모 배수(보정용). 2단계 조정 1.15 → 3.0: 연 규모를 달마다 기하 보간하자 1970년대 시장이 직선 보간의 1/2~1/4로 줄어서
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
     primaryBoost: 1.25, // 주 고객층 인지도 +25%

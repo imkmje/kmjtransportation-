@@ -2,11 +2,12 @@
 import { config } from '../config';
 import { bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, standard, unitCost, zeroStats } from './cars';
-import { designWeek, devCostPerWeek, testCut } from './dev';
+import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut } from './dev';
 import { allGens, sellingGens } from './game';
-import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, ageMonths } from './market';
+import { carriedEquity, faceliftEligibility, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
+import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
-import { monthOf, yearOf, yearOfMonth } from './time';
+import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { STATS, type CarState, type Generation, type Project, type ProjectSpec, type Stats } from './types';
 
 export const projectById = (s: CarState, id: number): Project | undefined => s.projects.find((p) => p.id === id);
@@ -70,27 +71,33 @@ export function salesForecast(s: CarState, projectId: number, price: number, mar
   const car = { body: p.body, segment: p.segment, stats: pv.stats, price };
   const cap = (d: number) => Math.round(Math.min(config.factory.capacity, d));
   return {
-    min: cap(monthlyDemand(s, { ...car, awareness: start, life: config.life.start }, others, y)),
-    max: cap(monthlyDemand(s, { ...car, awareness: target, life: 1 }, others, y)),
+    min: cap(monthlyDemand(s, { ...car, awareness: start, life: config.life.start }, others, monthTime(m))),
+    max: cap(monthlyDemand(s, { ...car, awareness: target, life: 1 }, others, monthTime(m))),
   };
 }
 
-/** 수명 막대(0~1): 정점 이후의 수명 감소 × 기준 상승에 따른 낡음 */
+/** 수명 막대(0~1): 정점 이후의 수명 감소(페이스리프트가 되돌린 수명 나이 기준) × 기준 상승에 따른 낡음 */
 export function lifeBar(s: CarState, g: Generation): number {
   const m = g.status === 'onSale' ? monthOf(s.week) : (g.endMonth ?? monthOf(s.week));
-  const age = ageMonths(g, m), decay = age < config.life.rampMonths ? 1 : lifeFactor(age);
+  const age = lifeAge(g, m), decay = age < config.life.rampMonths ? 1 : lifeFactor(age);
   return Math.max(0, Math.min(1, (decay * standard(yearOfMonth(g.launchMonth))) / standard(yearOfMonth(m))));
 }
 
-/** 차 카드 조언 한 줄 */
-export function advice(g: Generation): string {
+/** 차 카드 조언 한 줄. s를 주면 지금 달 기준으로 페이스리프트·풀체인지 권유를 정한다(없으면 판매 기록 길이로 어림) */
+export function advice(g: Generation, s?: CarState): string {
   const d = config.discontinue;
   if (g.status === 'discontinued') return '단종된 차입니다.';
   if (g.status === 'ending') return '이번 달 말까지만 판매하고 단종됩니다.';
   if (!g.sales.length) return '출시 직후입니다. 첫 달 판매를 기다리세요.';
   const last = g.sales[g.sales.length - 1], peak = Math.max(...g.sales);
   if (g.sales.length >= d.adviceMonths && g.sales.slice(-d.adviceMonths).every((x) => x < d.adviceSales)) return `판매가 ${d.adviceMonths}개월째 월 ${d.adviceSales}대 미만입니다. 단종을 권합니다.`;
-  if (peak > 0 && last <= peak * d.adviceDrop) return `판매가 정점의 ${Math.round((last / peak) * 100)}%로 떨어졌습니다. 후속 모델을 준비하세요.`;
+  if (peak > 0 && last <= peak * d.adviceDrop) {
+    const head = `판매가 정점의 ${Math.round((last / peak) * 100)}%로 떨어졌습니다.`, L = config.lifecycle;
+    const age = (s ? monthOf(s.week) : g.launchMonth + g.sales.length) - g.launchMonth;
+    if (!g.editions.some((e) => e.kind === 'facelift') && age >= L.facelift.afterMonths) return `${head} 페이스리프트를 고려하세요.`;
+    if (age >= L.fullChange.afterMonths) return `${head} 풀체인지를 고려하세요.`;
+    return `${head} 후속 모델을 준비하세요.`;
+  }
   if (g.lastDemand > config.factory.capacity) return '주문이 생산량을 넘습니다. 가격을 올려도 잘 팔립니다.';
   if (currentEdition(g).defects > 0) return '남은 결함이 있어 리콜 위험이 있습니다.';
   return '판매가 순조롭습니다.';
@@ -98,6 +105,62 @@ export function advice(g: Generation): string {
 
 /** 출시할 수 있는 빈 생산 라인이 있는가 */
 export const hasFreeLine = (s: CarState): boolean => sellingGens(s).length < config.factory.lines;
+
+// ---------- 차종의 일생(8장) ----------
+/** 페이스리프트 미리보기: 예상 비용(설계 4주 + 최소 시험), 예상 등급(난수 1.0·최소 시험), D 가산(상한 적용), 수명·인지도 변화 */
+export interface FaceliftPreview {
+  eligibility: Eligibility; cost: number; designWeeks: number; minTestWeeks: number;
+  grades: Stats; avg: number; avgBefore: number; dGain: number; dCap: number;
+  lifeBefore: number; lifeAfter: number; awarenessBefore: number; awarenessAfter: number;
+}
+export function faceliftPreview(s: CarState, generationId: number, spec: { options: string[]; tier?: number }): FaceliftPreview | null {
+  const g = generationById(s, generationId);
+  if (!g) return null;
+  const fl = config.lifecycle.facelift, d = config.dev, ed = currentEdition(g), tier = spec.tier ?? ed.tier, team = s.staff.filter((x) => x.projectId === null);
+  const m = monthOf(s.week), y = yearOf(s.week + fl.designWeeks + d.minTestWeeks);
+  const dir: Stats = { P: 2, E: 2, U: 2, D: 2, Q: 2 }, mult = bodyById(g.body).mult;
+  const dRaw = faceliftWeekByStaff(team, { budget: 'normal', direction: dir }, () => 1).reduce((a, w) => a + w.D, 0) * fl.designWeeks;
+  const dCap = fl.dCap * g.editions[0].stats.D, dGain = Math.min(mult.D * dRaw, dCap);
+  const defects = Math.max(0, ed.defects * fl.defectKeep + dRaw * d.defectPerPoint * fl.defectRate - testCut(team) * d.minTestWeeks);
+  const stats = finalStats(g.body, g.powertrain, tier, spec.options, g.points, defects);
+  stats.D += dGain;
+  const age = lifeAge(g, m), keep = m - g.launchMonth >= fl.lateMonths ? fl.lateLifeKeep : fl.lifeKeep;
+  return {
+    eligibility: faceliftEligibility(s, generationId), cost: faceliftWeekCost(g.devCost) * (fl.designWeeks + d.minTestWeeks), designWeeks: fl.designWeeks, minTestWeeks: d.minTestWeeks,
+    grades: grades(stats, y), avg: avgGrade(stats, y), avgBefore: avgGrade(ed.stats, y), dGain, dCap,
+    lifeBefore: lifeFactor(age), lifeAfter: lifeFactor(age * keep), awarenessBefore: g.awareness, awarenessAfter: Math.min(1, g.awareness + fl.awareness),
+  };
+}
+
+/** 풀체인지 미리보기: planPreview + 비용 할인(같은 차체 85%), 이어받을 차종 자산, 전작 비교 예상, 재구매 수요 */
+export interface FullChangePreview {
+  eligibility: Eligibility; grades: Stats; avg: number; min: number; max: number; cost: number; costMult: number;
+  equity: number; equityBase: number; bodyChanged: boolean; revival: boolean;
+  prevAvg: number; compare: 'better' | 'worse' | 'same'; rebuyPerMonth: number;
+}
+export function fullChangePreview(s: CarState, nameplateId: number, spec: Omit<ProjectSpec, 'name'>): FullChangePreview | null {
+  const n = nameplateById(s, nameplateId);
+  if (!n || !n.generations.length) return null;
+  const prev = latestGen(n), pv = planPreview(s, { ...spec, name: n.name }), costMult = fullChangeCostMult(prev.body === spec.body);
+  const eq = carriedEquity(s, nameplateId, spec.body), prevAvg = launchAvgGrade(prev);
+  return {
+    eligibility: fullChangeEligibility(s, nameplateId), ...pv, cost: pv.cost * costMult, costMult,
+    equity: eq.equity, equityBase: eq.base, bodyChanged: eq.bodyChanged, revival: eq.revival,
+    prevAvg, compare: pv.avg > prevAvg ? 'better' : pv.avg < prevAvg ? 'worse' : 'same', rebuyPerMonth: rebuyPerMonth(prev),
+  };
+}
+
+/** 차종 계보(기록 화면): 세대별 출시·단종 달, 평론, 판매, 판 */
+export function lineage(s: CarState, nameplateId: number) {
+  const n = nameplateById(s, nameplateId);
+  return (n?.generations ?? []).map((g) => ({
+    generationId: g.id, number: g.number, body: g.body, launchMonth: g.launchMonth, endMonth: g.endMonth, status: g.status,
+    label: g.endMonth !== null ? `단종(${monthLabel(g.endMonth)})` : g.status === 'onSale' ? '판매 중' : '단종 예정',
+    reviewAvg: g.reviewAvg, totalSold: g.totalSold, editions: g.editions.map((e) => e.kind), chassisSeed: g.chassisSeed,
+  }));
+}
+
+export { planEntries, nameplateEquity, lookCandidates, faceliftEligibility, fullChangeEligibility, type PlanEntries, type NameplateEntry, type Eligibility } from './lifecycle';
 
 /** 대출 남은 한도 */
 export { loanLimit, loanRate } from './finance';

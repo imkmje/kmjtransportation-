@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CarLook } from './look';
-import { BODY } from './shapes';
+import { chassisOf } from './variant';
 import { buildCar, createCarMaterials, disposeCar, type CarMaterials } from './carBuilder';
 
 // 회전 무대: 조명·원판·눈금·그림자·환경 반사는 데모(car-studio.html initThree)와 같다.
@@ -125,7 +125,7 @@ export class Stage {
     const first = !this.carG.children.length;
     this.clear(); this.blob.visible = true;
     this.carG.add(buildCar(look, this.M));
-    const b = BODY[look.bodyId];
+    const b = chassisOf(look);
     this.blob.scale.set(b.L * 1.25, b.W * 1.7, 1);
     this.pop = this.still ? 1 : 0;
     this.setColor(look.color);
@@ -138,6 +138,29 @@ export class Stage {
   }
 
   setAutoRotate(on: boolean): void { this.auto = on; }
+
+  /** 작은 PNG(data URL): 후보 썸네일·차종 계보 사진. 본 무대의 차·회전·크기를 잠시 바꿨다가 같은 틱 안에 되돌린다.
+      yaw: 무대 회전(기본 앞 3/4, 0=옆, −π/2=정면, π/2=뒷면) */
+  renderThumb(look: CarLook, w: number, h: number, yaw = -.65): string {
+    const { R, table, carG, blob } = this, M = createCarMaterials(look.color), car = buildCar(look, M), c = chassisOf(look);
+    const old = { pr: R.getPixelRatio(), size: R.getSize(new THREE.Vector2()), yaw: table.rotation.y, vis: blob.visible, sc: blob.scale.clone() };
+    carG.visible = false; table.add(car); table.rotation.y = yaw;
+    blob.visible = true; blob.scale.set(c.L * 1.25, c.W * 1.7, 1);
+    const cam = new THREE.PerspectiveCamera(28, w / h, .1, 100), d = Math.max(6.6, 9.6 * h / w);
+    cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .62, 0);
+    let url = '';
+    try {
+      R.setPixelRatio(1); R.setSize(w, h, false);
+      R.render(this.scene, cam);
+      url = this.canvas.toDataURL('image/png');
+    } finally {
+      table.remove(car); disposeCar(car); for (const m of Object.values(M)) m.dispose();
+      carG.visible = true; table.rotation.y = old.yaw; blob.visible = old.vis; blob.scale.copy(old.sc);
+      R.setPixelRatio(old.pr); R.setSize(old.size.x, old.size.y, false);
+      R.render(this.scene, this.cam); // 화면에 보이기 전에 본 장면으로 다시 그린다
+    }
+    return url;
+  }
 
   snapshot(): string {
     this.R.render(this.scene, this.cam); // 버퍼가 지워지기 전에 같은 틱에서 읽는다

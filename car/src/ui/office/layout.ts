@@ -38,20 +38,20 @@ export function roomFor(level: number): Room {
 
   // 공통: 왼쪽 앞 구석의 차 받침대, 오른쪽 벽의 개발 표지판
   floor('plinth', 0.25, D - 2.5, 1.2, 2.1);
-  wallR('sign', 0.5, Math.min(4.2, W * 0.42), 1.7, 1.2);
+  wallR('sign', 0.5, Math.min(4.4, W * 0.5), 1.7, 1.2);
   if (lv === 1) {
     floor('boxes', 0.25, 0.3, 1.1, 1.1);
     floor('boxes', 0.3, 1.6, 0.9, 0.9);
     floor('shelf', W - 1.6, 0.2, 1.3, 0.7);
     wallR('window', W - 2.4, 1.4, 2.1, 0.6);
-    p.push({ kind: 'bulb', x: W * 0.45, y: D * 0.5, w: 0, d: 0, z: H });
+    p.push({ kind: 'bulb', x: W - 2.2, y: 1.2, w: 0, d: 0, z: H });
   } else {
     wallL('whiteboard', 0.6, Math.min(3.2, D * 0.35), 1.2, 1.4);
     wallL('clock', D * 0.35 + 1.4, 0.7, 2.1, 0.7);
     floor('plant', W - 0.9, 0.25, 0.6, 0.6);
     floor('boxes', 0.3, 0.4, 0.9, 0.9);
     const nWin = lv >= 5 ? 3 : lv >= 3 ? 2 : 1;
-    const start = Math.min(4.2, W * 0.42) + 1.0, span = W - start - 1.2;
+    const start = Math.min(4.4, W * 0.5) + 1.0, span = W - start - 1.2;
     for (let i = 0; i < nWin; i++) wallR('window', start + (span / nWin) * i + 0.2, span / nWin - 0.4, 1.2, 1.5);
   }
   if (lv >= 2) floor('shelf', 2.0, 0.2, 1.3, 0.7);

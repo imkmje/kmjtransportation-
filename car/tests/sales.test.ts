@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { Game, allGens } from '../src/sim/game';
-import { awarenessTarget, monthlyDemand, toSaleCar, type SaleCar } from '../src/sim/market';
+import { awarenessTarget, monthlyDemand, toSaleCar, updateRivals, type SaleCar } from '../src/sim/market';
 import { grade, lifeFactor, standard } from '../src/sim/cars';
 import { advice, expectedReviews, generationUnitProfit, lifeBar, salesForecast } from '../src/sim/queries';
 import { criticScores } from '../src/sim/reviews';
-import { monthOf } from '../src/sim/time';
+import { monthOf, monthTime } from '../src/sim/time';
 import { config } from '../src/config';
 import { devReady, launched, ok, toMonthEnd } from './util';
 
@@ -162,7 +162,9 @@ describe('단종(8.6)과 생산 라인', () => {
     const launch = () => g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 0, color: 'red', wheels: 0 });
     expect(launch().ok).toBe(false); // 그 달에는 아직 라인을 쓰고 있다
     g.tick(); g.tick(); // 월말 직전
-    const m = monthOf(g.state.week), expected = monthlyDemand(g.state, toSaleCar(gen, m), [], 1970 + Math.floor(m / 12)) * 0.5;
+    const m = monthOf(g.state.week), st = structuredClone(g.state);
+    updateRivals(st.rivals, st.seed, m); // 월말 정산은 경쟁 차를 먼저 갱신한다
+    const expected = monthlyDemand(st, toSaleCar(gen, m), [], monthTime(m)) * 0.5;
     const ev = g.tick();
     expect(gen.sales.at(-1)).toBe(Math.round(Math.min(expected, 300)));
     expect(gen.status).toBe('discontinued');
