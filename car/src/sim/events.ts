@@ -1,7 +1,7 @@
 // 시대 사건(설계서 11장). 고정 사건은 시드와 날짜만으로 계산한다(상태 없음): 시작 달 = 자료 연·월 ± 1년(시드 해시).
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
 import { config } from '../config';
-import { ERA_EVENTS, MARKET, RANDOM_EVENTS, optionById, powertrainById, bodyById } from '../data';
+import { ERA_EVENTS, MARKET, RANDOM_EVENTS, optionById, powertrainById, bodyById, segmentById } from '../data';
 import { hash01 } from './rng';
 import { monthOf, monthLabel, yearOfMonth } from './time';
 import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type Stat, type Stats } from './types';
@@ -164,7 +164,7 @@ function eraEffectText(e: EraEffect): string {
     case 'statWeight': return `고객이 ${STAT[e.stat]}을(를) 더 중시(가중치 ×${e.mult})`;
     case 'bodyDemand': return `${e.bodies.map((b) => bodyById(b).name).join('·')} 수요 ${pct(e.mult)}`;
     case 'ptDemand': return `${powertrainById(e.powertrain).name} 수요 ${pct(e.mult)}`;
-    case 'segDemand': return `${e.segment === 'rich' ? '부유층' : e.segment} 구매 ${pct(e.mult)}`;
+    case 'segDemand': return `${segmentById(e.segment).name} 구매 ${pct(e.mult)}`;
     case 'marketSize': return `${e.region === 'all' ? '전 지역' : MARKET[e.region]?.name ?? e.region} 시장 ${pct(e.mult)}`;
     case 'trend': {
       const name = MARKET[REGION].bodyShare[e.id] ? bodyById(e.id).name : powertrainById(e.id).name;

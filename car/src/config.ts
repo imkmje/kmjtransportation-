@@ -13,7 +13,7 @@ export const config = {
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
     designWeeks: [8, 12, 16], minTestWeeks: 2,
-    prototypePerWeek: 5800, // 시제차 비용(주당). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
+    prototypePerWeek: 5600, // 시제차 비용(주당). 4단계 5800 → 5600(경쟁사 난수 순서가 바뀌어 첫 차 개발비 중앙값이 12억을 조금 넘어서). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
@@ -58,9 +58,10 @@ export const config = {
       // 대당 이익이 판매가의 약 10%라 원가 배수 0.8이면 이익이 3배가 되어 돈이 폭발했다 → 배수를 완만하게, 건설비·유지비를 올림
       { capacity: 300, lines: 1, cost: 0, upkeep: 5000, costMult: 1 },
       { capacity: 1000, lines: 2, cost: 170000, upkeep: 19000, costMult: 0.99 },
-      { capacity: 3000, lines: 3, cost: 2600000, upkeep: 52000, costMult: 0.98 },
-      { capacity: 8000, lines: 5, cost: 22000000, upkeep: 186000, costMult: 0.97 },
-      { capacity: 20000, lines: 8, cost: 70000000, upkeep: 525000, costMult: 0.96 },
+      // 4단계 보정: 3~5등급 유지비 5.2/18.6/52.5억 → 15.6/84/240억(연구로 차체·동력이 좋아져 1980년대 이익이 커진 만큼, 큰 공장을 굴리는 비용을 올림)
+      { capacity: 3000, lines: 3, cost: 2600000, upkeep: 156000, costMult: 0.98 },
+      { capacity: 8000, lines: 5, cost: 22000000, upkeep: 840000, costMult: 0.97 },
+      { capacity: 20000, lines: 8, cost: 70000000, upkeep: 2400000, costMult: 0.96 },
     ],
     buildMonths: 6, // 증설 공사 6개월
   },
@@ -131,7 +132,7 @@ export const config = {
     leadMonths: 5, // 후속 차 개발을 시작하는 시점(교체 몇 개월 전)
     modelsPerBody: 1, // 차종 수 상한 = 쓸 수 있는 차체 수 × 이 값(생산 라인 수 이내)
     gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
-    optionCostShare: 0.02, // 4단계: 옵션은 원가가 기준가의 2% 이하인 것만(규제 옵션은 예외)
+    optionCostShare: 0.04, // 4단계: 옵션은 원가가 기준가의 4% 이하인 것만(규제 옵션은 예외, 가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다)
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
   },
