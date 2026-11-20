@@ -83,7 +83,8 @@ export const unitProfit = (body: string, powertrain: string, tier: number, optio
 /** 세대의 지금 대당 이익. s를 주면 원가 배수(공장·연구·사건)와 연구로 줄어든 동력 가산을 반영 */
 export const generationUnitProfit = (g: Generation, s?: CarState): number => { const e = currentEdition(g); return unitProfit(g.body, g.powertrain, e.tier, e.options, e.price, s ? costMultOf(s) : 1, s ? ptCostAdd(s, g.powertrain) : undefined); };
 
-/** 예상 월 판매 범위: 최소 = 출시 첫 달(수명 0.6, 시작 인지도), 최대 = 수명 1.0·목표 인지도. 생산 상한 적용 */
+/** 예상 월 판매 범위(0.5.0): 출시 3개월째(수명 1.0, 인지도가 3개월 동안 목표로 다가간 값)의 수요 ± forecastSpread(30%). 생산 상한 적용.
+ *  (예전: 출시 첫 달 최저 ~ 목표 인지도 최고라 "2~47대"처럼 폭이 너무 넓었다) */
 export function salesForecast(s: CarState, projectId: number, price: number, marketing: number): { min: number; max: number } | null {
   const p = projectById(s, projectId), pv = projectPreview(s, projectId), ex = expectedReviews(s, projectId, price);
   if (!p || !pv || !ex) return null;
@@ -91,11 +92,9 @@ export function salesForecast(s: CarState, projectId: number, price: number, mar
   const others = sellingGens(s).filter((g) => g.status === 'onSale').map((g) => toSaleCar(g, m));
   const start = awarenessStart(s.reputation, ex.avg), target = Math.max(start, awarenessTarget(s.reputation, marketing, grade(pv.stats.Q, y)));
   const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain };
-  const cap = (d: number) => Math.round(Math.min(capacityOf(s), d));
-  return {
-    min: cap(monthlyDemand(s, { ...car, awareness: start, life: config.life.start }, others, monthTime(m))),
-    max: cap(monthlyDemand(s, { ...car, awareness: target, life: 1 }, others, monthTime(m))),
-  };
+  const cap = (d: number) => Math.round(Math.min(capacityOf(s), d)), F = config.forecast;
+  const aw = target + (start - target) * (1 - config.awareness.rate) ** F.months, mid = monthlyDemand(s, { ...car, awareness: aw, life: 1 }, others, monthTime(m));
+  return { min: cap(mid * (1 - F.spread)), max: cap(mid * (1 + F.spread)) };
 }
 
 /** 수명 막대(0~1): 정점 이후의 수명 감소(페이스리프트가 되돌린 수명 나이 기준) × 기준 상승에 따른 낡음 */

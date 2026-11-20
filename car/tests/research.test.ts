@@ -37,8 +37,8 @@ describe('자료 무결성(4단계)', () => {
     const byYear = [...OPTIONS].sort((a, b) => a.year - b.year), pts = (o: typeof OPTIONS[0]) => o.U + o.D + o.Q;
     expect(pts(byYear.at(-1)!)).toBeGreaterThan(pts(byYear[0]) * 5); // 뒤 시대 옵션일수록 원점수가 크다
   });
-  it('기술 40~45개·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
-    expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(45);
+  it('기술 40~50개(0.5.0: 1970년 기초 기술 4개 추가)·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
+    expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(50);
     expect(new Set(TECHS.map((t) => t.field))).toEqual(new Set(['powertrain', 'body', 'electronics', 'production', 'eco']));
     expect(new Set(TECHS.map((t) => t.id)).size).toBe(TECHS.length);
     const ids = new Set(TECHS.map((t) => t.id));
@@ -98,7 +98,7 @@ describe('해금은 연구로만(10장)', () => {
 });
 
 describe('연구 진행(10장)', () => {
-  it('돈은 바로, 쉬는 엔지니어가 매주 능력/10씩 쌓아 완료(이벤트). 프로젝트 중인 엔지니어는 0', () => {
+  it('돈은 바로, 쉬는 엔지니어가 매주 능력/10씩 쌓아 완료(이벤트). 개발 중인 엔지니어는 그 30%(0.5.0, 창업 직후에도 연구 점수가 0이 아니다)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 3 }), s = g.state, t = techById('el_radio'), cash = s.cash;
     const eng = s.staff.filter((x) => x.role === 'engineer'), ppw = eng.reduce((a, x) => a + x.ability / 10, 0);
     expect(weeklyResearchPoints(s)).toBeCloseTo(ppw, 12);
@@ -109,9 +109,9 @@ describe('연구 진행(10장)', () => {
     while (!done) { done = g.tick().some((e) => e.kind === 'unlock' && e.text.includes('카 라디오')); weeks++; }
     expect(weeks).toBe(Math.ceil(t.cost.points / ppw));
     expect(s.research.done).toEqual(['el_radio']); expect(s.research.active).toEqual([]);
-    // 프로젝트에 배치된 엔지니어는 연구 점수를 내지 않는다
+    // 개발에 배치된 엔지니어는 연구 점수의 30%를 낸다
     ok(g.command({ type: 'startProject', ...SPEC }));
-    expect(weeklyResearchPoints(s)).toBe(0);
+    expect(weeklyResearchPoints(s)).toBeCloseTo(ppw * config.research.projectShare, 12); expect(weeklyResearchPoints(s)).toBeGreaterThan(0);
   });
   it('선행·현금·연구 칸(본사 1등급 3개, 0.4.2)·중복을 확인하고, 취소하면 돈은 돌아오지 않는다', () => {
     const g = gameAt(1982);
