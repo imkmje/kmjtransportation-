@@ -1,10 +1,9 @@
 import type { CarLook } from './look';
-import { WHEEL_GROW } from './shapes';
 import { chassisOf } from './variant';
 
 // 옆모습 SVG: 3D와 같은 차대 값(chassisSeed 반영)에서 뽑는다(데모 sil()). color가 없으면 currentColor.
 export function silhouetteSvg(look: CarLook, opts: { color?: string } = {}): string {
-  const p = chassisOf(look), wr = p.wr + WHEEL_GROW[look.wheel], h = p.L / 2, f = (n: number) => n.toFixed(2);
+  const p = chassisOf(look), wr = p.wr, h = p.L / 2, f = (n: number) => n.toFixed(2);
   const c = opts.color ?? 'currentColor';
   const pts = [[-h, p.clr], [h, p.clr], [h, p.belt - (p.nose ?? .2)], [p.cF + p.rf, p.belt], [p.cF, p.roof], [p.cR, p.roof], [p.cR - p.rr, p.belt], [-h, p.belt - .06]];
   // 픽업: 객실 뒤 벽과 짐칸 사이 틈(흰 세로선)

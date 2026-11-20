@@ -47,7 +47,7 @@ function render() {
     $(id).onclick = e => { const k = (e.target as HTMLElement).closest('button')?.dataset.k; if (!k) return; set(k); if (rebuild) render(); else for (const b of $(id).querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.k === k)); };
   };
   pick('bodies', (Object.keys(BODY) as BodyId[]).map(k => [k, silhouetteSvg({ ...look, bodyId: k }) + k]), look.bodyId, v => { look.bodyId = v as BodyId; });
-  pick('eras', [['1970', '1970'], ['1990', '1990'], ['2010', '2010'], ['2020', '2020']], String(look.era), v => { look.era = Number(v) as CarLook['era']; });
+  pick('eras', [['1970', '1970'], ['1985', '1985'], ['1990', '1990'], ['2010', '2010'], ['2020', '2020']], String(look.era), v => { look.era = Number(v) as CarLook['era']; });
   pick('pts', [['gas', '가솔린'], ['ev', '전기']], look.powertrain, v => { look.powertrain = v as CarLook['powertrain']; });
   pick('colors', PAINT.map(c => [c, `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${c}"></span>`]), look.color, v => { look.color = v; stage?.setColor(v); }, false);
   pick('cseeds', SEEDS, String(look.chassisSeed ?? ''), v => { look.chassisSeed = v ? Number(v) : undefined; });
