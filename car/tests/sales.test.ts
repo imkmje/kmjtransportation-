@@ -34,11 +34,11 @@ describe('판매 공식(7.3)', () => {
     expect(grade(100, 1980)).toBeCloseTo(5 / (1 + config.grade.growth) ** 10, 9);
     expect(grade(1000, 1970)).toBe(10); // 10에서 자른다
   });
-  it('수명: 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2%', () => {
+  it('수명: 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6%(0.4.2)', () => {
     expect(lifeFactor(0)).toBeCloseTo(0.6, 9);
-    expect(lifeFactor(3)).toBe(1);
-    expect(lifeFactor(15)).toBeCloseTo(0.988 ** 12, 9);
-    for (let a = 4; a < 120; a++) expect(lifeFactor(a)).toBeLessThan(lifeFactor(a - 1));
+    expect(lifeFactor(3)).toBe(1); expect(lifeFactor(30)).toBe(1);
+    expect(lifeFactor(42)).toBeCloseTo(0.994 ** 12, 9);
+    for (let a = 31; a < 120; a++) expect(lifeFactor(a)).toBeLessThan(lifeFactor(a - 1));
   });
   it('공장 생산량 상한: 수요가 넘쳐도 월 300대까지만 판다', () => {
     const { g, gen } = launched(1);

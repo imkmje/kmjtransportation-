@@ -235,7 +235,7 @@ export function startApp(): void {
       $('#fb').hidden = true; setOfficeInset();
       office ??= createOffice(host);
       office.update(v); officeLast = v; // update → emit 순서
-      // 점수 글자는 약 1.8초 떠 있으므로 그보다 자주 보내지 않는다(빠르기 4배면 한 주가 0.375초라 겹친다). 못 보낸 것은 다음 주 기록이 바꿔 끼운다
+      // 점수 글자는 약 1.8초 떠 있으므로 그보다 자주 보내지 않는다(아주 빠름이면 한 주가 0.75초라 겹친다). 못 보낸 것은 다음 주 기록이 바꿔 끼운다
       const now = performance.now(), due = now - officeSent >= OFFICE_GAP_MS, ev = officeEvents.filter((e) => due || e.kind === 'say');
       if (ev.length) {
         if (due) officeSent = now;

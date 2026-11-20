@@ -41,11 +41,11 @@ export function unitCost(body: string, powertrain: string, tier: number, options
   return base * costMult + config.market.logistics;
 }
 
-/** 7.3 수명: 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2% */
+/** 7.3 수명: 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6% */
 export function lifeFactor(ageMonths: number): number {
-  const { start, rampMonths, decay } = config.life;
+  const { start, rampMonths, plateauMonths, decay } = config.life;
   if (ageMonths < rampMonths) return start + ((1 - start) * ageMonths) / rampMonths;
-  return (1 - decay) ** (ageMonths - rampMonths);
+  return (1 - decay) ** Math.max(0, ageMonths - plateauMonths);
 }
 
 export const salaryOf = (ability: number): number => config.salary.base + ability * config.salary.perAbility;

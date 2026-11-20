@@ -50,7 +50,7 @@ export const config = {
     wordOfMouth: 0.02, // 품질 표시 등급 1당 목표 +0.02
     rate: 0.15, // 매달 목표값으로 15%씩 다가간다
   },
-  life: { start: 0.6, rampMonths: 3, decay: 0.012 }, // 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2%
+  life: { start: 0.6, rampMonths: 3, plateauMonths: 30, decay: 0.006 }, // 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6%. 0.4.2: 매달 −1.2%(3개월부터)에서 바꿈. 기준 상승(등급 낮아짐)만으로도 판매가 해마다 약 20%씩 줄어, 수명 감소를 늦게·약하게 해야 6~7년에 정점의 25% 아래가 된다
   recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 12, rep: -5, awarenessMult: 0.8 }, // 6.3. 리콜 대당 비용 0.4.1에서 15 → 12만원(결함이 남은 차의 부담 완화)
   factory: { // 9.3 공장. capacity·lines·upkeep·costMult는 1등급 값(화면 호환용), sim은 levels를 쓴다
     capacity: 300, lines: 1, upkeep: 4000, costMult: 1, // 0.4.1: 1등급 유지비 5,000 → 4,000
