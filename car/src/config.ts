@@ -13,7 +13,7 @@ export const config = {
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
     designWeeks: [8, 12, 16], minTestWeeks: 2,
-    prototypePerWeek: 5500, // 시제차 비용(주당). 2단계 조정 4000 → 5500: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 5개월로 짧아져서, 개발비를 약 11억(설계자 결정 6~12억 안)으로
+    prototypePerWeek: 5800, // 시제차 비용(주당). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
@@ -32,7 +32,7 @@ export const config = {
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
   market: { // 7.3
-    scale: 3.0, // 시장 규모 배수(보정용). 2단계 조정 1.15 → 3.0: 연 규모를 달마다 기하 보간하자 1970년대 시장이 직선 보간의 1/2~1/4로 줄어서
+    scale: 2.1, // 시장 규모 배수(보정용). 2단계 조정 1.15 → 2.1: 연 규모를 달마다 기하 보간하자 1970년대 시장이 직선 보간의 1/2~1/4로 줄어서
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
@@ -60,11 +60,11 @@ export const config = {
   },
   lifecycle: { // 8장
     facelift: {
-      afterMonths: 18, designWeeks: 4, costShare: 0.25, // 출시 18개월 뒤, 설계 4주, 비용 = 그 세대 개발비의 25%(설계 4주 + 최소 시험 2주에 나눠 낸다)
-      dCap: 0.15, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +15%
+      afterMonths: 18, designWeeks: 4, costShare: 0.35, // 출시 18개월 뒤, 설계 4주, 비용 = 그 세대 개발비의 35%(설계 4주 + 최소 시험 2주에 나눠 낸다). 설계서 25% → 35%(설계자 허용 25~40%, 리프트가 필수가 되지 않게)
+      dCap: 0.1, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +10%(설계서 +15% → 허용 8~15% 안)
       defectKeep: 0.5, defectRate: 1 / 3, // 남은 결함 × 0.5로 시작, 새 결함은 1/3 속도
-      lifeKeep: 0.4, lateMonths: 60, lateLifeKeep: 0.7, // 수명 나이를 40%로(세대 나이 60개월 이후면 70%로)
-      awareness: 0.1, switchMonthMult: 0.7, // 인지도 +0.1, 전환 달 생산 −30%
+      lifeKeep: 0.6, lateMonths: 60, lateLifeKeep: 0.8, // 수명 나이를 60%로(세대 나이 60개월 이후면 80%로). 설계서 40%/70% → 허용 45~65%/75~85% 안
+      awareness: 0.06, switchMonthMult: 0.7, // 인지도 +0.06(설계서 +0.1 → 허용 0.04~0.10 안), 전환 달 생산 −30%
     },
     fullChange: {
       afterMonths: 36, sameBodyCost: 0.85, newBodyCost: 1, // 출시 36개월 뒤(또는 단종 상태), 비용 85%(같은 차체) / 100%

@@ -20,10 +20,10 @@ export interface SteadyOptions {
   changeMonths: number; // 세대 나이가 이 개월이 되면 후속 차를 출시(그 5개월 전에 개발 시작)
   successor: 'fullchange' | 'newName'; // 후속: 같은 이름 풀체인지 / 매번 새 차종(전 세대 단종 뒤 출시)
 }
-const STEADY: SteadyOptions = { budget: 'normal', designWeeks: 12, marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 72, successor: 'fullchange' };
+const STEADY: SteadyOptions = { budget: 'normal', designWeeks: 12, marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange' };
 const LEAD_MONTHS = 5; // 후속 차 개발을 시작하는 시점(교체 몇 개월 전)
 
-/** 신중(8.4 의도한 흐름): 보통 예산·12주·결함이 충분히 줄면 출시·기준가 판매, 3년 차 페이스리프트, 6~7년 차 풀체인지 */
+/** 신중(8.4 의도한 흐름): 보통 예산·12주·결함이 충분히 줄면 출시·기준가 판매, 3년 차(30개월) 페이스리프트, 6년 차가 시작될 때(60개월) 풀체인지 */
 export function steady(opts: Partial<SteadyOptions> = {}): Bot {
   const o = { ...STEADY, ...opts };
   return {

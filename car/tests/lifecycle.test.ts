@@ -54,15 +54,16 @@ describe('페이스리프트(8.2)', () => {
     expect(gen.editions[1].tier).toBe(3); expect(gen.editions[1].options).toEqual(['radio']);
     expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }))).toContain('이미 페이스리프트를 했습니다');
   });
-  it('비용: 설계 4주 + 시험 2주면 그 세대 개발비의 25%', () => {
+  it('비용: 설계 4주 + 시험 2주면 그 세대 개발비 × 비용 비율(config, 설계자 허용 25~40%)', () => {
+    expect(FL.costShare).toBeGreaterThanOrEqual(0.25); expect(FL.costShare).toBeLessThanOrEqual(0.4);
     const { g, gen } = aged(20);
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
     const p = toTest(g);
     expect(p.weeksDone).toBe(4);
-    expect(p.spent).toBeCloseTo(gen.devCost * 0.25, 6);
-    expect(faceliftPreview(g.state, gen.id, { options: [] })!.cost).toBeCloseTo(gen.devCost * 0.25, 6);
+    expect(p.spent).toBeCloseTo(gen.devCost * FL.costShare, 6);
+    expect(faceliftPreview(g.state, gen.id, { options: [] })!.cost).toBeCloseTo(gen.devCost * FL.costShare, 6);
   });
-  it('디자이너 점수만 D에 추가되고 상한은 원래 D의 +15%, 결함은 남은 결함 × 0.5에서 시작해 1/3 속도로 쌓인다', () => {
+  it('디자이너 점수만 D에 추가되고 상한은 원래 D의 +dCap(config, 허용 8~15%), 결함은 남은 결함 × 0.5에서 시작해 1/3 속도로 쌓인다', () => {
     for (const ability of [1, 1000]) {
       const { g, gen } = aged(18);
       gen.editions[0].defects = 8;
@@ -80,12 +81,12 @@ describe('페이스리프트(8.2)', () => {
       const before = finalStats(gen.body, gen.powertrain, p.tier, p.options, gen.points, p.defects).D, origD = gen.editions[0].stats.D;
       ok(g.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
       const gain = gen.editions[1].stats.D - before;
-      if (ability === 1) { expect(gain).toBeCloseTo(bodyById(gen.body).mult.D * p.points.D, 9); expect(gain).toBeLessThan(origD * 0.15); }
-      else expect(gain).toBeCloseTo(origD * 0.15, 9);
+      if (ability === 1) { expect(gain).toBeCloseTo(bodyById(gen.body).mult.D * p.points.D, 9); expect(gain).toBeLessThan(origD * FL.dCap); }
+      else expect(gain).toBeCloseTo(origD * FL.dCap, 9);
     }
   });
-  it('출시: 수명 나이 40%로(세대 나이 60개월 이후면 70%), 인지도 +0.1, 평론 재평가 없음(기사 한 줄), 생산 라인을 새로 요구하지 않음', () => {
-    for (const [months, keep] of [[24, 0.4], [60, 0.7]] as const) {
+  it('출시: 수명 나이를 lifeKeep로(세대 나이 60개월 이후면 lateLifeKeep), 인지도 +awareness, 평론 재평가 없음(기사 한 줄), 생산 라인을 새로 요구하지 않음', () => {
+    for (const [months, keep] of [[24, FL.lifeKeep], [60, FL.lateLifeKeep]] as const) {
       const { g, gen } = aged(months);
       ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
       const p = toTest(g);
@@ -94,7 +95,7 @@ describe('페이스리프트(8.2)', () => {
       const r = g.command({ type: 'launch', projectId: p.id, ...LAUNCH });
       expect(r.ok).toBe(true);
       expect(m - gen.lifeMonth).toBeCloseTo(age * keep, 9);
-      expect(gen.awareness).toBeCloseTo(Math.min(1, aw + 0.1), 9);
+      expect(gen.awareness).toBeCloseTo(Math.min(1, aw + FL.awareness), 9);
       expect(gen.reviews).toEqual(reviews); expect(g.state.reputation).toBe(rep);
       expect(r.ok && r.events?.[0].kind).toBe('news');
       expect(gen.editions[1].headline).toContain('페이스리프트');
