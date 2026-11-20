@@ -57,6 +57,11 @@
 .office .tagpop i{display:block;height:4px;border-radius:2px;background:#e3e7ec;margin-top:3px;overflow:hidden}
 .office .tagpop i s{display:block;height:100%;background:#7fa88a}
 
+/* 화면 밖에서 일하는 사람 쪽 표시(누르면 그쪽으로 이동) */
+.office .offs button{position:absolute;transform:translate(-50%,-50%);min-height:44px;padding:0 14px;border-radius:999px;border:1px solid #c9d0d9;background:#ffffffe8;color:#2b313a;
+  font:700 13px/1 "Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif;box-shadow:0 2px 8px #1c26331f;white-space:nowrap;cursor:pointer}
+.office .offs button:focus-visible{outline:3px solid #ff5a1f;outline-offset:2px}
+
 /* 점수와 말풍선: 작고 조용하게 */
 .office .pop{transform-box:view-box;animation:office-rise 2.6s ease-out forwards;pointer-events:none}
 .office .pop text{font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round}

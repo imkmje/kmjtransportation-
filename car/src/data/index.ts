@@ -16,7 +16,7 @@ export const SEGMENTS = segmentsJson as unknown as SegmentDef[];
 export const COMPAT = compatJson as Record<string, Record<string, number>>;
 export const MARKET = marketJson as unknown as Record<string, RegionMarket>;
 export const RIVALS = rivalsJson as unknown as RivalDef[];
-export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[] };
+export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[]; family: string[]; given: string[] }; // family·given: 채용 후보 이름(성 + 이름)
 
 const find = <T extends { id: string }>(list: T[], id: string, what: string): T => { const x = list.find((v) => v.id === id); if (!x) throw new Error(`없는 ${what}: ${id}`); return x; };
 export const bodyById = (id: string) => find(BODIES, id, '차체');

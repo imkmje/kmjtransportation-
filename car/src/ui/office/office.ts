@@ -512,7 +512,44 @@ export function createOffice(host: HTMLElement): Office {
   }
 
   // ---------- 카메라: 기본은 일하는 구역을 가까이, 한 손가락 끌기·두 손가락 확대, 두 번 톡 → 기본 화면 ----------
-  const maxS = () => Math.max(fitS, hostH / 6 / 58);          // 사람(키 58단위)이 화면 높이의 1/6
+  const PH = 58;                                               // 사람 키(그림 단위)
+  const maxS = () => Math.max(fitS, hostH / 4 / PH);          // 가장 가까이: 사람이 화면 높이의 1/4
+  const topInset = () => Math.max(0, Math.min(hostH * 0.4, parseFloat(getComputedStyle(root).getPropertyValue('--office-top-inset')) || 0));
+  /** 일하는 사람(쉬는 중이면 없음). 서서 일하는 사람 + 자리에서 일하는 사람 */
+  const workers = () => [...actors.values()].filter((a) => view && view.phase !== 'rest' && (a.home.kind === 'spot' || a.staff.working));
+  const groupKey = (a: Actor) => (a.home.kind === 'seat' ? 'seat' : a.home.spot!.kind);
+  const GROUP_NAME: Record<string, string> = { seat: '책상', test: '시험실', studio: '스튜디오', lab: '연구실' };
+  function groupsOf(list: Actor[]): Actor[][] {
+    const m = new Map<string, Actor[]>();
+    for (const a of list) m.set(groupKey(a), [...(m.get(groupKey(a)) ?? []), a]);
+    return [...m.values()];
+  }
+  /** 일하는 구역의 화면 범위: 앉은 사람은 책상 묶음 둘레(±1m), 서서 일하는 사람은 차·장비 둘레(±1.6m), 머리 높이까지 */
+  function boundsOf(list: Actor[]): [number, number, number, number] | null {
+    const ps: [number, number][] = [];
+    for (const a of list) {
+      const m = a.home.kind === 'spot' ? 1.6 : 1.0;
+      for (const [dx, dy] of [[-m, -m], [m, -m], [-m, m], [m, m]]) ps.push(P(a.home.x + dx, a.home.y + dy), P(a.home.x + dx, a.home.y + dy, 1.8));
+    }
+    if (!ps.length) { const z = room?.zones.find((q) => q.kind === 'office'); if (z) ps.push(P(z.x, z.y), P(z.x + z.w, z.y + z.d), P(z.x, z.y + z.d), P(z.x + z.w, z.y)); }
+    if (!ps.length) return null;
+    const xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]);
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  }
+  /** 범위가 위쪽 띠 아래 공간의 약 88%를 채우는 배율 */
+  const fitOf = (b: [number, number, number, number]) => 0.88 * Math.min(hostW / (b[2] - b[0]), (hostH - topInset()) / (b[3] - b[1]));
+  /** 범위 b를 보는 배율과 가운데. 사람 키는 화면 높이의 8~18%(구역이 다 들어가면 12% 이상이 되게 위에서 구역을 고른다) */
+  function frame(list: Actor[]) {
+    const b = boundsOf(list);
+    if (!b) return null;
+    const want = fitOf(b), inset = topInset();
+    const s = Math.max(fitS, Math.min(hostH * 0.18 / PH, Math.max(hostH * 0.08 / PH, want)));
+    // 가운데: 구역이 다 들어가면 구역 가운데, 잘리면 사람들의 평균 위치(사람이 많은 쪽이 남게)
+    const hp = list.map((a) => P(a.home.x, a.home.y, 0.9)), fits = want >= s || !hp.length;
+    const cx = fits ? (b[0] + b[2]) / 2 : hp.reduce((t, q) => t + q[0], 0) / hp.length;
+    const cy = (fits ? (b[1] + b[3]) / 2 : hp.reduce((t, q) => t + q[1], 0) / hp.length) - (inset / 2) / s; // 위쪽 띠는 가려진 곳으로 본다
+    return { s, cx, cy };
+  }
   function applyCam() {
     const vw = hostW / cam.s, vh = hostH / cam.s;
     // 화면 가운데가 방 범위 안에 있게만 묶는다(방이 화면 밖으로 다 나가지 않음). 방보다 넓게 보면 방 가운데로
@@ -520,35 +557,69 @@ export function createOffice(host: HTMLElement): Office {
     const cy = vh >= vb.h && cam.mode === 'free' ? vb.y + vb.h / 2 : Math.max(vb.y, Math.min(vb.y + vb.h, cam.cy));
     cam.cx = cx; cam.cy = cy;
     svg.setAttribute('viewBox', `${f(cx - vw / 2)} ${f(cy - vh / 2)} ${f(vw)} ${f(vh)}`);
+    updateChips();
   }
-  /** 기본 화면: 일하는 사람들이 있는 곳이 무대를 채우게(무대가 세로로 길어도 빈 여백 없이) */
+  /** 기본 화면: 일하는 사람들이 가운데에 크게. 다 넣으면 사람이 작아질 만큼 흩어져 있으면 사람이 많은 곳(같으면 시험실)부터 들어가는 만큼만 */
   function setDefault() {
+    stopGlide();
     cam.mode = 'auto';
-    const all = [...actors.values()], st = all.filter((a) => a.home.kind === 'spot');
-    const busy = all.filter((a) => view && view.phase !== 'rest' && a.staff.working && a.home.kind === 'seat');
-    const list = st.length || busy.length ? [...st, ...busy] : all;
-    // 일하는 구역: 앉은 사람은 책상 묶음 둘레(±1m), 서서 일하는 사람은 차·장비 둘레(±1.6m), 머리 높이까지
-    const ps: [number, number][] = [];
-    for (const a of list) {
-      const m = a.home.kind === 'spot' ? 1.6 : 1.0;
-      for (const [dx, dy] of [[-m, -m], [m, -m], [-m, m], [m, m]]) ps.push(P(a.home.x + dx, a.home.y + dy), P(a.home.x + dx, a.home.y + dy, 1.8));
+    const work = workers();
+    let list = work.length ? work : [...actors.values()];
+    const lo = hostH * 0.12 / PH, b0 = boundsOf(list);
+    if (work.length && b0 && fitOf(b0) < lo) {
+      const gs = groupsOf(work).sort((a, b) => b.length - a.length || Number(groupKey(b[0]) === 'test') - Number(groupKey(a[0]) === 'test'));
+      list = gs[0];
+      for (const g of gs.slice(1)) { const bb = boundsOf([...list, ...g]); if (bb && fitOf(bb) >= lo) list = [...list, ...g]; }
     }
-    if (!ps.length) { const z = room?.zones.find((q) => q.kind === 'office'); if (z) ps.push(P(z.x, z.y), P(z.x + z.w, z.y + z.d), P(z.x, z.y + z.d), P(z.x + z.w, z.y)); }
-    const xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]);
-    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    // 위쪽 띠(게임이 얹는 반투명 띠)는 가려진 곳으로 보고 그 아래 공간의 가운데에 맞춘다
-    const inset = Math.max(0, Math.min(hostH * 0.4, parseFloat(getComputedStyle(root).getPropertyValue('--office-top-inset')) || 0));
-    const availH = hostH - inset;
-    // 구역이 더 빡빡한 쪽의 약 70%를 차지하게. 사람 키는 화면 높이의 8%~1/7 사이로(구역이 넓으면 가장자리는 잘린다)
-    const want = 0.7 * Math.min(hostW / (x1 - x0), availH / (y1 - y0));
-    cam.s = Math.max(fitS, Math.min(hostH / 7 / 58, Math.max(hostH * 0.08 / 58, want)));
-    // 가운데는 사람들의 평균 위치(잘릴 때 사람이 많은 쪽이 남게), 구역이 다 들어가면 구역 가운데
-    const fits = want >= cam.s;
-    const hp = list.map((a) => P(a.home.x, a.home.y, 0.9));
-    cam.cx = fits || !hp.length ? (x0 + x1) / 2 : hp.reduce((t, q) => t + q[0], 0) / hp.length;
-    cam.cy = (fits || !hp.length ? (y0 + y1) / 2 : hp.reduce((t, q) => t + q[1], 0) / hp.length) - (inset / 2) / cam.s;
+    const fr = frame(list);
+    if (fr) { cam.s = fr.s; cam.cx = fr.cx; cam.cy = fr.cy; }
     applyCam();
   }
+
+  // 화면 밖에서 일하는 사람: 가장자리에 "시험실 ▸ 2명" 표시, 누르면 그쪽으로 부드럽게 이동
+  const chipsEl = document.createElement('div');
+  chipsEl.className = 'offs';
+  root.append(chipsEl);
+  let chipSig = '';
+  function updateChips() {
+    const inset = topInset(), w = hostW / cam.s, h = hostH / cam.s;
+    const l = cam.cx - w / 2, r = cam.cx + w / 2, t = cam.cy - h / 2 + inset / cam.s, bt = cam.cy + h / 2;
+    const out: { k: string; n: number; x: number; y: number; arrow: string }[] = [];
+    for (const g of groupsOf(workers())) {
+      const off = g.map((a) => P(a.home.x, a.home.y, 0.9)).filter(([x, y]) => x < l || x > r || y < t || y > bt);
+      if (!off.length) continue;
+      // 화면 가운데(띠 아래)에서 그 사람들 쪽으로 그은 선이 가장자리와 만나는 곳
+      const ox = hostW / 2, oy = inset + (hostH - inset) / 2;
+      const dx = (off.reduce((s, p) => s + p[0], 0) / off.length - cam.cx) * cam.s, dy = (off.reduce((s, p) => s + p[1], 0) / off.length - cam.cy) * cam.s + hostH / 2 - oy;
+      const mx = hostW / 2 - 78, my = (hostH - inset) / 2 - 30, k = Math.min(dx ? mx / Math.abs(dx) : Infinity, dy ? my / Math.abs(dy) : Infinity);
+      const side = Math.abs(dx) * my >= Math.abs(dy) * mx;
+      out.push({ k: groupKey(g[0]), n: off.length, x: ox + dx * k, y: oy + dy * k, arrow: side ? (dx > 0 ? '▸' : '◂') : (dy > 0 ? '▾' : '▴') });
+    }
+    const sig = out.map((o) => `${o.k}${o.n}${o.arrow}`).join();
+    if (sig !== chipSig) {
+      chipSig = sig;
+      chipsEl.innerHTML = out.map((o) => { const name = GROUP_NAME[o.k] ?? o.k; return `<button type="button" data-g="${o.k}" aria-label="${name}에서 일하는 ${o.n}명 보기">${o.arrow === '▸' ? `${name} ▸ ${o.n}명` : `${o.arrow} ${name} ${o.n}명`}</button>`; }).join('');
+    }
+    out.forEach((o, i) => { const el = chipsEl.children[i] as HTMLElement; el.style.left = `${f(o.x)}px`; el.style.top = `${f(o.y)}px`; });
+  }
+  let glide = 0;
+  const stopGlide = () => { if (glide) cancelAnimationFrame(glide); glide = 0; };
+  /** 그 구역에서 일하는 사람들이 보이도록 0.5초 동안 옮긴다(움직임 줄이기 설정이면 바로) */
+  function focusGroup(k: string) {
+    const fr = frame(workers().filter((a) => groupKey(a) === k));
+    if (!fr) return;
+    stopGlide(); tagPop.hidden = true;
+    const a = { ...cam }, t0 = performance.now(), dur = reduced.matches ? 0 : 500;
+    cam.mode = 'free';
+    const go = (now: number) => {
+      const u = dur ? Math.min(1, (now - t0) / dur) : 1, e = u * u * (3 - 2 * u);
+      cam.s = a.s + (fr.s - a.s) * e; cam.cx = a.cx + (fr.cx - a.cx) * e; cam.cy = a.cy + (fr.cy - a.cy) * e;
+      applyCam();
+      glide = u < 1 ? requestAnimationFrame(go) : 0;
+    };
+    go(t0);
+  }
+  chipsEl.addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('button[data-g]'); if (b) focusGroup(b.dataset.g!); });
   function measure() {
     const r = root.getBoundingClientRect();
     if (!r.width || !r.height) return;
@@ -571,6 +642,7 @@ export function createOffice(host: HTMLElement): Office {
   }
   const pinchStart = () => { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1; s0 = cam.s; w0 = toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); dragDist = 99; };
   svg.addEventListener('pointerdown', (e) => {
+    stopGlide();
     svg.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, [e.clientX, e.clientY]);
     if (ptrs.size === 1) dragDist = 0;
@@ -599,7 +671,7 @@ export function createOffice(host: HTMLElement): Office {
     tap(e.clientX, e.clientY);
   };
   svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
-  svg.addEventListener('wheel', (e) => { e.preventDefault(); pinTo(toWorld(e.clientX, e.clientY), e.clientX, e.clientY, cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+  svg.addEventListener('wheel', (e) => { e.preventDefault(); stopGlide(); pinTo(toWorld(e.clientX, e.clientY), e.clientX, e.clientY, cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
   // iOS 사파리의 화면 확대 몸짓 막기(touch-action:none과 함께)
   root.addEventListener('gesturestart', (e) => e.preventDefault());
   svg.addEventListener('dblclick', (e) => e.preventDefault());
@@ -697,7 +769,7 @@ export function createOffice(host: HTMLElement): Office {
       if (rebuilt) { structKey = key; build(v); if (lvChanged) cam.mode = 'auto'; }
       applyState(v);
       // 사용자가 옮기거나 확대한 뒤에는 그대로 둔다(등급이 바뀌면 다시 맞춤)
-      if (rebuilt) measure(); else if (phaseChanged && cam.mode === 'auto') setDefault();
+      if (rebuilt) measure(); else if (phaseChanged && cam.mode === 'auto') setDefault(); else updateChips();
       run();
     },
     emit(events) {
@@ -735,7 +807,7 @@ export function createOffice(host: HTMLElement): Office {
     },
     setActive(on) { active = on; run(); },
     dispose() {
-      disposed = true; run();
+      disposed = true; run(); stopGlide();
       for (const t of timeouts) clearTimeout(t);
       timeouts.clear(); ro.disconnect();
       document.removeEventListener('visibilitychange', onVis);

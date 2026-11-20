@@ -2,6 +2,7 @@
 import { config } from '../config';
 import { COMPAT, MARKET, RIVALS, SEGMENTS, bodyById } from '../data';
 import { grades, lifeFactor } from './cars';
+import { salesFleetMult } from './company';
 import { hash01, type Rng } from './rng';
 import { STATS, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
 
@@ -30,16 +31,17 @@ export function attractiveness(g: Stats, body: string, segment: string): number 
   return STATS.reduce((a, k) => a + seg.w[k] * (g[k] / config.grade.mid), 0) * (COMPAT[body]?.[segment] ?? 1);
 }
 
-/** 가격 매력 = (기준가 × 매력 / 판매가)^ε, 0.2~2.5 */
+/** 가격 매력 = (기준가 × 매력 / 판매가)^ε, 0.2~2.5. 기준가보다 비싸면 (기준가/판매가)^overpriceExp를 더 곱한다(자르기 뒤, 3단계 추가 계수) */
 export const priceAppeal = (basePrice: number, attract: number, price: number, eps: number): number =>
-  Math.min(config.market.priceAppealMax, Math.max(config.market.priceAppealMin, ((basePrice * attract) / price) ** eps));
+  Math.min(config.market.priceAppealMax, Math.max(config.market.priceAppealMin, ((basePrice * attract) / price) ** eps))
+  * Math.min(1, basePrice / price) ** config.market.overpriceExp;
 
 /** 판매 계산에 필요한 차 한 대의 요약(출시 전 미리보기에도 쓴다) */
 export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number }
 
-/** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림) */
-export function scoreA(c: SaleCar, segment: string, year: number): number {
-  const attract = attractiveness(grades(c.stats, Math.floor(year)), c.body, segment);
+/** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림). fleetMult: 영업 직원의 법인·택시 매력 배수(9.1) */
+export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1): number {
+  const attract = attractiveness(grades(c.stats, Math.floor(year)), c.body, segment) * (segment === config.staff.sales.fleetSegment ? fleetMult : 1);
   const eps = SEGMENTS.find((s) => s.id === segment)!.eps;
   const aw = Math.min(1, c.awareness * (segment === c.segment ? config.market.primaryBoost : 1));
   return attract * priceAppeal(bodyById(c.body).basePrice, attract, c.price, eps) * aw * c.life;
@@ -48,15 +50,15 @@ export function scoreA(c: SaleCar, segment: string, year: number): number {
 /** 월 수요(생산 상한 적용 전) = Σ 고객층 칸 월 규모 × 비중 × 점유율. others: 같은 칸의 내 다른 차. year: 소수 연도(monthTime, 시장 규모가 달마다 변한다) */
 export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number): number {
   const size = cellMonthly(car.body, year), mix = MARKET[REGION].mix[car.body] ?? {};
-  const e = config.market.shareExp;
+  const e = config.market.shareExp, fm = salesFleetMult(state);
   let total = 0;
   for (const seg of SEGMENTS) {
     const w = mix[seg.id] ?? 0;
     if (w <= 0) continue;
-    const mine = scoreA(car, seg.id, year) ** e;
+    const mine = scoreA(car, seg.id, year, fm) ** e;
     let rest = 0;
     for (const r of state.rivals) rest += (r.cells[car.body] ?? 0) ** e;
-    for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year) ** e;
+    for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year, fm) ** e;
     if (mine > 0) total += size * w * (mine / (mine + rest));
   }
   return total;
@@ -87,7 +89,7 @@ export function initRivals(rng: Rng, seed: number): RivalState[] {
   return [...RIVALS].sort((a, b) => (a.id < b.id ? -1 : 1)).map((r, ri) => {
     const cells: Record<string, number> = {}, models: Record<string, RivalModel> = {};
     for (const body of Object.keys(r.cells).sort()) {
-      const base = config.rivals.base + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
+      const base = rivalBase(0) + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
       models[body] = firstRivalModel(seed, ri, body, base);
     }
     const st = { id: r.id, name: r.name, cells, models };
@@ -95,6 +97,11 @@ export function initRivals(rng: Rng, seed: number): RivalState[] {
     return st;
   });
 }
+/** 경쟁사의 성장(3단계 설계 결정 b): 경쟁 차 기본 A = 1970년 base에서 해마다 growth씩 올라 max에서 멈춘다. 새 모델을 낼 때의 달로 정한다 */
+export const rivalBase = (month: number): number => {
+  const r = config.rivals;
+  return Math.min(r.baseMax, r.base + (r.baseGrowth * month) / config.time.monthsPerYear);
+};
 const bodyKey = (body: string): number => [...body].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0), 7) >>> 0;
 const rivalCycle = (seed: number, ri: number, body: string, n: number): number =>
   config.rivals.cycleMin + Math.floor(hash01(seed, 1, ri, bodyKey(body), n) * (config.rivals.cycleMax - config.rivals.cycleMin + 1));
@@ -118,7 +125,7 @@ export function updateRivals(rivals: RivalState[], seed: number, month: number):
       const md = st.models[body];
       if (month - md.start >= md.cycle) {
         const n = md.n + 1;
-        st.models[body] = { n, start: month, cycle: rivalCycle(seed, ri, body, n), base: r.base + (def?.cells[body] ?? 0) + (hash01(seed, 3, ri, bodyKey(body), n) * 2 - 1) * r.noise };
+        st.models[body] = { n, start: month, cycle: rivalCycle(seed, ri, body, n), base: rivalBase(month) + (def?.cells[body] ?? 0) + (hash01(seed, 3, ri, bodyKey(body), n) * 2 - 1) * r.noise };
       }
       st.cells[body] = rivalA(st.models[body], month);
     }

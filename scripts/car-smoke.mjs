@@ -150,7 +150,7 @@ await shot('garage');
 // ---- 회사·기록 ----
 await page.click('#tabs button[data-tab="company"]');
 const ctext = await page.locator('#panel').innerText();
-check('회사 탭: 재무·직원 4명·공장·경쟁사', ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('직원 4명') && ctext.includes('공장') && ctext.includes('도요다'));
+check('회사 탭: 안쪽 탭 4개(재무·직원·본사·공장), 처음은 재무·경쟁사', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
 const cash0 = await G(() => window.__car.game.state.cash);
 await act('borrow', '[data-v="10000"]');
 check('대출 1억 받기', (await G(() => window.__car.game.state.cash)) - cash0 === 10000 && (await G(() => window.__car.game.state.loan.balance)) === 10000);
@@ -209,7 +209,10 @@ check('개발 취소(확인 창)', (await G(() => window.__car.game.state.projec
 for (const [w, h] of [[1366, 1024], [1480, 925], [400, 800]]) {
   await page.setViewportSize({ width: w, height: h });
   const res = [];
-  for (const t of ['garage', 'dev', 'company', 'records']) { await page.click(`#tabs button[data-tab="${t}"]`); await page.waitForTimeout(80); res.push(await overflow()); }
+  for (const t of ['garage', 'dev', 'company', 'records']) {
+    await page.click(`#tabs button[data-tab="${t}"]`); await page.waitForTimeout(80); res.push(await overflow());
+    if (t === 'company') for (const c of ['staff', 'hq', 'factory', 'fin']) { await act('cotab', `[data-v="${c}"]`); await page.waitForTimeout(60); res.push(await overflow()); }
+  }
   await page.click('#tabs button[data-tab="dev"]'); await act('plan'); await page.waitForTimeout(80); res.push(await overflow());
   if (w === 400) { await shot('phone-plan'); await page.click('#tabs button[data-tab="garage"]'); await page.waitForTimeout(400); await shot('phone-garage'); }
   else await page.click('#tabs button[data-tab="garage"]');
@@ -303,13 +306,20 @@ await tick(2);
 check('한 주가 지나면 사무실에 점수 연출이 나감', (await G(() => window.__car.office.scores)) > sc0, `${sc0} → ${await G(() => window.__car.office.scores)}`);
 check('사무실 칸에 위쪽 띠 높이(--office-top-inset)를 넣음', await G(() => { const v = parseFloat(document.getElementById('office').style.getPropertyValue('--office-top-inset')), h = document.querySelector('#ov .ofc').getBoundingClientRect().height; return v > 0 && Math.abs(v - h) <= 1; }));
 check('사무실 위 글자는 위쪽 가장자리에만(무대 위 1/3 안)', await G(() => { const o = document.querySelector('#ov .ofc').getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect(); return o.bottom <= st.top + st.height / 3; }));
+check('개발 탭 배치(1366×1024): 사무실이 패널 위에 화면 폭 80% 이상으로', await G(() => { const st = document.getElementById('stage').getBoundingClientRect(), pn = document.getElementById('panel').getBoundingClientRect(); return st.bottom <= pn.top + 1 && st.width >= innerWidth * 0.8; }));
 await page.waitForTimeout(1200);
 await shot('office-design');
-await page.setViewportSize({ width: 1480, height: 925 }); await page.waitForTimeout(800); await shot('office-1480');
+for (const [w, h] of [[1366, 1024], [1480, 925], [400, 800]]) {
+  await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(500);
+  check(`개발 탭 ${w}×${h}: 본문 스크롤·가로 넘침 없음`, (await overflow()) <= 0);
+  if (w === 1480) await shot('office-1480');
+}
 await page.setViewportSize({ width: 1366, height: 1024 });
 await page.click('#tabs button[data-tab="garage"]');
 check('차고로 가면 사무실을 멈추고 3D를 다시 그림', await G(() => !window.__car.office.on && window.__car.stage?.active === true));
 await page.click('#tabs button[data-tab="dev"]');
+await page.waitForTimeout(300);
+check('개발 탭 → 차고 → 개발 탭: 사무실이 살아 있음(보이고, 직원이 그려지고, 무대 칸이 넓은 배치)', await G(() => { const o = document.getElementById('office'), svg = o.querySelector('svg'), r = o.getBoundingClientRect(); return window.__car.office.on && !o.hidden && !!svg?.getAttribute('viewBox') && o.querySelectorAll('.pp').length === 4 && r.width >= innerWidth * 0.8 && r.height > 300; }));
 await act('cancelDev'); await page.click('#ask-yes');
 
 // ---- 페이스리프트(출시 18개월 뒤) ----
@@ -414,6 +424,150 @@ await G(() => { const c = window.__car; c.tick(1); while (c.game.state.week % 4 
 check('단종 뒤 차고가 비면 무대에서 차를 치움(빈 원판)', (await G(() => window.__car.stage?.empty)) === true && (await page.locator('#ov').innerText()).includes('판매 중인 차가 없습니다') && (await page.locator('#cv').isVisible()));
 await shot('garage-cleared');
 
+// ---- 3단계: 회사(직원·본사·공장), 팀 고르기, 동시 개발 ----
+const S3 = (fn, arg) => G(fn, arg);
+const staffN = () => S3(() => window.__car.game.state.staff.length);
+await openMenu(); await act('home'); await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
+await act('titleNew'); await page.fill('#t-co', '삼단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '3'); await act('startNew');
+await page.click('#speeds button[data-speed="0"]');
+await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300);
+const vb1 = await S3(() => document.querySelector('#office svg')?.getAttribute('viewBox') ?? '');
+await page.click('#tabs button[data-tab="company"]');
+check('3단계 회사 탭: 안쪽 탭 4개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 4);
+await act('cotab', '[data-v="staff"]');
+const st0 = await page.locator('#panel').innerText();
+check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·하는 일), 정원 4/4', (await page.locator('#panel .srow:not(.head)').count()) === 4 && st0.includes('4/4') && ['디자이너', '엔지니어', '테스터', '컨디션', '쉬는 중'].every((t) => st0.includes(t)));
+check('정원이 찼으면 공고 대신 이유 + 본사 탭으로 가는 버튼', (await page.locator('.hire-full').innerText()).includes('정원(4명)이 찼습니다') && (await page.locator('.hire-card [data-act="cotab"][data-v="hq"]').count()) === 1 && (await page.locator('[data-act="postJob"]').count()) === 0);
+check('정원이 찼으면 공고 명령도 거부 이유', await S3(() => { const r = window.__car.game.command({ type: 'postJob', role: 'designer', tier: 1 }); return !r.ok && r.reason.includes('정원'); }));
+await page.locator('.hire-card [data-act="cotab"][data-v="hq"]').click();
+const hq0 = await page.locator('#panel').innerText();
+check('본사 탭: 5등급 단계·지금 등급(정원·개발 차 수·옵션 칸·유지비)·다음 등급 비교', (await page.locator('.lv5 li').count()) === 5 && (await page.locator('.lv5 li.on').innerText()).includes('창고 공장') && ['정원', '동시에 개발할 수 있는 차', '옵션 칸', '월 유지비', '승급 비용', '소형 사옥'].every((t) => hq0.includes(t)));
+await G(() => { const s = window.__car.game.state; s.cash = 5000000; s.reputation = 40; window.__car.render(); }); // 점검용: 현금 500억·평판 40
+await act('upgradeHQ');
+check('본사 키우기: 확인 창', (await page.locator('#ask').isVisible()) && (await page.locator('#ask-text').innerText()).includes('본사'));
+await page.click('#ask-yes');
+await act('upgradeHQ'); await page.click('#ask-yes');
+const hq3 = await S3(() => { const s = window.__car.game.state; return { lv: s.hqLevel }; });
+check('본사 3등급: 정원 12·개발팀 2', hq3.lv === 3 && (await page.locator('#panel .hq-cur').innerText()).includes('4/12') && (await page.locator('.lv5 li.on').innerText()).includes('본사 빌딩'), JSON.stringify(hq3));
+await shot('co-hq');
+await act('cotab', '[data-v="staff"]');
+await act('postJob', '[data-v="2"]');
+check('공고 → 후보 3명 카드(이름·능력·성장 여지·요구 월급·남은 주)', (await page.locator('.cand').count()) === 3 && /성장 여지 (큼|보통|작음)/.test(await page.locator('.cand').first().innerText()) && (await page.locator('.cand').first().innerText()).includes('요구 월급') && (await page.locator('[data-act="dismissCands"]').count()) === 1);
+await page.waitForTimeout(300);
+await shot('co-cands');
+await page.locator('.cand [data-act="hire"]').first().click();
+check('채용: 직원 5명, 정원 5/12 표시', (await staffN()) === 5 && (await page.locator('.hire-card .cap-n').innerText()) === '5/12');
+for (let i = 0; i < 2; i++) await page.locator('.cand [data-act="hire"]').first().click();
+await act('hireRole', '[data-v="sales"]');
+check('영업 직무를 고르면 영업 효과 한 줄', (await page.locator('.hire-card').innerText()).includes('차가 더 빨리 알려지고 법인 판매가 늘어납니다'));
+await act('postJob', '[data-v="1"]');
+for (let i = 0; i < 3; i++) await page.locator('.cand [data-act="hire"]').first().click();
+await act('hireRole', '[data-v="engineer"]'); await act('postJob', '[data-v="1"]');
+for (let i = 0; i < 2; i++) await page.locator('.cand [data-act="hire"]').first().click();
+await page.locator('.cand [data-act="hire"]').first().click();
+check('정원 12명이 차면 채용 거부 이유(정원)', (await staffN()) === 12 && (await page.locator('#toasts').innerText()).includes('정원(12명)이 찼습니다') && (await page.locator('.hire-full').count()) === 1);
+const last = await S3(() => window.__car.game.state.staff.at(-1).id);
+await page.locator(`.srow[data-id="${last}"]`).click();
+await act('fire');
+check('해고: 화면 안 확인 창(퇴직금)', (await page.locator('#ask').isVisible()) && (await page.locator('#ask-text').innerText()).includes('퇴직금'));
+await page.click('#ask-no');
+check('해고 확인 창 "아니요": 그대로', (await staffN()) === 12);
+await act('fire'); await page.click('#ask-yes');
+await page.locator('.cand [data-act="hire"]').first().click();
+check('해고 뒤 빈자리에 남은 후보 채용 → 12명', (await staffN()) === 12 && (await page.locator('.cand').count()) === 0);
+const d1 = await S3(() => window.__car.game.state.staff.find((x) => x.role === 'designer' && x.ability < x.potential - 6));
+await page.locator(`.srow[data-id="${d1.id}"]`).click();
+const card = await page.locator('#staff-card').innerText();
+check('직원 상세 카드: 교육(비용·효과)·휴식·배치·해고(퇴직금)', ['교육 보내기', '능력 +', '2주 쉬기', '개발 배치', '해고', '퇴직금'].every((t) => card.includes(t)));
+await act('train', `[data-id="${d1.id}"]`);
+const d1b = await S3((id) => window.__car.game.state.staff.find((x) => x.id === id), d1.id);
+check('교육: 능력 상승 + 표에 "교육 중 n주 남음"', d1b.ability > d1.ability && (await page.locator(`.srow[data-id="${d1.id}"]`).innerText()).includes('교육 중'), `${d1.ability} → ${d1b.ability}`);
+await page.waitForTimeout(300);
+await shot('co-staff');
+// 기획: 팀 고르기
+await page.click('#tabs button[data-tab="garage"]');
+await planNew(); await page.fill('#pname', '하나'); await act('ptab', '[data-v="budget"]');
+const picks = await page.locator('.pick').count();
+const avg0 = Number(await page.locator('.plan-est').getAttribute('data-avg'));
+const pid = await page.locator('.pick[aria-pressed="true"]').last().getAttribute('data-id');
+await page.locator(`.pick[data-id="${pid}"]`).click();
+const avg1 = Number(await page.locator('.plan-est').getAttribute('data-avg'));
+check('기획 팀 고르기: 놀고 있는 개발 직원(영업 제외) 목록, 한 명 빼면 예상 등급이 내려감', picks === 9 && avg1 < avg0, `${picks}명, ${avg0.toFixed(2)} → ${avg1.toFixed(2)}`);
+await page.waitForTimeout(400);
+await shot('plan-team');
+// 반만 데리고 개발 → 남은 직원으로 두 번째 차
+const half = await S3(() => [...document.querySelectorAll('.pick[aria-pressed="true"]')].slice(4).map((b) => b.dataset.id));
+for (const id of half) await page.locator(`.pick[data-id="${id}"]`).click();
+await act('startDev');
+check('고른 팀만 배치', await S3(() => { const s = window.__car.game.state, p = s.projects[0]; return s.staff.filter((x) => x.projectId === p.id).length === 4; }));
+check('개발 중 빈 개발팀이 있으면 개발 탭에 [신차 기획]', (await page.locator('#panel .pchips [data-act="plan"]').count()) === 1);
+await page.locator('#panel .pchips [data-act="plan"]').click(); if ((await G(() => window.__car.screen)) === 'start') await act('pickNew');
+await page.fill('#pname', '두울'); await startDev();
+check('개발팀 2개: 프로젝트 2개 동시 진행 + 전환 칩 2개', (await S3(() => window.__car.game.state.projects.length)) === 2 && (await page.locator('.pchip').count()) === 2 && (await page.locator('#panel .pchips [data-act="plan"]').count()) === 0);
+await page.locator('.pchip').first().click();
+check('전환 칩: 고른 프로젝트의 띠·사무실 표지판', (await page.locator('#ov .ofc-t b').innerText()) === '하나' && (await S3(() => window.__car.office.view.projectName)) === '하나');
+await tick(2); await page.waitForTimeout(400);
+const ov3 = await S3(() => ({ lv: window.__car.office.view.level, n: window.__car.office.view.staff.length, sales: window.__car.office.view.staff.some((x) => x.role === 'sales'), vb: document.querySelector('#office svg')?.getAttribute('viewBox') ?? '' }));
+const vbw = (v) => Number(v.split(/\s+/)[2] ?? 0);
+check('사무실: 본사 3등급·직원 12명(영업 포함)·방이 넓어짐', ov3.lv === 3 && ov3.n === 12 && ov3.sales && vbw(ov3.vb) > vbw(vb1), `${vb1} → ${ov3.vb}`);
+await page.waitForTimeout(1200);
+await shot('dev-two');
+// 출시: 라인 1개 → 공장 증설 → 두 번째 차
+await G(() => { const c = window.__car; let i = 0; while (i++ < 80 && !c.game.state.projects.every((p) => p.phase === 'test' && p.testWeeks >= 2)) c.tick(1); c.render(); });
+await act('toLaunch'); await launchNow(); await page.waitForSelector('#sheet:not([hidden])'); await act('closeReview');
+await tick(9);
+await G(() => { const g = window.__car.game.state.nameplates[0].generations[0]; g.lastDemand = 520; g.lostSales = 520 - (g.sales.at(-1) ?? 0); window.__car.render(); }); // 점검용: 주문이 생산을 넘은 달
+check('차고: 주문 상황 한 줄 + 공장 보기 버튼', /지난달 주문 520대 중 \d+대만 만들었습니다/.test(await page.locator('.order-line').innerText()));
+await page.waitForTimeout(400);
+await shot('garage-order');
+await act('goCo', '[data-v="factory"]');
+check('주문 상황 [공장 보기] → 회사 탭 공장', (await G(() => window.__car.screen)) === 'company' && (await page.locator('#panel .fac-cur').count()) === 1);
+const f0 = await page.locator('#panel').innerText();
+check('공장 탭: 지금 등급(월 생산·생산 라인·유지비·원가 절감)·다음 등급 비교·차종별 생산·조언', ['한 달 생산', '생산 라인', '월 유지비', '원가 절감', '증설 뒤', '차종별 생산', '지난달 주문'].every((t) => f0.includes(t)) && (await page.locator('.prod').count()) === 1);
+await act('expandFactory');
+check('공장 증설: 확인 창(공사 6개월)', (await page.locator('#ask-text').innerText()).includes('6개월'));
+await page.click('#ask-yes');
+check('공사 중 표시(남은 달·진행 막대), 다시 증설 버튼은 막힘', (await page.locator('.build').innerText()).includes('개월 남았습니다') && (await page.locator('[data-act="expandFactory"]').isDisabled()));
+await page.waitForTimeout(300);
+await shot('co-factory-build');
+await G(() => { const c = window.__car; let i = 0; while (i++ < 40 && c.game.state.factory.level < 2) c.tick(1); c.render(); });
+const fac = await S3(() => window.__car.game.state.factory);
+check('6개월 뒤 공장 2등급: 월 생산 1,000·생산 라인 2', fac.level === 2 && !fac.build && (await page.locator('.fac-cur').innerText()).includes('1,000') && /1\/2/.test(await page.locator('.fac-cur').innerText()), JSON.stringify(fac));
+check('증설 완료 알림(회사)', (await page.locator('#toasts').innerText()).includes('증설을 마쳤습니다'));
+await page.click('#tabs button[data-tab="dev"]');
+await page.locator('.pchip').last().click().catch(() => {});
+await act('toLaunch'); await launchNow(); await page.waitForSelector('#sheet:not([hidden])'); await act('closeReview');
+check('두 번째 차 동시 판매(생산 라인 2/2)', (await S3(() => window.__car.game.state.nameplates.filter((n) => n.generations.some((g) => g.status === 'onSale')).length)) === 2 && (await page.locator('#ov .lines').innerText()) === '2/2');
+await tick(5);
+await page.click('#tabs button[data-tab="company"]'); await act('cotab', '[data-v="factory"]');
+const gids = await S3(() => window.__car.game.state.nameplates.map((n) => n.generations[0].id));
+await act('allocManual', `[data-id="${gids[0]}"]`);
+check('직접 배분: 슬라이더가 나옴', (await page.locator(`.alloc-r[data-gen="${gids[0]}"]`).count()) === 1);
+await page.$eval(`.alloc-r[data-gen="${gids[0]}"]`, (el) => { el.value = '80'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+check('직접 배분 80% 적용', (await S3((id) => window.__car.game.state.nameplates[0].generations[0].allocShare, gids[0])) === 0.8);
+await act('allocManual', `[data-id="${gids[1]}"]`);
+await page.$eval(`.alloc-r[data-gen="${gids[1]}"]`, (el) => { el.value = '50'; el.dispatchEvent(new Event('change', { bubbles: true })); });
+check('직접 배분 합이 100%를 넘으면 이유 표시, 적용 안 됨', (await page.locator('.alloc-why').innerText()).includes('100%') && (await S3(() => window.__car.game.state.nameplates[1].generations[0].allocShare)) <= 0.2);
+await page.waitForTimeout(300);
+await shot('co-factory');
+await act('cotab', '[data-v="fin"]');
+check('재무: 일회성 지출 줄, 유지비 본사·공장 나눔', (await page.locator('#panel').innerText()).includes('본사 유지비') && (await page.locator('#panel').innerText()).includes('공장 유지비') && (await page.locator('#panel').innerText()).includes('본사'));
+await shot('co-fin');
+for (const [w, h] of [[1366, 1024], [1480, 925], [400, 800]]) {
+  await page.setViewportSize({ width: w, height: h });
+  const res = [];
+  for (const c of ['fin', 'staff', 'hq', 'factory']) { await act('cotab', `[data-v="${c}"]`); await page.waitForTimeout(100); res.push(await overflow()); if (w !== 1366 && (c === 'staff' || c === 'factory')) await shot(`${w === 400 ? 'phone' : 'w1480'}-${c}`); }
+  await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300); res.push(await overflow());
+  await page.click('#tabs button[data-tab="company"]');
+  check(`3단계 회사 탭·동시 개발 ${w}×${h}: 본문 스크롤·가로 넘침 없음`, res.every((x) => x <= 0), res.join(','));
+}
+await page.setViewportSize({ width: 1366, height: 1024 });
+await page.click('#tabs button[data-tab="dev"]');
+await G(() => { window.__car.toast('알림 1', 'alert', '점검'); window.__car.toast('알림 2'); window.__car.toast('알림 3'); });
+await page.waitForTimeout(400);
+check('넓은 개발 탭: 알림은 사무실 칸 오른쪽 위(띠 아래)에 최대 2개', await G(() => { const t = [...document.querySelectorAll('#toasts .toast')].filter((x) => getComputedStyle(x).display !== 'none'), st = document.getElementById('stage').getBoundingClientRect(), band = document.querySelector('#ov .ofc').getBoundingClientRect(), r = document.getElementById('toasts').getBoundingClientRect(); return t.length === 2 && r.top >= band.bottom - 1 && r.right <= st.right && r.left > st.left + st.width / 2 && r.bottom < st.bottom; }));
+await shot('dev-toasts');
+
 // ---- 0.1.0 형식 저장 불러오기 ----
 await openMenu();
 const [chooser] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
@@ -422,7 +576,17 @@ await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes');
 await page.waitForFunction(() => window.__car.game?.state.companyName === '변환테스트');
 await tick(4);
 await page.click('#tabs button[data-tab="dev"]'); await page.click('#tabs button[data-tab="records"]'); await page.click('#tabs button[data-tab="garage"]');
-check('0.1.0 형식 저장(형식 1) 불러와 이어 하기', await G(() => { const c = window.__car, s = c.game.state; return s.saveVersion === 2 && s.nameplates.length > 0 && typeof c.ui.photos === 'object' && typeof c.ui.colors === 'object'; }) && (await page.locator('#panel').isVisible()));
+check('0.1.0 형식 저장(형식 1) 불러와 이어 하기', await G(() => { const c = window.__car, s = c.game.state; return s.saveVersion === 3 && s.nameplates.length > 0 && typeof c.ui.photos === 'object' && typeof c.ui.colors === 'object'; }) && (await page.locator('#panel').isVisible()));
+await openMenu();
+const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
+await chooser2.setFiles('car/tests/fixtures/save-v2.json');
+await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes');
+await page.waitForFunction(() => window.__car.game?.state.companyName === '변환테스트2');
+await tick(4);
+for (const t of ['dev', 'records', 'company']) await page.click(`#tabs button[data-tab="${t}"]`);
+for (const c of ['staff', 'hq', 'factory', 'fin']) await act('cotab', `[data-v="${c}"]`);
+await page.click('#tabs button[data-tab="garage"]');
+check('0.2.0 형식 저장(형식 2) 불러와 이어 하기', await G(() => { const s = window.__car.game.state; return s.saveVersion === 3 && s.hqLevel === 1 && s.staff.every((x) => typeof x.potential === 'number'); }) && (await page.locator('#panel').isVisible()));
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);

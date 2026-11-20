@@ -32,11 +32,11 @@ export function finalStats(body: string, powertrain: string, tier: number, optio
   return s;
 }
 
-/** 대당 원가 = 차체 원가 × (1 + 동력 가산) × (1 + 단계 가산) + 옵션 원가, × 공장 원가 배수 + 물류비 */
-export function unitCost(body: string, powertrain: string, tier: number, options: string[]): number {
+/** 대당 원가 = 차체 원가 × (1 + 동력 가산) × (1 + 단계 가산) + 옵션 원가, × 공장 원가 배수 + 물류비. costMult: 공장 등급의 원가 배수(생략하면 1등급 1.0) */
+export function unitCost(body: string, powertrain: string, tier: number, options: string[], costMult = 1): number {
   const pt = powertrainById(powertrain);
   const base = bodyById(body).cost * (1 + pt.costAdd) * (1 + pt.tiers[tier - 1].costAdd) + options.reduce((a, id) => a + optionById(id).cost, 0);
-  return base * config.factory.costMult + config.market.logistics;
+  return base * costMult + config.market.logistics;
 }
 
 /** 7.3 수명: 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2% */

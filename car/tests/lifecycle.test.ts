@@ -1,4 +1,4 @@
-// 차종의 일생(설계서 8장): 페이스리프트·풀체인지·차종 자산·기획 첫 화면·모양 후보·주간 기록·저장 형식 2
+// 차종의 일생(설계서 8장): 페이스리프트·풀체인지·차종 자산·기획 첫 화면·모양 후보·주간 기록·저장 형식 1 → 3
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game, allGens, SAVE_VERSION } from '../src/sim/game';
@@ -353,11 +353,12 @@ describe('주간 개발 기록 이벤트(devWeek)', () => {
   });
 });
 
-describe('직원 성장(9.1 최소 구현)과 경쟁 차 교체(8.4)', () => {
-  it('출시로 프로젝트를 마치면 참여 직원 능력 +1~2(상한 60)', () => {
+describe('직원 경험(9.1)과 경쟁 차 교체(8.4)', () => {
+  it('출시로 프로젝트를 마치면 참여 직원 능력 +1~2(잠재력 상한)', () => {
     const { g, gen } = aged(18);
     const before = g.state.staff.map((x) => x.ability);
-    g.state.staff[0].ability = 59;
+    g.state.staff[0].ability = 59; g.state.staff[0].potential = 60;
+    for (const x of g.state.staff.slice(1)) x.potential = 100;
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
     ok(g.command({ type: 'launch', projectId: toTest(g).id, ...LAUNCH }));
     g.state.staff.forEach((x, i) => {
@@ -396,13 +397,15 @@ describe('시장 규모(7.3, 7.5): 달마다 매끄럽게, 연도 사이는 비�
   });
 });
 
-describe('저장 형식 2', () => {
-  it(`SAVE_VERSION = 2, 형식 1 파일을 올려서 불러오고 이어서 실행할 수 있다`, () => {
-    expect(SAVE_VERSION).toBe(2);
+describe('저장 형식 1 → 3', () => {
+  it(`SAVE_VERSION = 3, 형식 1 파일을 올려서 불러오고 이어서 실행할 수 있다`, () => {
+    expect(SAVE_VERSION).toBe(3);
     const v1 = JSON.parse(readFileSync('car/tests/fixtures/save-v1.json', 'utf8'));
     expect(v1.saveVersion).toBe(1);
     const g = Game.fromJSON(v1), s = g.state;
-    expect(s.saveVersion).toBe(2);
+    expect(s.saveVersion).toBe(3);
+    expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null });
+    for (const x of s.staff) expect(x.potential).toBe(Math.max(60, x.ability));
     const gen = allGens(s)[0], ed = gen.editions[0];
     expect(gen.lifeMonth).toBe(gen.launchMonth); expect(gen.equity).toBe(0); expect(gen.rebuy).toBe(0);
     expect(Number.isInteger(gen.chassisSeed)).toBe(true); expect(Number.isInteger(ed.faceSeed)).toBe(true); expect(ed.headline).toBeNull();
