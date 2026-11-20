@@ -472,7 +472,16 @@ export function startApp(): void {
   const segName = (id: string) => SEGMENTS.find((x) => x.id === id)?.name ?? id;
   const specLine = (body: string, pt: string, tier: number, seg: string) => `${bodyById(body).name} · ${powertrainById(pt).name} ${tierName(pt, tier)} · ${segName(seg)}용`;
   const statBars = (g: Stats) => STATS.map((k) => `<div class="stat"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><div class="track"><u style="width:${Math.min(100, g[k] * 10).toFixed(1)}%"></u></div><b>${score(g[k])}</b></div>`).join('');
-  const kpi = (label: string, value: string, cls = '') => `<div class="kpi"><small>${label}</small><b class="${cls}">${value.replace(/(만원|억)$/, '<span>$1</span>')}</b></div>`; // 단위는 작게
+  const kpi = (label: string, value: string, cls = '', box = '') => `<div class="kpi${box ? ` ${box}` : ''}"><small>${label}</small><b class="${cls}">${value.replace(/(만원|억)$/, '<span>$1</span>')}</b></div>`; // 단위는 작게
+  /** 판매 가격 조절(출시·차고 공용): 가격·기준가 대비, −/+ 단추와 슬라이더, 대당 이익·예상 월 판매·예상 월 이익을 한 덩어리로(태블릿 가로에서 스크롤 없이) */
+  const priceBlock = (id: string, o: { price: number; base: number; up: number; sales: string; profit: string; pos: boolean; gen?: number }) => {
+    const min = Math.ceil(o.base * config.price.min), max = Math.floor(o.base * config.price.max), d = Math.round((o.price / o.base - 1) * 100);
+    return `<div class="pricerow" id="${id}-row" data-live><b id="${id}-out">${num(o.price)}<span>만원</span></b><span class="vsbase">기준가 ${num(o.base)}만원 대비 ${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)}%</span></div>
+      <div class="px-ctl"><button class="px-step" data-step="-1" aria-label="가격 10만원 내리기">−</button><div class="px-track" style="--base:${((o.base - min) / Math.max(1, max - min)).toFixed(3)}"><input type="range" class="px-r" id="${id}"${o.gen === undefined ? '' : ` data-gen="${o.gen}"`} min="${min}" max="${max}" step="10" value="${o.price}" aria-label="판매 가격(만원)"><i class="px-base" aria-hidden="true"></i></div><button class="px-step" data-step="1" aria-label="가격 10만원 올리기">+</button></div>
+      <div class="kpis px-kpis" id="${id}-kpis" data-live>${kpi('대당 이익', money(o.up, true), o.up >= 0 ? 'pos' : 'neg')}${kpi('예상 월 판매', o.sales, '', 'px-sales')}${kpi('예상 월 이익', o.profit, o.pos ? 'pos' : 'neg', 'px-profit')}</div>`;
+  };
+  /** 예상 월 이익 = 판매 × 대당 이익 − 광고비(직원 월급·본사 유지비는 빼고) */
+  const monthProfit = (n: number, up: number, mk: number) => n * up - config.awareness.marketingCost[mk];
   const ovTop = (eyebrow: string, model: string, spec: string, when = '') => `<div class="ov tl"><div class="eyebrow"><i></i>${eyebrow}</div><div class="model">${model}</div><div class="spec">${esc(spec)}</div>${when ? `<div class="spec when">${esc(when)}</div>` : ''}</div>`;
   const ovScore = (label: string, v: number | null) => v === null ? '' : `<div class="ov br">${ring(v)}<div><small>${label}</small><b>${score(v)}</b></div></div>`;
   const ovHint = '<div class="ov bl">끌어서 돌려 보기</div>';
