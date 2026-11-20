@@ -2,7 +2,15 @@
 export const config = {
   time: { startYear: 1970, weeksPerMonth: 4, monthsPerYear: 12 }, // 4장: 1 tick = 1주, 4주 = 1개월, 48주 = 1년
   start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35, potentialMin: 50, potentialMax: 75 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
-  reputation: { min: 0, max: 100 },
+  reputation: { min: 0, max: 100, cellTop: 1, cellTopMax: 4, exportSteps: [10000, 100000, 1000000], exportStepRep: 3 }, // 5단계 평판 수단(12장 일부): 연간 칸 점유 1위 지역마다 +1(연 최대 4), 누적 수출 단계마다 +3
+  // 회사 칭호(12장): 누적 판매(대)·평판·진출 지역 수를 모두 넘으면 그 칭호(아래에서부터)
+  titles: [
+    { name: '동네 공장', sold: 0, rep: 0, regions: 1 },
+    { name: '국민 브랜드', sold: 50000, rep: 20, regions: 1 },
+    { name: '수출 기업', sold: 300000, rep: 30, regions: 2 },
+    { name: '글로벌 메이커', sold: 2000000, rep: 55, regions: 3 },
+    { name: '전설', sold: 10000000, rep: 80, regions: 4 },
+  ],
   grade: { base: 100, growth: 0.045, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × (1 + growth)^(연도 − 1970), 표시 = 5 × 원점수 / 기준. 3단계 조정 3.5% → 4.5%(설계 결정 d, 허용 3~5%)
   powertrain: { base: 40, growth: 1.22 }, // 5.3: 동력 점수 = 40 × 1.22^(단계 − 1)
   salary: { base: 250, perAbility: 12 }, // 9.1: 월급 = 250 + 능력 × 12
@@ -39,9 +47,13 @@ export const config = {
     priceAppealMin: 0.2, priceAppealMax: 2.5,
     overpriceExp: 20, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
-    logistics: 0, // 국내 물류비(대당)
+    logistics: 0, // 4단계까지의 대당 물류비(만원). 5단계부터 지역 물류비는 market.json의 logistics(기준가 대비 비율, 국내 0)
+    regionScale: { domestic: 1, asia: 1, europe: 1, northAmerica: 1 } as Record<string, number>, // 5단계 지역 시장 규모 배수(게임용 근사, 균형 보정)
+    epsMean: 1.9, // 경쟁 차 가격 기울기의 기준 ε(고객층 ε의 대략 평균)
+    grid: { priceMin: 0.6, priceMax: 1.5, cols: 12, rows: 8 }, // 시장 지도 격자: 가격(기준가 대비) × 성격(0 실용 ~ 1 스포티)
   },
   awareness: { // 7.3 인지도
+    foreign: { base: 0.03, repShare: 0.5, equityShare: 0.5 }, // 5단계 해외 인지도: 시작·목표의 기본값과 평판·차종 자산을 이어받는 비율
     base: 0.15, repDiv: 250, reviewPer: 0.03, // 시작 = 0.15 + 평판/250 + (평론 평균 − 5) × 0.03
     marketingTarget: [0, 0.15, 0.3, 0.45], // 마케팅 등급별 목표 인지도 가산
     marketingCost: [0, 500, 1500, 4000], // 마케팅 등급별 월 비용
@@ -106,6 +118,9 @@ export const config = {
     cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
+    // 5단계: 새 모델이 히트작일 확률(효과는 events.json의 rivalHit onFire), 대응 신차(플레이어 점유율 35% 이상이 12개월 → 가장 강한 회사가 다음 교체 때 A + responseAdd),
+    // 성격·가격 기울기(고객층별 A 배수: 1 + sportTilt × (성격 − 0.5) × 고객층 스포티 정도, (기준가/가격)^(priceTilt × (ε − epsMean))), 모델 가격·성격의 해시 흔들림
+    hitChance: 0.04, responseShare: 0.35, responseMonths: 12, responseAdd: 0.2, sportTilt: 0.6, priceTilt: 0.3, priceNoise: 0.05, sportNoise: 0.1,
   },
   lifecycle: { // 8장
     facelift: {
@@ -161,11 +176,11 @@ export const config = {
   },
   // 0.4.1 난이도(설계자 결정): 새 게임에서 고른다(인자를 빼면 easy). 예전 저장은 normal로 본다. 공식은 그대로, 아래 값을 읽는 자리에서 바꾼다.
   // cash: 시작 현금, loanBase: 대출 기본 한도, bankruptcyMonths: 파산 유예, rivalMult: 경쟁 차 A 배수, upkeepMult: 본사·공장 유지비 배수,
-  // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수
+  // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수, regionCostMult: 지역 진출 비용 배수(5단계)
   difficulty: {
-    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 18, rivalMult: 0.88, upkeepMult: 0.8, prototypeMult: 0.8, recallMult: 0.6, manyDefects: 20, bailouts: 2 },
-    normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1 },
-    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
+    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 18, rivalMult: 0.88, upkeepMult: 0.8, prototypeMult: 0.8, recallMult: 0.6, manyDefects: 20, bailouts: 2, regionCostMult: 0.8 },
+    normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1, regionCostMult: 1 },
+    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0, regionCostMult: 1 },
   },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },

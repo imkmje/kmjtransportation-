@@ -23,7 +23,7 @@ export const TECHS = techJson as unknown as TechDef[];
 /** 시대 사건(11.1 고정 13개, 11.2 무작위 8종) */
 export const ERA_EVENTS = eventsJson.era as unknown as EraEventDef[];
 export const RANDOM_EVENTS = eventsJson.random as unknown as RandomEventDef[];
-export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[]; family: string[]; given: string[] }; // family·given: 채용 후보 이름(성 + 이름)
+export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[]; family: string[]; given: string[]; rivalCars: Record<string, Record<string, string>> }; // rivalCars: 경쟁사별 차체별 패러디 차 이름(5단계) // family·given: 채용 후보 이름(성 + 이름)
 
 const find = <T extends { id: string }>(list: T[], id: string, what: string): T => { const x = list.find((v) => v.id === id); if (!x) throw new Error(`없는 ${what}: ${id}`); return x; };
 export const bodyById = (id: string) => find(BODIES, id, '차체');
