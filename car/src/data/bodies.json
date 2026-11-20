@@ -1,0 +1,5 @@
+[
+  { "id": "sedanS", "name": "소형 세단", "year": 1970, "cost": 984, "basePrice": 1200, "mult": { "P": 0.9, "E": 1.1, "U": 1.0, "D": 0.9, "Q": 1.0 } },
+  { "id": "hatch", "name": "해치백", "year": 1974, "cost": 902, "basePrice": 1100, "mult": { "P": 0.9, "E": 1.2, "U": 1.1, "D": 0.9, "Q": 1.0 } },
+  { "id": "sedanM", "name": "중형 세단", "year": 1978, "cost": 2132, "basePrice": 2600, "mult": { "P": 1.0, "E": 1.0, "U": 1.1, "D": 1.0, "Q": 1.0 } }
+]

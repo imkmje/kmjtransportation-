@@ -1,0 +1,409 @@
+<title>카 컴퍼니 3D 스튜디오</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Gothic+A1:wght@400;500;700;900&display=swap">
+<style>
+/* 레이아웃: 밝은 촬영 스튜디오(3D 회전 무대)가 화면의 주인공. 글자는 무대 위에 얹고, 아래 도크에서 부품을 고른다. 한 가지 밝은 테마로 고정. */
+:root{
+  --bg:#e7eaee; --stage1:#ffffff; --stage2:#dfe4ea; --stage3:#c9d0d9;
+  --card:#ffffff; --ink:#14171c; --ink2:#5b6470; --ink3:#8b94a1; --line:#d8dde4; --soft:#f1f3f6;
+  --accent:#ff5a1f; --accent2:#c93f0c; --pos:#12915a; --neg:#d43c3c;
+  --kr:"Gothic A1","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --num:"Barlow Condensed","Gothic A1",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--kr);padding-block:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));-webkit-font-smoothing:antialiased}
+.app{max-width:1120px;margin:0 auto;padding:12px 0 40px;display:flex;flex-direction:column;gap:12px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+
+/* 상단 */
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:8px;font-weight:900;font-size:16px;letter-spacing:-.01em}
+.top .sp{flex:1}
+.pill{display:inline-flex;align-items:baseline;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--ink2)}
+.pill b{font-family:var(--num);font-size:17px;color:var(--ink);font-weight:600}
+
+/* 무대 */
+.stage{position:relative;border-radius:24px;overflow:hidden;height:clamp(330px,58vh,580px);
+  background:radial-gradient(120% 90% at 50% 62%,var(--stage1) 0,var(--stage2) 48%,var(--stage3) 100%);border:1px solid #fff;box-shadow:0 1px 0 var(--line),0 24px 48px -28px #1c263340}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.fallback{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink)}
+.fallback svg{width:min(80%,560px);height:auto}
+.ov{position:absolute;pointer-events:none}
+.ov.tl{left:22px;top:20px;right:22px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--ink2);display:flex;align-items:center;gap:8px}
+.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px #ff5a1f2e}
+.model{font-weight:900;font-size:clamp(34px,7vw,64px);line-height:1;letter-spacing:-.04em;margin:8px 0 6px;overflow-wrap:anywhere}
+.spec{font-size:14px;color:var(--ink2);font-weight:500}
+.ov.tr{right:18px;top:18px;text-align:right}
+.trend{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:6px 12px}
+.ov.br{right:20px;bottom:18px;display:flex;align-items:center;gap:10px;background:#ffffffc9;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:18px;padding:8px 14px 8px 8px;border:1px solid #fff}
+.ov.br small{display:block;font-size:11px;color:var(--ink2);font-weight:700}
+.ov.br b{font-family:var(--num);font-size:30px;font-weight:700;line-height:1}
+.ov.bl{left:22px;bottom:20px;font-size:12px;color:var(--ink3);font-weight:500}
+@media (max-width:560px){.ov.tr{top:auto;bottom:94px;right:14px}.stage{height:clamp(300px,48vh,420px)}.ov.bl{display:none}}
+
+/* 도크 */
+.dock{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:820px){.dock{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--card);border-radius:20px;padding:16px;border:1px solid var(--line)}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--soft);border-radius:14px;padding:4px;gap:2px;margin-bottom:14px}
+.seg button{border:0;background:transparent;border-radius:11px;min-height:40px;font-weight:700;font-size:13px;color:var(--ink2);padding:0 4px}
+.seg button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px #1c263326}
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.opt{text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:16px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:2px;min-height:112px;transition:border-color .15s,transform .15s}
+.opt:hover{transform:translateY(-2px)}
+.opt[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.opt svg{width:100%;height:40px;color:var(--ink);margin-bottom:4px}
+.opt b{font-size:14px;font-weight:700}
+.opt small{font-size:11.5px;color:var(--ink2);line-height:1.4}
+.opt .cost{font-family:var(--num);font-size:14px;font-weight:600;color:var(--ink);margin-top:auto;padding-top:4px}
+.paints{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.paint{border:1.5px solid var(--line);background:var(--card);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--ink2)}
+.paint i{width:40px;height:40px;border-radius:50%;box-shadow:inset 0 -6px 10px #0000003d,inset 0 5px 8px #ffffff80,0 2px 5px #1c263340}
+.paint[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink);color:var(--ink)}
+
+.lbl{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--ink3);margin:0 0 8px}
+.stat{display:grid;grid-template-columns:72px minmax(0,1fr) 30px;gap:10px;align-items:center;font-size:13px;font-weight:500;margin-bottom:8px}
+.stat .track{height:8px;border-radius:2px;background:var(--soft);overflow:hidden;-webkit-mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%);mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%)}
+.stat .track u{display:block;height:100%;background:var(--ink);transition:width .4s cubic-bezier(.2,.8,.2,1)}
+.stat b{font-family:var(--num);font-size:16px;font-weight:600;text-align:right}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+.namein{width:100%;font:inherit;font-weight:700;min-height:44px;border-radius:12px;border:1.5px solid var(--line);padding:0 12px;background:var(--card);color:var(--ink)}
+.pricerow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:12px}
+.pricerow b{font-family:var(--num);font-size:34px;font-weight:700;line-height:1}
+.pricerow b span{font-family:var(--kr);font-size:13px;font-weight:700;margin-left:3px}
+.margin{font-size:12.5px;font-weight:700}
+.margin.pos{color:var(--pos)}.margin.neg{color:var(--neg)}
+input[type=range]{width:100%;accent-color:var(--ink);margin:8px 0 2px}
+.go{width:100%;border:0;border-radius:16px;min-height:56px;margin-top:12px;background:var(--accent);color:#fff;font-weight:900;font-size:17px;letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 22px -10px var(--accent2);transition:transform .12s}
+.go:hover{transform:translateY(-1px)}.go:active{transform:translateY(1px)}
+.go.dark{background:var(--ink);box-shadow:none}
+
+/* 결과 시트 */
+.sheet{position:fixed;inset:0;z-index:20;background:#14171c8c;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:grid;place-items:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));overflow:auto}
+.report{background:var(--bg);border-radius:24px;width:min(880px,100%);padding:20px;animation:rise .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{transform:translateY(28px);opacity:0}}
+.report h2{font-weight:900;font-size:clamp(22px,4vw,30px);letter-spacing:-.03em;margin:6px 0 14px;text-wrap:balance}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.kpi{background:var(--card);border-radius:16px;padding:12px 14px;border:1px solid var(--line);min-width:0}
+.kpi small{font-size:11.5px;font-weight:700;color:var(--ink2)}
+.kpi b{display:block;font-family:var(--num);font-size:clamp(26px,6vw,40px);font-weight:700;line-height:1.05}
+.kpi b span{font-family:var(--kr);font-size:13px;margin-left:2px}
+.rgrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px;margin-top:8px}
+@media (max-width:700px){.rgrid{grid-template-columns:minmax(0,1fr)}}
+.news{background:#faf7f0;border:1px solid #e3dccb;border-radius:16px;padding:14px 16px}
+.news .mast{font-weight:900;letter-spacing:.3em;font-size:11px;border-bottom:2px solid var(--ink);padding-bottom:6px;display:flex;justify-content:space-between}
+.news h3{font-size:19px;font-weight:900;line-height:1.3;letter-spacing:-.02em;margin:10px 0 6px;text-wrap:balance}
+.news p{font-size:13px;line-height:1.65;color:var(--ink2);margin:0}
+.news .score{margin-top:10px;font-weight:700;font-size:13px;color:var(--ink)}
+.rank{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.rank div{display:grid;grid-template-columns:18px 28px minmax(0,1fr) auto;align-items:center;gap:8px;padding:7px 8px;border-radius:12px;font-size:13px;font-weight:500}
+.rank div.me{background:var(--ink);color:#fff;font-weight:700}
+.rank span.n{font-family:var(--num);font-size:16px;font-weight:600}
+.rank span.i{font-family:var(--num);color:var(--ink3)}
+.axis{fill:var(--ink3);font-size:10px;font-family:var(--kr)}
+.note{font-size:11.5px;color:var(--ink3);line-height:1.5;margin:8px 2px 0}
+@media (prefers-reduced-motion:reduce){.report{animation:none}.stat .track u{transition:none}.opt,.go{transition:none}}
+</style>
+
+<div class="app">
+  <div class="top">
+    <div class="brand"><span id="myLogo"></span>가칭 모터스</div>
+    <div class="sp"></div>
+    <span class="pill">1기 3월 1주</span>
+    <span class="pill">자금 <b>120억</b></span>
+    <span class="pill">평판 <b>3.1</b></span>
+  </div>
+
+  <section class="stage" id="stage">
+    <canvas id="cv" aria-label="설계 중인 자동차 3D 미리보기. 끌어서 돌려 볼 수 있습니다."></canvas>
+    <div class="fallback" id="fb" hidden></div>
+    <div class="ov tl">
+      <div class="eyebrow"><i></i>NEW MODEL · 설계 중</div>
+      <div class="model" id="mName"></div>
+      <div class="spec" id="mSpec"></div>
+    </div>
+    <div class="ov tr"><span class="trend">이번 분기 유행 · SUV · 전기차</span></div>
+    <div class="ov bl">끌어서 돌려 보기</div>
+    <div class="ov br">
+      <svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="21" fill="none" stroke="#d8dde4" stroke-width="6"/><circle id="ring" cx="26" cy="26" r="21" fill="none" stroke="#14171c" stroke-width="6" stroke-linecap="round" stroke-dasharray="132" stroke-dashoffset="132" transform="rotate(-90 26 26)" style="transition:stroke-dashoffset .5s"/></svg>
+      <div><small>예상 평점</small><b id="mScore"></b></div>
+    </div>
+  </section>
+
+  <section class="dock">
+    <div class="panel">
+      <div class="seg" role="tablist" id="seg"></div>
+      <div id="opts"></div>
+    </div>
+    <div class="panel">
+      <p class="lbl">예상 평가</p>
+      <div id="stats"></div>
+      <hr>
+      <p class="lbl">차 이름</p>
+      <input class="namein" id="name" value="미라지 S" maxlength="10" aria-label="차 이름">
+      <div class="pricerow"><b class="num" id="priceOut"></b><span class="margin" id="marginOut"></span></div>
+      <input type="range" id="price" min="1500" max="6500" step="50" value="3400" aria-label="판매 가격(만원)">
+      <button class="go" id="go">출시하기 <span aria-hidden="true">→</span></button>
+      <p class="note">숫자는 데모용 가짜 계산입니다.</p>
+    </div>
+  </section>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="report" role="dialog" aria-labelledby="rTitle">
+    <div class="eyebrow"><i></i>출시 6개월 리포트</div>
+    <h2 id="rTitle"></h2>
+    <div class="kpis">
+      <div class="kpi"><small>판매량</small><b><i id="kU" style="font-style:normal">0</i><span>대</span></b></div>
+      <div class="kpi"><small>매출</small><b><i id="kR" style="font-style:normal">0</i><span>억</span></b></div>
+      <div class="kpi"><small>순이익</small><b id="kPw"><i id="kP" style="font-style:normal">0</i><span>억</span></b></div>
+    </div>
+    <div class="rgrid">
+      <div class="kpi"><small>월별 판매량 (대)</small><svg id="chart" viewBox="0 0 360 170" width="100%"></svg>
+        <small>이번 분기 판매 순위</small><div class="rank" id="rank"></div></div>
+      <div><div class="news"><div class="mast"><span>모터 데일리</span><span>1기 9월호</span></div><h3 id="nH"></h3><p id="nB"></p><div class="score" id="nS"></div></div>
+        <button class="go dark" id="again">다음 차 설계하기</button>
+        <p class="note">회사 이름과 로고는 실제 브랜드를 비튼 가짜이며, 도형은 새로 그렸습니다.</p></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+/* ── 데이터 ── 치수 단위는 m */
+const BODY={
+  sedan:{n:'세단',sub:'무난한 균형',L:4.6,W:1.78,clr:.2,belt:.92,roof:1.42,cR:-1.05,cF:.55,rr:.55,rf:.7,wr:.33,wb:1.4,deck:1,pr:6,de:6,cost:2400,sweet:3200},
+  suv:{n:'SUV',sub:'넓고 높음 · 유행',L:4.6,W:1.86,clr:.3,belt:1.08,roof:1.72,cR:-1.75,cF:.6,rr:.25,rf:.6,wr:.39,wb:1.4,deck:0,pr:9,de:6,cost:2900,sweet:3900},
+  hatch:{n:'해치백',sub:'작고 저렴',L:4.0,W:1.72,clr:.2,belt:.92,roof:1.46,cR:-1.4,cF:.45,rr:.3,rf:.6,wr:.31,wb:1.25,deck:0,pr:7,de:5,cost:1700,sweet:2200},
+  coupe:{n:'쿠페',sub:'멋 위주 · 좁음',L:4.5,W:1.82,clr:.15,belt:.84,roof:1.26,cR:-.75,cF:.35,rr:.95,rf:.8,wr:.34,wb:1.38,deck:1,pr:3,de:9,cost:3000,sweet:4500}};
+const ENG={
+  eco:{n:'경제형 1.6',sub:'연비가 좋고 저렴',pf:3,ef:9,cost:0,ic:'<path d="M26 34C26 18 38 8 56 8c0 17-9 28-26 28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M30 34c5-10 12-16 20-20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>'},
+  turbo:{n:'터보 2.0',sub:'힘이 좋음 · 스포일러',pf:8,ef:4,cost:500,ic:'<circle cx="40" cy="21" r="14" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M40 21c0-6 3-9 8-10M40 21c5 3 6 8 4 12M40 21c-6 3-10 1-13-3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="40" cy="21" r="2.5" fill="currentColor"/>'},
+  ev:{n:'전기 모터',sub:'유행 · 원가 비쌈',pf:6,ef:10,cost:1400,ic:'<path d="M44 4 30 23h9l-3 14 14-19h-9z" fill="currentColor"/>'}};
+const WHEEL={
+  w17:{n:'17인치',sub:'기본',d:0,de:0,ef:0,cost:0},
+  w19:{n:'19인치',sub:'디자인 +1 · 연비 −0.5',d:.03,de:1,ef:-.5,cost:80},
+  w21:{n:'21인치',sub:'디자인 +2 · 연비 −1',d:.06,de:2,ef:-1,cost:200}};
+const PAINT=[['카민 레드','#c8202f'],['선셋 오렌지','#f26a1b'],['포레스트','#1f5c4a'],['코발트','#1f4fd1'],['펄 화이트','#eef0f2'],['그래파이트','#3a3f47'],['미드나잇','#14213d'],['샴페인','#c9b38a']];
+const RIV=[['도요다','toyotto',5210],['현다이','hyundoy',4480],['비엠브이','bmv',2650],['테슬러','tesler',2310],['포티','forty',1790]];
+const s={body:'sedan',eng:'turbo',wheel:'w19',color:PAINT[0][1],price:3400,tab:'body'};
+
+function logo(k,z=26){const g={
+ me:`<rect x="2" y="2" width="28" height="28" rx="9" fill="#14171c"/><path d="M8 21h13M11 16h14M14 11h11" stroke="#ff5a1f" stroke-width="3" stroke-linecap="round"/>`,
+ toyotto:`<ellipse cx="16" cy="16" rx="14" ry="9.5" fill="none" stroke="#c0392b" stroke-width="2.5"/><ellipse cx="16" cy="16" rx="6" ry="9.5" fill="none" stroke="#c0392b" stroke-width="2.5"/>`,
+ hyundoy:`<rect x="5" y="5" width="22" height="22" rx="4" transform="rotate(45 16 16)" fill="none" stroke="#1f4e9c" stroke-width="2.5"/><path d="M11 22l4-12M17 22l4-12M12.5 17h8" stroke="#1f4e9c" stroke-width="2.4" stroke-linecap="round"/>`,
+ bmv:`<circle cx="16" cy="16" r="13" fill="#fff" stroke="#555" stroke-width="2.5"/><path d="M16 16V4a12 12 0 0 1 12 12z" fill="#2a77c9"/><path d="M16 16v12A12 12 0 0 1 4 16z" fill="#2a77c9"/>`,
+ tesler:`<path d="M16 3l11 4v9c0 7-5 11-11 13C10 27 5 23 5 16V7z" fill="#fff" stroke="#d6252b" stroke-width="2.4"/><path d="M10 11h12M16 11v11" stroke="#d6252b" stroke-width="2.6" stroke-linecap="round"/>`,
+ forty:`<rect x="2" y="8" width="28" height="16" rx="8" fill="#1d3c8f"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="sans-serif">40</text>`}[k];
+ return `<svg width="${z}" height="${z}" viewBox="0 0 32 32" aria-hidden="true" style="display:block">${g}</svg>`;}
+$('myLogo').innerHTML=logo('me',26);
+
+/* 옆모습 아이콘: 3D와 같은 치수에서 뽑는다 */
+function sil(p,wr=p.wr){const h=p.L/2,f=n=>n.toFixed(2);
+  const pts=[[-h,p.clr],[h,p.clr],[h,p.belt-.2],[p.cF+p.rf,p.belt],[p.cF,p.roof],[p.cR,p.roof],[p.cR-p.rr,p.belt],[-h,p.belt-.06]];
+  return `<svg viewBox="-2.6 -1.95 5.2 2.05" aria-hidden="true"><g transform="scale(1,-1)"><path d="M${pts.map(q=>f(q[0])+' '+f(q[1])).join('L')}Z" fill="currentColor" stroke="currentColor" stroke-width=".16" stroke-linejoin="round"/>${[-p.wb,p.wb].map(x=>`<circle cx="${x}" cy="${wr}" r="${wr+.07}" fill="#fff"/><circle cx="${x}" cy="${wr}" r="${wr-.03}" fill="currentColor"/><circle cx="${x}" cy="${wr}" r="${wr*.45}" fill="#fff"/>`).join('')}</g></svg>`}
+
+/* ── 3D 무대 ── */
+let three=null;
+const col=h=>new THREE.Color(h).convertSRGBToLinear();
+function initThree(){
+  const cv=$('cv'),st=$('stage');
+  const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.outputEncoding=THREE.sRGBEncoding;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.0;
+  R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;
+  const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(28,2,.1,100);
+  // 반사용 가상 스튜디오(조명 판 3장)
+  const es=new THREE.Scene();es.background=col(0x8e98a4);
+  const board=(w,h,x,y,z,c)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color:col(c),side:THREE.DoubleSide}));m.position.set(x,y,z);m.lookAt(0,0,0);es.add(m)};
+  board(12,5,0,9,0,0xffffff);board(9,4,-9,3,5,0xffffff);board(9,4,9,3,-5,0xdfe9ff);board(40,40,0,-4,0,0x6a7078);
+  const pm=new THREE.PMREMGenerator(R);scene.environment=pm.fromScene(es,.03).texture;
+  scene.add(new THREE.HemisphereLight(0xffffff,0xb9c2cc,.55));
+  const key=new THREE.DirectionalLight(0xffffff,1.05);key.position.set(4,9,5);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
+  Object.assign(key.shadow.camera,{left:-5,right:5,top:5,bottom:-5,near:1,far:25});key.shadow.bias=-.0004;scene.add(key);
+  // 회전 무대
+  const table=new THREE.Group();scene.add(table);
+  const disc=new THREE.Mesh(new THREE.CylinderGeometry(3.05,3.05,.08,96),new THREE.MeshStandardMaterial({color:col(0xf5f6f8),roughness:.5,metalness:.05}));disc.position.y=-.04;disc.receiveShadow=true;table.add(disc);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(2.86,2.89,128),new THREE.MeshBasicMaterial({color:col(0x14171c)}));ring.rotation.x=-Math.PI/2;ring.position.y=.002;table.add(ring);
+  for(let i=0;i<48;i++){const t=new THREE.Mesh(new THREE.PlaneGeometry(i%4?.05:.12,.012),new THREE.MeshBasicMaterial({color:col(i%12?0x9aa3ae:0xff5a1f)}));const a=i/48*Math.PI*2;t.rotation.x=-Math.PI/2;t.rotation.z=-a;t.position.set(Math.cos(a)*2.74,.002,Math.sin(a)*2.74);table.add(t)}
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.ShadowMaterial({opacity:.16}));floor.rotation.x=-Math.PI/2;floor.position.y=-.08;floor.receiveShadow=true;scene.add(floor);
+  // 바닥에 붙는 부드러운 그림자
+  const c2=document.createElement('canvas');c2.width=c2.height=128;const g=c2.getContext('2d'),gr=g.createRadialGradient(64,64,6,64,64,64);gr.addColorStop(0,'rgba(10,14,20,.55)');gr.addColorStop(1,'rgba(10,14,20,0)');g.fillStyle=gr;g.fillRect(0,0,128,128);
+  const blob=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c2),transparent:true,depthWrite:false}));blob.rotation.x=-Math.PI/2;blob.position.y=.004;table.add(blob);
+  const carG=new THREE.Group();table.add(carG);
+  const M={
+    paint:new THREE.MeshPhysicalMaterial({color:col(s.color),metalness:.3,roughness:.4,envMapIntensity:.75,clearcoat:1,clearcoatRoughness:.06}),
+    glass:new THREE.MeshPhysicalMaterial({color:col(0x0b1016),metalness:.9,roughness:.06}),
+    tire:new THREE.MeshStandardMaterial({color:col(0x121417),roughness:.92}),
+    rim:new THREE.MeshStandardMaterial({color:col(0xd4d9e0),metalness:.95,roughness:.22}),
+    dark:new THREE.MeshStandardMaterial({color:col(0x15181c),roughness:.6,metalness:.3}),
+    lamp:new THREE.MeshStandardMaterial({color:col(0xffffff),emissive:col(0xfff3d0),emissiveIntensity:1.4}),
+    tail:new THREE.MeshStandardMaterial({color:col(0xc00000),emissive:col(0xd00000),emissiveIntensity:.7}),
+    chrome:new THREE.MeshStandardMaterial({color:col(0xeef1f4),metalness:1,roughness:.12})};
+  const size=()=>{const w=st.clientWidth,h=st.clientHeight;if(!w||!h)return;R.setSize(w,h,false);cam.aspect=w/h;const d=Math.max(8.6,12.5/cam.aspect);cam.position.set(0,d*.22+.5,d);cam.lookAt(0,.62,0);cam.updateProjectionMatrix()};
+  new ResizeObserver(size).observe(st);size();
+  three={R,scene,cam,table,carG,M,blob,pop:0,target:col(s.color)};
+  // 끌어서 돌리기
+  let drag=false,lx=0,idle=0;table.rotation.y=-.65;
+  cv.onpointerdown=e=>{drag=true;lx=e.clientX;cv.setPointerCapture(e.pointerId)};
+  cv.onpointermove=e=>{if(drag){table.rotation.y+=(e.clientX-lx)*.008;lx=e.clientX;idle=2.5}};
+  cv.onpointerup=cv.onpointercancel=()=>drag=false;
+  const still=matchMedia('(prefers-reduced-motion:reduce)').matches;let last=performance.now();
+  (function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1000);last=now;
+    if(idle>0)idle-=dt;else if(!drag&&!still)table.rotation.y+=dt*.22;
+    three.pop+=(1-three.pop)*Math.min(1,dt*9);const k=.9+.1*three.pop;carG.scale.set(k,k,k);
+    M.paint.color.lerp(three.target,Math.min(1,dt*7));R.render(scene,cam)})(last);
+}
+/* 차체: 앞뒤 방향으로 단면(고리)을 180여 장 세워 이어 붙인 곡면. 유리·램프·하부는 같은 곡면 위의 면을 재질만 바꿔 칠한다. */
+function buildCar(){
+  if(!three)return;const {carG,M}=three,p={...BODY[s.body]};p.wr+=WHEEL[s.wheel].d;
+  while(carG.children.length){const c=carG.children.pop();c.traverse(o=>o.geometry&&o.geometry.dispose())}
+  const add=(geo,mat,x=0,y=0,z=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;carG.add(m);return m};
+  const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
+  const h=p.L/2,hw=p.W/2,N=184,ar=p.wr+.055,mid=(p.cR+p.cF)/2,ev=s.eng==='ev';
+  // 옆모습 윗선: 꺾은선을 찍고 두 번 문질러 둥글린다
+  const ctl=[[-h,p.belt-.02],[p.cR-p.rr-.08,p.belt+.03],[p.cR,p.roof],[mid,p.roof+.025],[p.cF,p.roof],[p.cF+p.rf,p.belt+.04],[h-.55,p.belt-.05],[h,p.belt-.2]];
+  const lin=x=>{for(let i=1;i<ctl.length;i++)if(x<=ctl[i][0]){const [x0,y0]=ctl[i-1],[x1,y1]=ctl[i];return y0+(y1-y0)*(x-x0)/(x1-x0)}return ctl[ctl.length-1][1]};
+  const xs=[];for(let i=0;i<=N;i++)xs.push(Math.max(-h+.004,Math.min(h-.004,-h+p.L*i/N)));
+  let Ts=xs.map(lin);for(let k=0;k<2;k++)Ts=Ts.map((_,i)=>{let a=0;for(let j=-4;j<=4;j++)a+=Ts[Math.max(0,Math.min(N,i+j))];return a/9});
+  const Tat=x=>Ts[Math.max(0,Math.min(N,Math.round((x+h)/p.L*N)))];
+  const J=32,RN=2*J,pos=[],st=[];
+  for(let i=0;i<=N;i++){
+    const x=xs[i],d=Math.min(x+h,h-x);let arch=0;
+    for(const xw of[-p.wb,p.wb]){const dx=Math.abs(x-xw);if(dx<ar)arch=p.wr+Math.sqrt(ar*ar-dx*dx)}
+    let yb=Math.max(p.clr,arch),ys=p.belt+.03-.07*(x+h)/p.L,T=Ts[i];
+    if(arch)ys=Math.max(ys,arch+.08);T=Math.max(T,ys+.09);
+    const re=.2,e=d<re?Math.sqrt(1-(1-d/re)**2):1,ym=p.clr+(p.belt-p.clr)*.55;
+    T=ym+(T-ym)*e;yb=ym-(ym-yb)*e;ys=Math.max(Math.min(ys,T-.09*e),yb+.35*(T-yb));
+    const rp=x>0?.55:.42;let w=hw*(1-.05*(x/h)**4)+.018*Math.exp(-(((Math.abs(x)-p.wb)/.4)**2));
+    if(d<rp)w-=rp-Math.sqrt(rp*rp-(rp-d)**2);w=Math.max(w,.05);
+    const g=T-ys,ledge=Math.min(.035,g*.3),wroof=Math.max(.06,w-ledge-.24*Math.max(0,g-.09)),rc=Math.min(.11,g*.6,wroof*.6),rb=Math.min(.07,(ys-yb)*.3),tuck=.045*e,wB=w-tuck;
+    const P=[];
+    for(const f of[0,.33,.66,1])P.push([yb,(wB-rb)*f]);
+    for(const a of[Math.PI/6,Math.PI/3])P.push([yb+rb-rb*Math.cos(a),wB-rb+rb*Math.sin(a)]);
+    for(let k=0;k<=10;k++){const u=k/10;P.push([yb+rb+u*(ys-yb-rb),w-tuck*(1-u)**2])}
+    const b0=ys+ledge*.8,b1=Math.max(b0,T-rc);
+    for(let k=0;k<=6;k++){const u=k/6;P.push([b0+u*(b1-b0),w-ledge+u*(wroof-w+ledge)])}
+    for(const a of[Math.PI/8,Math.PI/4,Math.PI*3/8])P.push([b1+rc*Math.sin(a),wroof-rc+rc*Math.cos(a)]);
+    const wt=wroof-rc,crown=.03*Math.min(1,g/.3);
+    for(let k=0;k<=5;k++){const z=wt*(1-k/5);P.push([T+crown*(1-(z/wt)**2),z])}
+    for(let k=0;k<=J;k++)pos.push(x,P[k][0],P[k][1]);
+    for(let k=J-1;k>=1;k--)pos.push(x,P[k][0],-P[k][1]);
+    st.push({g});
+  }
+  const vi=(i,r)=>i*RN+(r%RN),idx=[[],[],[],[],[]],ysN=p.belt-.04,ysR=p.belt+.03,sill=p.clr+(s.body==='suv'?.2:.1);
+  for(let i=0;i<N;i++)for(let r=0;r<RN;r++){
+    const a=vi(i,r),b=vi(i+1,r),c=vi(i+1,r+1),dd=vi(i,r+1),k=r<J?r:RN-1-r;
+    const cx=(pos[a*3]+pos[b*3])/2,cy=(pos[a*3+1]+pos[b*3+1]+pos[c*3+1]+pos[dd*3+1])/4,cz=Math.abs(pos[a*3+2]+pos[c*3+2])/2;
+    const gm=Math.min(st[i].g,st[i+1].g);let m=0;
+    if(k>=18&&k<=21&&gm>.22&&Math.abs(cx-mid)>.045)m=1;
+    else if(k>=27&&((cx>p.cF+.1&&cx<p.cF+p.rf-.04)||(cx>p.cR-p.rr+.04&&cx<p.cR-.1)))m=1;
+    else if(k<=5)m=2;
+    else if(k<=15&&cy<sill)m=2;
+    else if(cx>h-.34&&cx<h-.015&&((k>=12&&k<=14)||(ev&&k===15)))m=3;
+    else if(cx<-h+.3&&cx>-h+.012&&k>=12&&k<=14)m=4;
+    else if(cx>h-.12&&k<=16&&cz<hw*(ev?.4:.52)&&cy>p.clr+.05&&cy<p.clr+(ev?.15:.27))m=2;
+    idx[m].push(a,b,dd,b,c,dd);
+  }
+  // 앞뒤 끝 막기
+  const c0=pos.length/3;pos.push(xs[0],p.clr+(p.belt-p.clr)*.55,0,xs[N],p.clr+(p.belt-p.clr)*.55,0);
+  for(let r=0;r<RN;r++){idx[0].push(c0,vi(0,r),vi(0,r+1),c0+1,vi(N,r+1),vi(N,r))}
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  let all=[],o=0;idx.forEach((ix,m)=>{geo.addGroup(o,ix.length,m);all=all.concat(ix);o+=ix.length});geo.setIndex(all);geo.computeVertexNormals();
+  add(geo,[M.paint,M.glass,M.dark,M.lamp,M.tail]);
+  // 작은 부품
+  for(const sgn of[1,-1]){
+    const mr=add(new THREE.SphereGeometry(.075,16,12),M.paint,p.cF+p.rf-.04,p.belt+.1,sgn*(hw+.05));mr.scale.set(1.35,.8,.75);
+    add(box(.05,.03,.1),M.dark,p.cF+p.rf-.02,p.belt+.06,sgn*(hw-.02));
+    add(box(.14,.022,.02),M.chrome,mid+.5,p.belt-.1,sgn*(hw+.004));add(box(.14,.022,.02),M.chrome,mid-.38,p.belt-.09,sgn*(hw+.004));
+  }
+  for(const xw of[-p.wb,p.wb]){const wl=add(new THREE.CylinderGeometry(ar-.02,ar-.02,p.W-.42,24),M.dark,xw,p.wr,0);wl.rotation.x=Math.PI/2;wl.castShadow=false}
+  if(s.eng==='turbo'){
+    const sx=p.deck?-h+.2:p.cR-.06,sy=Tat(sx)+(p.deck?.12:.05);
+    add(box(.2,.028,p.W-.42),M.dark,sx,sy,0);
+    if(p.deck)for(const sgn of[1,-1])add(box(.05,.1,.04),M.dark,sx+.03,sy-.05,sgn*(hw-.42));
+    for(const sgn of[1,-1]){const ex=add(new THREE.CylinderGeometry(.04,.04,.16,16),M.chrome,-h+.1,p.clr+.03,sgn*.48);ex.rotation.z=Math.PI/2}
+  }
+  // 바퀴: 타이어(옆면을 둥글린 회전체) + 림 + 스포크
+  const rimR=p.wr*.68,tire=new THREE.LatheGeometry([[rimR,-.125],[p.wr-.035,-.125],[p.wr,-.085],[p.wr,.085],[p.wr-.035,.125],[rimR,.125]].map(q=>new THREE.Vector2(q[0],q[1])),48);
+  for(const x of[-p.wb,p.wb])for(const sgn of[1,-1]){
+    const w=new THREE.Group();w.position.set(x,p.wr,sgn*(hw-.15));w.rotation.x=sgn*Math.PI/2;carG.add(w);
+    const part=(g,mat,y=0)=>{const mm=new THREE.Mesh(g,mat);mm.position.y=y;mm.castShadow=true;w.add(mm);return mm};
+    part(tire.clone(),M.tire);part(new THREE.CylinderGeometry(rimR,rimR,.02,40),M.dark,.06);
+    part(new THREE.CylinderGeometry(rimR*.72,rimR*.72,.015,32),M.rim,.075);
+    part(new THREE.TorusGeometry(rimR-.012,.02,10,48),M.rim,.115).rotation.x=Math.PI/2;
+    for(let i=0;i<5;i++){const pv=new THREE.Group();pv.rotation.y=i/5*Math.PI*2;pv.position.y=.105;w.add(pv);
+      for(const off of[-.028,.028]){const sp=new THREE.Mesh(box(rimR*.92,.022,.026),M.rim);sp.position.set(rimR*.5,0,off);sp.castShadow=true;pv.add(sp)}}
+    part(new THREE.CylinderGeometry(.055,.065,.035,20),M.chrome,.115);
+  }
+  tire.dispose();three.blob.scale.set(p.L*1.25,p.W*1.7,1);three.pop=0;
+}
+
+/* ── 점수·화면 ── */
+function calc(){const b=BODY[s.body],e=ENG[s.eng],w=WHEEL[s.wheel];
+  const pc=Math.max(0,Math.min(10,10-Math.abs(s.price-b.sweet)/b.sweet*12));
+  const v={perf:e.pf,eff:Math.max(0,e.ef+w.ef),prac:b.pr,des:Math.min(10,b.de+w.de),pricec:pc,cost:b.cost+e.cost+w.cost};
+  v.score=(v.perf+v.eff+v.prac+v.des+v.pricec*1.5)/5.5;return v}
+const TABS={body:'차체',eng:'동력',wheel:'휠',color:'색상'};
+function renderOpts(){
+  $('seg').innerHTML=Object.entries(TABS).map(([k,v])=>`<button role="tab" data-k="${k}" aria-selected="${s.tab===k}">${v}</button>`).join('');
+  const won=n=>n?'+'+n.toLocaleString()+'만원':'기본';
+  const o=$('opts');
+  if(s.tab==='body')o.innerHTML=`<div class="opts">${Object.entries(BODY).map(([k,v])=>`<button class="opt" data-k="${k}" aria-pressed="${s.body===k}">${sil(v)}<b>${v.n}</b><small>${v.sub}</small><span class="cost">원가 ${v.cost.toLocaleString()}만원</span></button>`).join('')}</div>`;
+  else if(s.tab==='eng')o.innerHTML=`<div class="opts">${Object.entries(ENG).map(([k,v])=>`<button class="opt" data-k="${k}" aria-pressed="${s.eng===k}"><svg viewBox="0 0 80 42" aria-hidden="true">${v.ic}</svg><b>${v.n}</b><small>${v.sub}</small><span class="cost">${won(v.cost)}</span></button>`).join('')}</div>`;
+  else if(s.tab==='wheel')o.innerHTML=`<div class="opts">${Object.entries(WHEEL).map(([k,v],i)=>`<button class="opt" data-k="${k}" aria-pressed="${s.wheel===k}"><svg viewBox="0 0 80 42" aria-hidden="true"><circle cx="40" cy="21" r="${13+i*3}" fill="none" stroke="currentColor" stroke-width="${5-i}"/>${[0,1,2,3,4].map(j=>`<line x1="40" y1="21" x2="${40+Math.cos(j*1.2566-1.57)*(10+i*3)}" y2="${21+Math.sin(j*1.2566-1.57)*(10+i*3)}" stroke="currentColor" stroke-width="2"/>`).join('')}<circle cx="40" cy="21" r="2.5" fill="currentColor"/></svg><b>${v.n}</b><small>${v.sub}</small><span class="cost">${won(v.cost)}</span></button>`).join('')}</div>`;
+  else o.innerHTML=`<div class="paints">${PAINT.map(([n,c])=>`<button class="paint" data-k="${c}" aria-pressed="${s.color===c}"><i style="background:${c}"></i>${n}</button>`).join('')}</div>`;
+}
+function renderInfo(){
+  const b=BODY[s.body],v=calc(),nm=$('name').value.trim()||'이름 없음';
+  $('mName').textContent=nm;$('mSpec').textContent=`${b.n} · ${ENG[s.eng].n} · ${WHEEL[s.wheel].n} · ${PAINT.find(x=>x[1]===s.color)[0]}`;
+  $('mScore').textContent=v.score.toFixed(1);$('ring').style.strokeDashoffset=132*(1-v.score/10);
+  $('stats').innerHTML=[['성능',v.perf],['연비',v.eff],['실용성',v.prac],['디자인',v.des],['가격 경쟁력',v.pricec]].map(([l,x])=>`<div class="stat"><span>${l}</span><div class="track"><u style="width:${x*10}%"></u></div><b>${x.toFixed(1)}</b></div>`).join('');
+  $('priceOut').innerHTML=s.price.toLocaleString()+'<span>만원</span>';
+  const mg=s.price-v.cost;$('marginOut').textContent='대당 이익 '+(mg>=0?'+':'')+mg.toLocaleString()+'만원';$('marginOut').className='margin '+(mg>=0?'pos':'neg');
+}
+$('seg').onclick=e=>{const k=e.target.closest('button')?.dataset.k;if(k){s.tab=k;renderOpts()}};
+$('opts').onclick=e=>{const k=e.target.closest('button')?.dataset.k;if(!k)return;
+  if(s.tab==='body'){s.body=k;s.price=BODY[k].sweet;$('price').value=s.price}else if(s.tab==='eng')s.eng=k;else if(s.tab==='wheel')s.wheel=k;else s.color=k;
+  if(s.tab==='color'){if(three)three.target.copy(col(k))}else buildCar();
+  renderOpts();renderInfo();drawFallback()};
+$('price').oninput=e=>{s.price=+e.target.value;renderInfo()};$('name').oninput=renderInfo;
+function drawFallback(){if(three)return;$('fb').hidden=false;$('fb').innerHTML=sil(BODY[s.body]);$('fb').style.color=s.color}
+
+/* ── 출시 결과 ── */
+function rng(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return()=>{h|=0;h=h+0x6D2B79F5|0;let t=Math.imul(h^h>>>15,1|h);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function countUp(el,to,sign){const t0=performance.now(),still=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  (function f(now){const k=still?1:Math.min(1,(now-t0)/700),v=Math.round(to*(1-Math.pow(1-k,3)));el.textContent=(sign&&v>0?'+':'')+v.toLocaleString();if(k<1)requestAnimationFrame(f)})(t0)}
+function launch(){
+  const v=calc(),nm=$('name').value.trim()||'이름 없음',r=rng(s.body+s.eng+s.wheel+s.color+s.price+nm);
+  const trend=(s.body==='suv'?1.25:1)*(s.eng==='ev'?1.15:1),base=v.score*v.score*55*trend;
+  const m=[.55,1,.9,.7,.55,.45].map(f=>Math.round(base*f*(.9+r()*.2))),units=m.reduce((a,b)=>a+b,0);
+  const rev=units*s.price/10000,profit=units*(s.price-v.cost)/10000,rv=Math.max(1,Math.min(10,v.score+(r()-.5)*.8));
+  $('rTitle').textContent=`「${nm}」, 6개월 동안 ${units.toLocaleString()}대 팔렸습니다`;
+  $('sheet').hidden=false;countUp($('kU'),units);countUp($('kR'),Math.round(rev));countUp($('kP'),Math.round(profit),true);$('kPw').style.color=profit>=0?'var(--pos)':'var(--neg)';
+  $('nH').textContent=profit<0?`「${nm}」 잘 팔리는데 남는 게 없다`:rv>=7.5?`「${nm}」 시장 강타, “이 가격에 이 완성도”`:rv>=5.5?`「${nm}」 무난한 데뷔, 경쟁사는 아직 여유`:`「${nm}」 가격표 보고 놀란 소비자들`;
+  $('nB').textContent=profit<0?'대당 이익이 마이너스라 팔수록 손해라는 지적이 나온다. 업계는 가격 재조정을 점치고 있다.':rv>=7.5?'판매 첫 달부터 대기자가 몰렸다. 전시장 직원은 “색상 문의가 특히 많다”고 전했다.':'평가는 갈렸다. 개선을 바라는 목소리와 이만하면 됐다는 반응이 엇갈린다.';
+  $('nS').textContent='시승 평가 '+rv.toFixed(1)+' / 10';
+  // 그래프: 축과 선이 같은 척도를 쓴다
+  const W=360,H=170,L=40,Rt=12,T=12,B=24,st=Math.pow(10,Math.floor(Math.log10(Math.max(...m,1)))),mx=Math.ceil(Math.max(...m,1)/st)*st;
+  const x=i=>L+i*(W-L-Rt)/5,y=q=>T+(1-q/mx)*(H-T-B),pts=m.map((q,i)=>x(i)+','+y(q)).join(' ');
+  $('chart').innerHTML=[0,mx/2,mx].map(q=>`<line x1="${L}" x2="${W-Rt}" y1="${y(q)}" y2="${y(q)}" stroke="#d8dde4"/><text class="axis" x="${L-6}" y="${y(q)+3}" text-anchor="end">${q.toLocaleString()}</text>`).join('')
+    +m.map((_,i)=>`<text class="axis" x="${x(i)}" y="${H-6}" text-anchor="middle">${i+1}개월</text>`).join('')
+    +`<polygon points="${L},${y(0)} ${pts} ${x(5)},${y(0)}" fill="#ff5a1f" opacity=".12"/><polyline points="${pts}" fill="none" stroke="#ff5a1f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(5)}" cy="${y(m[5])}" r="5" fill="#ff5a1f" stroke="#fff" stroke-width="2"/>`;
+  const list=[...RIV.map(q=>({n:q[0],k:q[1],v:q[2]})),{n:'가칭 모터스',k:'me',v:Math.round(units/6),me:1}].sort((a,b)=>b.v-a.v);
+  $('rank').innerHTML=list.map((o,i)=>`<div class="${o.me?'me':''}"><span class="i">${i+1}</span>${logo(o.k,24)}<span>${o.n}</span><span class="n">${o.v.toLocaleString()}</span></div>`).join('');
+  $('again').focus();
+}
+$('go').onclick=launch;$('again').onclick=()=>{$('sheet').hidden=true;$('go').focus()};
+$('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').hidden=true};
+addEventListener('keydown',e=>{if(e.key==='Escape')$('sheet').hidden=true});
+
+try{if(!window.THREE)throw 0;initThree();buildCar()}catch(e){three=null;$('cv').hidden=true}
+renderOpts();renderInfo();drawFallback();
+</script>

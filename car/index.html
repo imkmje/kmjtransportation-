@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#e7eaee" />
+    <title>카 컴퍼니</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="top">
+        <div class="brand"><span id="mylogo"></span><span id="co"></span></div>
+        <span class="pill" id="date"></span>
+        <span class="pill">현금 <b id="cash"></b></span>
+        <span class="pill">평판 <b id="rep"></b></span>
+        <div class="sp"></div>
+        <div class="speeds" id="speeds" role="group" aria-label="빠르기">
+          <button data-speed="0">멈춤</button><button data-speed="1">1배</button><button data-speed="2">2배</button><button data-speed="4">4배</button>
+        </div>
+        <span class="held" id="held" hidden>결정 중 · 멈춤</span>
+        <button class="menubtn" id="menubtn" aria-label="메뉴(저장·설정)">메뉴</button>
+      </header>
+      <nav id="tabs" aria-label="화면">
+        <button data-tab="garage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6v10H3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 20v-6h10v6" fill="none" stroke="currentColor" stroke-width="2"/></svg>차고</button>
+        <button data-tab="dev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-9 9H5v-6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 6l6 6" stroke="currentColor" stroke-width="2"/></svg>개발</button>
+        <button data-tab="company"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l5 3V8l5 3V4h6v16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>회사</button>
+        <button data-tab="records"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>기록</button>
+      </nav>
+      <main id="main">
+        <section class="stage" id="stage">
+          <canvas id="cv" aria-label="자동차 3D 무대. 끌어서 돌려 볼 수 있습니다."></canvas>
+          <div class="fallback" id="fb" hidden></div>
+          <div id="ov"></div>
+        </section>
+        <section id="panel" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div id="title" class="cover" hidden></div>
+    <div id="sheet" class="sheet" hidden><div class="report" id="sheet-body" role="dialog" aria-modal="true"></div></div>
+    <div id="ask" class="sheet ask" hidden><div class="report small" role="alertdialog" aria-modal="true"><p id="ask-text"></p><div class="row end"><button class="btn" id="ask-no">아니요</button><button class="btn ink" id="ask-yes">예</button></div></div></div>
+    <div id="toasts" aria-live="polite"></div>
+    <div id="debug" hidden></div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

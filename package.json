@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:car": "npm run build && node scripts/car-smoke.mjs"
   },
   "dependencies": {
     "three": "^0.187.0"
