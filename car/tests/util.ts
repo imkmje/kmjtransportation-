@@ -15,7 +15,7 @@ export function ok(r: { ok: boolean; reason?: string }): void { if (!r.ok) throw
 
 /** 개발을 시작해 시험 testWeeks주까지 진행한 게임 */
 export function devReady(seed = 1, testWeeks = 2, spec: Partial<ProjectSpec> = {}): { g: Game; pid: number } {
-  const g = Game.create({ seed });
+  const g = Game.create({ difficulty: 'normal', seed });
   ok(g.command({ type: 'startProject', ...SPEC, ...spec }));
   const pid = g.state.projects[0].id;
   while (!g.state.projects[0].waiting && (g.state.projects[0].phase === 'design' || g.state.projects[0].testWeeks < testWeeks)) g.tick(); // 결함을 다 잡으면 출시 대기(시험 주가 더 늘지 않는다)

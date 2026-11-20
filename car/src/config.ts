@@ -136,6 +136,7 @@ export const config = {
     optionCostShare: 0.04, // 4단계: 옵션은 원가가 기준가의 4% 이하인 것만(규제 옵션은 예외, 가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다)
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
+    clumsy: { priceMult: 1.1, changeMonths: 120 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년
     novice: { launchDefects: 10, changeMonths: 90, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 7.5년, 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
   },
   research: { // 10장 연구

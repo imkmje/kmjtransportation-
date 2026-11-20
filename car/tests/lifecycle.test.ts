@@ -259,7 +259,7 @@ describe('풀체인지(8.3)', () => {
 
 describe('기획 첫 화면(8.7)과 조언', () => {
   it('planEntries: 새 차종은 항상 가능, 차종별 가능 여부·이유·남은 개월', () => {
-    expect(planEntries(Game.create({ seed: 1 }).state)).toEqual({ newModel: { ok: true }, nameplates: [] });
+    expect(planEntries(Game.create({ difficulty: 'normal', seed: 1 }).state)).toEqual({ newModel: { ok: true }, nameplates: [] });
     const { g, gen } = aged(10);
     const left18 = 18 - (monthOf(g.state.week) - gen.launchMonth), left36 = left18 + 18;
     const e = planEntries(g.state).nameplates[0];
@@ -305,7 +305,7 @@ describe('3D 모양 시드(8.5)', () => {
     expect(lookCandidates(g.state, id, 'chassis')).not.toEqual(a);
     expect(lookCandidates(g.state, id, 'face', 'nextGen')).not.toEqual(a);
     expect(lookCandidates(g.state, 0, 'face')).not.toEqual(a);
-    expect(lookCandidates(Game.create({ seed: 2 }).state, 0, 'face')).not.toEqual(lookCandidates(Game.create({ seed: 1 }).state, 0, 'face'));
+    expect(lookCandidates(Game.create({ difficulty: 'normal', seed: 2 }).state, 0, 'face')).not.toEqual(lookCandidates(Game.create({ difficulty: 'normal', seed: 1 }).state, 0, 'face'));
     // 페이스리프트: 시드를 빼면 첫 후보, 판에 저장되고 차대 시드는 그대로
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
     expect(g.state.projects[0].faceSeed).toBe(a[0]);
@@ -313,13 +313,13 @@ describe('3D 모양 시드(8.5)', () => {
     expect(gen.editions[1].faceSeed).toBe(a[0]); expect(g.state.projects.length).toBe(0);
   });
   it('신차: 시드를 주면 세대·판에 그대로, 빼면 첫 후보, 잘못된 시드는 거부', () => {
-    const g = Game.create({ seed: 3 });
+    const g = Game.create({ difficulty: 'normal', seed: 3 });
     expect(reason(g.command({ type: 'startProject', ...SPEC, faceSeed: -1 }))).toBe('모양 시드가 올바르지 않습니다.');
     expect(reason(g.command({ type: 'startProject', ...SPEC, chassisSeed: 1.5 }))).toBe('모양 시드가 올바르지 않습니다.');
     const c = lookCandidates(g.state, 0, 'chassis'), f = lookCandidates(g.state, 0, 'face');
     ok(g.command({ type: 'startProject', ...SPEC }));
     expect(g.state.projects[0]).toMatchObject({ kind: 'new', targetId: null, chassisSeed: c[0], faceSeed: f[0] });
-    const h = Game.create({ seed: 3 });
+    const h = Game.create({ difficulty: 'normal', seed: 3 });
     ok(h.command({ type: 'startProject', ...SPEC, chassisSeed: 77, faceSeed: 88 }));
     ok(h.command({ type: 'launch', projectId: toTest(h).id, ...LAUNCH }));
     const gen = allGens(h.state)[0];
@@ -329,7 +329,7 @@ describe('3D 모양 시드(8.5)', () => {
 
 describe('주간 개발 기록 이벤트(devWeek)', () => {
   it('직원별 점수 합 = 실제 점수 증가, 결함 증감도 일치, 시험 주는 점수 0', () => {
-    const g = Game.create({ seed: 4 });
+    const g = Game.create({ difficulty: 'normal', seed: 4 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0];
     for (let w = 0; w < 16; w++) {
@@ -344,7 +344,7 @@ describe('주간 개발 기록 이벤트(devWeek)', () => {
     }
   });
   it('난수 호출 순서는 1단계와 같다(설계 주: 직원마다 1번 + 결함 추정 1번, 시험 주: 결함 추정 1번)', () => {
-    const g = Game.create({ seed: 6 });
+    const g = Game.create({ difficulty: 'normal', seed: 6 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const r = new Rng(0); r.setState(g.state.rng);
     for (let w = 0; w < 14; w++) {
@@ -370,7 +370,7 @@ describe('직원 경험(9.1)과 경쟁 차 교체(8.4)', () => {
     });
   });
   it('경쟁 차는 낡았다가 4~7년 주기로 새 모델이 되고, 게임 난수를 소비하지 않는다', () => {
-    const g = Game.create({ seed: 8 }), rng = g.state.rng, start = structuredClone(g.state.rivals);
+    const g = Game.create({ difficulty: 'normal', seed: 8 }), rng = g.state.rng, start = structuredClone(g.state.rivals);
     g.state.cash = 1e9; // 파산으로 멈추지 않게
     for (let i = 0; i < 48 * 10; i++) g.tick();
     expect(g.state.rng).toBe(rng);
@@ -380,7 +380,7 @@ describe('직원 경험(9.1)과 경쟁 차 교체(8.4)', () => {
       expect(r.cells[body]).toBeLessThanOrEqual(r.models[body].base * 1.15 + 1e-12);
     }
     expect(g.state.rivals).not.toEqual(start);
-    const h = Game.create({ seed: 8 });
+    const h = Game.create({ difficulty: 'normal', seed: 8 });
     h.state.cash = 1e9;
     for (let i = 0; i < 48 * 10; i++) h.tick();
     expect(h.state.rivals).toEqual(g.state.rivals);

@@ -12,7 +12,7 @@ import { REGION, cellMonthly, currentEdition } from './market';
 import { planPreview } from './queries';
 import { latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, yearOf } from './time';
-import type { Budget, CarState, Generation, Role, Staff } from './types';
+import type { Budget, CarState, Difficulty, Generation, Role, Staff } from './types';
 
 export interface Bot { name: string; step(g: Game): void }
 
@@ -33,12 +33,13 @@ export interface SteadyOptions {
   faceliftShare: number; // 페이스리프트를 하는 세대의 비율(세대 ID 해시)
   manageEvery: number; // 채용·교육·연구를 몇 개월마다 하는가
   expandRatio: number; // 공장 증설: 지난달 주문이 한도의 이 배수 이상
-  borrow: boolean; // 현금이 음수가 되면 대출 한도의 절반까지 빌린다
+  borrowShare: number; // 현금이 음수가 되면 대출 한도의 이 비율까지 빌린다(0이면 안 빌림)
+  priceMult: number; // 출시 가격 = 기준가 × 이 값
 }
 const STEADY: SteadyOptions = {
   budget: 'normal', designWeeks: 12, marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange',
   manage: true, expand: true, gouge: false, research: true,
-  sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrow: false,
+  sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrowShare: 0, priceMult: 1,
 };
 const B = config.bots;
 
@@ -49,7 +50,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
   return { // 봇은 기억을 두지 않는다(저장 → 불러오기 뒤 새 봇으로 이어도 같은 결과)
     name: 'steady',
     step(g) {
-      if (o.borrow && g.state.cash < 0) { const room = loanLimit(g.state) * 0.5 - g.state.loan.balance; if (room >= 1) g.command({ type: 'borrow', amount: Math.floor(Math.min(room, -g.state.cash + fixedCost(g.state) * 2)) }); }
+      if (o.borrowShare > 0 && g.state.cash < 0) { const room = loanLimit(g.state) * o.borrowShare - g.state.loan.balance; if (room >= 1) g.command({ type: 'borrow', amount: Math.floor(Math.min(room, -g.state.cash + fixedCost(g.state) * 2)) }); }
       for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
       launchReady(g, o);
       startProjects(g, o);
@@ -63,7 +64,12 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
 /** 서툰 플레이(0.4.1, 처음 하는 사람 흉내): 방향 대충, 화면 결함 10개쯤에서 출시, 가격 기준가·광고 1, 페이스리프트는 절반만, 풀체인지 7~8년,
  *  채용·교육·연구(값싼 것)는 6개월에 한 번, 공장 증설은 주문이 한도의 2배를 넘은 뒤, 현금이 음수면 대출 한도의 절반까지 빌린다 */
 export const novice = (opts: Partial<SteadyOptions> = {}): Bot => ({
-  ...steady({ sloppy: true, launchDefects: B.novice.launchDefects, faceliftShare: 0.5, changeMonths: B.novice.changeMonths, manageEvery: B.novice.manageEvery, expandRatio: B.novice.expandRatio, borrow: true, ...opts }), name: 'novice',
+  ...steady({ sloppy: true, launchDefects: B.novice.launchDefects, faceliftShare: 0.5, changeMonths: B.novice.changeMonths, manageEvery: B.novice.manageEvery, expandRatio: B.novice.expandRatio, borrowShare: 0.5, ...opts }), name: 'novice',
+});
+/** 더 서툰 플레이(0.4.1, 쉬움 난이도 점검용): 최소 시험 2주만 하고 출시(결함이 많이 남음), 가격은 기준가의 110%, 광고 0,
+ *  페이스리프트·연구·채용·교육·본사·공장 투자 안 함, 풀체인지는 10년에 한 번, 현금이 음수면 대출 한도 끝까지 빌린다 */
+export const clumsy = (opts: Partial<SteadyOptions> = {}): Bot => ({
+  ...steady({ sloppy: true, launchDefects: Infinity, maxTestWeeks: config.dev.minTestWeeks, priceMult: B.clumsy.priceMult, marketing: 0, faceliftMonths: Infinity, changeMonths: B.clumsy.changeMonths, research: false, manage: false, borrowShare: 1, ...opts }), name: 'clumsy',
 });
 /** 리프트 안 함(16장): 페이스리프트 없이 5년(60개월) 주기 풀체인지 */
 export const noFacelift = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ faceliftMonths: Infinity, changeMonths: 60, ...opts }), name: 'noFacelift' });
@@ -183,8 +189,8 @@ function launchReady(g: Game, o: SteadyOptions): void {
       launch(currentEdition(gen).price);
       continue;
     }
-    if (p.kind === 'fullchange') { launch(bodyPrice(p.body)); continue; } // 같은 생산 라인을 이어받는다
-    if (sellingGens(s).length < linesOf(s)) { launch(bodyPrice(p.body)); continue; }
+    if (p.kind === 'fullchange') { launch(Math.round(bodyPrice(p.body) * o.priceMult)); continue; } // 같은 생산 라인을 이어받는다
+    if (sellingGens(s).length < linesOf(s)) { launch(Math.round(bodyPrice(p.body) * o.priceMult)); continue; }
     // 라인이 없으면 교체 시기가 된 가장 오래된 차를 단종(그달 말 라인이 빈다)
     const old = sellingGens(s).filter((x) => x.status === 'onSale' && m - x.launchMonth >= changeAt(s, o, x)).sort((a, b) => a.launchMonth - b.launchMonth || a.id - b.id)[0];
     if (old && !sellingGens(s).some((x) => x.status === 'ending')) g.command({ type: 'discontinue', generationId: old.id });
@@ -253,8 +259,9 @@ export interface RunResult {
 }
 
 /** 봇 한 판: years년 돌리고 요약 */
-export function runBot(bot: Bot, seed: number, years: number): RunResult {
-  const g = Game.create({ seed, companyName: bot.name });
+/** difficulty: 생략하면 'normal'(균형 측정의 기준) */
+export function runBot(bot: Bot, seed: number, years: number, difficulty: Difficulty = 'normal'): RunResult {
+  const g = Game.create({ seed, companyName: bot.name, difficulty });
   const weeks = years * config.time.monthsPerYear * config.time.weeksPerMonth;
   let first: Generation | undefined, payback: number | null = null;
   for (let w = 0; w < weeks && g.state.status === 'playing'; w++) {

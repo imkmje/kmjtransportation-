@@ -11,7 +11,7 @@ const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 describe('보정 목표(6.2): 1970년·초기 직원·보통 예산·12주·균등·표준 동력', () => {
   it('출시 시점(시험으로 결함이 약 5개 이하) 5개 능력치 표시 등급 평균이 4.0~5.0', () => {
     const avgs = SEEDS.map((seed) => {
-      const g = Game.create({ seed });
+      const g = Game.create({ difficulty: 'normal', seed });
       ok(g.command({ type: 'startProject', ...SPEC }));
       while (g.state.projects[0].phase === 'design' || g.state.projects[0].testWeeks < 2 || g.state.projects[0].defectEst > 5) g.tick();
       return projectPreview(g.state, g.state.projects[0].id)!.avg;
@@ -26,14 +26,14 @@ describe('보정 목표(6.2): 1970년·초기 직원·보통 예산·12주·균�
 
 describe('개발(6장)', () => {
   it('설계 기간이 끝나면 시험으로 넘어가고 알림이 뜬다', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     ok(g.command({ type: 'startProject', ...SPEC, designWeeks: 8 }));
     for (let i = 0; i < 7; i++) expect(g.tick().some((e) => e.kind === 'designDone')).toBe(false);
     expect(g.tick().some((e) => e.kind === 'designDone')).toBe(true);
     expect(g.state.projects[0].phase).toBe('test');
   });
   it('설계 중 결함은 매주 그 주 점수/12만큼 늘고, 시험 중에는 꼼꼼함/10 + 기술/30만큼 줄어든다', () => {
-    const g = Game.create({ seed: 3 });
+    const g = Game.create({ difficulty: 'normal', seed: 3 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0];
     const sum = (s: typeof p.points) => s.P + s.E + s.U + s.D + s.Q;
@@ -51,7 +51,7 @@ describe('개발(6장)', () => {
     expect(p.defects).toBe(0); // 0 아래로는 내려가지 않는다
   });
   it('화면용 결함 수는 실제의 ±15% 안(반올림)', () => {
-    const g = Game.create({ seed: 5 });
+    const g = Game.create({ difficulty: 'normal', seed: 5 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0];
     let differs = 0;
@@ -84,7 +84,7 @@ describe('개발(6장)', () => {
     expect((lo.spent - proto) / (no.spent - proto)).toBeCloseTo(0.5, 6);
   });
   it('주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용, 월말에 현금에서 나간다', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const p = g.state.projects[0], salary = g.state.staff.reduce((a, s) => a + 250 + s.ability * 12, 0);
     expect(weeklyDevCost(g.state, p)).toBeCloseTo(salary / 4 + config.dev.prototypePerWeek, 9);
@@ -95,7 +95,7 @@ describe('개발(6장)', () => {
     expect(g.state.cash).toBeCloseTo(config.start.cash - l.dev - salary - config.factory.upkeep - config.hq.upkeep, 6);
   });
   it('기획 검증: 방향 합 10·각 0~4, 옵션 2개까지·중복 금지, 설계 8/12/16주, 개발팀 1개', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     grant(g, 'el_radio');
     const bad = (x: object) => { const r = g.command({ type: 'startProject', ...SPEC, ...x } as never); return r.ok ? '' : r.reason; };
     expect(bad({ direction: { P: 5, E: 1, U: 2, D: 1, Q: 1 } })).toContain('개발 방향');
@@ -110,7 +110,7 @@ describe('개발(6장)', () => {
     expect(g.state.staff.every((s) => s.projectId === g.state.projects[0].id)).toBe(true);
   });
   it('이름이 비면 기본 이름을 붙인다', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     ok(g.command({ type: 'startProject', ...SPEC, name: '' }));
     expect(g.state.projects[0].name.length).toBeGreaterThan(0);
   });
@@ -137,7 +137,7 @@ describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () =
   const specs = [SPEC, { ...SPEC, budget: 'high' as const, designWeeks: 16, direction: { P: 4, E: 0, U: 2, D: 4, Q: 0 } }, { ...SPEC, budget: 'low' as const, designWeeks: 8, options: ['radio'] }];
   it('실제로 개발한 등급이 예상 범위 안에 들고, 개발비는 설계 + 최소 시험 주 만큼', () => {
     for (const spec of specs) for (let seed = 1; seed <= 12; seed++) {
-      const g = Game.create({ seed });
+      const g = Game.create({ difficulty: 'normal', seed });
       grant(g, 'el_radio');
       const pv = planPreview(g.state, spec);
       expect(pv.min).toBeLessThanOrEqual(pv.avg); expect(pv.avg).toBeLessThanOrEqual(pv.max);

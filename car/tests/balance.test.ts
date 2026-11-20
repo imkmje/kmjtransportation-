@@ -15,7 +15,7 @@ const eok = (x: number) => Math.round(x / 10000);
 
 /** 봇을 months개월 돌려 첫 차의 평론·회수 개월·출시 3~14개월 판매 중앙값(생산 한도 대비)과 최저 현금을 잰다 */
 function firstCar(bot: Bot, seed: number, months: number) {
-  const g = Game.create({ seed });
+  const g = Game.create({ difficulty: 'normal', seed });
   let payback: number | null = null, minCash = Infinity;
   for (let w = 0; w < months * config.time.weeksPerMonth && g.state.status === 'playing'; w++) {
     bot.step(g); g.tick();
@@ -42,7 +42,7 @@ const snapOf = (g: Game): Snap => {
 const cache = new Map<string, { seed: number; snaps: Snap[]; launches: number[]; alive: boolean[] }[]>(); // alive: 달마다 살아 있었는가
 function runs(name: string, bot: () => Bot, years: number[]) {
   if (!cache.has(name)) cache.set(name, SEEDS.map((seed) => {
-    const g = Game.create({ seed }), b = bot(), snaps: Snap[] = [], alive: boolean[] = [], wpy = config.time.weeksPerMonth * config.time.monthsPerYear;
+    const g = Game.create({ difficulty: 'normal', seed }), b = bot(), snaps: Snap[] = [], alive: boolean[] = [], wpy = config.time.weeksPerMonth * config.time.monthsPerYear;
     for (let w = 1; w <= Math.max(...years) * wpy; w++) {
       if (g.state.status === 'playing') { b.step(g); g.tick(); }
       if (w % config.time.weeksPerMonth === 0) alive.push(g.state.status === 'playing');
@@ -137,7 +137,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
   it('5) 페이스리프트 1회의 36개월 추가 이익 ÷ 비용 1.5~4(같은 순간에서 갈라, 두 쪽 다 그 뒤 다른 결정은 하지 않는다)', () => {
     let gain = 0, cost = 0, n = 0;
     for (const seed of SEEDS) {
-      const g = Game.create({ seed }), st = steady();
+      const g = Game.create({ difficulty: 'normal', seed }), st = steady();
       for (let w = 0; w < 48 * 10 && g.state.status === 'playing'; w++) {
         st.step(g);
         const p = g.state.projects.find((x) => x.kind === 'facelift');

@@ -6,20 +6,20 @@ import { toMonthEnd } from './util';
 
 describe('재무(9.4)', () => {
   it('월말 고정비: 월급 + 공장 유지비 + 본사 유지비', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     toMonthEnd(g);
     const l = g.state.ledger[0], salary = g.state.staff.reduce((a, s) => a + 250 + 12 * s.ability, 0);
     expect(l.salaries).toBe(salary); expect(l.upkeep).toBe(config.factory.upkeep + config.hq.upkeep);
     expect(l.profit).toBe(-(salary + l.upkeep)); expect(g.state.cash).toBe(config.start.cash + l.profit);
   });
   it('장부는 최근 24개월만 남긴다', () => {
-    const g = Game.create({ seed: 1 }); g.state.cash = 1e9;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }); g.state.cash = 1e9;
     for (let i = 0; i < 48 * 3; i++) g.tick();
     expect(g.state.ledger.length).toBe(24);
     expect(g.state.ledger[23].month).toBe(35);
   });
   it('대출 한도 = 30억(0.4.1) + 최근 12개월 매출 × 0.3, 넘으면 거부', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     expect(loanLimit(g.state)).toBe(300000);
     expect(g.command({ type: 'borrow', amount: 300001 })).toEqual({ ok: false, reason: '대출 한도를 넘습니다.' });
     expect(g.command({ type: 'borrow', amount: 0 })).toEqual({ ok: false, reason: '빌릴 금액이 올바르지 않습니다.' });
@@ -30,7 +30,7 @@ describe('재무(9.4)', () => {
     expect(loanLimit(g.state)).toBe(330000);
   });
   it('월 이율 0.6%, 한도의 70%를 넘게 쓰면 1.0%', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.command({ type: 'borrow', amount: 100000 });
     expect(loanRate(g.state)).toBe(0.006);
     toMonthEnd(g);
@@ -39,7 +39,7 @@ describe('재무(9.4)', () => {
     expect(loanRate(g.state)).toBe(0.01);
   });
   it('상환: 남은 대출과 현금 안에서만', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.command({ type: 'borrow', amount: 1000 });
     expect(g.command({ type: 'repay', amount: 2000 })).toEqual({ ok: false, reason: '남은 대출보다 많이 갚을 수 없습니다.' });
     expect(g.command({ type: 'repay', amount: 1000 }).ok).toBe(true);
@@ -48,7 +48,7 @@ describe('재무(9.4)', () => {
     expect(g.command({ type: 'repay', amount: 1000 })).toEqual({ ok: false, reason: '현금이 모자랍니다.' });
   });
   it('파산: 현금 음수로 12개월(0.4.1) 연속이면 게임 오버, 경고에 남은 대출 한도, 이후 진행·명령 불가', () => {
-    const g = Game.create({ seed: 1 }); g.state.cash = -1;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }); g.state.cash = -1;
     expect(config.bankruptcy.months).toBe(12);
     const kinds: string[] = [], warns: string[] = [];
     for (let m = 0; m < 12; m++) { let ev; do ev = g.tick(); while (!ev.some((e) => e.kind === 'monthEnd')); kinds.push(...ev.map((e) => e.kind)); warns.push(...ev.filter((e) => e.kind === 'cashWarning').map((e) => e.text)); }
@@ -61,14 +61,14 @@ describe('재무(9.4)', () => {
     expect(g.command({ type: 'borrow', amount: 1 })).toEqual({ ok: false, reason: '게임이 끝났습니다.' });
   });
   it('현금이 다시 양수가 되면 연속 기록이 끊긴다', () => {
-    const g = Game.create({ seed: 1 }); g.state.cash = -1;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }); g.state.cash = -1;
     for (let i = 0; i < 4 * 5; i++) g.tick();
     expect(g.state.negMonths).toBe(5);
     g.state.cash = 1e6; toMonthEnd(g);
     expect(g.state.negMonths).toBe(0);
   });
   it('구제 금융: 한 판에 1회, 현금 음수일 때만, 현금 0·평판 −20·대출 한도 절반', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     expect(g.command({ type: 'bailout' })).toEqual({ ok: false, reason: '현금이 마이너스일 때만 받을 수 있습니다.' });
     g.state.cash = -5000; g.state.negMonths = 4; g.state.reputation = 50;
     expect(g.command({ type: 'bailout' }).ok).toBe(true);
@@ -78,7 +78,7 @@ describe('재무(9.4)', () => {
     expect(g.command({ type: 'bailout' })).toEqual({ ok: false, reason: '구제 금융은 한 번만 받을 수 있습니다.' });
   });
   it('파산 뒤 구제 금융(9.4): 게임 오버에서도 1회 받으면 다시 진행된다(현금 0·평판 −20·한도 절반·연속 적자 초기화)', () => {
-    const g = Game.create({ seed: 1 }); g.state.cash = -1; g.state.reputation = 50;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }); g.state.cash = -1; g.state.reputation = 50;
     while (g.state.status === 'playing') g.tick();
     const w = g.state.week, ledger = g.state.ledger.length;
     expect(g.state.negMonths).toBe(config.bankruptcy.months);

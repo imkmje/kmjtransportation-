@@ -11,7 +11,7 @@ import { devReady, launched, ok, toMonthEnd } from './util';
 const car = (over: Partial<SaleCar> = {}): SaleCar => ({ body: 'sedanS', segment: 'worker', stats: { P: 90, E: 90, U: 90, D: 90, Q: 90 }, price: 1200, awareness: 0.4, life: 1, ...over });
 
 describe('판매 공식(7.3)', () => {
-  const s = Game.create({ seed: 1 }).state;
+  const s = Game.create({ difficulty: 'normal', seed: 1 }).state;
   it('가격을 올리면 판매가 준다', () => {
     const d = [800, 1200, 1600, 2000].map((price) => monthlyDemand(s, car({ price }), [], 1970));
     for (let i = 1; i < d.length; i++) expect(d[i]).toBeLessThan(d[i - 1]);

@@ -173,7 +173,7 @@ export class Game {
       s.factory = { level: b.level, build: null };
       ev.push({ kind: 'company', text: `공장 ${b.level}등급 증설을 마쳤습니다. 한 달 생산 ${capacityOf(s).toLocaleString()}대, 생산 라인 ${linesOf(s)}개.` });
     }
-    // 9.4 파산: 현금 음수로 bankruptcy.months개월 연속이면 게임 오버(0.4.1: 6 → 12개월)
+    // 9.4 파산: 현금 음수로 난이도의 유예 개월(보통 12, 0.4.1에서 6 → 12) 연속이면 게임 오버
     if (s.cash < 0) {
       s.negMonths++;
       if (s.negMonths >= diffOf(s).bankruptcyMonths) { s.status = 'gameOver'; ev.push({ kind: 'gameOver', text: `현금 부족이 ${diffOf(s).bankruptcyMonths}개월 이어져 회사가 파산했습니다.` }); }
