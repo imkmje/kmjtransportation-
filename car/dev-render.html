@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>차 렌더 확인</title>
+<style>
+/* 개발용 확인 페이지(게임에는 안 들어감). 무대 배경은 데모 .stage와 같다. */
+[hidden]{display:none!important}
+body{margin:0;padding:12px 16px;background:#e7eaee;color:#14171c;font-family:system-ui,sans-serif}
+.stage{position:relative;border-radius:24px;overflow:hidden;height:clamp(330px,58vh,580px);
+  background:radial-gradient(120% 90% at 50% 62%,#ffffff 0,#dfe4ea 48%,#c9d0d9 100%);border:1px solid #fff}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+.fallback{position:absolute;inset:0;display:grid;place-items:center}
+.fallback svg{width:min(80%,560px)}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.row button{min-height:36px;border:1.5px solid #d8dde4;background:#fff;border-radius:10px;padding:0 10px;font:inherit}
+.row button[aria-pressed="true"]{border-color:#14171c}
+.row button svg{width:72px;height:28px;display:block}
+#info{font-size:13px;color:#5b6470}
+</style>
+</head>
+<body>
+<section class="stage" id="stage"><canvas id="cv"></canvas><div class="fallback" id="fb" hidden></div></section>
+<div class="row" id="bodies"></div>
+<div class="row" id="eras"></div>
+<div class="row" id="pts"></div>
+<div class="row" id="colors"></div>
+<div class="row"><button id="sporty">스포티</button><button id="wheel">휠</button><button id="rot">자동 회전</button><button id="snap">스냅샷</button><span id="info"></span></div>
+<script type="module" src="./src/render/dev.ts"></script>
+</body>
+</html>
