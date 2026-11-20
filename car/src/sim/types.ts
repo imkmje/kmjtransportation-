@@ -162,14 +162,17 @@ export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice'
 export interface NewsItem { week: number; text: string; category?: NewsCategory } // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
+/** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
+export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
   saveVersion: 4;
+  difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
   companyName: string;
   reputation: number;
   cash: number;
-  loan: { balance: number; limitMult: number; bailoutUsed: boolean };
+  loan: { balance: number; limitMult: number; bailoutUsed: boolean; bailouts?: number }; // bailoutUsed: 구제 금융을 더 받을 수 없음(난이도의 횟수를 다 씀, 어려움은 처음부터 true), bailouts: 받은 횟수(없으면 bailoutUsed로 0/1)
   negMonths: number; // 현금 음수로 끝난 연속 달 수
   status: 'playing' | 'gameOver';
   staff: Staff[];

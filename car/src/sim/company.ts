@@ -2,6 +2,7 @@
 import { config } from '../config';
 import { eventCostMult, productionMult } from './events';
 import { costCut, upkeepCut } from './research';
+import { diffOf } from './difficulty';
 import type { CarState, Role, Staff } from './types';
 
 const C = config.staff;
@@ -18,8 +19,8 @@ export const capacityOf = (s: CarState): number => factoryDef(s).capacity * prod
 export const linesOf = (s: CarState): number => factoryDef(s).lines;
 /** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율) */
 export const costMultOf = (s: CarState): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s);
-/** 월 유지비 = 공장 × (1 − 연구 유지비 인하) + 본사 */
-export const upkeepOf = (s: CarState): number => factoryDef(s).upkeep * (1 - upkeepCut(s)) + hqDef(s).upkeep;
+/** 월 유지비 = (공장 × (1 − 연구 유지비 인하) + 본사) × 난이도 배수 */
+export const upkeepOf = (s: CarState): number => (factoryDef(s).upkeep * (1 - upkeepCut(s)) + hqDef(s).upkeep) * diffOf(s).upkeepMult;
 
 export const isDevRole = (r: Role): boolean => r !== 'sales';
 /** 교육 중(교육을 시작한 주부터 4주) */

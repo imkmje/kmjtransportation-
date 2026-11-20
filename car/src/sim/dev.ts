@@ -5,6 +5,7 @@ import { defectCut, devSpeed, unlockedIds } from './research';
 import { salaryOf, zeroStats } from './cars';
 import { conditionMult, isAway, optionSlots } from './company';
 import type { Rng } from './rng';
+import { diffOf } from './difficulty';
 import { STATS, type Budget, type CarState, type Project, type ProjectSpec, type Staff, type Stats } from './types';
 
 /** 기획 검증: 문제가 있으면 한국어 이유, 없으면 null */
@@ -30,9 +31,9 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
 
 export const staffOn = (state: CarState, p: Project): Staff[] => state.staff.filter((s) => s.projectId === p.id);
 
-/** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 */
-export const devCostPerWeek = (team: Staff[], budget: Budget): number =>
-  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek;
+/** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
+export const devCostPerWeek = (team: Staff[], budget: Budget, protoMult = 1): number =>
+  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
 /** 페이스리프트의 주간 비용: 그 세대 개발비 × 25% ÷ (설계 4주 + 최소 시험 2주). 시험을 더 하면 그만큼 더 든다 */
 export const faceliftWeekCost = (genDevCost: number): number =>
   (genDevCost * config.lifecycle.facelift.costShare) / (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks);
@@ -42,7 +43,7 @@ const genById = (state: CarState, id: number | null) => state.nameplates.flatMap
 const latestGenOf = (state: CarState, nameplateId: number | null) => state.nameplates.find((n) => n.id === nameplateId)?.generations.at(-1);
 export function weeklyDevCost(state: CarState, p: Project): number {
   if (p.kind === 'facelift') return faceliftWeekCost(genById(state, p.targetId)?.devCost ?? 0);
-  const base = devCostPerWeek(staffOn(state, p), p.budget);
+  const base = devCostPerWeek(staffOn(state, p), p.budget, diffOf(state).prototypeMult);
   return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
 }
 

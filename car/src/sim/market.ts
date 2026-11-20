@@ -5,6 +5,7 @@ import { grades, lifeFactor } from './cars';
 import { salesFleetMult } from './company';
 import { REGION, chargingInfra, eraNow, eraWeights, marketMult, rivalHitAdd, trendOf } from './events';
 import { hash01, type Rng } from './rng';
+import { diffOf } from './difficulty';
 import { STATS, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
 
 export { REGION };
@@ -54,7 +55,7 @@ export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1,
 export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number): number {
   const m = Math.floor((year - config.time.startYear) * config.time.monthsPerYear + 1e-6), n = eraNow(state.seed, m);
   const size = cellMonthly(car.body, year) * (n.body[car.body] ?? 1) * marketMult(n), mix = MARKET[REGION].mix[car.body] ?? {};
-  const e = config.market.shareExp, fm = salesFleetMult(state);
+  const e = config.market.shareExp, fm = salesFleetMult(state), rm = diffOf(state).rivalMult; // rm: 난이도의 경쟁 차 A 배수
   const tr = (c: SaleCar) => trendOf(c.body, year, n) * (c.powertrain ? trendOf(c.powertrain, year, n) : 1);
   const trMine = tr(car);
   let total = 0;
@@ -64,7 +65,7 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
     const ww = eraWeights(seg.w, n);
     const mine = scoreA(car, seg.id, year, fm, ww, trMine) ** e;
     let rest = 0;
-    for (const r of state.rivals) rest += ((r.cells[car.body] ?? 0) + rivalHitAdd(state, r.id, car.body, m)) ** e;
+    for (const r of state.rivals) rest += (((r.cells[car.body] ?? 0) + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e;
     for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year, fm, ww, tr(o)) ** e;
     if (mine > 0) total += size * w * (mine / (mine + rest));
   }

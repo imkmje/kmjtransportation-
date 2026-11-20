@@ -8,6 +8,8 @@ import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeErr
 import { carriedEquity, faceliftEligibility, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
 import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
+import { diffOf } from './difficulty';
+export { difficultyInfo } from './difficulty';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { STATS, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
@@ -31,7 +33,7 @@ export function projectPreview(s: CarState, projectId: number): { stats: Stats; 
 export function expectedReviews(s: CarState, projectId: number, price: number): { scores: number[]; avg: number } | null {
   const p = projectById(s, projectId), pv = projectPreview(s, projectId);
   if (!p || !pv) return null;
-  const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0);
+  const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0, diffOf(s).manyDefects);
   return { scores, avg: mean(scores) };
 }
 
@@ -71,7 +73,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
     return finalStats(spec.body, spec.powertrain, level, spec.options, pts, defects);
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
-  return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget) * (spec.designWeeks + d.minTestWeeks) };
+  return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
 }
 
 /** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */
