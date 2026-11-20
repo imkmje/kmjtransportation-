@@ -5,7 +5,8 @@ import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, un
 import { withRequired, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, sellingGens } from './game';
 import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
-import { carriedEquity, faceliftEligibility, faceliftRefresh, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
+import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
+export { basePriceOf } from './market';
 import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
 import { diffOf } from './difficulty';
@@ -62,7 +63,7 @@ const idleDevStaff = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId
 
 /** 기획 미리보기: 지금 쉬는 개발 직원(team을 주면 그 팀)으로 개발하면 받을 표시 등급과 개발비(설계 + 최소 시험).
  *  min = 주간 난수가 모두 최저·최소 시험 주로 출시, max = 모두 최고·시험으로 결함을 다 없앤 경우. grades·avg는 난수 1.0·최소 시험 */
-export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idleDevStaff(s)): { grades: Stats; avg: number; min: number; max: number; cost: number; blockedBy: string | null; required: string[] } {
+export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idleDevStaff(s)): { stats: Stats; grades: Stats; avg: number; min: number; max: number; cost: number; blockedBy: string | null; required: string[] } {
   const d = config.dev;
   const y = yearOf(s.week + spec.designWeeks + d.minTestWeeks); // 출시하는 해 기준(해가 바뀌면 등급이 낮아진다)
   const level = levelForTier(s, spec.powertrain, spec.tier), speed = 1 + devSpeed(s), cut = 1 - defectCut(s); // 연구: 동력 단계·개발 속도·결함 감소
@@ -74,7 +75,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
     return finalStats(spec.body, spec.powertrain, level, withRequired(s, spec.options), pts, defects); // 의무 장비 포함(0.4.2)
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
-  return { blockedBy: regulationBlock(s), required: requiredOptions(s), grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
+  return { blockedBy: regulationBlock(s), required: requiredOptions(s), stats: mid, grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
 }
 
 /** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */
@@ -167,7 +168,7 @@ export function fullChangePreview(s: CarState, nameplateId: number, spec: Omit<P
   return {
     eligibility: fullChangeEligibility(s, nameplateId), ...pv, cost: pv.cost * costMult, costMult,
     equity: eq.equity, equityBase: eq.base, bodyChanged: eq.bodyChanged, revival: eq.revival,
-    prevAvg, compare: pv.avg > prevAvg ? 'better' : pv.avg < prevAvg ? 'worse' : 'same', rebuyPerMonth: rebuyPerMonth(prev),
+    prevAvg, compare: compareToPrev(prev, pv.stats, spec.body), rebuyPerMonth: rebuyPerMonth(prev), // 전작 비교는 원점수로(0.4.2), prevAvg는 화면 참고용
   };
 }
 

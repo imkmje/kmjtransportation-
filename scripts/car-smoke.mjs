@@ -376,8 +376,9 @@ await act('cancelDev'); await page.click('#ask-yes');
 // ---- 페이스리프트(출시 18개월 뒤) ----
 await page.click('#tabs button[data-tab="garage"]');
 await G(() => { const c = window.__car, s = c.game.state, g = s.nameplates[0].generations[0]; while (Math.floor(s.week / 4) - g.launchMonth < 18) c.tick(1); c.render(); });
-const life0 = Number(await page.locator('#panel .life').first().getAttribute('aria-valuenow'));
 check('18개월 뒤 차고 [페이스리프트]가 열림', await page.locator('[data-act="goLift"]').isEnabled(), `출시 ${await monthsSinceLaunch()}개월`);
+// 0.4.2 수명: 출시 30개월까지 100% 유지 뒤 매달 줄어든다. 30개월이 지난 뒤에 리프트해야 수명 회복을 볼 수 있다
+await G(() => { const c = window.__car, s = c.game.state, g = s.nameplates[0].generations[0]; while (Math.floor(s.week / 4) - g.launchMonth < 31) c.tick(1); c.render(); });
 await act('goLift');
 check('페이스리프트 화면: 지금 얼굴 + 새 얼굴 후보 3개(정면 썸네일)', (await G(() => window.__car.screen)) === 'lift' && (await page.locator('.faces .face.now').count()) === 1 && (await page.locator('.faces .opt.face img, .faces .opt.face svg').count()) === 3);
 const ltext = await page.locator('#panel').innerText();
@@ -399,6 +400,9 @@ await shot('lift-est');
 await act('startLift');
 check('페이스리프트 시작: 종류·고른 얼굴 시드', await G(([f]) => { const p = window.__car.game.state.projects[0]; return p?.kind === 'facelift' && p.faceSeed === f; }, [face2]) && (await page.locator('#ov').innerText()).includes('페이스리프트 중'));
 await untilReady();
+await page.click('#tabs button[data-tab="garage"]');
+const life0 = Number(await page.locator('#panel .life').first().getAttribute('aria-valuenow')); // 리프트 출시 직전(출시 30개월 넘음)
+await page.click('#tabs button[data-tab="dev"]');
 await page.waitForTimeout(800);
 await shot('office-test');
 check('개발 탭: 시험 중 사무실(결함을 다 잡아 출시 대기면 쉬는 모습)', await G(() => { const p = window.__car.game.state.projects[0], ph = window.__car.office.view?.phase; return p?.waiting ? ph === 'rest' : ph === 'test'; }));
@@ -422,7 +426,7 @@ check('판(edition) 2개, 얼굴 시드가 바뀜', lifted.n === 2 && lifted.f1 
 check('차고: 페이스리프트 연월 표시', /\d{4}년 \d+월 페이스리프트/.test(await page.locator('#ov .spec.when').innerText()), await page.locator('#ov .spec.when').innerText());
 await page.waitForTimeout(300);
 const life1 = Number(await page.locator('#panel .life').first().getAttribute('aria-valuenow'));
-check('수명 막대 상승', life1 > life0, `${life0} → ${life1}`);
+check('30개월 뒤 페이스리프트: 수명 막대 상승', life1 > life0, `${life0} → ${life1}`);
 check('차고 표시: "1세대 · 페이스리프트", 페이스리프트 사진 저장', (await page.locator('#ov .model').innerText()).includes('페이스리프트') && await G((id) => !!window.__car.ui.photos['e' + id], lifted.id));
 await page.waitForTimeout(500);
 await shot('garage-lift');

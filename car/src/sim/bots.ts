@@ -10,7 +10,7 @@ import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDev
 import { Game, allGens, sellingGens } from './game';
 import { REGION, basePriceOf, cellMonthly, currentEdition } from './market';
 import { planPreview } from './queries';
-import { latestGen, launchAvgGrade } from './lifecycle';
+import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, yearOf } from './time';
 import type { Budget, CarState, Difficulty, Generation, Role, Staff } from './types';
 
@@ -246,10 +246,13 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다
   const last = prev ?? (s.nameplates.length ? latestGen(s.nameplates[s.nameplates.length - 1]) : undefined);
   const long = config.dev.designWeeks[2], tries = [spec, { ...spec, designWeeks: long }, { ...spec, designWeeks: long, budget: 'high' as Budget }];
-  const staff = s.staff.filter((x) => team.includes(x.id));
-  const pick = o.sloppy ? spec : (last && tries.find((t) => planPreview(s, { ...t, name: '' }, staff).avg >= launchAvgGrade(last))) || tries[last ? tries.length - 1 : 0];
-  if (nameplateId !== null) g.command({ type: 'startFullChange', nameplateId, ...pick, team });
-  else g.command({ type: 'startProject', name: '', ...pick, team });
+  // 0.4.2: 풀체인지는 미리보기의 전작 비교(원점수)가 '못하다'가 아니게(모자라면 쉬는 개발 직원 전원을 넣는다), 새 차종은 직전 차의 출시 등급 이상이 되게
+  const all = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week) && !x.lab).map((x) => x.id);
+  const cands = [...tries.map((t) => ({ t, team })), ...(prev && all.length > team.length ? tries.map((t) => ({ t, team: all })) : [])];
+  const okTry = (c: (typeof cands)[number]) => { const pv = planPreview(s, { ...c.t, name: '' }, s.staff.filter((x) => c.team.includes(x.id))); return prev ? compareToPrev(prev, pv.stats, c.t.body) !== 'worse' : pv.avg >= launchAvgGrade(last!); };
+  const pick = o.sloppy ? cands[0] : (last && cands.find(okTry)) || cands[last ? tries.length - 1 : 0];
+  if (nameplateId !== null) g.command({ type: 'startFullChange', nameplateId, ...pick.t, team: pick.team });
+  else g.command({ type: 'startProject', name: '', ...pick.t, team: pick.team });
 }
 
 /** 서툰 개발 방향: 균등하거나 한쪽(성능·디자인 / 실용·연비 / 품질)으로 몰기 */

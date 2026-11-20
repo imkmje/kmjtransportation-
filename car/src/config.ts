@@ -131,7 +131,8 @@ export const config = {
       afterMonths: 36, sameBodyCost: 0.85, newBodyCost: 1, // 출시 36개월 뒤(또는 단종 상태), 비용 85%(같은 차체) / 100%
       equityPerReview: 0.03, equityReviewBase: 0.12, equityReviewMax: 0.2, equitySalesDiv: 500000, equitySalesMax: 0.1, equityMax: 0.3, // 자산 = clamp(0.03 × 평론 − 0.12, 0, 0.2) + min(0.1, 누적/50만)
       recallEquity: -0.05, newBodyEquity: 0.5, revivalMonths: 36, revivalEquity: 0.5, // 리콜 −0.05, 차체 변경 ×0.5, 단종 36개월 넘으면 부활 ×0.5
-      worseReview: -1, betterReview: 0.5, // 전작 비교: 표시 등급 평균이 낮으면 평론 전원 −1, 높으면 +0.5
+      worseReview: -1, betterReview: 0.5, // 전작 비교(0.4.2: 원점수 = 절대 성능): 어느 능력치든 전 세대 마지막 판보다 낮으면 평론 전원 −1, 모두 낮지 않고 평균이 뚜렷이 높으면 +0.5
+      worseTolerance: 0.05, betterShare: 0.1, // 평균이 5% 넘게 낮아야 "못하다", 10% 이상 높아야 "진화했다"
       rebuyShare: 0.03, rebuyMonths: 12, rebuyMinQ: 5, // 전 세대 누적 판매의 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 5 미만이면 0)
     },
     retrofit: { costShare: 0.05, min: 5000 }, // 0.4.2 의무 장비 추가: 일시 비용 = 그 세대 개발비 × 5%(최소 5,000만원). 대당 원가는 장비 원가만큼 오른다

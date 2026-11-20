@@ -3,14 +3,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game, allGens, SAVE_VERSION } from '../src/sim/game';
 import { steady } from '../src/sim/bots';
-import { finalStats, grade, avgGrade } from '../src/sim/cars';
+import { finalStats, grade } from '../src/sim/cars';
 import { devCostPerWeek } from '../src/sim/dev';
 import { carriedEquity, lookCandidates, nameplateEquity, planEntries } from '../src/sim/lifecycle';
 import { cellMonthly, monthlyDemand, toSaleCar, updateRivals } from '../src/sim/market';
-import { advice, faceliftPreview, fullChangePreview } from '../src/sim/queries';
+import { advice, faceliftPreview, fullChangePreview, projectPreview } from '../src/sim/queries';
 import { Rng } from '../src/sim/rng';
 import { monthOf, monthTime, yearOf } from '../src/sim/time';
-import { STATS, type Generation, type ProjectSpec } from '../src/sim/types';
+import { STATS, type Generation, type ProjectSpec, type Stats } from '../src/sim/types';
 import { MARKET, bodyById } from '../src/data';
 import { config } from '../src/config';
 import { SPEC, grant, launched, ok, toMonthEnd } from './util';
@@ -192,24 +192,26 @@ describe('풀체인지(8.3)', () => {
       expect(np.generations[1].equity).toBeCloseTo(c.equity, 12);
     }
   });
-  it('전작 비교: 표시 등급 평균이 전 세대 출시 당시보다 낮으면 평론 전원 −1 "전작만 못하다", 높으면 +0.5 "진화했다"', () => {
-    const { g, gen } = aged(36);
+  it('전작 비교(0.4.2): 원점수(절대 성능, 차체 배수를 나눈 값)의 평균으로. 전작 마지막 판보다 5% 넘게 낮으면 평론 전원 −1 "전작만 못하다", 10% 이상 높으면 +0.5 "진화했다", 그 밖은 "전작과 비슷하다"', () => {
+    const { g } = aged(36);
     const np = g.state.nameplates[0];
     ok(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }));
-    const p = toTest(g), snap = g.toJSON();
-    const run = (stat: number) => {
+    const p = toTest(g), snap = g.toJSON(), now = projectPreview(g.state, p.id)!.stats;
+    const run = (prevStats: Stats) => {
       const h = Game.fromJSON(snap), prev = h.state.nameplates[0].generations[0];
-      prev.editions[0].stats = { P: stat, E: stat, U: stat, D: stat, Q: stat };
+      prev.editions[0].stats = prevStats;
       const r = h.command({ type: 'launch', projectId: p.id, ...LAUNCH });
       return { r, g2: h.state.nameplates[0].generations[1] };
     };
-    const worse = run(1000), better = run(1);
-    expect(avgGrade(worse.g2.editions[0].stats, yearOf(g.state.week))).toBeGreaterThan(avgGrade({ P: 1, E: 1, U: 1, D: 1, Q: 1 }, yearOf(gen.launchWeek)));
+    const up = (f: number) => ({ P: now.P * f, E: now.E * f, U: now.U * f, D: now.D * f, Q: now.Q * f });
+    const worse = run(up(1.06)), better = run(up(1 / 1.1)), same = run({ ...now, P: now.P * 1.1 }); // same: 한 능력치만 전작보다 낮고 평균은 5% 안
+    expect(worse.g2.editions[0].stats).toEqual(now); // 미리보기와 같은 원점수로 출시
     for (let i = 0; i < 4; i++) {
-      const a = worse.g2.reviews[i], b = better.g2.reviews[i];
+      const a = worse.g2.reviews[i], b = better.g2.reviews[i], c = same.g2.reviews[i];
       if (a > 1 && b < 10) expect(b - a).toBeCloseTo(1.5, 9);
+      if (a > 1 && c < 10) expect(c - a).toBeCloseTo(1, 9);
     }
-    expect(worse.g2.editions[0].headline).toContain('전작만 못하다'); expect(better.g2.editions[0].headline).toContain('진화했다');
+    expect(worse.g2.editions[0].headline).toContain('전작만 못하다'); expect(better.g2.editions[0].headline).toContain('진화했다'); expect(same.g2.editions[0].headline).toContain('전작과 비슷하다');
     expect(better.r.ok && better.r.events?.some((e) => e.text.includes('진화했다'))).toBe(true);
   });
   it('기존 고객 재구매: 전 세대 누적 판매 × 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 5 미만이면 0)', () => {

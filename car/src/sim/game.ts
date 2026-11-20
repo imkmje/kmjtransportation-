@@ -1,11 +1,11 @@
 // 카 컴퍼니 게임 본체: 상태, 1주 진행(tick), 명령(command), 저장(toJSON/fromJSON)
 import { config } from '../config';
 import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
-import { avgGrade, defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
+import { defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
 import { specError, stepProject, withRequired } from './dev';
 import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
-import { carriedEquity, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, launchAvgGrade, nameplateById, rebuyPerMonth } from './lifecycle';
+import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
 import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
 import { addNews, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
@@ -547,8 +547,8 @@ export class Game {
       if (!s.knownCombos.includes(combo)) s.knownCombos.push(combo); // 5.5 조합 노트에 공개
       let headline: string | null = null, equity = 0, rebuy = 0;
       if (np && prev) { // 8.3 풀체인지: 전작 비교·차종 자산·재구매, 전 세대는 이번 달 말 단종
-        const carried = carriedEquity(s, np.id, p.body), prevAvg = launchAvgGrade(prev), nowAvg = avgGrade(stats, year), no = prev.number + 1;
-        const delta = nowAvg < prevAvg ? fc.worseReview : nowAvg > prevAvg ? fc.betterReview : 0;
+        const carried = carriedEquity(s, np.id, p.body), cmp = compareToPrev(prev, stats, p.body), no = prev.number + 1; // 전작 비교는 원점수(절대 성능)로(0.4.2)
+        const delta = cmp === 'worse' ? fc.worseReview : cmp === 'better' ? fc.betterReview : 0;
         for (let i = 0; i < reviews.length; i++) reviews[i] = Math.round(Math.min(c.max, Math.max(c.min, reviews[i] + delta)) * 10) / 10;
         headline = `「${np.name}」 ${no}세대${carried.revival ? '로 부활,' : ','} ${delta < 0 ? '전작만 못하다' : delta > 0 ? '진화했다' : '전작과 비슷하다'}`;
         equity = carried.equity; rebuy = rebuyPerMonth(prev);

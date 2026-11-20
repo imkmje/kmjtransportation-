@@ -4,9 +4,9 @@ import { avgGrade, grade } from './cars';
 import { currentEdition } from './market';
 import { hash32 } from './rng';
 import { regulationBlock, requiredOptions } from './events';
-import { optionById } from '../data';
+import { bodyById, optionById } from '../data';
 import { monthOf, yearOf } from './time';
-import { STATS, type CarState, type Generation, type Nameplate, type Stats } from './types';
+import { STATS, type CarState, type Generation, type Nameplate, type Stat, type Stats } from './types';
 
 const L = config.lifecycle;
 const gens = (s: CarState): Generation[] => s.nameplates.flatMap((n) => n.generations);
@@ -79,7 +79,16 @@ export function carriedEquity(s: CarState, nameplateId: number, body: string): {
   return { equity: base * (bodyChanged ? f.newBodyEquity : 1) * (revival ? f.revivalEquity : 1), base, bodyChanged, revival };
 }
 
-/** 세대의 출시 당시 표시 등급 평균(전작 비교용) */
+/** 전작 비교(8.3, 0.4.2): 원점수(절대 성능)로 비교한다. 차체 배수를 나눈 값(차체를 바꿔도 같은 잣대)으로, 새 세대의 어느 능력치든 전 세대 마지막 판보다 2% 넘게 낮으면 worse,
+ *  모두 낮지 않고 평균이 10% 이상 높으면 better, 그 밖은 same. body: 새 세대 차체. (예전: 출시 당시 표시 등급 평균. 기준 상승 탓에 꾸준히 연구해도 절반 넘게 감점이었다) */
+export function compareToPrev(prev: Generation, stats: Stats, body: string): 'better' | 'worse' | 'same' {
+  const f = L.fullChange, mo = bodyById(prev.body).mult, mn = bodyById(body).mult, last = prev.editions[prev.editions.length - 1].stats;
+  const o = (k: Stat) => last[k] / mo[k], n = (k: Stat) => stats[k] / mn[k], avg = (x: (k: Stat) => number) => STATS.reduce((a, k) => a + x(k), 0) / STATS.length;
+  if (avg(n) < avg(o) * (1 - f.worseTolerance)) return 'worse';
+  return avg(n) >= avg(o) * (1 + f.betterShare) ? 'better' : 'same';
+}
+
+/** 세대의 출시 당시 표시 등급 평균(화면·봇 참고용) */
 export const launchAvgGrade = (g: Generation): number => avgGrade(g.editions[0].stats, yearOf(g.launchWeek));
 /** 기존 고객 재구매(8.3): 전 세대 누적 판매 × 3% ÷ 12 (매달). 전 세대 품질 등급(마지막 판 출시 당시)이 5 미만이면 0 */
 export function rebuyPerMonth(prev: Generation): number {
