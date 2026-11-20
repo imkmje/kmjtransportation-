@@ -650,9 +650,9 @@ export function startApp(): void {
     const seeds = { nameplateId: npId, chassisSeed: Q.lookCandidates(s, npId, 'chassis')[0], faceSeed: Q.lookCandidates(s, npId, 'face', 'nextGen')[0], team: idleDev().map((x) => x.id) };
     if (n && prev) {
       const e = currentEdition(prev), opts = new Set(Q.optionsAt(s).map((o) => o.id));
-      return { name: n.name, body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: e.options.filter((o) => opts.has(o)), direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 12, color: e.color, ...seeds };
+      return { name: n.name, body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: e.options.filter((o) => opts.has(o)), direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: e.color, ...seeds };
     }
-    return { name: '', body: Q.bodiesAt(s)[0].id, segment: 'worker', powertrain: Q.powertrainsAt(s)[0].id, tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 12, color: PAINT[0][1], ...seeds };
+    return { name: '', body: Q.bodiesAt(s)[0].id, segment: 'worker', powertrain: Q.powertrainsAt(s)[0].id, tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: PAINT[0][1], ...seeds };
   }
   /** 팀으로 고를 수 있는 직원: 프로젝트에 배치되지 않은 개발 직무(교육·휴식 중이면 그동안 일하지 않음) */
   const idleDev = () => { const lab = new Set(game!.state.staff.filter((x) => x.lab).map((x) => x.id)); return Q.staffInfo(game!.state).filter((x) => x.projectId === null && x.role !== 'sales' && !lab.has(x.id)); }; // 전담 연구원은 개발에 넣지 않는다
