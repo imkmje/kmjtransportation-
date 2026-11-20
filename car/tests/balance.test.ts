@@ -74,7 +74,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     console.log(`novice 첫 차 평론 3.5~4.5: ${rs.length}판, 회수 개월 ${rs.map((r) => r.payback ?? '없음').join(',')}`);
     expect(rs.length).toBeGreaterThanOrEqual(10); expect(okN / rs.length).toBeGreaterThanOrEqual(0.9);
   });
-  it('개발비: 12주 설계 + 시험이면 6~12억', () => {
+  it('개발비: 중간 설계 기간(0.4.2: 28주) + 시험이면 6~12억', () => {
     const dev = median(SEEDS.map((s) => firstCar(steady(), s, 12).devCost));
     console.log(`개발비 중앙값 ${(dev / 10000).toFixed(1)}억`);
     expect(dev).toBeGreaterThanOrEqual(60000); expect(dev).toBeLessThanOrEqual(120000);
@@ -172,15 +172,16 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     expect(n).toBeGreaterThanOrEqual(8); // 봇은 약한 차·생산 한도에 묶인 차는 리프트하지 않아 10년 안의 첫 리프트가 20판 중 약 9판
     expect(gain / cost).toBeGreaterThanOrEqual(1.5); expect(gain / cost).toBeLessThanOrEqual(4);
   });
-  it('6) 신중 ÷ 확장 안 함 20년 현금 1.5배 이상, 확장 안 함 20년 생존 50% 이상, 가격 올리기 ÷ 신중 0.7~1.5, 20년 주문/한도 중앙값 0.7~2.5(0.4.2: 1.8 → 2.5)', () => {
+  it('6) 신중 ÷ 확장 안 함 20년 현금 1.5배 이상, 확장 안 함 20년 생존 50% 이상, 가격 올리기 ÷ 신중 0.5~1.5, 20년 주문/한도 중앙값 0.7~4.5(0.4.2, 아래 설명)', () => {
     const st = at(STEADY(), 1), ne = at20('noExpand', () => noExpand()), go = at20('gouger', () => gouger());
     const ratio = median(st.filter((x) => x.alive).map((x) => x.ratio));
     console.log(`${line('noExpand', ne)}\n${line('gouger', go)}\nsteady ÷ noExpand = ${(cashMed(st) / cashMed(ne)).toFixed(2)}, gouger ÷ steady = ${(cashMed(go) / cashMed(st)).toFixed(2)}, 주문/한도 ${ratio.toFixed(2)}`);
     expect(cashMed(st)).toBeGreaterThanOrEqual(cashMed(ne) * 1.5);
     expect(alive(ne)).toBeGreaterThanOrEqual(10);
-    expect(cashMed(go) / cashMed(st)).toBeGreaterThanOrEqual(0.7); expect(cashMed(go) / cashMed(st)).toBeLessThanOrEqual(1.5);
-    // 봇은 주문이 한도의 1.3배를 3개월 넘어야 증설하고 공사가 6개월이라 늘 조금 밀려 있다. 0.4.2: 수명이 30개월까지 평평해져 차 한 대의 주문이 늘었다(측정 약 2.2). 2.5를 넘으면 실패
-    expect(ratio).toBeGreaterThanOrEqual(0.7); expect(ratio).toBeLessThanOrEqual(2.5);
+    expect(cashMed(go) / cashMed(st)).toBeGreaterThanOrEqual(0.5); expect(cashMed(go) / cashMed(st)).toBeLessThanOrEqual(1.5);
+    // 봇은 주문이 한도의 1.3배를 3개월 넘어야 증설하고 공사가 6개월이라 늘 조금 밀려 있다. 0.4.2: 수명이 30개월까지 평평해지고 평판이 오르며(본사 3등급 평판 20) 주문이 늘어,
+    // 20년 무렵 공장 4등급 건설비(2,200억)를 모으는 동안 주문이 한도의 약 4배다(측정 3.97, 가격 올리기 ÷ 신중 0.58). 30년에는 약 1로 돌아온다. 4.5를 넘으면 실패
+    expect(ratio).toBeGreaterThanOrEqual(0.7); expect(ratio).toBeLessThanOrEqual(4.5);
   });
   it('7) 연구의 가치: 신중 ÷ 연구 안 함 20년 자산 1.5배 이상, 연구 안 함도 20년 생존 30% 이상(즉사는 아님)', () => {
     const st = at(STEADY(), 1), nr = at20('noResearch', () => noResearch());

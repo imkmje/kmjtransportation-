@@ -299,7 +299,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     }
     expect(got).toEqual([[4, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4]]);
     expect([50000, 400000, 3000000, 15000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억
-    expect([25, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
+    expect([20, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
   });
   it('옵션 슬롯: 본사 1등급은 2개, 3등급이면 3개까지', () => {
@@ -340,7 +340,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     expect(i.next).toMatchObject({ level: 2, name: '소형 사옥', cost: 50000, staffCap: 8 });
     expect(i.canUpgrade).toBe(true); expect(i.staffCount).toBe(4);
     g.state.cash = 1e9; ok(g.command({ type: 'upgradeHQ' }));
-    expect(hqInfo(g.state)).toMatchObject({ canUpgrade: false, reason: '평판 25 이상이어야 합니다(지금 10).' }); // 0.4.2: 30 → 25
+    expect(hqInfo(g.state)).toMatchObject({ canUpgrade: false, reason: '평판 20 이상이어야 합니다(지금 10).' }); // 0.4.2: 30 → 20
   });
 });
 

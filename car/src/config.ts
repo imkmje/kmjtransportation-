@@ -79,10 +79,10 @@ export const config = {
   },
   hq: { // 9.2 본사. upkeep은 1등급 값(화면 호환용)
     upkeep: 500,
-    levels: [ // 이름, 승급비, 평판 조건, 정원, 개발팀, 옵션 슬롯, 월 유지비(유지비는 설계서에 없어 정한 후보값). 0.4.2: 3등급 평판 조건 30 → 25(신중 봇의 10년 평판 중앙값이 약 28)
+    levels: [ // 이름, 승급비, 평판 조건, 정원, 개발팀, 옵션 슬롯, 월 유지비(유지비는 설계서에 없어 정한 후보값). 0.4.2: 3등급 평판 조건 30 → 20(신중 봇의 10년 평판 중앙값이 쉬움 24·보통 22)
       { name: '창고 공장', cost: 0, rep: 0, staff: 4, teams: 1, options: 2, upkeep: 500 },
       { name: '소형 사옥', cost: 50000, rep: 0, staff: 8, teams: 1, options: 2, upkeep: 1500 },
-      { name: '본사 빌딩', cost: 400000, rep: 25, staff: 12, teams: 2, options: 3, upkeep: 5000 },
+      { name: '본사 빌딩', cost: 400000, rep: 20, staff: 12, teams: 2, options: 3, upkeep: 5000 },
       { name: '연구 단지', cost: 3000000, rep: 55, staff: 16, teams: 2, options: 4, upkeep: 15000 },
       { name: '글로벌 본사', cost: 15000000, rep: 80, staff: 20, teams: 3, options: 4, upkeep: 40000 },
     ],
