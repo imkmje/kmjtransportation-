@@ -175,7 +175,7 @@ const trendText = (e: Extract<EraEffect, { type: 'trend' }>) => [
   e.add ? `${e.add > 0 ? '유행해 인기가' : '인기가'} ${Math.round(Math.abs(e.add) * 100)}% ${e.add > 0 ? '오릅니다' : '떨어집니다'}.` : '',
   e.perYear ? `인기가 해마다 ${Math.round(Math.abs(e.perYear) * 100)}%씩 ${e.perYear < 0 ? '줄어듭니다' : '늘어납니다'}.` : '',
 ].filter(Boolean).join(' ');
-/** 고정 사건 효과 한 문장(쉬운 말). since: 사건이 시작한 뒤 지난 달 수(규제의 봐주는 기간 계산) */
+/** 고정 사건 효과 한 문장. since: 사건이 시작한 뒤 지난 달 수(규제의 유예 기간 계산) */
 function eraEffectText(e: EraEffect, since: number): string {
   switch (e.type) {
     case 'statWeight': { const n = STAT_WORD[e.stat]; return `고객이 차를 고를 때 ${n}${josa(n, '을/를')} ${e.mult >= 1.5 ? '훨씬 더' : e.mult > 1 ? '더' : '덜'} 따집니다.`; }
@@ -187,12 +187,12 @@ function eraEffectText(e: EraEffect, since: number): string {
     case 'loanRate': return `대출 이자가 ${e.mult === 2 ? '두 배' : `${e.mult}배`}${e.mult > 1 ? '로 오릅니다' : '로 내립니다'}.`;
     case 'production': return `모든 공장의 생산이 ${e.mult === 0.5 ? '절반으로' : `${pct(e.mult)}%`} 줄어듭니다.`;
     case 'regulation': {
-      if (e.region !== REGION) return '외국에만 해당하는 규제라, 국내에서 차를 파는 우리 회사에는 영향이 없습니다.';
+      if (e.region !== REGION) return '해외 시장에만 적용되는 규제라, 내수만 하는 지금은 영향이 없습니다.';
       const n = optNames(e.options ?? []), left = e.graceMonths - since;
-      return left > 0 ? `${left}개월 뒤부터 ${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다(그때까지는 봐주는 기간입니다).` : `${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다.`;
+      return left > 0 ? `${left}개월 뒤부터 ${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다(그때까지는 유예 기간입니다).` : `${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다.`;
     }
-    case 'charging': return '충전소가 해마다 늘어 전기차가 점점 더 잘 팔립니다.';
-    case 'exportEase': return '외국 시장 이야기라, 국내에서 차를 파는 우리 회사에는 영향이 없습니다.';
+    case 'charging': return '충전 인프라가 해마다 늘어 전기차 수요가 점점 커집니다.';
+    case 'exportEase': return '해외 진출 조건이 완화되지만, 내수만 하는 지금은 영향이 없습니다.';
   }
 }
 /** 무작위 사건이 남긴 기간 효과 한 문장 */
@@ -225,7 +225,7 @@ export function eventImpactOn(s: CarState, generationId: number): string[] {
       case 'ptDemand': return e.powertrain === g.powertrain ? `이 차는 ${pt}${josa(pt, '이라/라')} ${sells(e.mult)}.` : null;
       case 'segDemand': return e.segment === g.segment ? `이 차를 사는 ${seg}${josa(seg, '이/가')} 차를 ${pct(e.mult)}% ${e.mult < 1 ? '덜' : '더'} 삽니다.` : null;
       case 'trend': { const n = e.id === g.body ? body : e.id === g.powertrain ? pt : null; return n && trendText(e) ? `이 차는 ${n}${josa(n, '이라/라')} ${trendText(e)}` : null; }
-      case 'charging': return g.powertrain === E.charging.powertrain ? `충전소가 늘수록 이 차가 잘 팔립니다(지금 충전소 보급 ${Math.round(chargingInfra(s.seed, m) * 100)}%).` : null;
+      case 'charging': return g.powertrain === E.charging.powertrain ? `충전 인프라가 늘수록 이 차가 잘 팔립니다(지금 충전 인프라 보급률 ${Math.round(chargingInfra(s.seed, m) * 100)}%).` : null;
       case 'statWeight': {
         const n = STAT_WORD[e.stat], v = gr[e.stat];
         if (e.mult <= 1 || (v > 4 && v < 6)) return null;

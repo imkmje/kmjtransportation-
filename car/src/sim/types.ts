@@ -96,6 +96,7 @@ export interface Project extends ProjectSpec {
   defects: number; // 실제 결함(화면에는 defectEst만)
   defectEst: number; // 화면용 "약 N개"(±15% 오차, 매주 다시 뽑음)
   spent: number; // 지금까지 쓴 개발비
+  waiting?: boolean; // 출시 대기(0.4.1): 시험 중 실제 결함이 0이 되고 최소 시험 주를 채우면 true. 그 뒤로는 주간 개발비 0, 직원은 풀려난다(없으면 false)
 }
 
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */

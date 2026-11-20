@@ -72,6 +72,7 @@ export class Game {
     const s = this.state, ev: GameEvent[] = [];
     if (s.status !== 'playing') return ev;
     for (const p of [...s.projects].sort((a, b) => a.id - b.id)) {
+      if (p.waiting) continue; // 출시 대기: 개발비·진행 없음
       const phase = p.phase, log = stepProject(s, p, this.rng);
       const made = log.staff.reduce((a, x) => a + STATS.reduce((b, k) => b + x.stats[k], 0), 0);
       ev.push({
@@ -79,6 +80,7 @@ export class Game {
         text: phase === 'design' ? `「${p.name}」 설계 ${p.weeksDone}주차: 점수 +${made.toFixed(1)}, 결함 +${log.defectsAdded.toFixed(1)}` : `「${p.name}」 시험 ${p.testWeeks}주차: 결함 −${log.defectsRemoved.toFixed(1)}`,
       });
       if (log.designDone) ev.push({ kind: 'designDone', id: p.id, text: `「${p.name}」 설계가 끝났습니다. 시험을 시작합니다.` });
+      if (log.waitingNow) ev.push({ kind: 'advice', id: p.id, text: `「${p.name}」의 결함을 모두 잡았습니다. 이제 출시할 수 있습니다. 출시 대기 중에는 개발비가 들지 않습니다.` });
     }
     researchWeek(s, ev); // 10장: 쉬는 엔지니어·전담 연구원의 연구 점수(직원 컨디션 갱신 전, 이번 주 배치 기준)
     this.staffWeek(ev);
@@ -100,7 +102,7 @@ export class Game {
     const s = this.state, c = config.staff.condition, next = s.week + 1;
     for (const x of [...s.staff].sort((a, b) => a.id - b.id)) {
       const p = x.projectId === null ? undefined : s.projects.find((q) => q.id === x.projectId);
-      const d = p && !isAway(x, s.week) ? -c.perWeek[p.budget] : c.recover;
+      const d = p && !p.waiting && !isAway(x, s.week) ? -c.perWeek[p.budget] : c.recover;
       x.condition = Math.min(1, Math.max(0, x.condition + d));
       if (x.trainings.length && x.trainings[x.trainings.length - 1] + config.staff.train.weeks === next) ev.push({ kind: 'company', id: x.id, text: `${x.name} 교육을 마쳤습니다(능력 ${x.ability}).` });
       if (x.restUntil !== null && x.restUntil <= next) { x.restUntil = null; ev.push({ kind: 'company', id: x.id, text: `${x.name} 휴식을 마치고 돌아왔습니다.` }); }
@@ -145,7 +147,7 @@ export class Game {
           recall += cost; g.profit -= cost; g.recalls++;
           g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
           this.addRep(config.recall.rep);
-          ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜! 수리비 ${Math.round(cost).toLocaleString()}만원이 들고 평판이 ${-config.recall.rep} 떨어졌습니다.` });
+          ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜 실시. 수리비 ${Math.round(cost).toLocaleString()}만원이 들고 평판이 ${-config.recall.rep} 떨어졌습니다.` });
         }
       }
       const dc = config.discontinue, last = g.sales.slice(-dc.adviceMonths); // 8.6: 월 10대 미만이 6개월째가 된 달에 한 번 조언
@@ -166,11 +168,14 @@ export class Game {
       s.factory = { level: b.level, build: null };
       ev.push({ kind: 'company', text: `공장 ${b.level}등급 증설을 마쳤습니다. 한 달 생산 ${capacityOf(s).toLocaleString()}대, 생산 라인 ${linesOf(s)}개.` });
     }
-    // 9.4 파산: 현금 음수로 6개월 연속이면 게임 오버
+    // 9.4 파산: 현금 음수로 bankruptcy.months개월 연속이면 게임 오버(0.4.1: 6 → 12개월)
     if (s.cash < 0) {
       s.negMonths++;
       if (s.negMonths >= config.bankruptcy.months) { s.status = 'gameOver'; ev.push({ kind: 'gameOver', text: `현금 부족이 ${config.bankruptcy.months}개월 이어져 회사가 파산했습니다.` }); }
-      else ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${config.bankruptcy.months}개월이 되면 파산합니다.` });
+      else {
+        const room = Math.max(0, loanLimit(s) - s.loan.balance); // 남은 대출 한도를 함께 알린다(0.4.1)
+        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${config.bankruptcy.months}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
+      }
     } else s.negMonths = 0;
   }
 
@@ -498,7 +503,7 @@ export class Game {
       if (first.length) {
         for (let i = 0; i < reviews.length; i++) reviews[i] = Math.round(Math.min(c.max, reviews[i] + config.research.worldFirst) * 10) / 10;
         s.research.early = s.research.early.filter((id) => !first.includes(id));
-        events.push({ kind: 'news', category: 'research', text: `「${p.name}」 세계 최초로 ${first.map((id) => `「${techById(id).name}」`).join(', ')} 기술을 담았다! 평론가들이 높이 평가했습니다.` });
+        events.push({ kind: 'news', category: 'research', text: `「${p.name}」 세계 최초로 ${first.map((id) => `「${techById(id).name}」`).join(', ')} 기술을 담았다. 평론가들이 높이 평가했습니다.` });
       }
       const combo = `${p.body}:${p.segment}`;
       if (!s.knownCombos.includes(combo)) s.knownCombos.push(combo); // 5.5 조합 노트에 공개
@@ -507,7 +512,7 @@ export class Game {
         const carried = carriedEquity(s, np.id, p.body), prevAvg = launchAvgGrade(prev), nowAvg = avgGrade(stats, year), no = prev.number + 1;
         const delta = nowAvg < prevAvg ? fc.worseReview : nowAvg > prevAvg ? fc.betterReview : 0;
         for (let i = 0; i < reviews.length; i++) reviews[i] = Math.round(Math.min(c.max, Math.max(c.min, reviews[i] + delta)) * 10) / 10;
-        headline = `「${np.name}」 ${no}세대${carried.revival ? '로 부활!' : ','} ${delta < 0 ? '전작만 못하다' : delta > 0 ? '진화했다' : '전작과 비슷하다'}`;
+        headline = `「${np.name}」 ${no}세대${carried.revival ? '로 부활,' : ','} ${delta < 0 ? '전작만 못하다' : delta > 0 ? '진화했다' : '전작과 비슷하다'}`;
         equity = carried.equity; rebuy = rebuyPerMonth(prev);
         if (prev.status === 'onSale') { prev.status = 'ending'; prev.endMonth = month; }
         events.push({ kind: 'news', id: prev.id, text: headline, category: 'other' });

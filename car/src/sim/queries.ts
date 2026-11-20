@@ -2,7 +2,7 @@
 import { config } from '../config';
 import { COMPAT, bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
-import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut } from './dev';
+import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, sellingGens } from './game';
 import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
 import { carriedEquity, faceliftEligibility, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
@@ -33,6 +33,17 @@ export function expectedReviews(s: CarState, projectId: number, price: number): 
   if (!p || !pv) return null;
   const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0);
   return { scores, avg: mean(scores) };
+}
+
+/** 개발 진행 상태와 주간 개발비(0.4.1). waiting: 출시 대기(결함을 다 잡아 개발비가 0). weeklyCost: 지금 주마다 드는 개발비(만원) */
+export function projectStatus(s: CarState, projectId: number): { phase: Project['phase']; waiting: boolean; weeklyCost: number; costNote: string } | null {
+  const p = projectById(s, projectId);
+  if (!p) return null;
+  const waiting = !!p.waiting, weeklyCost = waiting ? 0 : weeklyDevCost(s, p), n = Math.round(weeklyCost).toLocaleString();
+  const costNote = waiting ? '출시 대기 중이라 개발비가 들지 않습니다.'
+    : p.kind === 'facelift' ? `페이스리프트 개발 중에는 주마다 약 ${n}만원이 듭니다.`
+    : `${p.phase === 'design' ? '설계' : '시험'} 중에는 주마다 약 ${n}만원이 듭니다(직원 몫 + 시제차).`;
+  return { phase: p.phase, waiting, weeklyCost, costNote };
 }
 
 /** 남은 결함(화면에 보이는 "약 N개") 판단: 15개 이상 많음 / 6~14 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */

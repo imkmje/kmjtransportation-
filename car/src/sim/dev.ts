@@ -78,12 +78,13 @@ export const testCut = (team: Staff[], week?: number): number =>
     .reduce((a, s) => a + s.ability / (s.role === 'tester' ? config.dev.testerDiv : s.role === 'engineer' ? config.dev.engineerDiv : Infinity), 0);
 
 /** 한 주 진행 결과: 설계가 끝났는지 + 직원별 점수와 결함 증감(사무실 화면용 주간 기록) */
-export interface WeekLog { designDone: boolean; staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number }
+export interface WeekLog { designDone: boolean; staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number; waitingNow: boolean } // waitingNow: 이번 주에 출시 대기가 됨
 
-/** 한 주 진행(난수 순서: 설계 주는 직원마다 1번, 그다음 결함 추정 1번) */
+/** 한 주 진행(난수 순서: 설계 주는 직원마다 1번, 그다음 결함 추정 1번. 결함이 0이면 추정 난수를 쓰지 않는다). 출시 대기 프로젝트는 아무것도 하지 않는다(비용 0) */
 export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
-  const d = config.dev, team = staffOn(state, p);
-  const log: WeekLog = { designDone: false, staff: team.map((s) => ({ id: s.id, stats: zeroStats() })), defectsAdded: 0, defectsRemoved: 0 };
+  const d = config.dev, team = p.waiting ? [] : staffOn(state, p);
+  const log: WeekLog = { designDone: false, staff: team.map((s) => ({ id: s.id, stats: zeroStats() })), defectsAdded: 0, defectsRemoved: 0, waitingNow: false };
+  if (p.waiting) return log;
   if (p.phase === 'design') {
     const rand = () => rng.range(d.randMin, d.randMax);
     const per = p.kind === 'facelift' ? faceliftWeekByStaff(team, p, rand, state.week) : designWeekByStaff(team, p, rand, state.week);
@@ -103,6 +104,10 @@ export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
   }
   const cost = weeklyDevCost(state, p);
   p.spent += cost; state.pendingDev += cost;
-  p.defectEst = Math.round(p.defects * (1 + rng.range(-d.estError, d.estError)));
+  p.defectEst = p.defects > 0 ? Math.round(p.defects * (1 + rng.range(-d.estError, d.estError))) : 0;
+  if (p.phase === 'test' && p.defects <= 0 && p.testWeeks >= d.minTestWeeks) { // 결함을 다 잡으면 출시 대기: 더 시험해도 얻는 것이 없으므로 직원을 풀고 비용을 멈춘다
+    p.waiting = true; log.waitingNow = true;
+    for (const x of team) x.projectId = null;
+  }
   return log;
 }

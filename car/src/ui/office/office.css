@@ -87,3 +87,9 @@
 @media (prefers-reduced-motion:reduce){
   .office *{animation:none!important;transition:none!important}
 }
+
+/* 원위치 버튼: 사용자가 옮긴 뒤에만 오른쪽 아래에 */
+.office .ofc-home{position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;border:1px solid #c9d0d9;background:#ffffffeb;color:#2b313a;
+  font:700 13px/1 "Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif;box-shadow:0 2px 8px #1c26331f;cursor:pointer;touch-action:manipulation}
+.office .ofc-home[hidden]{display:none}
+.office .ofc-home:focus-visible{outline:3px solid #ff5a1f;outline-offset:2px}

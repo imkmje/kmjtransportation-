@@ -143,7 +143,7 @@ export function researchWeek(s: CarState, ev: GameEvent[]): void {
     const t = techById(a.techId), early = yearOf(s.week) < t.year;
     s.research.done.push(t.id);
     if (early && !s.research.early.includes(t.id)) s.research.early.push(t.id);
-    ev.push({ kind: 'unlock', category: 'research', text: `「${t.name}」 연구를 마쳤습니다. ${unlockText(t)}${early ? ' 세계 최초입니다! 이 기술을 처음 쓰는 차는 평론 점수를 1점씩 더 받습니다.' : ''}` });
+    ev.push({ kind: 'unlock', category: 'research', text: `「${t.name}」 연구를 마쳤습니다. ${unlockText(t)}${early ? ' 세계 최초입니다. 이 기술을 처음 쓰는 차는 평론 점수를 1점씩 더 받습니다.' : ''}` });
   }
 }
 
