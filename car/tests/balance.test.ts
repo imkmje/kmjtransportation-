@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { idle, runBot, steady, type Bot } from '../src/sim/bots';
+import { idle, newNameOnly, noFacelift, runBot, steady, type Bot } from '../src/sim/bots';
 import { Game, allGens } from '../src/sim/game';
 import { config } from '../src/config';
 
@@ -54,5 +54,35 @@ describe('균형 봇(시드 20개, 설계자 보정 목표 2026-11-20)', () => {
     const rs = SEEDS.map((s) => firstCar(flop, s, 36));
     console.log(`실패작 평론: ${rs.map((r) => r.review.toFixed(1)).join(',')}, 최저 현금(억): ${rs.map((r) => Math.round(r.minCash / 10000)).join(',')}`);
     for (const r of rs) { expect(r.review).toBeLessThanOrEqual(3.5); expect(r.minCash < 0 || r.loan > 0).toBe(true); }
+  });
+
+  it('6) 20년 뒤 현금 중앙값: 신중(리프트·체인지)이 리프트 안 함·새 이름만보다 15% 이상 높다(2단계 기능이 의미 있다는 증거)', () => {
+    const cash = (bot: Bot) => SEEDS.map((s) => runBot(bot, s, 20));
+    const st = cash(steady()), nf = cash(noFacelift()), nn = cash(newNameOnly());
+    const m = (rs: typeof st) => median(rs.map((r) => r.cash)), alive = (rs: typeof st) => rs.filter((r) => r.survived).length;
+    console.log(`20년: steady 생존 ${alive(st)}/20 현금 ${Math.round(m(st) / 10000)}억 / noFacelift ${alive(nf)}/20 ${Math.round(m(nf) / 10000)}억 / newNameOnly ${alive(nn)}/20 ${Math.round(m(nn) / 10000)}억`);
+    expect(m(st)).toBeGreaterThan(0);
+    expect(m(st)).toBeGreaterThanOrEqual(m(nf) + Math.abs(m(nf)) * 0.15);
+    expect(m(st)).toBeGreaterThanOrEqual(m(nn) + Math.abs(m(nn)) * 0.15);
+  });
+  it('7) 페이스리프트 1회의 비용 대비 추가 이익(36개월, 같은 순간에서 갈라 리프트 안 한 쪽과 비교)이 평균 양수', () => {
+    const gains = SEEDS.map((seed) => {
+      const g = Game.create({ seed }), st = steady();
+      for (let w = 0; w < 48 * 10 && g.state.status === 'playing'; w++) {
+        const snap = g.toJSON();
+        st.step(g);
+        if (g.state.projects.some((p) => p.kind === 'facelift')) {
+          const b = Game.fromJSON(snap), nf = noFacelift();
+          for (let i = 0; i < 36 * config.time.weeksPerMonth; i++) { if (i) st.step(g); g.tick(); nf.step(b); b.tick(); }
+          return g.state.cash - b.state.cash;
+        }
+        g.tick();
+      }
+      return null;
+    }).filter((x): x is number => x !== null);
+    const avg = gains.reduce((a, b) => a + b, 0) / gains.length;
+    console.log(`리프트 ${gains.length}회, 36개월 추가 이익(억): ${gains.map((x) => Math.round(x / 10000)).join(',')} → 평균 ${(avg / 10000).toFixed(1)}억`);
+    expect(gains.length).toBeGreaterThanOrEqual(15);
+    expect(avg).toBeGreaterThan(0);
   });
 });

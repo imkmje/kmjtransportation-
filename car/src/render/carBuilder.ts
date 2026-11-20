@@ -123,7 +123,14 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   // 앞뒤 끝면에 붙는 데칼: 평면 도형(x→가로, y→높이)을 곡면에 투영
   const decal = (geo: THREE.BufferGeometry, mat: THREE.Material, s: 1 | -1, lift: number = F.lift) => {
     const pa = geo.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < pa.count; i++) { const gz = pa.getX(i), gy = pa.getY(i); pa.setXYZ(i, surfX(gy, gz, s) + s * lift, gy, -s * gz); }
+    for (let i = 0; i < pa.count; i++) { const gz = pa.getX(i), gy = pa.getY(i); pa.setXYZ(i, surfX(gy, gz, s), gy, -s * gz); }
+    // 곡면의 법선 방향으로 띄운다(아래로 말려 들어가는 범퍼 끝에서도 차체에 묻히지 않게)
+    geo.computeVertexNormals();
+    const na = geo.getAttribute('normal') as THREE.BufferAttribute;
+    for (let i = 0; i < pa.count; i++) {
+      const sn = na.getX(i) * s < 0 ? -1 : 1; // 감김과 상관없이 바깥(앞이면 +x) 쪽으로
+      pa.setXYZ(i, pa.getX(i) + sn * na.getX(i) * lift, pa.getY(i) + sn * na.getY(i) * lift, pa.getZ(i) + sn * na.getZ(i) * lift);
+    }
     geo.computeVertexNormals();
     return add(geo, mat);
   };
@@ -229,7 +236,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     }
   }
   if (fc.bar) decal(rect(-fw * F.barZ, fw * F.barZ, lampTop - F.barH, lampTop, 12, 1), M.lamp, 1, L2);
-  if (fc.bumper === 'black' && !E.classic) for (const s of [1, -1] as const) decal(rect(-fw * .8, fw * .8, p.clr + .04, p.clr + .22, 12, 3), M.trim, s);
+  if (fc.bumper === 'black' && !E.classic) for (const s of [1, -1] as const) decal(rect(-fw * .8, fw * .8, p.clr + .06, p.clr + .22, 24, 6), M.trim, s, F.lift * 1.5);
   if (!ev) {
     const gz = Math.min(fw * (E.classic ? F.classicGrilleZ : F.grilleZ) * fc.grilleW, lampIn - .04), fr = F.grilleFrame;
     const g1 = lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * fc.grilleH, plateTop + .03);

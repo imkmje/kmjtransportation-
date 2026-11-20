@@ -146,7 +146,9 @@ export class Stage {
     const old = { pr: R.getPixelRatio(), size: R.getSize(new THREE.Vector2()), yaw: table.rotation.y, vis: blob.visible, sc: blob.scale.clone() };
     carG.visible = false; table.add(car); table.rotation.y = yaw;
     blob.visible = true; blob.scale.set(c.L * 1.25, c.W * 1.7, 1);
-    const cam = new THREE.PerspectiveCamera(28, w / h, .1, 100), d = Math.max(6.6, 9.6 * h / w);
+    // 보이는 폭(길이·폭을 각도로 섞음)에 맞춰 거리를 정한다: 정면 사진도 차가 작아지지 않게
+    const ext = Math.max(2.6, Math.abs(Math.cos(yaw)) * c.L + Math.abs(Math.sin(yaw)) * c.W);
+    const cam = new THREE.PerspectiveCamera(28, w / h, .1, 100), d = Math.max(ext * 1.4, ext * 2 * h / w) + Math.abs(Math.sin(yaw)) * (c.L - c.W) / 2; // 정면·뒷면이면 가까운 끝까지의 거리를 더한다
     cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .62, 0);
     let url = '';
     try {

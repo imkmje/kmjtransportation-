@@ -342,10 +342,12 @@ export function startApp(): void {
       ${ex ? critics.map((c, i) => `<div class="stat"><span>${c.name}</span><div class="track"><u style="width:${ex.scores[i] * 10}%"></u></div><b>${score(ex.scores[i])}</b></div>`).join('') : ''}
       <div class="kpis" style="margin-top:10px">${kpi('예상 평점', ex ? score(ex.avg) : '—')}${kpi('예상 월 판매', fc ? `${num(fc.min)}~${num(fc.max)}<span>대</span>` : '—')}</div>
       ${fc ? `<p class="hint sales-fc" style="margin-top:8px">한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b> 팔릴 것으로 보입니다(공장 한도 ${num(config.factory.capacity)}대).</p>` : ''}
-      <p class="note">적은 쪽은 출시 직후(아직 덜 알려짐), 많은 쪽은 몇 달 뒤 알려지고 나서입니다. 실제 평론은 ±0.7 정도 달라집니다.</p>
-      <button class="btn" data-act="tab" data-v="dev" style="width:100%;margin-top:8px">시험 더 하기(돌아가기)</button></div>`;
-    const bar = `<div class="actbar">${free ? '' : `<div class="badbox">생산 라인이 모두 차 있습니다(공장 라인 ${config.factory.lines}개). 차고에서 판매 중인 차를 단종하면 그달 말부터 라인이 빕니다.</div><button class="btn" data-act="tab" data-v="garage">차고로 가서 단종하기</button>`}<button class="go" data-act="doLaunch" ${free ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div>`;
-    return { ov: ovh, panel: card0 + card1 + card2 + card3 + bar, look };
+      <p class="note">적은 쪽은 출시 직후(아직 덜 알려짐), 많은 쪽은 몇 달 뒤 알려지고 나서입니다. 실제 평론은 ±0.7 정도 달라집니다.</p></div>`;
+    // 내용 맨 끝: 한 줄 요약 + 버튼 줄(기획 화면과 같은 방식, 화면에 붙어 있지 않음)
+    const card4 = `<div class="card launch-go"><p class="lbl">출시 요약</p><p class="hint launch-sum">이 조건으로 출시합니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 광고 ${MARKETING[L.marketing]} · 예상 평점 ${ex ? score(ex.avg) : '—'} · 월 ${fc ? `${num(fc.min)}~${num(fc.max)}대` : '—'} · 결함 약 ${num(p.defectEst)}개</p>
+      ${free ? '' : `<div class="badbox" style="margin-top:10px">생산 라인이 모두 차 있습니다(공장 라인 ${config.factory.lines}개). 차고에서 판매 중인 차를 단종하면 그달 말부터 라인이 빕니다.</div><button class="btn" data-act="tab" data-v="garage" style="width:100%;margin-top:8px">차고로 가서 단종하기</button>`}
+      <div class="row" style="margin-top:12px"><button class="btn" data-act="tab" data-v="dev">← 개발 화면으로</button><button class="go" data-act="doLaunch" ${free ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div></div>`;
+    return { ov: ovh, panel: card0 + card1 + card2 + card3 + card4, look };
   }
 
   // ----- 리뷰 -----

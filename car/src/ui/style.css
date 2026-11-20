@@ -97,7 +97,7 @@ h2,h3,p{margin:0}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row.end{justify-content:flex-end}
 .row > .btn{flex:1 1 auto}
-.row > .go{flex:1 1 auto;width:auto;margin-top:0;min-height:46px} /* 기획 마지막 단계: [← 이전] 옆 개발 시작 */
+.row > .go{flex:1 1 auto;width:auto;margin-top:0;min-height:46px} /* 기획 마지막 단계·출시 화면 끝: 왼쪽 버튼 옆 주황 버튼 */
 .btn{border:1.5px solid var(--line);background:var(--card);border-radius:14px;min-height:46px;padding:0 16px;font-weight:700;font-size:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-align:center}
 .btn.ink{background:var(--ink);border-color:var(--ink);color:#fff}
 .btn.danger{color:var(--neg);border-color:#efc4c4}
@@ -111,8 +111,6 @@ h2,h3,p{margin:0}
 .okbox{background:#e9f7ef;border:1px solid #b9e2c9;color:#0d5c37;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.5;font-weight:600}
 .badbox{background:#fdecec;border:1px solid #f1c2c2;color:#8a1f1f;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.5;font-weight:600}
 /* 패널 아래에 붙는 주 버튼 줄(스크롤해도 보인다) */
-.actbar{position:sticky;bottom:0;z-index:2;margin-top:-12px;padding-top:18px;background:linear-gradient(#e7eaee00,var(--bg) 18px);display:flex;flex-direction:column;gap:8px}
-.actbar .go{margin-top:0}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 /* 탭 안 탭 */
