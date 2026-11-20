@@ -1,0 +1,13 @@
+{
+  "domestic": {
+    "name": "국내",
+    "years": [1970, 1990, 2020],
+    "annual": [20000, 1000000, 1800000],
+    "bodyShare": { "sedanS": [0.6, 0.3, 0.15], "hatch": [0.15, 0.2, 0.15], "sedanM": [0.25, 0.4, 0.3] },
+    "mix": {
+      "sedanS": { "youth": 0.25, "family": 0.2, "worker": 0.3, "rich": 0.02, "fleet": 0.18, "enthusiast": 0.05 },
+      "hatch": { "youth": 0.4, "family": 0.2, "worker": 0.25, "rich": 0.02, "fleet": 0.05, "enthusiast": 0.08 },
+      "sedanM": { "youth": 0.08, "family": 0.3, "worker": 0.22, "rich": 0.15, "fleet": 0.2, "enthusiast": 0.05 }
+    }
+  }
+}

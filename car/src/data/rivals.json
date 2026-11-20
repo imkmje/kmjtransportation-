@@ -1,0 +1,5 @@
+[
+  { "id": "hyundae", "name": "현다이", "trait": "가성비", "cells": { "sedanS": 0.1, "hatch": 0.1, "sedanM": 0 } },
+  { "id": "porty", "name": "포티", "trait": "픽업·대형", "cells": { "sedanS": -0.15, "hatch": -0.2, "sedanM": 0.05 } },
+  { "id": "toyoda", "name": "도요다", "trait": "전 차급·품질", "cells": { "sedanS": 0.1, "hatch": 0.05, "sedanM": 0.15 } }
+]

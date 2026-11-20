@@ -1,0 +1,5 @@
+[
+  { "id": "radio", "name": "라디오", "year": 1970, "U": 3, "D": 3, "Q": 0, "cost": 15 },
+  { "id": "aircon", "name": "에어컨", "year": 1975, "U": 8, "D": 0, "Q": 2, "cost": 60 },
+  { "id": "powerSteering", "name": "파워 스티어링", "year": 1980, "U": 5, "D": 0, "Q": 3, "cost": 40 }
+]
