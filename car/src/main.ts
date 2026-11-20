@@ -1,4 +1,4 @@
-import { CAR_VERSION } from './version';
+import './ui/style.css';
+import { startApp } from './ui/app';
 
-// 자리표시: 화면은 C6에서 만든다
-document.getElementById('app')!.textContent = `카 컴퍼니 v${CAR_VERSION}`;
+startApp();
