@@ -49,7 +49,7 @@ for (const t of TECHS) for (const e of t.effects) if (e.type === 'body' || e.typ
 const EV = config.events.charging.powertrain;
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.querySelector<T>(s)!;
-/** 용어 설명 단추(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
+/** 용어 설명 버튼(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
 const ib = (key: string, label = key.slice(key.indexOf(':') + 1)) => `<span class="ib" role="button" tabindex="0" data-info="${esc(key)}" aria-label="${esc(label)} 설명"></span>`;
 
 
@@ -81,6 +81,7 @@ export function startApp(): void {
   const thumbs = new Map<string, string>(); // 모양 후보 썸네일 캐시
   const garagePrice = new Map<number, number>(); // 차고 가격 슬라이더(적용 전 값)
   const devLog = new Map<number, string[]>(), devPrev = new Map<number, number>();
+  const defRate = new Map<number, number[]>(); // 프로젝트별 최근 4주의 결함 순감소(남은 기간 어림용)
   let stage: Stage | null = null, lookKey = '';
   let debugOn = (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
   const pauseOn = ((): Record<PauseKey, boolean> => { // 기본 모두 켬. 저장값이 깨졌으면 켬
@@ -88,7 +89,7 @@ export function startApp(): void {
     return Object.fromEntries(PAUSE_ITEMS.map(([k]) => [k, o[k] !== false])) as Record<PauseKey, boolean>;
   })();
   const candSeen = new Set<number>(); // 알림을 띄운 채용 후보
-  let pxHold: HTMLInputElement | null = null; // 손가락·−/+ 단추로 조절 중인 가격 슬라이더(그동안 패널을 다시 그리지 않고 숫자만 바꾼다)
+  let pxHold: HTMLInputElement | null = null; // 손가락·−/+ 버튼으로 조절 중인 가격 슬라이더(그동안 패널을 다시 그리지 않고 숫자만 바꾼다)
   let titleMode: 'home' | 'new' = 'home', gameOverShown = false, reviewTimers: number[] = [];
   let lastPanel = '', lastOv = '', dragging = false;
 
@@ -155,8 +156,9 @@ export function startApp(): void {
     box.classList.toggle('inofc', wide); box.classList.toggle('corner', corner); // 무대 없는 화면(회사·기록): 오른쪽 위(상단바 아래)
     if (corner) box.style.setProperty('--ct', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`);
     foldToasts();
-    if (!wide) return;
-    const st = $('#stage').getBoundingClientRect(), band = document.querySelector<HTMLElement>('#ov .ofc')?.getBoundingClientRect();
+    const st = $('#stage').getBoundingClientRect();
+    if (!wide) { box.style.setProperty('--tw', `${Math.round(Math.max(260, Math.min(400, st.width - 200)))}px`); return; } // 무대 왼쪽 아래, 오른쪽 아래 평점 원(약 170px)을 비켜 간다
+    const band = document.querySelector<HTMLElement>('#ov .ofc')?.getBoundingClientRect();
     box.style.setProperty('--ot', `${Math.round((band?.bottom ?? st.top) + 8)}px`);
     box.style.setProperty('--or', `${Math.round(innerWidth - st.right + 12)}px`);
   }
@@ -366,7 +368,8 @@ export function startApp(): void {
       case 'designDone': sfx('designDone'); toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
       case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수·결함만(글자가 겹치지 않게)
         if (weekFresh) { const keep = officeEvents.filter((x) => x.kind === 'say'); officeEvents.length = 0; officeEvents.push(...keep); weekFresh = false; }
-        officeEvents.push(...officeFromWeek(e)); break;
+        officeEvents.push(...officeFromWeek(e));
+        defRate.set(e.projectId, [e.defectsRemoved - e.defectsAdded, ...(defRate.get(e.projectId) ?? [])].slice(0, 4)); break;
       }
       case 'company': if (e.text.startsWith('공장')) sfx('factoryBuilt'); toast(e.text, 'alert', '회사', 7000); break;
       case 'news': { // 규제 예고·시행은 중요한 알림(오래 둔다)
@@ -453,6 +456,7 @@ export function startApp(): void {
     const mp = !game || !title.hidden || speed === 0 || game.state.status !== 'playing'; // 배경 음악: 멈춤·처음 화면·파산 화면에서 쉰다
     if (mp !== musicPaused) { musicPaused = mp; sound.setPaused(mp); }
     renderMute();
+    if (!sheet.hidden) requestAnimationFrame(() => markMore(sheetBody)); // 창 내용을 바꾼 뒤 renderTop()을 부른다
     if (!game) return;
     const s = game.state;
     sound.setEra(yearOf(s.week));
@@ -506,7 +510,14 @@ export function startApp(): void {
       else patchLive(v.panel);
     }
     if (tipHover && tipAnchor && !tipAnchor.isConnected) hideTip();
+    markMore(panel);
   }
+  /** 아래로 더 볼 내용이 있으면 .more(아래쪽 흐림 표시) */
+  function markMore(el: HTMLElement): void { el.classList.toggle('more', el.scrollHeight - el.scrollTop - el.clientHeight > 8); }
+  panel.addEventListener('scroll', () => markMore(panel), { passive: true });
+  sheetBody.addEventListener('scroll', () => markMore(sheetBody), { passive: true });
+  title.addEventListener('scroll', () => markMore(title), { passive: true });
+  addEventListener('resize', () => { markMore(panel); if (!sheet.hidden) markMore(sheetBody); });
   /** 조절 중에는 data-live 칸(id로 짝)만 새 내용으로 바꿔 끼운다(슬라이더 자신은 그대로 두어 손가락이 놓치지 않게) */
   function patchLive(html: string): void {
     const t = document.createElement('template'); t.innerHTML = html;
@@ -519,7 +530,7 @@ export function startApp(): void {
   const specLine = (body: string, pt: string, tier: number, seg: string) => `${bodyById(body).name} · ${powertrainById(pt).name} ${tierName(pt, tier)} · ${segName(seg)}용`;
   const statBars = (g: Stats) => STATS.map((k) => `<div class="stat"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><div class="track"><u style="width:${Math.min(100, g[k] * 10).toFixed(1)}%"></u></div><b>${score(g[k])}</b></div>`).join('');
   const kpi = (label: string, value: string, cls = '', box = '') => `<div class="kpi${box ? ` ${box}` : ''}"><small>${label}</small><b class="${cls}">${value.replace(/(만원|억)$/, '<span>$1</span>')}</b></div>`; // 단위는 작게
-  /** 판매 가격 조절(출시·차고 공용): 가격·기준가 대비, −/+ 단추와 슬라이더, 대당 이익·예상 월 판매·예상 월 이익을 한 덩어리로(태블릿 가로에서 스크롤 없이) */
+  /** 판매 가격 조절(출시·차고 공용): 가격·기준가 대비, −/+ 버튼과 슬라이더, 대당 이익·예상 월 판매·예상 월 이익을 한 덩어리로(태블릿 가로에서 스크롤 없이) */
   // body: 차체 기준가(가격 허용 범위, sim 검사와 같게), 기준가 표시·눈금·대비 %는 시장 기준가(차체 + 의무 장비 원가, 판매·평론 계산 기준)
   const priceBlock = (id: string, o: { price: number; body: string; up: number; sales: string; profit: string; pcls: string; gen?: number }) => {
     const b = bodyById(o.body).basePrice, ref = Q.basePriceOf(game!.state, o.body), min = Math.ceil(b * config.price.min), max = Math.floor(b * config.price.max), d = Math.round((o.price / ref - 1) * 100);
@@ -575,8 +586,8 @@ export function startApp(): void {
     const devCard = s.projects.map((p) => `<div class="card"><p class="lbl">개발 중</p><h2>${esc(p.name)}</h2><p class="hint">${p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`} · 남은 결함 약 ${p.defectEst}개</p><div class="row" style="margin-top:10px"><button class="btn" data-act="devSel" data-id="${p.id}">개발 화면 보기</button></div></div>`).join('');
     if (!gens.length) {
       const any = allGens(s).length > 0;
-      const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 몇 주에 걸쳐 차를 설계합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
-      const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(몇 주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
+      const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 1년 가까이 설계와 시험을 합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
+      const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(${config.dev.designWeeks[0]}~${config.dev.designWeeks[config.dev.designWeeks.length - 1]}주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '<p class="hint" style="margin-top:6px">개발을 기다리는 동안 회사 탭에서 직원을 뽑거나 연구를 시작할 수 있습니다.</p>' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
       return { ov: ovh, panel: intro + devCard, look: null };
     }
     garageIdx = ((garageIdx % gens.length) + gens.length) % gens.length;
@@ -872,21 +883,48 @@ export function startApp(): void {
     // 넓은 화면에서는 사무실 아래에 [진행·능력치] [결함·개발비·버튼] [주간 기록] 세 칸으로 나란히
     const team = s.staff.filter((x) => x.projectId === p.id);
     const card1 = `<div class="card"><p class="lbl">${kindLabel(p)} · ${p.phase === 'design' ? '설계 단계' : '시험 단계'}</p><h2>${esc(p.name)}<small>${phase}</small></h2>
-      <p class="hint team-line">만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}</p>
-      <div class="prog ${p.phase === 'test' ? 'test' : ''}"><u style="width:${pct.toFixed(1)}%"></u></div>
+      <p class="hint team-line">${p.waiting && !team.length ? '출시 대기 중이라 팀이 풀려났습니다. 엔지니어는 연구를 합니다.' : `만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}`}</p>
+      ${devSteps(p, pct, team)}
       <p class="lbl" style="margin-top:12px">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}</div>`;
     const ps = Q.projectStatus(s, p.id), wait = !!ps?.waiting;
     const costLine = ps && !wait ? `<p class="hint cost-line" style="margin-top:8px">${esc(ps.costNote)}</p>` : '';
-    const card2 = `<div class="card"><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>${costLine}
+    // 태블릿 가로(1024×768)에서 [출시 준비]가 스크롤 없이 보이게 버튼을 수치 바로 아래에 둔다
+    const card2 = `<div class="card"><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>
       ${wait ? '<div class="okbox wait-badge" style="margin-top:10px"><b>출시 대기</b> · 개발비가 들지 않습니다</div>' : ''}
-      ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}
       <button class="go${wait && ready ? ' pulse' : ''}" data-act="toLaunch" ${ready ? '' : 'disabled'}>${ready ? '출시 준비 →' : p.phase === 'design' ? '설계가 끝나면 시험을 시작합니다' : `시험 ${minT}주 뒤 출시할 수 있습니다`}</button>
-      <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:8px">개발 취소</button>
+      ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}${costLine}
+      <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:10px">개발 취소</button>
       ${p.phase === 'test' && !wait ? '<p class="note">시험을 길게 할수록 결함이 줄어 리콜 위험이 낮아지지만 그동안 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.</p>' : ''}</div>`;
-    const card3 = `<div class="card"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 단추로 시간을 진행합니다.</p>'}</div>`;
+    const card3 = `<div class="card">${waitTodo(free)}<p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.</p>'}</div>`;
     return { ov: ovh, panel: draftCard() + chips + card1 + card2 + card3, office: officeView(p) };
   }
 
+  /** 진행 단계(설계 → 시험 → 결함 잡기), 출시까지 남은 기간 어림, 팀 컨디션 */
+  function devSteps(p: Project, pct: number, team: { condition: number }[]): string {
+    const minT = config.dev.minTestWeeks, wait = !!p.waiting, test = p.phase === 'test', fix = test && p.testWeeks >= minT;
+    const cls = (done: boolean, on: boolean) => (done ? 'done' : on ? 'on' : '');
+    const steps = `<ol class="steps" aria-label="개발 단계"><li class="${cls(test, !test)}" style="--p:${pct.toFixed(0)}%">1 설계<b>${p.weeksDone}/${p.designWeeks}주</b></li>
+      <li class="${cls(fix, test && !fix)}" style="--p:${((p.testWeeks / minT) * 100).toFixed(0)}%">2 시험<b>${test ? `${Math.min(p.testWeeks, minT)}/${minT}주` : `최소 ${minT}주`}</b></li>
+      <li class="${cls(wait, fix && !wait)}" style="--p:50%">3 결함 잡기<b>${wait ? '끝' : `약 ${num(p.defectEst)}개 남음`}</b></li></ol>`;
+    const r = defRate.get(p.id) ?? [], rate = r.length ? r.reduce((a, x) => a + x, 0) / r.length : 0;
+    const mins = (w: number) => { const m = Math.round((w * WEEK_MS) / 60000); return m >= 1 ? ` · 보통 빠르기로 약 ${m}분` : ''; };
+    const left = p.designWeeks - p.weeksDone + minT;
+    const eta = wait ? '<b>출시 대기</b> · 언제든 출시할 수 있습니다'
+      : !test ? `출시까지 최소 <b>${left}주</b>(설계 ${p.designWeeks - p.weeksDone}주 + 시험 ${minT}주)${mins(left)}`
+      : !fix ? `시험 <b>${minT - p.testWeeks}주</b> 뒤 출시할 수 있습니다`
+      : rate > 0.05 ? `지난 몇 주 속도면 결함을 다 잡기까지 약 <b>${Math.ceil(p.defectEst / rate)}주</b>${mins(Math.ceil(p.defectEst / rate))}` : '결함이 줄어드는 속도를 재는 중입니다';
+    const avg = team.length ? team.reduce((a, x) => a + x.condition, 0) / team.length : 0, w = condWord(avg);
+    const cond = team.length ? `<div class="team-cond">팀 컨디션 <span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(avg * 100)}%"></u></span><b>${w}</b>${w === '지침' ? '<span>· 회사 탭 직원 화면에서 휴식을 줄 수 있습니다</span>' : ''}</div>` : '';
+    return `${steps}<p class="eta"><span>${eta}</span></p>${cond}`;
+  }
+  /** 개발을 기다리는 동안 할 수 있는 일: 채용, 연구, 다음 차 기획 */
+  function waitTodo(free: boolean): string {
+    const s = game!.state, h = Q.hiringInfo(s), r = Q.researchInfo(s);
+    const b = (act: string, v: string, name: string, sub: string) => `<button class="btn" data-act="${act}" data-v="${v}"><span>${name}<small>${sub}</small></span><span aria-hidden="true">→</span></button>`;
+    return `<p class="lbl">기다리는 동안</p><div class="wait-todo">${b('goCo', 'staff', '직원 채용', h.candidates.length ? `후보 ${h.candidates.length}명이 기다립니다` : h.full ? `정원 ${h.staffCount}/${h.capacity}명이 찼습니다` : `정원 ${h.staffCount}/${h.capacity}명 · 공고를 낼 수 있습니다`)}
+      ${b('goCo', 'research', '연구', r.pointsPerWeek <= 0 ? '쉬는 엔지니어가 없어 지금은 연구 점수가 0입니다' : r.used < r.slots ? `연구 칸 ${r.slots - r.used}개가 비어 있습니다` : `연구 ${r.used}개 진행 중 · 한 주 ${pts1(r.pointsPerWeek)}점`)}
+      ${draft || lift ? b('resumePlan', '', '다음 차 기획', '기획 중인 초안을 이어서 합니다') : free ? b('plan', '', '다음 차 기획', '비어 있는 개발팀이 있습니다') : sellingGens(s).length ? b('tab', 'garage', '판매 중인 차 살피기', '가격·광고를 조정합니다') : b('goCo', 'hq', '본사', '본사를 키우면 정원과 개발팀이 늘어납니다')}</div>`;
+  }
   /** 결함 안내 한 줄(시험 단계·출시 화면) */
   const defectBox = (a: ReturnType<typeof Q.defectAdvice>) => `<div class="${a.level === 'many' ? 'badbox' : a.level === 'some' ? 'warnbox' : 'okbox'} defect-adv" data-level="${a.level}" style="margin-top:10px">${esc(a.text)}</div>`;
 
@@ -904,7 +942,7 @@ export function startApp(): void {
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
     const card1 = `<div class="card price-card"><p class="lbl">판매 가격${fl ? '(다시 정하기)' : ''}</p>${priceBlock('lprice', { price: L.price, body: p.body, up,
-      sales: fc ? `${fc.min === fc.max ? num(fc.min) : `${num(fc.min)}~${num(fc.max)}`}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? [...new Set(pr.map((x) => money(x, true)))].join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
+      sales: fc ? `${fc.min === fc.max ? num(fc.min) : `${num(fc.min)}~${num(fc.max)}`}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? [...new Set(pr.map((x) => `<span class="nw">${money(x, true).replace(/(만원|억)$/, '<span>$1</span>')}</span>`))].join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
       ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b> 팔릴 것으로 보입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
       ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
     const card2 = `<div class="card"><p class="lbl">색상${fl ? '(그대로 두거나 바꾸기)' : ''}</p>${paints('lset', L.color)}
@@ -1049,7 +1087,7 @@ export function startApp(): void {
     }).join('');
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
     const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>
-      <div class="srow head" aria-hidden="true"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div>${list}
+      <div class="srow head" aria-hidden="true"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
       <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다.</p></div>`;
     const x = rows.find((y) => y.id === staffSel);
     let card2 = '';
@@ -1115,7 +1153,7 @@ export function startApp(): void {
     }).join('');
     const prod = `<div class="card fac-prod"><h3>차종별 생산</h3>${f.cars.length ? `<div class="advice" style="margin:0 0 10px">${esc(Q.capacityAdvice(s))}</div>${rows}
       <p class="hint" style="margin-top:8px">직접 정한 몫 합계 <b class="alloc-sum">${Math.round(manualSum * 100)}%</b> (100%를 넘을 수 없습니다. 나머지는 자동인 차가 주문에 맞춰 나눕니다)</p>${allocWhy ? `<div class="badbox alloc-why" style="margin-top:8px">${esc(allocWhy)}</div>` : ''}
-      <p class="note">막대: 진한 부분은 만든 차, 주황 부분은 주문을 받고도 못 만든 차입니다.</p>` : '<p class="hint">판매 중인 차가 없습니다.</p>'}</div>`;
+      <p class="note">막대: 진한 부분은 만든 차, 주황 부분은 주문을 받고도 못 만든 차입니다.</p>` : '<p class="hint">판매 중인 차가 없습니다. 차를 출시하면 여기서 차종별 생산량과 못 판 주문을 봅니다.</p>'}</div>`;
     return `<div class="cols">${cur}${next}${prod}</div>`;
   }
 
@@ -1266,7 +1304,7 @@ export function startApp(): void {
       <details><summary>자세히: 시드(같은 시드면 같은 판)</summary><input class="namein" id="t-seed" type="text" inputmode="numeric" placeholder="비우면 무작위" autocomplete="off"></details>
       <button class="go" data-act="startNew">회사 세우기 <span aria-hidden="true">→</span></button><button class="btn" data-act="titleHome">돌아가기</button>`;
     title.innerHTML = `<div class="inner"><div class="gname">${logoSvg(DEFAULT_LOGO, 64)}카 컴퍼니</div><p class="tag">1970년, 직원 4명의 작은 공장에서 시작합니다. 차를 기획·개발·출시해 판매하며 회사를 키웁니다.</p>${titleMode === 'new' ? form : home}<p class="note">게임 이름은 가칭입니다. 경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것입니다.</p></div><div class="ver">v${CAR_VERSION}</div>`;
-    title.className = 'cover'; title.hidden = false;
+    title.className = 'cover'; title.hidden = false; markMore(title);
     if (titleMode === 'new') $('#t-co').focus();
     renderTop();
   }
@@ -1402,7 +1440,7 @@ export function startApp(): void {
         if (!run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1] as Project;
         ui.colors[p.id] = color; devPrev.set(p.id, 0); draft = null; devSel = p.id;
-        toast(`「${p.name}」 개발을 시작했습니다. 위쪽 빠르기 단추로 시간을 진행합니다.`); go('dev'); return;
+        toast(`「${p.name}」 개발을 시작했습니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.`); go('dev'); return;
       }
       case 'cancelDev': {
         const p = s && curProj(); if (!p || !game) return;
@@ -1590,7 +1628,7 @@ export function startApp(): void {
     else if (t.classList.contains('snd-r')) { sound.set({ [t.dataset.k!]: Number(t.value) / 100 }); const o = t.parentElement?.querySelector('b'); if (o) o.textContent = `${t.value}%`; sfx('sliderTick'); }
   });
   // 가격 슬라이더: 손가락 위치를 직접 값으로 바꾼다(브라우저 기본 슬라이더는 작은 손잡이만 잡히고, 패널 스크롤·다시 그리기와 다퉈 놓치기 쉬웠다).
-  // −/+ 단추는 한 번에 한 단계, 길게 누르면 연속. 키보드는 기본 슬라이더 그대로
+  // −/+ 버튼은 한 번에 한 단계, 길게 누르면 연속. 키보드는 기본 슬라이더 그대로
   let pxMove = false, pxRep = 0;
   const setPx = (r: HTMLInputElement, v: number) => {
     const min = Number(r.min), max = Number(r.max), st = Number(r.step) || 1, x = Math.max(min, Math.min(max, min + Math.round((v - min) / st) * st));

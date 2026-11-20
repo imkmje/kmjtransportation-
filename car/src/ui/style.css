@@ -621,8 +621,9 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
   #toasts:not(.inofc):not(.corner) .toast{font-size:12.5px;padding:8px 12px;border-radius:14px}
 }
 /* 패널·창 안에 아래로 더 볼 내용이 있으면 아래쪽을 흐리게(스크롤 표시) */
-#panel.more::after,.report.more::after{content:"";display:block;position:sticky;bottom:0;flex:none;grid-column:1/-1;height:40px;margin-top:-40px;pointer-events:none;background:linear-gradient(#e7eaee00,#e7eaeef2 80%);border-radius:0 0 20px 20px}
-.s-cond{white-space:nowrap}.s-cond .cbar{width:36px}
+#panel.more::after,.report.more::after{content:"";display:block;position:sticky;bottom:0;flex:none;grid-column:1/-1;height:28px;margin-top:-28px;pointer-events:none;background:linear-gradient(#e7eaee00,#e7eaeed9);border-radius:0 0 20px 20px}
+@media (min-width:641px){.srow{grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr) 70px 78px minmax(0,1.3fr)}}
+.s-cond{white-space:nowrap}.s-cond .cbar{width:30px}.s-do{word-break:keep-all}
 /* 개발 진행: 단계 표시·팀 컨디션·기다리는 동안 할 일 */
 .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:10px 0 6px;padding:0;list-style:none}
 .steps li{position:relative;padding-top:12px;font-size:12px;font-weight:700;color:var(--ink3);line-height:1.35}
@@ -638,3 +639,7 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
 .wait-todo{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin-bottom:12px}
 .wait-todo .btn{justify-content:space-between;text-align:left;min-height:48px;padding:6px 14px}
 .wait-todo .btn small{display:block;font-weight:600;color:var(--ink2);opacity:1}
+.kpi b span.nw{font-size:inherit;margin:0;white-space:nowrap}
+#sheet:not([hidden]) ~ #toasts{top:max(12px,env(safe-area-inset-top,0px));right:12px;left:auto;bottom:auto;width:min(340px,calc(100vw - 24px))} /* 창이 떠 있으면 경고 알림은 오른쪽 위로(창 아래쪽 버튼을 가리지 않게) */
+button.pill{min-height:44px;align-items:center} /* 상단바의 누르는 알약(사건·결정 대기) */
+.cover.more::after{content:"";position:fixed;left:0;right:0;bottom:0;height:56px;pointer-events:none;background:linear-gradient(#c9d0d900,#c9d0d9e6)} /* 새 게임 화면: 아래로 더 있음 */
