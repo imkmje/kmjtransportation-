@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { gouger, idle, newNameOnly, noExpand, noFacelift, noResearch, novice, runBot, steady, type Bot } from '../src/sim/bots';
 import { eraTimeline } from '../src/sim/events';
 import { Game, allGens, sellingGens } from '../src/sim/game';
@@ -8,6 +8,9 @@ import { launchAvgGrade } from '../src/sim/lifecycle';
 import { currentEdition } from '../src/sim/market';
 import { yearOf } from '../src/sim/time';
 import { config } from '../src/config';
+
+// 봇 수십 판을 돌려 CI에서 기본 5초를 넘긴다(0.5.0 PR에서 5.4초로 실패).
+vi.setConfig({ testTimeout: 60_000 });
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 const median = (xs: number[]) => { const v = [...xs].filter(Number.isFinite).sort((a, b) => a - b); return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2; };
