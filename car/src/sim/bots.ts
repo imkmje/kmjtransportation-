@@ -37,7 +37,7 @@ export interface SteadyOptions {
   priceMult: number; // 출시 가격 = 기준가 × 이 값
 }
 const STEADY: SteadyOptions = {
-  budget: 'normal', designWeeks: 12, marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange',
+  budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange',
   manage: true, expand: true, gouge: false, research: true,
   sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrowShare: 0, priceMult: 1,
 };
@@ -234,7 +234,7 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   };
   // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다
   const last = prev ?? (s.nameplates.length ? latestGen(s.nameplates[s.nameplates.length - 1]) : undefined);
-  const tries = [spec, { ...spec, designWeeks: 16 }, { ...spec, designWeeks: 16, budget: 'high' as Budget }];
+  const long = config.dev.designWeeks[2], tries = [spec, { ...spec, designWeeks: long }, { ...spec, designWeeks: long, budget: 'high' as Budget }];
   const staff = s.staff.filter((x) => team.includes(x.id));
   const pick = o.sloppy ? spec : (last && tries.find((t) => planPreview(s, { ...t, name: '' }, staff).avg >= launchAvgGrade(last))) || tries[last ? tries.length - 1 : 0];
   if (nameplateId !== null) g.command({ type: 'startFullChange', nameplateId, ...pick, team });

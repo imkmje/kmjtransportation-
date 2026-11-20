@@ -31,10 +31,10 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
 
 export const staffOn = (state: CarState, p: Project): Staff[] => state.staff.filter((s) => s.projectId === p.id);
 
-/** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
+/** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 직원 몫 비율 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
 export const devCostPerWeek = (team: Staff[], budget: Budget, protoMult = 1): number =>
-  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
-/** 페이스리프트의 주간 비용: 그 세대 개발비 × 25% ÷ (설계 4주 + 최소 시험 2주). 시험을 더 하면 그만큼 더 든다 */
+  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.staffCostShare * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
+/** 페이스리프트의 주간 비용: 그 세대 개발비 × costShare ÷ (설계 주 + 최소 시험 주). 시험을 더 하면 그만큼 더 든다 */
 export const faceliftWeekCost = (genDevCost: number): number =>
   (genDevCost * config.lifecycle.facelift.costShare) / (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks);
 /** 풀체인지 비용 배수: 같은 차체 85%, 차체를 바꾸면 100% */
