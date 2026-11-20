@@ -263,11 +263,12 @@ input[type=range]{width:100%;accent-color:var(--ink);margin:10px 0 2px;min-heigh
 #debug{position:fixed;z-index:60;left:8px;bottom:8px;background:#14171ccc;color:#fff;font:12px/1.4 ui-monospace,monospace;padding:6px 8px;border-radius:8px;pointer-events:none;white-space:pre}
 /* ---- 2단계: 기획 첫 화면·모양 고르기·페이스리프트·사무실·차종 계보 ---- */
 #office{position:absolute;inset:0}
-.ov.ofc{left:12px;right:12px;top:12px;display:flex;align-items:flex-start;gap:10px;justify-content:space-between}
-.ofc-t{background:#ffffffd9;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid #fff;border-radius:16px;padding:8px 12px;min-width:0;display:flex;flex-direction:column;gap:2px;max-width:100%}
+/* 사무실 위 글자: 위쪽 가장자리의 반투명 띠. 장면의 끌기·핀치 줌을 막지 않게 버튼 말고는 pointer-events:none(.ov 기본) */
+.ov.ofc{left:0;right:0;top:0;display:flex;align-items:flex-start;gap:10px;justify-content:space-between;padding:12px 14px 10px;background:linear-gradient(#ffffffd0,#ffffffa8 70%,#ffffff00);border-radius:24px 24px 0 0}
+.ofc-t{min-width:0;display:flex;flex-direction:column;gap:2px;max-width:100%}
 .ofc-t b{font-size:clamp(18px,2.2vw,26px);font-weight:900;letter-spacing:-.03em;line-height:1.15;overflow-wrap:anywhere}
 .ofc-s{font-size:12px;color:var(--ink2);font-weight:700;line-height:1.4}
-.ofc-g{background:#ffffffd9;border:1px solid #fff;border-radius:16px;padding:6px 12px;text-align:right;flex:none}
+.ofc-g{text-align:right;flex:none}
 .ofc-g small{display:block;font-size:11px;color:var(--ink2);font-weight:700}.ofc-g b{font-size:26px;font-weight:900;line-height:1}
 .ov.ofc .go{pointer-events:auto;width:auto;margin:0;min-height:48px;padding:0 18px;font-size:15px;flex:none}
 .choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:8px;margin-top:12px}

@@ -187,8 +187,8 @@ export function startApp(): void {
         break;
       }
       case 'designDone': toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝! 이제 시험이에요', mood: 'test' }); break;
-      case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수만(글자가 겹치지 않게)
-        const keep = officeEvents.filter((x) => x.kind !== 'score'); officeEvents.length = 0; officeEvents.push(...keep, ...officeFromWeek(e)); break;
+      case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수·결함만(글자가 겹치지 않게)
+        const keep = officeEvents.filter((x) => x.kind === 'say'); officeEvents.length = 0; officeEvents.push(...keep, ...officeFromWeek(e)); break;
       }
       case 'news': toast(e.text, 'alert', '모터 데일리', 9000, '', { label: '신문 보기', fn: () => showNews(e.text) }); break;
       case 'advice': toast(e.text, 'alert', '조언', 9000); break;
