@@ -48,10 +48,10 @@ export function projectStatus(s: CarState, projectId: number): { phase: Project[
   return { phase: p.phase, waiting, weeklyCost, costNote };
 }
 
-/** 남은 결함(화면에 보이는 "약 N개") 판단: 15개 이상 많음 / 6~14 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
-export function defectAdvice(p: Project): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
+/** 남은 결함(화면에 보이는 "약 N개") 판단: 감점 기준(보통 15개, s를 주면 난이도 값) 이상 많음 / 6개~기준 미만 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
+export function defectAdvice(p: Project, s?: CarState): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
   const c = config.critics, n = p.defectEst, recallYear = Math.min(config.recall.maxYear, n * config.recall.perDefect);
-  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `결함이 아직 많습니다. 지금 출시하면 평론가 4명이 모두 ${c.manyDefectsPenalty}점씩 깎고, 리콜 위험이 큽니다.` };
+  if (n >= (s ? diffOf(s).manyDefects : c.manyDefects)) return { level: 'many', recallYear, text: `결함이 아직 많습니다. 지금 출시하면 평론가 4명이 모두 ${c.manyDefectsPenalty}점씩 깎고, 리콜 위험이 큽니다.` };
   if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다.' };
   return { level: 'ok', recallYear, text: '출시해도 좋습니다.' };
 }

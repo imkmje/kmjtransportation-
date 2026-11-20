@@ -12,13 +12,15 @@ import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, wor
 import { criticScores, mean } from './reviews';
 import { josa } from './josa';
 import { Rng, hash32 } from './rng';
+import { DIFFICULTIES, diffOf } from './difficulty';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
-import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PendingChoice, type Project, type ProjectKind, type ProjectSpec, type Staff, type Stats } from './types';
+import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PendingChoice, type Project, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
 export const SAVE_VERSION = 4;
-export interface GameOptions { seed: number; companyName?: string }
+/** difficulty: 생략하면 'easy'(0.4.1 새 게임 기본) */
+export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty }
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 const OK: CommandResult = { ok: true };
@@ -47,6 +49,9 @@ export class Game {
   }
 
   static create(opts: GameOptions): Game {
+    const difficulty = opts.difficulty ?? 'easy';
+    if (!DIFFICULTIES.includes(difficulty)) throw new Error(`없는 난이도: ${difficulty}`);
+    const D = config.difficulty[difficulty];
     const rng = new Rng(opts.seed);
     const pool = [...NAMES.staff];
     const staff: Staff[] = config.start.roles.map((role, i) => ({
@@ -56,10 +61,10 @@ export class Game {
     const rivals = initRivals(rng, opts.seed);
     for (const x of staff) x.potential = rng.intIn(config.start.potentialMin, config.start.potentialMax); // 경쟁사 뒤에 뽑아 2단계까지의 난수 순서를 지킨다
     const state: CarState = {
-      saveVersion: SAVE_VERSION, seed: opts.seed, rng: rng.getState(), week: 0,
+      saveVersion: SAVE_VERSION, difficulty, seed: opts.seed, rng: rng.getState(), week: 0,
       companyName: opts.companyName?.trim() || NAMES.defaultCompany,
-      reputation: config.start.reputation, cash: config.start.cash,
-      loan: { balance: 0, limitMult: 1, bailoutUsed: false }, negMonths: 0, status: 'playing',
+      reputation: config.start.reputation, cash: D.cash,
+      loan: { balance: 0, limitMult: 1, bailoutUsed: D.bailouts <= 0, bailouts: 0 }, negMonths: 0, status: 'playing',
       staff, candidates: [], hqLevel: 1, factory: { level: 1, build: null },
       projects: [], nameplates: [], rivals, ledger: [], pendingDev: 0, pendingOneOff: 0, nextId: staff.length + 1,
       research: { done: [], active: [], early: [] }, events: { pending: [], mods: [], news: [] }, knownCombos: [], history: [],
@@ -143,7 +148,7 @@ export class Game {
       if (ed.defects > 0) { // 6.3 리콜: 연 확률 min(40%, 결함 × 2%)을 달로 나눠 굴린다
         const pYear = Math.min(config.recall.maxYear, ed.defects * config.recall.perDefect);
         if (this.rng.next() < 1 - (1 - pYear) ** (1 / config.time.monthsPerYear)) {
-          const cost = g.totalSold * config.recall.costPerCar;
+          const cost = g.totalSold * config.recall.costPerCar * diffOf(s).recallMult;
           recall += cost; g.profit -= cost; g.recalls++;
           g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
           this.addRep(config.recall.rep);
@@ -171,10 +176,10 @@ export class Game {
     // 9.4 파산: 현금 음수로 bankruptcy.months개월 연속이면 게임 오버(0.4.1: 6 → 12개월)
     if (s.cash < 0) {
       s.negMonths++;
-      if (s.negMonths >= config.bankruptcy.months) { s.status = 'gameOver'; ev.push({ kind: 'gameOver', text: `현금 부족이 ${config.bankruptcy.months}개월 이어져 회사가 파산했습니다.` }); }
+      if (s.negMonths >= diffOf(s).bankruptcyMonths) { s.status = 'gameOver'; ev.push({ kind: 'gameOver', text: `현금 부족이 ${diffOf(s).bankruptcyMonths}개월 이어져 회사가 파산했습니다.` }); }
       else {
         const room = Math.max(0, loanLimit(s) - s.loan.balance); // 남은 대출 한도를 함께 알린다(0.4.1)
-        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${config.bankruptcy.months}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
+        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
       }
     } else s.negMonths = 0;
   }
@@ -266,9 +271,11 @@ export class Game {
         return OK;
       }
       case 'bailout': {
-        if (s.loan.bailoutUsed) return fail('구제 금융은 한 번만 받을 수 있습니다.');
+        const maxB = diffOf(s).bailouts, usedB = s.loan.bailouts ?? (s.loan.bailoutUsed ? 1 : 0);
+        if (maxB <= 0) return fail('이 난이도에서는 구제 금융을 받을 수 없습니다.');
+        if (usedB >= maxB) return fail(maxB === 1 ? '구제 금융은 한 번만 받을 수 있습니다.' : `구제 금융은 ${maxB}번까지만 받을 수 있습니다.`);
         if (s.cash >= 0) return fail('현금이 마이너스일 때만 받을 수 있습니다.');
-        s.cash = 0; s.negMonths = 0; s.loan.bailoutUsed = true; s.loan.limitMult *= config.loan.bailoutLimitMult;
+        s.cash = 0; s.negMonths = 0; s.loan.bailouts = usedB + 1; s.loan.bailoutUsed = usedB + 1 >= maxB; s.loan.limitMult *= config.loan.bailoutLimitMult;
         this.addRep(config.bankruptcy.bailoutRep);
         if (s.status === 'gameOver') { s.status = 'playing'; s.week++; } // 파산한 주는 월말 정산까지 끝났으므로 다음 주부터 이어 간다
         return OK;
@@ -405,7 +412,7 @@ export class Game {
       case 'awareness': for (const x of e.target === 'car' ? (g ? [g] : []) : sellingGens(s)) x.awareness = Math.min(1, x.awareness + e.value); break;
       case 'awarenessMult': if (g) g.awareness *= e.value; break;
       case 'condition': for (const x of s.staff) x.condition = Math.min(1, x.condition + e.value); break;
-      case 'fixDefects': if (g) { this.spend(g.totalSold * config.recall.costPerCar * e.costShare); currentEdition(g).defects = 0; } break;
+      case 'fixDefects': if (g) { this.spend(g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare); currentEdition(g).defects = 0; } break;
       case 'mod': s.events.mods.push({ kind: e.mod, value: e.value || (pc.fx ?? 1), untilMonth: m + e.months, label: def.name }); break;
       case 'hire': if (s.staff.length < staffCap(s)) {
         const ability = this.rng.intIn(e.abilityMin, e.abilityMax), id = s.nextId++;
@@ -498,7 +505,7 @@ export class Game {
       events.push({ kind: 'news', id: g.id, text, category: 'other' });
     } else {
       const stats = finalStats(p.body, p.powertrain, p.level, p.options, p.points, p.defects);
-      const reviews = criticScores(stats, year, base, cmd.price, p.defects, () => this.rng.range(-1, 1)), c = config.critics, fc = config.lifecycle.fullChange;
+      const reviews = criticScores(stats, year, base, cmd.price, p.defects, () => this.rng.range(-1, 1), diffOf(s).manyDefects), c = config.critics, fc = config.lifecycle.fullChange;
       const first = worldFirstTechs(s, p); // 10장 "세계 최초": 먼저 연구한 기술을 쓴 첫 차는 평론 +1(기술마다 한 번)
       if (first.length) {
         for (let i = 0; i < reviews.length; i++) reviews[i] = Math.round(Math.min(c.max, reviews[i] + config.research.worldFirst) * 10) / 10;
