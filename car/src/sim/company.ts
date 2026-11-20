@@ -1,5 +1,7 @@
 // 회사(설계서 9.1 직원, 9.2 본사, 9.3 공장): 등급 표 조회와 직원 상태 판정. 순수 함수(상태를 바꾸지 않는다)
 import { config } from '../config';
+import { eventCostMult, productionMult } from './events';
+import { costCut, upkeepCut } from './research';
 import type { CarState, Role, Staff } from './types';
 
 const C = config.staff;
@@ -11,11 +13,13 @@ export const staffCap = (s: CarState): number => hqDef(s).staff;
 export const devTeams = (s: CarState): number => hqDef(s).teams;
 /** 옵션 슬롯(5.4) */
 export const optionSlots = (s: CarState): number => hqDef(s).options;
-export const capacityOf = (s: CarState): number => factoryDef(s).capacity;
+/** 월 생산 한도 = 공장 등급 × 사건 배수(감염병·파업, 11장) */
+export const capacityOf = (s: CarState): number => factoryDef(s).capacity * productionMult(s);
 export const linesOf = (s: CarState): number => factoryDef(s).lines;
-export const costMultOf = (s: CarState): number => factoryDef(s).costMult;
-/** 월 유지비 = 공장 + 본사 */
-export const upkeepOf = (s: CarState): number => factoryDef(s).upkeep + hqDef(s).upkeep;
+/** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율) */
+export const costMultOf = (s: CarState): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s);
+/** 월 유지비 = 공장 × (1 − 연구 유지비 인하) + 본사 */
+export const upkeepOf = (s: CarState): number => factoryDef(s).upkeep * (1 - upkeepCut(s)) + hqDef(s).upkeep;
 
 export const isDevRole = (r: Role): boolean => r !== 'sales';
 /** 교육 중(교육을 시작한 주부터 4주) */

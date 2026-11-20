@@ -45,16 +45,20 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const carG = new THREE.Group();
   const p = chassisOf(look), fc = faceOf(look);
   p.wr += WHEEL_GROW[look.wheel];
-  const E = eraStyle(look), ev = look.powertrain === 'ev', F = FACE;
+  const E0 = eraStyle(look), ek = p.edge ?? 1, E = { ...E0, re: E0.re * ek, rpF: E0.rpF * ek, rpR: E0.rpR * ek };
+  const ev = look.powertrain === 'ev', F = FACE;
   let decalMiss = 0; // 데칼 점이 차체 곡면을 못 찾은 횟수(검사용, 0이어야 정상)
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], x = 0, y = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; carG.add(m); return m;
   };
   const h = p.L / 2, hw = p.W / 2, N = 184, J = 32, RN = 2 * J, ar = p.wr + p.archGap, mid = (p.cR + p.cF) / 2;
   const ym = p.clr + (p.belt - p.clr) * .55;
+  const pils = (p.pil ?? [.5]).map(t => p.cR + (p.cF - p.cR) * t); // 옆 창을 나누는 필러 x
+  // 픽업 짐칸: 객실 뒤 벽부터 꼬리문(끝 둥글림 + .1m) 앞까지
+  const bedF = p.cR - p.rr - .1, bedB = -h + E.re + .1, bedAt = (x: number) => p.bed != null && x > bedB && x < bedF;
 
   // 옆모습 윗선: 꺾은선을 찍고 두 번 문질러 둥글린다
-  const ctl = [[-h, p.belt - .02], [p.cR - p.rr - .08, p.belt + .03], [p.cR, p.roof], [mid, p.roof + .025], [p.cF, p.roof], [p.cF + p.rf, p.belt + .04], [h - .55, p.belt - .05], [h, p.belt - .2]];
+  const ctl = [[-h, p.belt - .02], [p.cR - p.rr - .08, p.belt + .03], [p.cR, p.roof], [mid, p.roof + .025], [p.cF, p.roof], [p.cF + p.rf, p.belt + .04], [h - .55, p.belt - .05], [h, p.belt - (p.nose ?? .2)]];
   const lin = (x: number) => {
     for (let i = 1; i < ctl.length; i++) if (x <= ctl[i][0]) { const [x0, y0] = ctl[i - 1], [x1, y1] = ctl[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); }
     return ctl[ctl.length - 1][1];
@@ -87,6 +91,14 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     for (const f of [0, .33, .66, 1]) P.push(yb, (wB - rb) * f);
     for (const a of [Math.PI / 6, Math.PI / 3]) P.push(yb + rb - rb * Math.cos(a), wB - rb + rb * Math.sin(a));
     for (let k = 0; k <= 10; k++) { const u = k / 10; P.push(yb + rb + u * (ys - yb - rb), w - tuck * (1 - u) ** 2); }
+    if (bedAt(x)) { // 짐칸 단면: 옆 → 벽 윗면 → 안쪽 벽 → 바닥(뒷바퀴 위에서는 바닥이 솟아 휠하우스가 된다)
+      const yw = Math.min(T, ys + .1), zi = w - .07, yf = Math.min(Math.max(p.bed!, yb + .06), yw - .06);
+      P.push(ys + (yw - ys) * .5, w - .004, yw - .012, w - .01, yw, w - .03, yw, zi + .012);
+      for (let k = 0; k <= 4; k++) P.push(yw - .02 - (yw - .05 - yf) * k / 4, zi);
+      P.push(yf, zi - .03);
+      for (let k = 0; k <= 5; k++) P.push(yf, (zi - .06) * (1 - k / 5));
+      return { P, g: 0 };
+    }
     const b0 = ys + ledge * .8, b1 = Math.max(b0, T - rc);
     for (let k = 0; k <= 6; k++) { const u = k / 6; P.push(b0 + u * (b1 - b0), w - ledge + u * (wroof - w + ledge)); }
     for (const a of [Math.PI / 8, Math.PI / 4, Math.PI * 3 / 8]) P.push(b1 + rc * Math.sin(a), wroof - rc + rc * Math.cos(a));
@@ -104,8 +116,9 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     return c;
   };
   // 앞(+1)·뒤(-1) 끝면의 x: 바퀴 아치 바깥부터 끝까지 이분 탐색
+  const loOf = (s: 1 | -1) => Math.max(p.wb + ar + .01, s < 0 && p.bed != null ? -bedB + .005 : 0); // 짐칸 차는 뒤 데칼을 꼬리문에서만 찾는다
   const surfX = (y: number, z: number, s: 1 | -1) => {
-    let lo = p.wb + ar + .01, hi = h - .004;
+    let lo = loOf(s), hi = h - .004;
     if (inside(ring(s * hi).P, y, z)) return s * hi;
     if (!inside(ring(s * lo).P, y, z)) { decalMiss++; return s * lo; }
     for (let it = 0; it < 14; it++) { const m = (lo + hi) / 2; if (inside(ring(s * m).P, y, z)) lo = m; else hi = m; }
@@ -164,7 +177,8 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     const cx = (pos[a * 3] + pos[b * 3]) / 2, cy = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[c * 3 + 1] + pos[dd * 3 + 1]) / 4;
     const gm = Math.min(gs[i], gs[i + 1]);
     let m = 0;
-    if (k >= 18 && k <= 21 && gm > .22 && Math.abs(cx - mid) > .045) m = 1;
+    if (bedAt(cx) && k >= 19) m = 2; // 짐칸 안쪽 벽·바닥
+    else if (k >= 18 && k <= 21 && gm > .22 && pils.every(px => Math.abs(cx - px) > .045)) m = 1;
     else if (k >= 27 && ((cx > p.cF + .1 && cx < p.cF + p.rf - .04) || (cx > p.cR - p.rr + .04 && cx < p.cR - .1))) m = 1;
     else if (h - Math.abs(cx) > E.re && (k <= 5 || (k <= 15 && cy < sill))) m = 2; // 둥근 앞뒤 끝은 범퍼라 차체 색(경계가 고리 선을 따라 매끈)
     idx[m].push(a, b, dd, b, c, dd);
@@ -213,7 +227,9 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   add(sg, M.trim).castShadow = false;
 
   // ── 앞얼굴(faceOf) ── fw: 얼굴이 쓰는 반폭
-  const fw = hw * E.faceW;
+  // 데칼 탐색이 시작되는 단면(바퀴 아치 바로 앞뒤)의 실제 옆면 폭을 넘지 않게 한다(앞뒤가 짧고 둥근 경차 등)
+  const fw = Math.min(hw * E.faceW, ...([[1, p.belt - F.lampDrop + fc.lampDy], [1, p.clr + .15], [-1, p.belt - F.tailDrop + fc.tailDy], [-1, p.clr + .15]] as const)
+    .map(([s, y]) => (sideZ(s * loOf(s), y) - .01) / .96));
   const L2 = F.lift * 2, L3 = F.lift * 3, plateTop = p.clr + F.plateY + F.plateH;
   const lampY = p.belt - F.lampDrop + fc.lampDy, lw = fc.lampW;
   let lampTop = lampY + F.lampH / 2, lampIn = fw * .5; // 라이트 바 높이, 그릴이 넘지 말아야 할 전조등 안쪽 끝
@@ -302,7 +318,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     }
   });
   for (const xw of [-p.wb, p.wb]) { const wl = add(new THREE.CylinderGeometry(ar - .02, ar - .02, p.W - .42, 24), M.dark, xw, p.wr, 0); wl.rotation.x = Math.PI / 2; wl.castShadow = false; }
-  if (look.sporty) {
+  if (look.sporty || p.spoiler) {
     const sx = p.deck ? -h + .2 : p.cR - .06, sy = Tat(sx) + (p.deck ? .12 : .05);
     add(new THREE.BoxGeometry(.2, .028, p.W - .42), M.dark, sx, sy, 0);
     if (p.deck) pair(sgn => add(new THREE.BoxGeometry(.05, .1, .04), M.dark, sx + .03, sy - .05, sgn * (hw - .42)));

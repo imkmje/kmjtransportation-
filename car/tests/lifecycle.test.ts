@@ -1,4 +1,4 @@
-// 차종의 일생(설계서 8장): 페이스리프트·풀체인지·차종 자산·기획 첫 화면·모양 후보·주간 기록·저장 형식 1 → 3
+// 차종의 일생(설계서 8장): 페이스리프트·풀체인지·차종 자산·기획 첫 화면·모양 후보·주간 기록·저장 형식 1 → 4
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game, allGens, SAVE_VERSION } from '../src/sim/game';
@@ -11,9 +11,9 @@ import { advice, faceliftPreview, fullChangePreview } from '../src/sim/queries';
 import { Rng } from '../src/sim/rng';
 import { monthOf, monthTime, yearOf } from '../src/sim/time';
 import { STATS, type Generation, type ProjectSpec } from '../src/sim/types';
-import { bodyById } from '../src/data';
+import { MARKET, bodyById } from '../src/data';
 import { config } from '../src/config';
-import { SPEC, launched, ok, toMonthEnd } from './util';
+import { SPEC, grant, launched, ok, toMonthEnd } from './util';
 
 const FL = config.lifecycle.facelift;
 const FULL: Omit<ProjectSpec, 'name'> = { body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 8 };
@@ -34,7 +34,7 @@ describe('페이스리프트(8.2)', () => {
   it('조건: 출시 18개월 뒤부터(이유와 남은 개월), 판매 중인 세대만', () => {
     const { g, gen } = aged(10);
     const r = g.command({ type: 'startFacelift', generationId: gen.id, options: [] });
-    expect(reason(r)).toBe(`출시 후 18개월이 지나야 합니다. 앞으로 ${18 - (monthOf(g.state.week) - gen.launchMonth)}개월`);
+    expect(reason(r)).toBe(`출시 후 18개월이 지나야 합니다. 앞으로 ${18 - (monthOf(g.state.week) - gen.launchMonth)}개월 남았습니다.`);
     while (monthOf(g.state.week) - gen.launchMonth < 18) g.tick();
     expect(g.command({ type: 'startFacelift', generationId: 999, options: [] })).toEqual({ ok: false, reason: '없는 세대입니다.' });
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
@@ -45,9 +45,10 @@ describe('페이스리프트(8.2)', () => {
   });
   it('세대당 1회, 진행 중이면 다시 못 함, 동력 단계는 낮출 수 없음', () => {
     const { g, gen } = aged(18);
+    grant(g, 'el_radio');
     expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [], tier: 1 }))).toContain('낮출 수 없습니다');
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: ['radio'], tier: 3 }));
-    expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }))).toContain('이미 개발 중');
+    expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }))).toContain('이미 개발하고 있습니다');
     const p = toTest(g);
     ok(g.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
     expect(gen.editions.map((e) => e.kind)).toEqual(['initial', 'facelift']);
@@ -121,11 +122,11 @@ describe('풀체인지(8.3)', () => {
   it('조건: 현 세대 출시 36개월 뒤이거나 단종 상태', () => {
     const { g, gen } = aged(20);
     const np = g.state.nameplates[0];
-    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toBe(`출시 후 36개월이 지나야 합니다. 앞으로 ${36 - (monthOf(g.state.week) - gen.launchMonth)}개월`);
+    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toBe(`출시 후 36개월이 지나야 합니다. 앞으로 ${36 - (monthOf(g.state.week) - gen.launchMonth)}개월 남았습니다.`);
     expect(reason(g.command({ type: 'startFullChange', nameplateId: 999, ...FULL }))).toBe('없는 차종입니다.');
     ok(g.command({ type: 'discontinue', generationId: gen.id }));
     ok(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }));
-    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toContain('이미 개발 중');
+    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toContain('이미 개발하고 있습니다');
     const b = aged(36, 2);
     ok(b.g.command({ type: 'startFullChange', nameplateId: b.g.state.nameplates[0].id, ...FULL }));
   });
@@ -133,6 +134,7 @@ describe('풀체인지(8.3)', () => {
     for (const [body, mult] of [['sedanS', 0.85], ['hatch', 1]] as const) {
       const { g } = aged(48);
       while (yearOf(g.state.week) < 1974) g.tick();
+      grant(g, 'bd_hatch');
       const team = g.state.staff.filter((x) => x.projectId === null);
       const spec = { ...FULL, body, segment: 'youth' };
       const pv = fullChangePreview(g.state, g.state.nameplates[0].id, spec)!;
@@ -179,6 +181,7 @@ describe('풀체인지(8.3)', () => {
     for (const body of ['sedanS', 'hatch']) {
       const { g, gen } = aged(36);
       while (yearOf(g.state.week) < 1974) g.tick();
+      grant(g, 'bd_hatch');
       gen.reviewAvg = 7; gen.totalSold = 30000; gen.recalls = 0;
       const np = g.state.nameplates[0];
       ok(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL, body, segment: 'youth' }));
@@ -261,8 +264,8 @@ describe('기획 첫 화면(8.7)과 조언', () => {
     const left18 = 18 - (monthOf(g.state.week) - gen.launchMonth), left36 = left18 + 18;
     const e = planEntries(g.state).nameplates[0];
     expect(e).toMatchObject({ name: '테스트카', generation: 1, generationId: gen.id, status: 'onSale', reviewAvg: gen.reviewAvg, totalSold: gen.totalSold });
-    expect(e.facelift).toEqual({ ok: false, reason: `출시 후 18개월이 지나야 합니다. 앞으로 ${left18}개월`, monthsLeft: left18 });
-    expect(e.fullChange).toEqual({ ok: false, reason: `출시 후 36개월이 지나야 합니다. 앞으로 ${left36}개월`, monthsLeft: left36 });
+    expect(e.facelift).toEqual({ ok: false, reason: `출시 후 18개월이 지나야 합니다. 앞으로 ${left18}개월 남았습니다.`, monthsLeft: left18 });
+    expect(e.fullChange).toEqual({ ok: false, reason: `출시 후 36개월이 지나야 합니다. 앞으로 ${left36}개월 남았습니다.`, monthsLeft: left36 });
     while (monthOf(g.state.week) - gen.launchMonth < 18) g.tick();
     expect(planEntries(g.state).nameplates[0].facelift).toEqual({ ok: true, reason: null, monthsLeft: 0 });
     ok(g.command({ type: 'discontinue', generationId: gen.id }));
@@ -385,25 +388,26 @@ describe('직원 경험(9.1)과 경쟁 차 교체(8.4)', () => {
 });
 
 describe('시장 규모(7.3, 7.5): 달마다 매끄럽게, 연도 사이는 비율 보간', () => {
-  it('연초에도 전달 대비 +15% 이내, 기준점(1970·1990·2020)은 market.json 그대로', () => {
-    const total = (m: number) => ['sedanS', 'hatch', 'sedanM'].reduce((a, b) => a + cellMonthly(b, monthTime(m)), 0);
+  it('연초에도 전달 대비 +15% 이내, 기준점(1970·1990·2020)은 3단계와 같은 연 규모', () => {
+    const bodies = Object.keys(MARKET.domestic.bodyShare);
+    const total = (m: number) => bodies.reduce((a, b) => a + cellMonthly(b, monthTime(m)), 0);
     for (let m = 1; m < 12 * 60; m++) {
       expect(total(m) / total(m - 1)).toBeLessThan(1.15);
       for (const b of ['sedanS', 'hatch', 'sedanM']) expect(cellMonthly(b, monthTime(m)) / cellMonthly(b, monthTime(m - 1))).toBeLessThan(1.15);
     }
-    const annual = (y: number, share: number) => (cellMonthly('sedanS', y) * 12) / config.market.scale / share; // 소형 세단 칸 ÷ 칸 비중 = 연 규모
-    expect(annual(1970, 0.6)).toBeCloseTo(20000, 6); expect(annual(1990, 0.3)).toBeCloseTo(1e6, 3); expect(annual(2020, 0.15)).toBeCloseTo(1.8e6, 3);
-    expect(annual(1980, 0.45)).toBeCloseTo(20000 * Math.sqrt(50), 3); // 비율 보간: 1970과 1990의 기하 평균(비중은 직선 보간)
+    const annual = (y: number) => (total((y - 1970) * 12) * 12) / config.market.scale; // 칸 비중의 합이 1이므로 모든 칸의 합 = 연 규모
+    expect(annual(1970)).toBeCloseTo(20000, 6); expect(annual(1990)).toBeCloseTo(1e6, 3); expect(annual(2020)).toBeCloseTo(1.8e6, 3);
+    expect(annual(1980)).toBeCloseTo(20000 * Math.sqrt(50), 0); // 비율 보간: 1970과 1990의 기하 평균
   });
 });
 
-describe('저장 형식 1 → 3', () => {
-  it(`SAVE_VERSION = 3, 형식 1 파일을 올려서 불러오고 이어서 실행할 수 있다`, () => {
-    expect(SAVE_VERSION).toBe(3);
+describe('저장 형식 1 → 4', () => {
+  it(`SAVE_VERSION = 4, 형식 1 파일을 올려서 불러오고 이어서 실행할 수 있다`, () => {
+    expect(SAVE_VERSION).toBe(4);
     const v1 = JSON.parse(readFileSync('car/tests/fixtures/save-v1.json', 'utf8'));
     expect(v1.saveVersion).toBe(1);
     const g = Game.fromJSON(v1), s = g.state;
-    expect(s.saveVersion).toBe(3);
+    expect(s.saveVersion).toBe(4);
     expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null });
     for (const x of s.staff) expect(x.potential).toBe(Math.max(60, x.ability));
     const gen = allGens(s)[0], ed = gen.editions[0];

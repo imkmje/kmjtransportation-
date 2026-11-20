@@ -1,5 +1,5 @@
 [
-  { "id": "hyundae", "name": "현다이", "trait": "가성비", "cells": { "sedanS": 0.1, "hatch": 0.1, "sedanM": 0 } },
-  { "id": "porty", "name": "포티", "trait": "픽업·대형", "cells": { "sedanS": -0.15, "hatch": -0.2, "sedanM": 0.05 } },
-  { "id": "toyoda", "name": "도요다", "trait": "전 차급·품질", "cells": { "sedanS": 0.1, "hatch": 0.05, "sedanM": 0.15 } }
+  { "id": "hyundae", "name": "현다이", "trait": "가성비", "cells": { "sedanS": 0.1, "hatch": 0.1, "sedanM": 0, "coupe": -0.1, "sedanL": -0.15, "minivan": 0, "kei": 0.1, "suv": 0, "pickup": -0.2, "sports": -0.2 } },
+  { "id": "porty", "name": "포티", "trait": "픽업·대형", "cells": { "sedanS": -0.15, "hatch": -0.2, "sedanM": 0.05, "coupe": 0.05, "sedanL": 0.1, "minivan": 0, "kei": -0.25, "suv": 0.1, "pickup": 0.2, "sports": 0 } },
+  { "id": "toyoda", "name": "도요다", "trait": "전 차급·품질", "cells": { "sedanS": 0.1, "hatch": 0.05, "sedanM": 0.15, "coupe": 0, "sedanL": 0.1, "minivan": 0.1, "kei": 0, "suv": 0.05, "pickup": 0, "sports": 0.05 } }
 ]

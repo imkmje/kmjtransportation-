@@ -1,6 +1,6 @@
 // 화면이 쓰는 조회 함수(순수 함수, 상태를 바꾸지 않는다)
 import { config } from '../config';
-import { bodyById } from '../data';
+import { COMPAT, bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
 import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut } from './dev';
 import { allGens, sellingGens } from './game';
@@ -8,6 +8,7 @@ import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeErr
 import { carriedEquity, faceliftEligibility, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
 import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
+import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { STATS, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
 
@@ -22,7 +23,7 @@ export const generationGrades = (s: CarState, g: Generation): Stats => grades(cu
 export function projectPreview(s: CarState, projectId: number): { stats: Stats; grades: Stats; avg: number } | null {
   const p = projectById(s, projectId);
   if (!p) return null;
-  const stats = finalStats(p.body, p.powertrain, p.tier, p.options, p.points, p.defects), y = yearOf(s.week);
+  const stats = finalStats(p.body, p.powertrain, p.level, p.options, p.points, p.defects), y = yearOf(s.week);
   return { stats, grades: grades(stats, y), avg: avgGrade(stats, y) };
 }
 
@@ -37,9 +38,9 @@ export function expectedReviews(s: CarState, projectId: number, price: number): 
 /** 남은 결함(화면에 보이는 "약 N개") 판단: 15개 이상 많음 / 6~14 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
 export function defectAdvice(p: Project): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
   const c = config.critics, n = p.defectEst, recallYear = Math.min(config.recall.maxYear, n * config.recall.perDefect);
-  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `아직 많습니다: 지금 출시하면 평론가 전원이 ${c.manyDefectsPenalty}점씩 깎고 리콜 위험이 큽니다` };
-  if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다' };
-  return { level: 'ok', recallYear, text: '출시해도 좋습니다' };
+  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `결함이 아직 많습니다. 지금 출시하면 평론가 4명이 모두 ${c.manyDefectsPenalty}점씩 깎고, 리콜 위험이 큽니다.` };
+  if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다.' };
+  return { level: 'ok', recallYear, text: '출시해도 좋습니다.' };
 }
 
 /** 쉬고 있는 개발 직무 직원(팀을 고르지 않았을 때의 기본 팀) */
@@ -50,21 +51,22 @@ const idleDevStaff = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId
 export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idleDevStaff(s)): { grades: Stats; avg: number; min: number; max: number; cost: number } {
   const d = config.dev;
   const y = yearOf(s.week + spec.designWeeks + d.minTestWeeks); // 출시하는 해 기준(해가 바뀌면 등급이 낮아진다)
+  const level = levelForTier(s, spec.powertrain, spec.tier), speed = 1 + devSpeed(s), cut = 1 - defectCut(s); // 연구: 동력 단계·개발 속도·결함 감소
   const at = (r: number, defectFree: boolean): Stats => {
     const w = designWeek(team, spec, () => r), pts = zeroStats();
-    for (const k of STATS) pts[k] = w[k] * spec.designWeeks;
+    for (const k of STATS) pts[k] = w[k] * spec.designWeeks * speed;
     const made = STATS.reduce((a, k) => a + pts[k], 0);
-    const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint - testCut(team) * d.minTestWeeks);
-    return finalStats(spec.body, spec.powertrain, spec.tier, spec.options, pts, defects);
+    const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint * cut - testCut(team) * d.minTestWeeks);
+    return finalStats(spec.body, spec.powertrain, level, spec.options, pts, defects);
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
   return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget) * (spec.designWeeks + d.minTestWeeks) };
 }
 
-/** 대당 이익 = 판매가 − 원가. costMult: 공장 원가 배수(생략하면 1등급 1.0, 화면은 costMultOf(state)를 넘길 것) */
-export const unitProfit = (body: string, powertrain: string, tier: number, options: string[], price: number, costMult = 1): number => price - unitCost(body, powertrain, tier, options, costMult);
-/** 세대의 지금 대당 이익. s를 주면 공장 등급의 원가 배수를 반영 */
-export const generationUnitProfit = (g: Generation, s?: CarState): number => { const e = currentEdition(g); return unitProfit(g.body, g.powertrain, e.tier, e.options, e.price, s ? costMultOf(s) : 1); };
+/** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */
+export const unitProfit = (body: string, powertrain: string, tier: number, options: string[], price: number, costMult = 1, ptAdd?: number): number => price - unitCost(body, powertrain, tier, options, costMult, ptAdd);
+/** 세대의 지금 대당 이익. s를 주면 원가 배수(공장·연구·사건)와 연구로 줄어든 동력 가산을 반영 */
+export const generationUnitProfit = (g: Generation, s?: CarState): number => { const e = currentEdition(g); return unitProfit(g.body, g.powertrain, e.tier, e.options, e.price, s ? costMultOf(s) : 1, s ? ptCostAdd(s, g.powertrain) : undefined); };
 
 /** 예상 월 판매 범위: 최소 = 출시 첫 달(수명 0.6, 시작 인지도), 최대 = 수명 1.0·목표 인지도. 생산 상한 적용 */
 export function salesForecast(s: CarState, projectId: number, price: number, marketing: number): { min: number; max: number } | null {
@@ -73,7 +75,7 @@ export function salesForecast(s: CarState, projectId: number, price: number, mar
   const y = yearOf(s.week), m = monthOf(s.week);
   const others = sellingGens(s).filter((g) => g.status === 'onSale').map((g) => toSaleCar(g, m));
   const start = awarenessStart(s.reputation, ex.avg), target = Math.max(start, awarenessTarget(s.reputation, marketing, grade(pv.stats.Q, y)));
-  const car = { body: p.body, segment: p.segment, stats: pv.stats, price };
+  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain };
   const cap = (d: number) => Math.round(Math.min(capacityOf(s), d));
   return {
     min: cap(monthlyDemand(s, { ...car, awareness: start, life: config.life.start }, others, monthTime(m))),
@@ -103,7 +105,7 @@ export function advice(g: Generation, s?: CarState): string {
     if (age >= L.fullChange.afterMonths) return `${head} 풀체인지를 고려하세요.`;
     return `${head} 후속 모델을 준비하세요.`;
   }
-  if (g.lostSales >= 1) return '주문이 생산량을 넘습니다. 공장을 증설하거나 가격을 올려도 잘 팔립니다.';
+  if (g.lostSales >= 1) return '주문이 생산량을 넘습니다. 공장을 증설하세요. 가격을 올려도 잘 팔립니다.';
   if (currentEdition(g).defects > 0) return '남은 결함이 있어 리콜 위험이 있습니다.';
   return '판매가 순조롭습니다.';
 }
@@ -127,7 +129,7 @@ export function faceliftPreview(s: CarState, generationId: number, spec: { optio
   const dRaw = faceliftWeekByStaff(team, { budget: 'normal', direction: dir }, () => 1).reduce((a, w) => a + w.D, 0) * fl.designWeeks;
   const dCap = fl.dCap * g.editions[0].stats.D, dGain = Math.min(mult.D * dRaw, dCap);
   const defects = Math.max(0, ed.defects * fl.defectKeep + dRaw * d.defectPerPoint * fl.defectRate - testCut(team) * d.minTestWeeks);
-  const stats = finalStats(g.body, g.powertrain, tier, spec.options, g.points, defects);
+  const stats = finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), spec.options, g.points, defects);
   stats.D += dGain;
   const age = lifeAge(g, m), keep = m - g.launchMonth >= fl.lateMonths ? fl.lateLifeKeep : fl.lifeKeep;
   return {
@@ -171,6 +173,25 @@ export { planEntries, nameplateEquity, lookCandidates, faceliftEligibility, full
 export { loanLimit, loanRate } from './finance';
 export { dateOf, dateLabel, monthLabel } from './time';
 export { grade, grades, avgGrade, standard, unitCost, bodiesAt, powertrainsAt, optionsAt, salaryOf } from './cars';
+
+// ---------- 연구(10장)·시대 사건(11장)·조합 노트(5.5) ----------
+export { researchInfo, researchError, researchCost, researchSlots, weeklyResearchPoints, unlockedBodies, unlockedOptions, unlockedPowertrains, powertrainLevels, ptLevel, levelForTier, ptCostAdd, techEffectsText, FIELD_NAMES, type ResearchInfo, type TechRow, type TechStatus } from './research';
+export { activeEvents, eventImpactOn, pendingChoices, newsLog, upcomingEvents, regulationError, chargingInfra, type ActiveEvent } from './events';
+
+/** 궁합 기호(◎ 1.2 / ○ 1.0 / △ 0.8 / × 0.6) */
+export const compatMark = (v: number): string => (v >= 1.2 ? '◎' : v >= 1 ? '○' : v >= 0.8 ? '△' : '×');
+export interface ComboNote { body: string; segment: string; mark: string; value: number; carName: string; generationId: number; reviewAvg: number; launchMonth: number }
+/** 조합 노트(5.5): 출시해 본 차체 × 고객층만 궁합이 공개된다. 그 조합을 처음 낸 차와 평론. 공개된 순서 */
+export function comboNotes(s: CarState): ComboNote[] {
+  return s.knownCombos.flatMap((key) => {
+    const [body, segment] = key.split(':'), g = allGens(s).find((x) => x.body === body && x.segment === segment);
+    const v = COMPAT[body]?.[segment] ?? 1;
+    return g ? [{ body, segment, mark: compatMark(v), value: v, carName: nameplateOf(s, g.id)?.name ?? '', generationId: g.id, reviewAvg: g.reviewAvg, launchMonth: g.launchMonth }] : [];
+  });
+}
+/** 기획 화면 한 칸의 궁합: 공개된 조합이면 기호, 아니면 null(아직 모름) */
+export const comboMark = (s: CarState, body: string, segment: string): string | null =>
+  s.knownCombos.includes(`${body}:${segment}`) ? compatMark(COMPAT[body]?.[segment] ?? 1) : null;
 
 // ---------- 회사(9장) ----------
 const hqLevelInfo = (level: number) => { const h = config.hq.levels[level - 1]; return { level, name: h.name, cost: h.cost, rep: h.rep, staffCap: h.staff, teams: h.teams, optionSlots: h.options, upkeep: h.upkeep }; };
@@ -245,10 +266,10 @@ export function capacityAdvice(s: CarState): string {
   const f = factoryInfo(s), r = f.ratio;
   if (!f.cars.length || f.demand <= 0) return '판매 중인 차가 없습니다.';
   const x = `한도의 ${r.toFixed(1)}배`;
-  if (r >= 1.3) return f.building ? `주문이 ${x}입니다. 증설 공사가 ${f.building.monthsLeft}개월 남았습니다` : f.next ? `주문이 ${x}입니다. 공장 증설을 고려하세요` : `주문이 ${x}입니다. 가격을 올려도 잘 팔립니다`;
-  if (r > 1) return `주문이 한도를 조금 넘습니다(${x})`;
-  if (r < 0.7) return `생산에 여유가 있습니다(한도의 ${Math.round(r * 100)}%만 주문)`;
-  return '생산량이 주문에 잘 맞습니다';
+  if (r >= 1.3) return f.building ? `주문이 ${x}입니다. 증설 공사가 ${f.building.monthsLeft}개월 남았습니다.` : f.next ? `주문이 ${x}입니다. 공장 증설을 고려하세요.` : `주문이 ${x}입니다. 가격을 올려도 잘 팔립니다.`;
+  if (r > 1) return `주문이 한도를 조금 넘습니다(${x}).`;
+  if (r < 0.7) return `생산에 여유가 있습니다(한도의 ${Math.round(r * 100)}%만 주문).`;
+  return '생산량이 주문에 잘 맞습니다.';
 }
 
 export { hqDef, factoryDef, staffCap, devTeams, optionSlots, capacityOf, linesOf, costMultOf, upkeepOf } from './company';

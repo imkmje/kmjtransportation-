@@ -1,7 +1,8 @@
 // 차의 능력치·등급·원가·수명(설계서 5장, 6.3, 7.3). 모두 순수 함수.
 import { config } from '../config';
 import { BODIES, OPTIONS, POWERTRAINS, bodyById, optionById, powertrainById } from '../data';
-import { STATS, type Stats } from './types';
+import { unlockedBodies, unlockedOptions, unlockedPowertrains } from './research';
+import { STATS, type CarState, type Stats } from './types';
 
 export const zeroStats = (): Stats => ({ P: 0, E: 0, U: 0, D: 0, Q: 0 });
 
@@ -12,10 +13,10 @@ export const grade = (raw: number, year: number): number => Math.min(config.grad
 export const grades = (s: Stats, year: number): Stats => { const g = zeroStats(); for (const k of STATS) g[k] = grade(s[k], year); return g; };
 export const avgGrade = (s: Stats, year: number): number => { const g = grades(s, year); return STATS.reduce((a, k) => a + g[k], 0) / STATS.length; };
 
-/** 동력·옵션 점수(차체 배수 적용 전) */
-export function partStats(powertrain: string, tier: number, options: string[]): Stats {
+/** 동력·옵션 점수(차체 배수 적용 전). level: 실제 동력 단계(연구로 오른다, 5.3) */
+export function partStats(powertrain: string, level: number, options: string[]): Stats {
   const pt = powertrainById(powertrain), s = zeroStats();
-  const score = config.powertrain.base * config.powertrain.growth ** (tier - 1);
+  const score = config.powertrain.base * config.powertrain.growth ** (level - 1);
   s.P = score * pt.split.P; s.E = score * pt.split.E;
   for (const id of options) { const o = optionById(id); s.U += o.U; s.D += o.D; s.Q += o.Q; }
   return s;
@@ -24,18 +25,19 @@ export function partStats(powertrain: string, tier: number, options: string[]): 
 /** 결함에 따른 품질 배수(남은 결함 1개당 −1%, 최대 −40%) */
 export const defectQMult = (defects: number): number => 1 - Math.min(config.dev.defectQMax, defects * config.dev.defectQPer);
 
-/** 최종 능력치 = 차체 배수 × (동력·옵션 점수 + 개발 점수), 품질은 결함 감점 */
-export function finalStats(body: string, powertrain: string, tier: number, options: string[], points: Stats, defects: number): Stats {
-  const b = bodyById(body), part = partStats(powertrain, tier, options), s = zeroStats();
+/** 최종 능력치 = 차체 배수 × (동력·옵션 점수 + 개발 점수), 품질은 결함 감점. level: 실제 동력 단계 */
+export function finalStats(body: string, powertrain: string, level: number, options: string[], points: Stats, defects: number): Stats {
+  const b = bodyById(body), part = partStats(powertrain, level, options), s = zeroStats();
   for (const k of STATS) s[k] = b.mult[k] * (part[k] + points[k]);
   s.Q *= defectQMult(defects);
   return s;
 }
 
-/** 대당 원가 = 차체 원가 × (1 + 동력 가산) × (1 + 단계 가산) + 옵션 원가, × 공장 원가 배수 + 물류비. costMult: 공장 등급의 원가 배수(생략하면 1등급 1.0) */
-export function unitCost(body: string, powertrain: string, tier: number, options: string[], costMult = 1): number {
+/** 대당 원가 = 차체 원가 × (1 + 동력 가산) × (1 + 등급 가산) + 옵션 원가, × 원가 배수 + 물류비.
+ *  costMult: 원가 배수(costMultOf(state) = 공장 등급 × 연구 인하 × 사건, 생략하면 1). ptAdd: 동력 가산(ptCostAdd(state, 동력), 생략하면 자료값 = 연구 전 전기 +35%) */
+export function unitCost(body: string, powertrain: string, tier: number, options: string[], costMult = 1, ptAdd?: number): number {
   const pt = powertrainById(powertrain);
-  const base = bodyById(body).cost * (1 + pt.costAdd) * (1 + pt.tiers[tier - 1].costAdd) + options.reduce((a, id) => a + optionById(id).cost, 0);
+  const base = bodyById(body).cost * (1 + (ptAdd ?? pt.costAdd)) * (1 + pt.tiers[tier - 1].costAdd) + options.reduce((a, id) => a + optionById(id).cost, 0);
   return base * costMult + config.market.logistics;
 }
 
@@ -48,7 +50,8 @@ export function lifeFactor(ageMonths: number): number {
 
 export const salaryOf = (ability: number): number => config.salary.base + ability * config.salary.perAbility;
 
-// ---------- 해금(1단계: 연구 없이 연도 자동 해금) ----------
-export const bodiesAt = (year: number) => BODIES.filter((b) => b.year <= year);
-export const powertrainsAt = (year: number) => POWERTRAINS.filter((p) => p.year <= year);
-export const optionsAt = (year: number) => OPTIONS.filter((o) => o.year <= year);
+// ---------- 해금(4단계부터 연구로) ----------
+// 상태를 주면 연구로 연 것(research.ts의 unlocked*와 같다), 연도를 주면 자료의 등장 연도 기준(옛 호환: 실제로 쓸 수 있는지는 연구가 정한다)
+export const bodiesAt = (x: number | CarState) => (typeof x === 'number' ? BODIES.filter((b) => b.year <= x) : unlockedBodies(x));
+export const powertrainsAt = (x: number | CarState) => (typeof x === 'number' ? POWERTRAINS.filter((p) => p.year <= x) : unlockedPowertrains(x));
+export const optionsAt = (x: number | CarState) => (typeof x === 'number' ? OPTIONS.filter((o) => o.year <= x) : unlockedOptions(x));

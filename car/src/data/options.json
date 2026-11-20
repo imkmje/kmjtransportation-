@@ -1,5 +1,18 @@
 [
   { "id": "radio", "name": "라디오", "year": 1970, "U": 3, "D": 3, "Q": 0, "cost": 15 },
   { "id": "aircon", "name": "에어컨", "year": 1975, "U": 8, "D": 0, "Q": 2, "cost": 60 },
-  { "id": "powerSteering", "name": "파워 스티어링", "year": 1980, "U": 5, "D": 0, "Q": 3, "cost": 40 }
+  { "id": "powerSteering", "name": "파워 스티어링", "year": 1980, "U": 5, "D": 0, "Q": 3, "cost": 40 },
+  { "id": "autoTrans", "name": "자동 변속기", "year": 1983, "U": 10, "D": 0, "Q": 3, "cost": 80 },
+  { "id": "leather", "name": "가죽 시트", "year": 1984, "U": 2, "D": 8, "Q": 4, "cost": 90 },
+  { "id": "heatedSeats", "name": "열선 시트", "year": 1984, "U": 9, "D": 2, "Q": 2, "cost": 40 },
+  { "id": "sunroof", "name": "선루프", "year": 1984, "U": 3, "D": 9, "Q": 0, "cost": 60 },
+  { "id": "abs", "name": "ABS", "year": 1988, "U": 2, "D": 0, "Q": 14, "cost": 70 },
+  { "id": "airbag", "name": "에어백", "year": 1992, "U": 0, "D": 0, "Q": 18, "cost": 60 },
+  { "id": "awd", "name": "사륜구동", "year": 1993, "U": 12, "D": 3, "Q": 4, "cost": 150 },
+  { "id": "navigation", "name": "내비게이션", "year": 1999, "U": 18, "D": 7, "Q": 0, "cost": 120 },
+  { "id": "rearCamera", "name": "후방 카메라", "year": 2006, "U": 22, "D": 0, "Q": 12, "cost": 60 },
+  { "id": "smartKey", "name": "스마트 키", "year": 2006, "U": 20, "D": 14, "Q": 0, "cost": 50 },
+  { "id": "adas", "name": "주행 보조", "year": 2015, "U": 20, "D": 0, "Q": 30, "cost": 150 },
+  { "id": "bigScreen", "name": "대형 화면", "year": 2018, "U": 28, "D": 30, "Q": 0, "cost": 120 },
+  { "id": "autonomy2", "name": "자율주행 2단계", "year": 2023, "U": 40, "D": 0, "Q": 35, "cost": 300 }
 ]

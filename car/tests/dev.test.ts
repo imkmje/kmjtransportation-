@@ -4,7 +4,7 @@ import { defectAdvice, planPreview, projectPreview } from '../src/sim/queries';
 import { finalStats, zeroStats, partStats, unitCost } from '../src/sim/cars';
 import { weeklyDevCost } from '../src/sim/dev';
 import { config } from '../src/config';
-import { SPEC, devReady, ok } from './util';
+import { SPEC, devReady, grant, ok } from './util';
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 
@@ -96,12 +96,13 @@ describe('개발(6장)', () => {
   });
   it('기획 검증: 방향 합 10·각 0~4, 옵션 2개까지·중복 금지, 설계 8/12/16주, 개발팀 1개', () => {
     const g = Game.create({ seed: 1 });
+    grant(g, 'el_radio');
     const bad = (x: object) => { const r = g.command({ type: 'startProject', ...SPEC, ...x } as never); return r.ok ? '' : r.reason; };
     expect(bad({ direction: { P: 5, E: 1, U: 2, D: 1, Q: 1 } })).toContain('개발 방향');
     expect(bad({ direction: { P: 2, E: 2, U: 2, D: 2, Q: 1 } })).toContain('합계 10점');
     expect(bad({ options: ['radio', 'radio'] })).toBe('같은 옵션을 두 번 고를 수 없습니다.');
     expect(bad({ designWeeks: 10 })).toContain('설계 기간');
-    expect(bad({ tier: 4 })).toContain('동력 단계');
+    expect(bad({ tier: 4 })).toContain('동력 등급');
     expect(bad({ budget: 'x' })).toBe('예산 등급이 올바르지 않습니다.');
     expect(bad({ segment: 'x' })).toBe('없는 고객층입니다.');
     ok(g.command({ type: 'startProject', ...SPEC, options: ['radio'] }));
@@ -136,7 +137,9 @@ describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () =
   const specs = [SPEC, { ...SPEC, budget: 'high' as const, designWeeks: 16, direction: { P: 4, E: 0, U: 2, D: 4, Q: 0 } }, { ...SPEC, budget: 'low' as const, designWeeks: 8, options: ['radio'] }];
   it('실제로 개발한 등급이 예상 범위 안에 들고, 개발비는 설계 + 최소 시험 주 만큼', () => {
     for (const spec of specs) for (let seed = 1; seed <= 12; seed++) {
-      const g = Game.create({ seed }), pv = planPreview(g.state, spec);
+      const g = Game.create({ seed });
+      grant(g, 'el_radio');
+      const pv = planPreview(g.state, spec);
       expect(pv.min).toBeLessThanOrEqual(pv.avg); expect(pv.avg).toBeLessThanOrEqual(pv.max);
       ok(g.command({ type: 'startProject', ...spec }));
       const p = g.state.projects[0];
@@ -152,7 +155,7 @@ describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () =
     const { g, pid } = devReady(1);
     const p = g.state.projects.find((x) => x.id === pid)!;
     const at = (n: number) => { p.defectEst = n; return defectAdvice(p); };
-    expect(at(15).level).toBe('many'); expect(at(15).text).toContain('평론가 전원이 1점씩');
+    expect(at(15).level).toBe('many'); expect(at(15).text).toContain('평론가 4명이 모두 1점씩');
     expect(at(14).level).toBe('some'); expect(at(6).level).toBe('some');
     expect(at(5).level).toBe('ok'); expect(at(0).level).toBe('ok');
     expect(at(10).recallYear).toBeCloseTo(0.2); expect(at(40).recallYear).toBe(config.recall.maxYear);

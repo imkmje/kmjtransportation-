@@ -23,9 +23,9 @@ export function faceliftEligibility(s: CarState, generationId: number): Eligibil
   if (!g) return no('없는 세대입니다.');
   if (g.status !== 'onSale') return no('판매 중인 세대만 페이스리프트할 수 있습니다.');
   if (g.editions.some((e) => e.kind === 'facelift')) return no('이 세대는 이미 페이스리프트를 했습니다(세대당 1회).');
-  if (s.projects.some((p) => p.kind === 'facelift' && p.targetId === g.id)) return no('이 세대의 페이스리프트를 이미 개발 중입니다.');
+  if (s.projects.some((p) => p.kind === 'facelift' && p.targetId === g.id)) return no('이 세대의 페이스리프트를 이미 개발하고 있습니다.');
   const left = L.facelift.afterMonths - genAge(s, g);
-  if (left > 0) return no(`출시 후 ${L.facelift.afterMonths}개월이 지나야 합니다. 앞으로 ${left}개월`, left);
+  if (left > 0) return no(`출시 후 ${L.facelift.afterMonths}개월이 지나야 합니다. 앞으로 ${left}개월 남았습니다.`, left);
   return yes;
 }
 
@@ -33,11 +33,11 @@ export function faceliftEligibility(s: CarState, generationId: number): Eligibil
 export function fullChangeEligibility(s: CarState, nameplateId: number): Eligibility {
   const n = nameplateById(s, nameplateId);
   if (!n || !n.generations.length) return no('없는 차종입니다.');
-  if (s.projects.some((p) => p.kind === 'fullchange' && p.targetId === n.id)) return no('이 차종의 다음 세대를 이미 개발 중입니다.');
+  if (s.projects.some((p) => p.kind === 'fullchange' && p.targetId === n.id)) return no('이 차종의 풀체인지(다음 세대)를 이미 개발하고 있습니다.');
   const g = latestGen(n);
   if (g.status !== 'onSale') return yes;
   const left = L.fullChange.afterMonths - genAge(s, g);
-  if (left > 0) return no(`출시 후 ${L.fullChange.afterMonths}개월이 지나야 합니다. 앞으로 ${left}개월`, left);
+  if (left > 0) return no(`출시 후 ${L.fullChange.afterMonths}개월이 지나야 합니다. 앞으로 ${left}개월 남았습니다.`, left);
   return yes;
 }
 

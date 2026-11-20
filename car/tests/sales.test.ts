@@ -99,7 +99,7 @@ describe('출시와 평론(7.1~7.2)', () => {
     g.tick();
     expect(L({ price: 700 })).toContain('0.6~2배');
     expect(L({ price: 2500 })).toContain('기준가');
-    expect(L({ marketing: 4 })).toContain('마케팅');
+    expect(L({ marketing: 4 })).toContain('광고 등급');
     expect(L({ wheels: 3 })).toContain('바퀴');
     expect(L({ price: 720 })).toBe('');
   });
@@ -150,7 +150,7 @@ describe('단종(8.6)과 생산 라인', () => {
     const { g } = launched(1);
     ok(g.command({ type: 'startProject', name: '둘째', body: 'sedanS', segment: 'youth', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'low', designWeeks: 8 }));
     for (let i = 0; i < 10; i++) g.tick();
-    expect(g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 0, color: 'red', wheels: 0 })).toEqual({ ok: false, reason: '생산 라인이 없습니다. 기존 차를 단종하세요. 공장을 증설하면 라인이 늘어납니다.' });
+    expect(g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 0, color: 'red', wheels: 0 })).toEqual({ ok: false, reason: '빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.' });
   });
   it('단종: 그 달 말까지 판매(마지막 달 ×0.5), 다음 달부터 라인이 비어 새 차를 낼 수 있다', () => {
     const { g, gen } = launched(1);
@@ -208,7 +208,7 @@ describe('출시 뒤 조정: setPrice / setMarketing', () => {
   });
   it('마케팅 등급 변경: 0~3, 다음 정산의 비용과 목표 인지도에 반영', () => {
     const { g, gen } = launched(1);
-    expect(g.command({ type: 'setMarketing', generationId: gen.id, marketing: 4 })).toEqual({ ok: false, reason: '마케팅 등급은 0~3 중에서 고르세요.' });
+    expect(g.command({ type: 'setMarketing', generationId: gen.id, marketing: 4 })).toEqual({ ok: false, reason: '광고 등급은 0~3 중에서 고르세요.' });
     ok(g.command({ type: 'setMarketing', generationId: gen.id, marketing: 3 }));
     toMonthEnd(g);
     expect(g.state.ledger.at(-1)!.marketing).toBe(config.awareness.marketingCost[3]);

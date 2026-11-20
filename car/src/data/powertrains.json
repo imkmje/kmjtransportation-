@@ -1,4 +1,10 @@
 [
-  { "id": "gasoline", "name": "가솔린", "year": 1970, "split": { "P": 0.6, "E": 0.4 }, "costAdd": 0,
+  { "id": "gasoline", "name": "가솔린", "year": 1970, "split": { "P": 0.6, "E": 0.4 }, "costAdd": 0, "startLevel": 3,
+    "tiers": [ { "name": "보급형", "costAdd": 0 }, { "name": "표준", "costAdd": 0.1 }, { "name": "고급", "costAdd": 0.22 } ] },
+  { "id": "diesel", "name": "디젤", "year": 1982, "split": { "P": 0.45, "E": 0.6 }, "costAdd": 0.08, "startLevel": 5,
+    "tiers": [ { "name": "보급형", "costAdd": 0 }, { "name": "표준", "costAdd": 0.1 }, { "name": "고급", "costAdd": 0.22 } ] },
+  { "id": "hybrid", "name": "하이브리드", "year": 1998, "split": { "P": 0.45, "E": 0.8 }, "costAdd": 0.18, "startLevel": 7,
+    "tiers": [ { "name": "보급형", "costAdd": 0 }, { "name": "표준", "costAdd": 0.1 }, { "name": "고급", "costAdd": 0.22 } ] },
+  { "id": "ev", "name": "전기", "year": 2010, "split": { "P": 0.6, "E": 0.9 }, "costAdd": 0.35, "startLevel": 7, "minCostAdd": 0.1,
     "tiers": [ { "name": "보급형", "costAdd": 0 }, { "name": "표준", "costAdd": 0.1 }, { "name": "고급", "costAdd": 0.22 } ] }
 ]

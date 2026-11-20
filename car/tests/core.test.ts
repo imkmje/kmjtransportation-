@@ -34,7 +34,7 @@ describe('새 게임', () => {
   });
   it('시작 상태: 현금 30억, 평판 10, 직원 4명(디자이너 1·엔지니어 2·테스터 1, 능력 25~35), 경쟁사 3곳', () => {
     const s = Game.create({ seed: 7 }).state;
-    expect(s.cash).toBe(300000); expect(s.reputation).toBe(10); expect(s.saveVersion).toBe(3); expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]);
+    expect(s.cash).toBe(300000); expect(s.reputation).toBe(10); expect(s.saveVersion).toBe(4); expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]);
     expect(s.staff.map((x) => x.role)).toEqual(['designer', 'engineer', 'engineer', 'tester']);
     for (const x of s.staff) { expect(x.ability).toBeGreaterThanOrEqual(25); expect(x.ability).toBeLessThanOrEqual(35); expect(x.potential).toBeGreaterThanOrEqual(50); expect(x.potential).toBeLessThanOrEqual(75); }
     expect(new Set(s.staff.map((x) => x.name)).size).toBe(4);
@@ -71,7 +71,7 @@ describe('결정론과 저장', () => {
   });
 });
 
-describe('연도 해금(1단계: 연구 없이 자동)', () => {
+describe('등장 연도(자료)와 연구 해금(4단계부터)', () => {
   it('차체: 소형 세단 1970, 해치백 1974, 중형 세단 1978', () => {
     expect(bodiesAt(1970).map((b) => b.id)).toEqual(['sedanS']);
     expect(bodiesAt(1974).map((b) => b.id)).toEqual(['sedanS', 'hatch']);
@@ -82,14 +82,13 @@ describe('연도 해금(1단계: 연구 없이 자동)', () => {
     expect(optionsAt(1975).map((o) => o.id)).toEqual(['radio', 'aircon']);
     expect(optionsAt(1980).map((o) => o.id)).toEqual(['radio', 'aircon', 'powerSteering']);
   });
-  it('해금 전 차체·옵션으로는 개발을 시작할 수 없고, 그해가 되면 된다(해금 알림)', () => {
+  it('그해가 되어도 연구하지 않으면 쓸 수 없다(연도 자동 해금 없음)', () => {
     const g = Game.create({ seed: 1 });
-    expect(g.command({ type: 'startProject', ...SPEC, body: 'hatch' })).toEqual({ ok: false, reason: '아직 쓸 수 없는 차체입니다.' });
-    expect(g.command({ type: 'startProject', ...SPEC, options: ['aircon'] })).toEqual({ ok: false, reason: '아직 쓸 수 없는 옵션입니다.' });
+    expect(g.command({ type: 'startProject', ...SPEC, body: 'hatch' })).toEqual({ ok: false, reason: '아직 쓸 수 없는 차체입니다(연구가 필요합니다).' });
+    expect(g.command({ type: 'startProject', ...SPEC, options: ['aircon'] })).toEqual({ ok: false, reason: '아직 쓸 수 없는 옵션입니다(연구가 필요합니다).' });
     g.state.week = 48 * 4 - 1;
-    const ev = g.tick();
-    expect(ev.some((e) => e.kind === 'unlock' && e.text.includes('해치백'))).toBe(true);
-    expect(g.command({ type: 'startProject', ...SPEC, body: 'hatch' }).ok).toBe(true);
+    expect(g.tick().some((e) => e.kind === 'unlock')).toBe(false);
+    expect(g.command({ type: 'startProject', ...SPEC, body: 'hatch' }).ok).toBe(false);
   });
   it('설정의 시작 연도는 1970', () => { expect(config.time.startYear).toBe(1970); });
 });
