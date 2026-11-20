@@ -3,7 +3,7 @@ export const config = {
   time: { startYear: 1970, weeksPerMonth: 4, monthsPerYear: 12 }, // 4장: 1 tick = 1주, 4주 = 1개월, 48주 = 1년
   start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35, potentialMin: 50, potentialMax: 75 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
   reputation: { min: 0, max: 100 },
-  grade: { base: 100, growth: 0.035, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × 1.035^(연도 − 1970), 표시 = 5 × 원점수 / 기준
+  grade: { base: 100, growth: 0.045, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × (1 + growth)^(연도 − 1970), 표시 = 5 × 원점수 / 기준. 3단계 조정 3.5% → 4.5%(설계 결정 d, 허용 3~5%)
   powertrain: { base: 40, growth: 1.22 }, // 5.3: 동력 점수 = 40 × 1.22^(단계 − 1)
   salary: { base: 250, perAbility: 12 }, // 9.1: 월급 = 250 + 능력 × 12
   dev: { // 6장
@@ -17,7 +17,7 @@ export const config = {
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
-    teamBase: 4, teamExp: 0.4, // 팀 규모 체감: 산출 × (n / 4)^(−0.4), 4명 이하는 1(3단계 설계 결정 a, k 허용 0~0.6)
+    teamBase: 4, teamExp: 0.53, // 팀 규모 체감: 산출 × (n / 4)^(−0.53), 4명 이하는 1(3단계 설계 결정 a, k 허용 0~0.6)
     maxOptions: 2, teams: 1, // 본사 1등급 값(화면 호환용). 실제 옵션 슬롯·개발팀 수는 hq.levels를 쓴다
   },
   critics: { // 7.2
@@ -33,11 +33,11 @@ export const config = {
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
   market: { // 7.3
-    scale: 0.5, // 시장 규모 배수(보정용). 2단계 1.15 → 2.1(기하 보간으로 1970년대 시장이 줄어서). 3단계 2.1 → 0.5: 공장 증설로 생산 한도가 풀리자
+    scale: 0.53, // 시장 규모 배수(보정용). 2단계 1.15 → 2.1(기하 보간으로 1970년대 시장이 줄어서). 3단계 2.1 → 0.53: 공장 증설로 생산 한도가 풀리자
     // 1990년 주문이 5등급 공장(월 2만 대)의 3배를 넘어서, 경쟁 차 기본 A(rivals.base)를 함께 낮춰 1970년대 판매는 그대로 두고 후반 시장만 줄였다
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
-    overpriceExp: 10, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
+    overpriceExp: 20, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -54,12 +54,13 @@ export const config = {
     capacity: 300, lines: 1, upkeep: 5000, costMult: 1,
     levels: [ // 월 생산, 생산 라인(동시 차종), 건설비, 월 유지비, 원가 배수
       // 3단계 봇 측정으로 조정(설계서 9.3 표: 건설비 8억/50억/250억/1,200억, 유지비 0.5/1.5/4/10/25억, 원가 배수 1/.95/.9/.85/.8).
+      // 후속 보정: 건설비 17억/260억/2,200억/7,000억, 유지비 0.5/1.9/5.2/18.6/52.5억(성장이 30년 이상에 걸치도록)
       // 대당 이익이 판매가의 약 10%라 원가 배수 0.8이면 이익이 3배가 되어 돈이 폭발했다 → 배수를 완만하게, 건설비·유지비를 올림
       { capacity: 300, lines: 1, cost: 0, upkeep: 5000, costMult: 1 },
-      { capacity: 1000, lines: 2, cost: 300000, upkeep: 15000, costMult: 0.99 },
-      { capacity: 3000, lines: 3, cost: 1500000, upkeep: 60000, costMult: 0.98 },
-      { capacity: 8000, lines: 5, cost: 4000000, upkeep: 150000, costMult: 0.97 },
-      { capacity: 20000, lines: 8, cost: 20000000, upkeep: 400000, costMult: 0.96 },
+      { capacity: 1000, lines: 2, cost: 170000, upkeep: 19000, costMult: 0.99 },
+      { capacity: 3000, lines: 3, cost: 2600000, upkeep: 52000, costMult: 0.98 },
+      { capacity: 8000, lines: 5, cost: 22000000, upkeep: 186000, costMult: 0.97 },
+      { capacity: 20000, lines: 8, cost: 70000000, upkeep: 525000, costMult: 0.96 },
     ],
     buildMonths: 6, // 증설 공사 6개월
   },
@@ -98,15 +99,15 @@ export const config = {
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
   rivals: { // 7.4·8.4: 경쟁 차 A = 기본값 + 강약 ± 0.1. 4~7년 주기로 새 모델, 주기 중간에 페이스리프트(2단계 단순 규칙, 5단계에서 완성)
-    base: 0.45, noise: 0.1, // 1970년 경쟁 차 기본 A. 3단계 조정 1 → 0.45(시장 규모 배수와 함께, 위 market.scale 설명)
-    baseGrowth: 0.03, baseMax: 0.9, // 경쟁사의 성장(설계 결정 b): 해마다 +0.03, 최대 0.9(새 모델을 낼 때 반영)
+    base: 0.42, noise: 0.1, // 1970년 경쟁 차 기본 A. 3단계 조정 1 → 0.42(시장 규모 배수와 함께, 위 market.scale 설명)
+    baseGrowth: 0.05, baseMax: 1.25, // 경쟁사의 성장(설계 결정 b): 해마다 +0.05, 1986년쯤 최대 1.25(새 모델을 낼 때 반영)
     cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
   },
   lifecycle: { // 8장
     facelift: {
-      afterMonths: 18, designWeeks: 4, costShare: 0.35, // 출시 18개월 뒤, 설계 4주, 비용 = 그 세대 개발비의 35%(설계 4주 + 최소 시험 2주에 나눠 낸다). 설계서 25% → 35%(설계자 허용 25~40%, 리프트가 필수가 되지 않게)
+      afterMonths: 18, designWeeks: 4, costShare: 0.4, // 출시 18개월 뒤, 설계 4주, 비용 = 그 세대 개발비의 40%(설계 4주 + 최소 시험 2주에 나눠 낸다). 설계서 25% → 40%(설계자 허용 25~40%, 리프트가 필수가 되지 않게, 3단계 봇 측정)
       dCap: 0.1, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +10%(설계서 +15% → 허용 8~15% 안)
       defectKeep: 0.5, defectRate: 1 / 3, // 남은 결함 × 0.5로 시작, 새 결함은 1/3 속도
       lifeKeep: 0.6, lateMonths: 60, lateLifeKeep: 0.8, // 수명 나이를 60%로(세대 나이 60개월 이후면 80%로). 설계서 40%/70% → 허용 45~65%/75~85% 안

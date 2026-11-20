@@ -31,7 +31,7 @@ describe('판매 공식(7.3)', () => {
   it('기준 상승(5.1): 같은 원점수라도 해가 갈수록 표시 등급이 낮아진다', () => {
     expect(standard(1970)).toBe(100);
     expect(grade(100, 1970)).toBe(5);
-    expect(grade(100, 1980)).toBeCloseTo(5 / 1.035 ** 10, 9);
+    expect(grade(100, 1980)).toBeCloseTo(5 / (1 + config.grade.growth) ** 10, 9);
     expect(grade(1000, 1970)).toBe(10); // 10에서 자른다
   });
   it('수명: 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2%', () => {

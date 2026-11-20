@@ -4,12 +4,12 @@ import { readFileSync } from 'node:fs';
 import { Game, allGens, sellingGens } from '../src/sim/game';
 import { steady } from '../src/sim/bots';
 import { capacityOf, conditionMult, costMultOf, devTeams, linesOf, optionSlots, salesAwarenessBonus, salesFleetMult, staffCap, upkeepOf } from '../src/sim/company';
-import { designWeekByStaff } from '../src/sim/dev';
-import { monthlyDemand, type SaleCar } from '../src/sim/market';
+import { designWeekByStaff, teamSizeMult } from '../src/sim/dev';
+import { monthlyDemand, rivalBase, type SaleCar } from '../src/sim/market';
 import { capacityAdvice, factoryInfo, hiringInfo, hqInfo, planPreview, staffInfo, teamPreview } from '../src/sim/queries';
 import { salaryOf, unitCost } from '../src/sim/cars';
 import { monthOf } from '../src/sim/time';
-import { NAMES } from '../src/data';
+import { NAMES, RIVALS } from '../src/data';
 import { config } from '../src/config';
 import type { Staff } from '../src/sim/types';
 import { SPEC, launched, ok, toMonthEnd } from './util';
@@ -40,16 +40,20 @@ describe('채용(9.1)', () => {
     ok(g.command({ type: 'upgradeHQ' }));
     ok(g.command({ type: 'postJob', role: 'designer', tier: 1 }));
   });
-  it('공고비 500만 / 2,000만 / 1억, 후보 3명(등급별 능력 범위, 잠재력 = 능력 + 10~35, 요구 월급 = 250 + 능력 × 12), 이미 후보가 있으면 거부', () => {
+  it('공고비 500만 / 2,000만 / 1억, 후보 3명(등급별 능력 범위, 잠재력 = 능력 + 5~20, 요구 월급 = 250 + 능력 × 12), 이미 후보가 있으면 거부, 3등급은 평판 40 이상', () => {
+    const t3 = hq2(9);
+    expect(reason(t3.command({ type: 'postJob', role: 'engineer', tier: 3 }))).toBe('3등급 공고는 평판 40 이상이어야 합니다.');
     for (const tier of [1, 2, 3] as const) {
       const g = hq2(tier), cash = g.state.cash;
+      if (tier === 3) g.state.reputation = 40;
+      const bonus = tier === 3 ? 2 : 0; // 평판 40 → +2
       ok(g.command({ type: 'postJob', role: 'engineer', tier }));
       expect(cash - g.state.cash).toBe(H.postCost[tier - 1]);
       expect(g.state.candidates.length).toBe(3);
       for (const c of g.state.candidates) {
         expect(c.role).toBe('engineer');
-        expect(c.ability).toBeGreaterThanOrEqual(H.abilityMin[tier - 1]); expect(c.ability).toBeLessThanOrEqual(H.abilityMax[tier - 1]); // 평판 10 → 보너스 0
-        expect(c.potential - c.ability).toBeGreaterThanOrEqual(Math.min(H.potentialMin, 100 - c.ability)); expect(c.potential).toBeLessThanOrEqual(100);
+        expect(c.ability).toBeGreaterThanOrEqual(H.abilityMin[tier - 1] + bonus); expect(c.ability).toBeLessThanOrEqual(H.abilityMax[tier - 1] + bonus); // 평판 10 → 보너스 0
+        expect(c.potential - c.ability).toBeGreaterThanOrEqual(Math.min(5, 100 - c.ability)); expect(c.potential - c.ability).toBeLessThanOrEqual(20); expect(c.potential).toBeLessThanOrEqual(100);
         expect(c.salary).toBe(250 + c.ability * 12);
         expect(c.expiresWeek).toBe(g.state.week + 4);
       }
@@ -99,6 +103,7 @@ describe('채용(9.1)', () => {
   });
   it('일회성 지출(공고비)은 바로 현금에서 나가고, 그달 장부 oneOff에 적히며 이익에 들어간다(현금은 두 번 빠지지 않는다)', () => {
     const g = hq2();
+    g.state.reputation = 40;
     toMonthEnd(g);
     const before = g.state.cash;
     ok(g.command({ type: 'postJob', role: 'designer', tier: 3 }));
@@ -121,26 +126,24 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
     expect(g.tick().find((e) => e.kind === 'devWeek' && e.staff.some((s) => s.id === x.id))).toBeUndefined();
     expect(reason(g.command({ type: 'fire', staffId: x.id }))).toBe('없는 직원입니다.');
   });
-  it('교육: 비용 = 능력 × 20만원(최소 300만), 능력 +3~6(잠재력 상한), 연 2회, 잠재력에 도달하면 거부', () => {
+  it('교육: 비용 = 능력 × 40만원(최소 500만), 능력 +1~3(잠재력 상한), 연 1회, 잠재력에 도달하면 거부', () => {
     const g = Game.create({ seed: 2 });
     g.state.cash = 1e7;
     const x = g.state.staff[0], a0 = x.ability, cash = g.state.cash;
     ok(g.command({ type: 'train', staffId: x.id }));
-    expect(cash - g.state.cash).toBe(Math.max(300, a0 * 20));
-    expect(x.ability - a0).toBeGreaterThanOrEqual(3); expect(x.ability - a0).toBeLessThanOrEqual(6);
+    expect(cash - g.state.cash).toBe(Math.max(500, a0 * 40));
+    expect(x.ability - a0).toBeGreaterThanOrEqual(1); expect(x.ability - a0).toBeLessThanOrEqual(3);
     expect(reason(g.command({ type: 'train', staffId: x.id }))).toBe('이미 교육 중입니다.');
     for (let i = 0; i < 4; i++) g.tick();
-    ok(g.command({ type: 'train', staffId: x.id }));
-    for (let i = 0; i < 4; i++) g.tick();
-    expect(reason(g.command({ type: 'train', staffId: x.id }))).toBe('올해 교육을 이미 2번 받았습니다.');
+    expect(reason(g.command({ type: 'train', staffId: x.id }))).toBe('올해 교육을 이미 1번 받았습니다.');
     g.state.week = 48; // 다음 해
     ok(g.command({ type: 'train', staffId: x.id }));
     const y = g.state.staff[1];
-    y.ability = 10; y.potential = 12;
+    y.ability = 10; y.potential = 11;
     const c0 = g.state.cash;
     ok(g.command({ type: 'train', staffId: y.id }));
-    expect(c0 - g.state.cash).toBe(300); expect(y.ability).toBe(12);
-    g.state.week += 4;
+    expect(c0 - g.state.cash).toBe(500); expect(y.ability).toBe(11);
+    g.state.week += 48;
     expect(reason(g.command({ type: 'train', staffId: y.id }))).toBe('잠재력에 도달해 더 배울 수 없습니다.');
     g.state.cash = 0;
     expect(reason(g.command({ type: 'train', staffId: g.state.staff[2].id }))).toBe('현금이 모자랍니다.');
@@ -449,7 +452,7 @@ describe('조회 함수(화면용)', () => {
     expect(rows[2]).toMatchObject({ weeksLeft: 4, canTrain: false, trainReason: '이미 교육 중입니다.', trainingsThisYear: 1 });
     expect(rows[3]).toMatchObject({ weeksLeft: 3, canTrain: false, trainReason: '휴식 중에는 교육할 수 없습니다.' });
     const x = g.state.staff[0];
-    expect(rows[0]).toMatchObject({ id: x.id, role: x.role, ability: x.ability, potential: x.potential, atPotential: false, salary: salaryOf(x.ability), condition: 1, conditionMult: 1, projectId: g.state.projects[0].id, canTrain: true, trainCost: Math.max(300, x.ability * 20), severance: 2 * salaryOf(x.ability) });
+    expect(rows[0]).toMatchObject({ id: x.id, role: x.role, ability: x.ability, potential: x.potential, atPotential: false, salary: salaryOf(x.ability), condition: 1, conditionMult: 1, projectId: g.state.projects[0].id, canTrain: true, trainCost: Math.max(500, x.ability * 40), severance: 2 * salaryOf(x.ability) });
   });
   it('hiringInfo: 정원·공고비·후보와 남은 주', () => {
     const g = Game.create({ seed: 1 });
@@ -501,5 +504,46 @@ describe('저장 형식 2 → 3', () => {
     expect(JSON.stringify(loaded.toJSON())).toBe(JSON.stringify(whole.toJSON()));
     expect(whole.state.staff.some((x) => x.role === 'sales')).toBe(true);
     expect(whole.state.factory.level).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('3단계 후속 보정 장치', () => {
+  it('팀 규모 체감: n명이면 산출 × (n/4)^(−k), 4명 이하는 1. planPreview에도 반영', () => {
+    const k = config.dev.teamExp;
+    expect(k).toBeGreaterThanOrEqual(0); expect(k).toBeLessThanOrEqual(0.6);
+    expect(teamSizeMult(1)).toBe(1); expect(teamSizeMult(4)).toBe(1);
+    expect(teamSizeMult(8)).toBeCloseTo(2 ** -k, 12); expect(teamSizeMult(20)).toBeCloseTo(5 ** -k, 12);
+    const x = Game.create({ seed: 1 }).state.staff[1], spec = { budget: 'normal' as const, direction: SPEC.direction };
+    const one = designWeekByStaff([x], spec, () => 1)[0].P, eight = designWeekByStaff(Array(8).fill(x), spec, () => 1);
+    expect(eight[0].P).toBeCloseTo(one * 2 ** -k, 12);
+    const g = Game.create({ seed: 1 }), s = g.state;
+    s.staff = Array.from({ length: 8 }, (_, i) => ({ ...s.staff[i % 4], id: i + 1 }));
+    expect(planPreview(s, SPEC).avg).toBeLessThan(planPreview(s, SPEC, s.staff.slice(0, 4)).avg * 2);
+    expect(planPreview(s, SPEC).avg).toBeGreaterThan(planPreview(s, SPEC, s.staff.slice(0, 4)).avg);
+  });
+  it('경쟁사의 성장: 기본 A는 1970년 base에서 해마다 baseGrowth씩 올라 baseMax에서 멈추고, 새 모델은 그 해 값을 쓴다', () => {
+    const r = config.rivals;
+    expect(rivalBase(0)).toBe(r.base);
+    expect(rivalBase(120)).toBeCloseTo(Math.min(r.baseMax, r.base + 10 * r.baseGrowth), 12);
+    expect(rivalBase(12 * 60)).toBe(r.baseMax);
+    const g = Game.create({ seed: 8 });
+    g.state.cash = 1e12;
+    for (let i = 0; i < 48 * 30; i++) g.tick();
+    for (const rv of g.state.rivals) for (const body of Object.keys(rv.models)) {
+      const md = rv.models[body], cell = (RIVALS.find((x) => x.id === rv.id)!.cells[body] ?? 0);
+      expect(md.base - cell).toBeCloseTo(rivalBase(md.start), 0); // ± 난수 0.1
+      expect(Math.abs(md.base - cell - rivalBase(md.start))).toBeLessThanOrEqual(r.noise + 1e-12);
+    }
+  });
+  it('7) 직원 20명·본사 5등급: 균등 배분·보통 예산·12주 차의 표시 등급 평균이 1985~1995년 기준 6~8.5', () => {
+    for (const year of [1985, 1990, 1995]) {
+      const g = Game.create({ seed: 1 }), s = g.state;
+      s.week = (year - 1970) * 48; s.hqLevel = 5;
+      const roles = [...Array(5).fill('designer'), ...Array(10).fill('engineer'), ...Array(5).fill('tester')] as Staff['role'][];
+      s.staff = roles.map((role, i) => ({ id: i + 1, name: `직원${i}`, role, ability: 60 + ((i * 7) % 21), potential: 100, condition: 1, projectId: null, trainings: [], restUntil: null })); // 능력 60~80
+      const avg = planPreview(s, { ...SPEC, body: 'sedanM', segment: 'family' }).avg;
+      console.log(`7) ${year}년 20명 팀 예상 등급 ${avg.toFixed(2)}`);
+      expect(avg).toBeGreaterThanOrEqual(6); expect(avg).toBeLessThanOrEqual(8.5);
+    }
   });
 });

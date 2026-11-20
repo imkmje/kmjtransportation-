@@ -144,7 +144,7 @@ function startProjects(g: Game, o: SteadyOptions): void {
   const s = g.state, m = monthOf(s.week), year = yearOf(s.week);
   if (s.projects.length >= devTeams(s) || !pickTeam(s).length) return;
   const onSale = sellingGens(s).filter((x) => x.status === 'onSale');
-  const age = (x: Generation) => m - x.launchMonth, opts = optionsAt(year).slice(-optionSlots(s)).map((x) => x.id);
+  const age = (x: Generation) => m - x.launchMonth;
   const targeted = (id: number | null) => s.projects.some((p) => p.targetId === id);
   const npOf = (x: Generation) => s.nameplates.find((n) => n.generations.includes(x))!;
   for (const x of onSale) {
