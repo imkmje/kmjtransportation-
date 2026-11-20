@@ -1,6 +1,6 @@
 import type { CarLook } from './look';
 import type { BodyId } from './look';
-import { ARCH_GAP, BELT_OVER_ARCH, BODY, ERA_FACE, MIN_CABIN, MIN_ROOF_GAP, MIN_TRUNK, VARY, WHEEL_GROW, eraOf, type BodyShape, type FaceSpec, type GrilleKind, type LampKind, type TailKind, type WheelKind } from './shapes';
+import { ARCH_GAP, BELT_OVER_ARCH, BODY, ERA, ERA_FACE, MIN_CABIN, MIN_OVERHANG, MIN_ROOF_GAP, MIN_TRUNK, VARY, WHEEL_GROW, eraOf, type BodyShape, type FaceSpec, type GrilleKind, type LampKind, type TailKind, type WheelKind } from './shapes';
 
 // 시드 → 값. 같은 시드면 항상 같은 수열(mulberry32). Math.random은 쓰지 않는다.
 export function rng(seed: number): () => number {
@@ -27,6 +27,8 @@ export interface SideSpec {
 export interface Chassis extends BodyShape {
   archGap: number; archY: number; archR: number; // 휠 아치 여유, 아치 원 중심 높이·반지름(휠 크기와 무관하게 고정)
   side: SideSpec;
+  roofType: RoofType; // 노치백(트렁크 따로)·세미 패스트백·패스트백
+  wedge: number; // 허리선이 뒤로 갈수록 올라가는 양(m, 시대 + 시드)
   dev: Record<DevKey, number>; // 뽑힌 값(−1~+1)
 }
 
@@ -56,31 +58,46 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
   };
 }
 
-/** 차체 기본값 + chassisSeed 변형. 시드가 없으면 BODY 그대로 */
+export type RoofType = 'notch' | 'semi' | 'fast';
+// 뒤 유리 길이(m): 노치백은 .6 이하, 세미 .8~1.0, 패스트백 1.1~1.3(지붕선이 트렁크 끝 가까이 흐른다)
+const REAR: Record<RoofType, (rr: number) => number> = { notch: rr => Math.min(rr, .6), semi: rr => Math.min(1, Math.max(.8, rr * 1.5)), fast: rr => Math.min(1.3, Math.max(1.1, rr * 2.2)) };
+
+/** 차체 기본값 + 시대 비례 + chassisSeed 변형. 시드가 없으면 BODY(시대 비례만 반영) */
 export function chassisOf(look: CarLook): Chassis {
-  const b = bodyOf(look.bodyId), keys = Object.keys(VARY) as DevKey[];
+  const b = bodyOf(look.bodyId), keys = Object.keys(VARY) as DevKey[], E = ERA[eraOf(look)], ev = look.powertrain === 'ev';
   const r = rng(look.chassisSeed ?? 0), has = look.chassisSeed != null;
   const dev = Object.fromEntries(keys.map(k => [k, has ? r() * 2 - 1 : 0])) as Record<DevKey, number>;
   if (!b.deck) dev.deck = 0;
-  const s = 1 + VARY.len * dev.len, h = b.L * s / 2, tmin = b.deck ? MIN_TRUNK : .2;
+  // 지붕선 유형: 트렁크 있는 차만(쿠페·스포츠카는 패스트백이 더 흔하다)
+  const rt = has ? r() : 0, sporty = look.bodyId === 'coupe' || look.bodyId === 'sports';
+  const roofType: RoofType = !b.deck ? 'notch' : rt < (sporty ? .3 : .5) ? 'notch' : rt < (sporty ? .6 : .8) ? 'semi' : 'fast';
+  const s = E.len * (1 + VARY.len * dev.len), h = b.L * s / 2, tmin = b.deck ? MIN_TRUNK : .2;
   let rf = b.rf * s * (1 + VARY.rake * dev.rake), rr = b.rr * s * (1 + VARY.rear * dev.rear);
+  if (b.deck) rr = REAR[roofType](rr);
+  // 전기차는 보닛이 짧다(객실을 앞으로)
+  const cab = VARY.cab * dev.cab + (ev && eraOf(look) >= 2010 ? .15 : 0);
   // 앞유리 아래 끝(보닛 길이)은 객실 이동만 따르고, 기울기는 지붕 앞 끝을 옮긴다. 보닛 .65m·트렁크 최소는 남긴다
-  const base = Math.min((b.cF + b.rf) * s + VARY.cab * dev.cab, h - .65);
+  const base = Math.min((b.cF + b.rf) * s + cab, h - .65);
   const room = base - (-h + tmin) - MIN_CABIN; // 앞뒤 유리가 쓸 수 있는 길이(극단 시드에서 객실이 찌그러지지 않게 유리를 줄인다)
   if (rr + rf > room) { const k = room / (rr + rf); rr *= k; rf *= k; }
-  const cR = Math.max(b.cR * s + VARY.cab * dev.cab + VARY.deck * dev.deck, -h + rr + tmin);
+  const cR = Math.max(b.cR * s + cab + VARY.deck * dev.deck, -h + rr + tmin);
   const cF = Math.max(base - rf, cR + MIN_CABIN);
   const side = sideOf(look, b);
   // 휠 아치: 가장 큰 휠 기준 원(중심 높이 archY). 허리선은 아치 꼭대기보다 BELT_OVER_ARCH 위(부푼 펜더 차체 제외)
-  const archGap = ARCH_GAP + VARY.arch * dev.arch, archY = b.wr + WHEEL_GROW[2], archR = archY + archGap;
-  const belt = Math.max(b.belt + VARY.belt * dev.belt, b.fenders ? 0 : archY + archR + BELT_OVER_ARCH);
+  const wr0 = b.wr + E.wrD, archGap = ARCH_GAP + VARY.arch * dev.arch, archY = wr0 + WHEEL_GROW[2], archR = archY + archGap;
+  // 휠베이스: 시대·시드 배율, 아치 바깥 오버행은 MIN_OVERHANG(차체 기본이 더 짧으면 그 값) 이상
+  const oh = Math.min(MIN_OVERHANG, b.L / 2 - b.wb - (b.wr + WHEEL_GROW[2] + ARCH_GAP));
+  const wb = Math.min(b.wb * s * E.wbK * (1 + VARY.wbr * dev.wbr) * (ev ? 1.03 : 1), h - archR - oh);
+  // 쐐기가 크면 앞바퀴 위 옆선이 내려가므로 허리선을 그만큼 올린다(아치가 보닛 위로 솟지 않게)
+  const wedge = Math.max(0, E.wedge + VARY.wedge * dev.wedge), wedgeAtFront = wedge * (h + wb) / (2 * h);
+  const belt = Math.max(b.belt + E.beltD + VARY.belt * dev.belt, b.fenders ? 0 : archY + archR + Math.max(BELT_OVER_ARCH, .05 + wedgeAtFront));
   // 가운데 도어 선은 객실 안 같은 비율 자리를 따라간다(필러와 어긋나지 않게)
   const n = b.doors.length, at = (d: number) => cR + (cF - cR) * (d * s - b.cR * s) / ((b.cF - b.cR) * s);
   const doors = b.doors.map((d, i) => i > 0 && (i < n - 1 || !b.deck) ? at(d) : d * s);
   return {
-    ...b, dev, side, L: b.L * s, W: b.W + VARY.wid * dev.wid, belt, roof: Math.max(b.roof + VARY.roof * dev.roof, belt + MIN_ROOF_GAP),
-    cR, cF, rr, rf: base - cF, wb: b.wb * s, archGap, archY, archR, archTrim: side.clad ? Math.max(b.archTrim, .065) : b.archTrim,
-    wr: b.wr + WHEEL_GROW[look.wheel ?? 1], doors,
+    ...b, dev, side, roofType, L: b.L * s, W: b.W + VARY.wid * dev.wid, belt, roof: Math.max(b.roof + E.roofD + VARY.roof * dev.roof, belt + MIN_ROOF_GAP),
+    cR, cF, rr, rf: base - cF, wb, archGap, archY, archR, archTrim: side.clad ? Math.max(b.archTrim, .065) : b.archTrim,
+    wr: wr0 + WHEEL_GROW[look.wheel ?? 1], doors, wedge,
   };
 }
 
@@ -91,16 +108,17 @@ export function measureChassis(c: Chassis): Record<'len' | 'roof' | 'belt' | 'ho
 }
 type MKey = keyof ReturnType<typeof measureChassis>;
 const stats = new Map<string, Record<MKey, [number, number]>>();
-/** 차체 종류별 치수 평균·표준편차(시드 1~300). 설명 문턱값의 기준 */
-export function chassisStats(bodyId: string): Record<MKey, [number, number]> {
-  let st = stats.get(bodyId);
+/** 차체 종류·시대·전기차 여부별 치수 평균·표준편차(시드 1~300). 설명 문턱값의 기준(같은 시대 같은 차체끼리 비교) */
+export function chassisStats(look: CarLook): Record<MKey, [number, number]> {
+  const era = eraOf(look), ev = look.powertrain === 'ev', key = `${look.bodyId}|${era}|${ev}`;
+  let st = stats.get(key);
   if (!st) {
-    const ms = Array.from({ length: 300 }, (_, i) => measureChassis(chassisOf({ bodyId: bodyId as BodyId, powertrain: 'gas', color: '#000', wheel: 1, chassisSeed: i + 1 })));
+    const ms = Array.from({ length: 300 }, (_, i) => measureChassis(chassisOf({ bodyId: look.bodyId, powertrain: ev ? 'ev' : 'gas', color: '#000', wheel: 1, era, chassisSeed: i + 1 })));
     st = Object.fromEntries((Object.keys(ms[0]) as MKey[]).map(k => {
       const v = ms.map(m => m[k]), mu = v.reduce((a, b) => a + b, 0) / v.length;
       return [k, [mu, Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length)]];
     })) as Record<MKey, [number, number]>;
-    stats.set(bodyId, st);
+    stats.set(key, st);
   }
   return st;
 }
@@ -112,7 +130,7 @@ const WORDS: Record<MKey, [string, string]> = {
 };
 /** 실제 치수가 차체 평균에서 가장 많이 벗어난 특징 2개(설명·테스트 공용) */
 export function chassisWords(look: CarLook): string[] {
-  const m = measureChassis(chassisOf(look)), st = chassisStats(look.bodyId);
+  const m = measureChassis(chassisOf(look)), st = chassisStats(look);
   return (Object.keys(WORDS) as MKey[]).map(k => [k, st[k][1] > 1e-6 ? (m[k] - st[k][0]) / st[k][1] : 0] as const)
     .filter(([, z]) => Math.abs(z) > DESC_Z).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2)
     .map(([k, z]) => WORDS[k][z > 0 ? 0 : 1]);
@@ -165,8 +183,8 @@ const WHEEL: Record<WheelKind, string> = { twin5: '더블 5스포크 휠', spoke
 
 /** 후보 고르기 화면용 쉬운 한 줄 설명. 차대는 실제 치수를 차체 평균과 비교해서, 얼굴은 뽑힌 부품에서 만든다 */
 export function describeLook(look: CarLook): { chassis: string; face: string } {
-  const top = chassisWords(look), sd = chassisOf(look).side;
-  const extra = sd.sunroof ? '선루프' : sd.rack ? '루프랙' : sd.blackPillar ? '떠 있는 지붕' : sd.beltChrome ? '크롬 창틀' : '';
+  const c = chassisOf(look), top = chassisWords(look), sd = c.side;
+  const extra = c.roofType === 'fast' ? '패스트백' : c.roofType === 'semi' ? '세미 패스트백' : sd.sunroof ? '선루프' : sd.rack ? '루프랙' : sd.blackPillar ? '떠 있는 지붕' : sd.beltChrome ? '크롬 창틀' : '';
   const f = faceOf(look);
   const grille = look.powertrain === 'ev' ? '막힌 그릴' : GRILLE[f.grille];
   return {

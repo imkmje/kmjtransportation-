@@ -24,7 +24,7 @@ function profile(l: CarLook) {
 }
 const median = (v: number[]) => { const s = [...v].sort((a, b) => a - b); return s[s.length >> 1]; };
 
-describe('3D 차 모양', () => {
+describe('3D 차 모양', { timeout: 60000 }, () => {
   it('설명(트렁크·보닛·지붕·길이)이 실제 생성 형상과 맞는다(차체 10종 × 시드 30 = 300대)', () => {
     const KEY: Record<string, ['len' | 'roof' | 'trunk' | 'hood', 1 | -1]> = {
       '긴 차체': ['len', 1], '짧은 차체': ['len', -1], '높은 지붕': ['roof', 1], '낮은 지붕': ['roof', -1],
@@ -99,12 +99,12 @@ describe('3D 차 모양', () => {
     }
   });
 
-  it('형상 검사: 데칼 빠짐 0, 좌우 대칭, 바퀴는 땅에 닿고 아치 안에, 삼각형 2만 1천5백 이하', () => {
+  it('형상 검사: 데칼 빠짐 0, 좌우 대칭, 바퀴는 땅에 닿고 아치 안에, 삼각형 2만 2천 이하', () => {
     for (const bodyId of BODIES) for (const era of ERAS) for (let s = 0; s < 4; s++) {
       const l = look({ bodyId, era, chassisSeed: s * 19 + 2, faceSeed: s * 5 + 1, wheel: (s % 3) as 0 | 1 | 2, sporty: s === 1, powertrain: s === 3 ? 'ev' : 'gas' });
       const g = buildCar(l, M), c = chassisOf(l);
       expect(g.userData.decalMiss).toBe(0);
-      expect(tris(g)).toBeLessThanOrEqual(21500);
+      expect(tris(g)).toBeLessThanOrEqual(22000);
       // 좌우 대칭: 차 전체 꼭짓점의 z 합이 0 근처, 최대·최소 z가 같다
       const box = new THREE.Box3().setFromObject(g);
       expect(Math.abs(box.max.z + box.min.z)).toBeLessThan(1e-3);
@@ -114,6 +114,35 @@ describe('3D 차 모양', () => {
       disposeCar(g);
     }
   });
+
+  it('보닛·트렁크·지붕 윗면은 차체색이다(유리·검은 재질이 번지지 않음), 스포일러는 차체에 붙는다', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) for (let s = 0; s < 6; s++) {
+      const l = look({ bodyId, era, chassisSeed: s * 23 + 4, faceSeed: s + 1, sporty: true, wheel: (s % 3) as 0 | 1 | 2 });
+      const g = buildCar(l, M), c = chassisOf(l), h = c.L / 2, mesh = bodyMesh(g);
+      g.updateMatrixWorld(true);
+      // 위에서 내려다본 첫 면의 재질(0 = 차체색)
+      const down = new THREE.Raycaster(); down.ray.direction.set(0, -1, 0);
+      for (let x = -h + .2; x < h - .2; x += .1) for (const z of [0, .3]) {
+        const hood = x > c.cF + c.rf + .08, deck = x < c.cR - c.rr - .08 && c.bed == null, roof = x > c.cR + .12 && x < c.cF - .12 && !c.side.sunroof;
+        if (!hood && !deck && !roof) continue;
+        down.ray.origin.set(x, 3, z);
+        const hit = down.intersectObject(g, true)[0];
+        if (hit?.object !== mesh) continue; // 루프랙·스포일러 등 부품이 먼저 맞으면 넘어간다
+        expect(hit.face!.materialIndex, `${bodyId} ${era} 시드${s} x=${x.toFixed(2)} ${hood ? '보닛' : deck ? '트렁크' : '지붕'}`).toBe(0);
+      }
+      // 스포일러(차체 폭의 검은 상자)의 아래 끝이 바로 밑 차체 윗면에서 1cm 안
+      const sp = g.children.find((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.material === M.dark && o.geometry instanceof THREE.BoxGeometry && o.geometry.parameters.depth > c.W - .5);
+      if (sp) {
+        const legs = g.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.geometry instanceof THREE.BoxGeometry && o.material === M.dark && Math.abs(o.position.x - sp.position.x) < .1 && o !== sp && o.geometry.parameters.depth === .04);
+        const bottom = Math.min(sp.position.y - .014, ...legs.map(o => o.position.y - (o.geometry as THREE.BoxGeometry).parameters.height / 2));
+        const ray = new THREE.Raycaster(new THREE.Vector3(sp.position.x, 3, legs[0]?.position.z ?? 0), new THREE.Vector3(0, -1, 0));
+        const hit = ray.intersectObject(mesh)[0];
+        expect(hit, `${bodyId} 스포일러 아래 차체 없음`).toBeTruthy();
+        expect(bottom - hit.point.y, `${bodyId} ${era} 스포일러 뜸`).toBeLessThan(.01);
+      }
+      disposeCar(g);
+    }
+  }, 60000);
 
   it('옆모습 SVG는 3D와 같은 차대 값(바퀴 반지름·위치)을 쓴다', () => {
     const l = look({ bodyId: 'suv', chassisSeed: 9, wheel: 2 }), c = chassisOf(l), svg = silhouetteSvg(l);

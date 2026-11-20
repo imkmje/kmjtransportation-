@@ -26,7 +26,7 @@ export function createCarMaterials(color: string): CarMaterials {
   crease.color = paint.color; // 무대가 차체색을 바꾸면(paint.color.lerp) 함께 바뀐다
   return {
     paint, crease,
-    glass: new THREE.MeshPhysicalMaterial({ color: 0x0b1016, metalness: .9, roughness: .06 }),
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x24303c, metalness: .45, roughness: .07, envMapIntensity: 1.1, clearcoat: .6 }), // 짙은 청회색 + 약한 반사
     tire: new std({ color: 0x121417, roughness: .92 }),
     rim: new std({ color: 0xd4d9e0, metalness: .95, roughness: .22 }),
     dark: new std({ color: 0x15181c, roughness: .6, metalness: .3 }),
@@ -70,12 +70,12 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   for (let k = 0; k < E.smooth; k++) Ts = Ts.map((_, i) => { let a = 0; for (let j = -4; j <= 4; j++) a += Ts[Math.max(0, Math.min(NU, i + j))]; return a / 9; });
   const Tat = (x: number) => { const f = Math.max(0, Math.min(NU, (x + h) / p.L * NU)), i = Math.min(NU - 1, Math.floor(f)); return Ts[i] + (Ts[i + 1] - Ts[i]) * (f - i); };
   const archEdges = [-p.wb - ar, -p.wb + ar, p.wb - ar, p.wb + ar];
-  const brk = [...archEdges.flatMap(e => [e - .003, e + .003]), ...pils.flatMap(px => [px - .045, px + .045]), ...(p.bed != null ? [bedB, bedF] : [])];
+  const brk = [...archEdges.flatMap(e => [e - .003, e + .003]), ...pils.flatMap(px => [px - .062, px - .045, px + .045, px + .062]), ...(p.bed != null ? [bedB, bedF] : [])];
   let xs: number[] = [];
   for (let x = -h + .004; x < h - .004;) {
     xs.push(x);
     const near = Math.min(...archEdges.map(e => Math.abs(x - e))), d = Math.min(x + h, h - x);
-    x += near < .09 || d < E.re + .06 ? .024 : .075;
+    x += near < .09 || d < E.re + .06 ? .024 : .08;
   }
   xs.push(h - .004);
   xs = [...xs, ...brk.filter(x => Math.abs(x) < h - .01)].sort((a, b) => a - b).filter((x, i, a) => i === 0 || x - a[i - 1] > .004 || i === a.length - 1);
@@ -88,7 +88,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     const d = Math.min(x + h, h - x);
     let arch = 0;
     for (const xw of [-p.wb, p.wb]) { const dx = Math.abs(x - xw); if (dx < ar) arch = ay + Math.sqrt(ar * ar - dx * dx); }
-    let yb = Math.max(p.clr, arch), ys = p.belt + .03 - E.wedge * (x + h) / p.L, T = Tat(x);
+    let yb = Math.max(p.clr, arch, d < .4 ? p.clr + E.chin * (1 - d / .4) ** 2 : 0), ys = p.belt + .03 - p.wedge * (x + h) / p.L, T = Tat(x); // 앞뒤 끝은 바닥을 말아 올린다(턱)
     // 부푼 펜더(fenders): 옆 윗선만 아치 위로 솟고 보닛 가운데는 낮게 남아 펜더 사이가 골이 된다
     const fen = p.fenders && arch ? arch + .08 : 0;
     if (arch && !p.fenders) ys = Math.max(ys, arch + .08);
@@ -101,24 +101,25 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     let w = hw * (1 - E.taper * (x / h) ** 4) + .018 * Math.exp(-(((Math.abs(x) - p.wb) / .4) ** 2));
     if (d < rp) w -= rp - Math.sqrt(rp * rp - (rp - d) ** 2);
     w = Math.max(w, .05);
-    const g = T - ys, gg = Math.max(g, .03), ledge = Math.min(.035, gg * .3), wroof = Math.max(.06, w - ledge - .24 * Math.max(0, g - .09));
-    const rc = Math.min(E.rc, gg * .6, wroof * .6), rb = Math.min(E.rb, (ys - yb) * .3), tuck = .045 * e, wB = w - tuck;
+    // wS: 옆판 윗끝 폭(배부른 옆판이면 안쪽), 그 위 옆 유리는 시대별 텀블홈만큼 안쪽으로 눕는다
+    const bow = E.bow * e, wS = w - bow, g = T - ys, gg = Math.max(g, .03), ledge = Math.min(.035, gg * .3), wroof = Math.max(.06, wS - ledge - E.tumble * Math.max(0, g - .09));
+    const rc = Math.min(E.rc, gg * .6, wroof * .6), rb = Math.min(E.rb, (ys - yb) * .3), tuck = E.tuck * e, wB = w - tuck - bow;
     const P: number[] = [];
     for (const f of [0, .33, .66, 1]) P.push(yb, (wB - rb) * f);
     for (const a of [Math.PI / 6, Math.PI / 3]) P.push(yb + rb - rb * Math.cos(a), wB - rb + rb * Math.sin(a));
-    for (let k = 0; k <= 10; k++) { const u = k / 10; P.push(yb + rb + u * (ys - yb - rb), w - tuck * (1 - u) ** 2); }
+    for (let k = 0; k <= 10; k++) { const u = k / 10; P.push(yb + rb + u * (ys - yb - rb), w - tuck * (1 - u) ** 2 - bow * (2 * u - 1) ** 2); }
     if (bedAt(x)) { // 짐칸 단면: 옆 → 벽 윗면 → 안쪽 벽 → 바닥(뒷바퀴 위에서는 바닥이 솟아 휠하우스가 된다)
-      const yw = Math.min(T, ys + .1), zi = w - .07, yf = Math.min(Math.max(p.bed!, yb + .06), yw - .06);
-      P.push(ys + (yw - ys) * .5, w - .004, yw - .012, w - .01, yw, w - .03, yw, zi + .012);
+      const yw = Math.min(T, ys + .1), zi = wS - .07, yf = Math.min(Math.max(p.bed!, yb + .06), yw - .06);
+      P.push(ys + (yw - ys) * .5, wS - .004, yw - .012, wS - .01, yw, wS - .03, yw, zi + .012);
       for (let k = 0; k <= 4; k++) P.push(yw - .02 - (yw - .05 - yf) * k / 4, zi);
       P.push(yf, zi - .03);
       for (let k = 0; k <= 5; k++) P.push(yf, (zi - .06) * (1 - k / 5));
       return { P, g: 0, ys, T };
     }
     const b0 = ys + ledge * .8, b1 = Math.max(b0, T - rc);
-    for (let k = 0; k <= 6; k++) { const u = k / 6; P.push(b0 + u * (b1 - b0), w - ledge + u * (wroof - w + ledge)); }
+    for (let k = 0; k <= 6; k++) { const u = k / 6; P.push(b0 + u * (b1 - b0), wS - ledge + u * (wroof - wS + ledge)); }
     for (const a of [Math.PI / 8, Math.PI / 4, Math.PI * 3 / 8]) P.push(b1 + rc * Math.sin(a), wroof - rc + rc * Math.cos(a));
-    const wt = wroof - rc, crown = .03 * Math.min(1, Math.max(0, g) / .3), valley = Math.max(0, b1 + rc - T - crown);
+    const wt = wroof - rc, crown = E.crown * e * (.4 + .6 * Math.min(1, Math.max(0, g) / .3)), valley = Math.max(0, b1 + rc - T - crown);
     for (let k = 0; k <= 5; k++) { const z = wt * (1 - k / 5), q = (z / wt) ** 2; P.push(T + crown * (1 - q) + valley * q, z); }
     return { P, g, ys, T };
   };
@@ -187,18 +188,21 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     for (let k = J - 1; k >= 1; k--) pos.push(xs[i], P[k * 2], -P[k * 2 + 1]);
     gs.push(g); yss.push(ys); tops.push(T);
   }
-  const vi = (i: number, r: number) => i * RN + (r % RN), idx: number[][] = [[], [], []], sill = p.clr + p.sill;
+  const vi = (i: number, r: number) => i * RN + (r % RN), idx: number[][] = [[], [], [], []], sill = p.clr + p.sill;
   for (let i = 0; i < N; i++) for (let r = 0; r < RN; r++) {
     const a = vi(i, r), b = vi(i + 1, r), c = vi(i + 1, r + 1), dd = vi(i, r + 1), k = r < J ? r : RN - 1 - r;
     const cx = (pos[a * 3] + pos[b * 3]) / 2, cy = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[c * 3 + 1] + pos[dd * 3 + 1]) / 4;
     const gm = Math.min(gs[i], gs[i + 1]), ysm = Math.max(yss[i], yss[i + 1]), tlo = Math.min(tops[i], tops[i + 1]), thi = Math.max(tops[i], tops[i + 1]);
+    const pd = Math.min(...pils.map(px => Math.abs(cx - px)));
     let m = 0;
     if (bedAt(cx) && k >= 19) m = 2; // 짐칸 안쪽 벽·바닥
-    else if (k >= 18 && k <= 21 && gm > .22 && pils.every(px => Math.abs(cx - px) > .045)) m = 1;
+    else if (k >= 18 && k <= 21 && gm > .22 && pd > .062) m = 1;
     // 앞·뒤 유리: 객실 앞뒤 경사면을 고리의 꼭대기 높이로 고른다(뒤가 곧게 선 SUV·해치백도 유리가 실처럼 얇아지지 않게).
     // 고리 단위로 고르면 유리 위아래 경계가 고리 선을 따라 곧다
     else if (k >= 25 && h - Math.abs(cx) > E.re * .7 && (cx < p.cR + .02 || cx > p.cF - .02) && tlo > ysm + .15 && thi < p.roof - .03 && !bedAt(cx)) m = 1;
     else if (sd.blackPillar && k >= 18 && k <= 24 && gm > .22 && cx < p.cR + .12 && cx > p.cR - p.rr * .8) m = 1; // 검은 뒤 필러(떠 있는 지붕)
+    // 창틀: 옆 유리 위아래 한 줄(k17·k22)과 필러 양옆 가는 띠, 유리 앞뒤 끝은 검은 고무. 필러 가운데는 차체색으로 남는다
+    else if (k >= 17 && k <= 22 && gm > .19 && (k === 17 || k === 22 || pd > .045 || gm <= .22) && !bedAt(cx)) m = 3;
     else if (h - Math.abs(cx) > E.re && (k <= 5 || (k <= 15 && cy < sill))) m = 2; // 둥근 앞뒤 끝은 범퍼라 차체 색(경계가 고리 선을 따라 매끈)
     idx[m].push(a, b, dd, b, c, dd);
   }
@@ -212,7 +216,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   idx.forEach((ix, m) => { geo.addGroup(o, ix.length, m); o += ix.length; });
   geo.setIndex(idx.flat());
   geo.computeVertexNormals();
-  add(geo, [M.paint, M.glass, M.dark]);
+  add(geo, [M.paint, M.glass, M.dark, M.trim]);
 
   // ── 띠 장식: 같은 개수의 점 줄 두 개(A·B)를 이은 얇은 면. 재질별로 한 메시에 모은다 ──
   const strips = new Map<THREE.Material, { pos: number[]; idx: number[] }>();
@@ -423,12 +427,13 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     }
   });
   // 휠하우스 안쪽(어두운 반원통): 위쪽 반만(바닥 아래로 뚫지 않게), 좌우 바퀴 안쪽에만(보닛 가운데로 솟지 않게)
-  const well = new THREE.CylinderGeometry(ar - .02, ar - .02, .34, 16, 1, true, Math.PI / 2, Math.PI);
-  for (const xw of [-p.wb, p.wb]) pair(sgn => { const wl = add(well, M.dark, xw, ay, sgn * (hw - .3)); wl.rotation.x = Math.PI / 2; wl.castShadow = false; });
+  const well = new THREE.CylinderGeometry(ar - .02, ar - .02, .22, 16, 1, true, Math.PI / 2, Math.PI);
+  for (const xw of [-p.wb, p.wb]) pair(sgn => { const wl = add(well, M.dark, xw, ay, sgn * (hw - .22)); wl.rotation.x = Math.PI / 2; wl.castShadow = false; });
   if (look.sporty || p.spoiler) {
-    const sx = p.deck ? -h + .2 : p.cR - .06, sy = Tat(sx) + (p.deck ? .12 : .05);
+    // 실제 윗면 높이(topY)에 맞춰 붙인다: 트렁크 날개는 다리가 덱에 닿고, 지붕 스포일러는 지붕 끝에 얹힌다
+    const sx = p.deck ? -h + .2 : p.cR - .06, zl = hw - .42, sy = p.deck ? topY(sx, 0) + .08 : Math.max(topY(sx, 0), topY(sx, zl)); // 고리 사이 면은 곡선보다 조금 낮아 살짝 묻는다
     add(new THREE.BoxGeometry(.2, .028, p.W - .42), M.dark, sx, sy, 0);
-    if (p.deck) pair(sgn => add(new THREE.BoxGeometry(.05, .1, .04), M.dark, sx + .03, sy - .05, sgn * (hw - .42)));
+    if (p.deck) pair(sgn => { const y0 = topY(sx + .03, zl) - .01; add(new THREE.BoxGeometry(.05, sy - y0, .04), M.dark, sx + .03, (sy + y0) / 2, sgn * zl); });
     if (!ev) pair(sgn => { const ex = add(new THREE.CylinderGeometry(.04, .04, .16, 16), M.chrome, -h + .1, p.clr + .03, sgn * .48); ex.rotation.z = Math.PI / 2; });
   }
   // ── 지붕: 선루프(유리 판), 루프랙(레일 2줄 + 다리) ──
