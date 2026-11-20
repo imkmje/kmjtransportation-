@@ -6,7 +6,7 @@ import { withRequired, designWeek, devCostPerWeek, faceliftWeekByStaff, facelift
 import { allGens, sellingGens } from './game';
 import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
 import { carriedEquity, faceliftEligibility, faceliftRefresh, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
-import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
+import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
 import { diffOf } from './difficulty';
 import { regulationBlock, requiredOptions } from './events';
@@ -34,7 +34,7 @@ export function projectPreview(s: CarState, projectId: number): { stats: Stats; 
 export function expectedReviews(s: CarState, projectId: number, price: number): { scores: number[]; avg: number } | null {
   const p = projectById(s, projectId), pv = projectPreview(s, projectId);
   if (!p || !pv) return null;
-  const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0, diffOf(s).manyDefects);
+  const scores = criticScores(pv.stats, yearOf(s.week), basePriceOf(s, p.body), price, p.defects, () => 0, diffOf(s).manyDefects);
   return { scores, avg: mean(scores) };
 }
 

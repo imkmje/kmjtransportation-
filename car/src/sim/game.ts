@@ -6,7 +6,7 @@ import { specError, stepProject, withRequired } from './dev';
 import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, launchAvgGrade, nameplateById, rebuyPerMonth } from './lifecycle';
-import { awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
+import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
 import { addNews, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
 import { criticScores, mean } from './reviews';
@@ -512,7 +512,7 @@ export class Game {
     if (p.kind === 'fullchange' && !prev) return fail('없는 차종입니다.');
     const inherits = p.kind === 'facelift' || (prev !== undefined && prev.status !== 'discontinued'); // 같은 생산 라인을 이어 쓴다
     if (!inherits && sellingGens(s).length >= linesOf(s)) return fail('빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.');
-    const base = bodyById(p.body).basePrice, bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing);
+    const base = basePriceOf(s, p.body), bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing); // 시장 기준가(의무 장비 원가 포함, 0.4.2)
     if (bad) return fail(bad);
     if (cmd.wheels !== 0 && cmd.wheels !== 1 && cmd.wheels !== 2) return fail('바퀴 모양은 0~2 중에서 고르세요.');
     if (typeof cmd.color !== 'string') return fail('색상을 고르세요.');

@@ -5,11 +5,15 @@ export const config = {
   reputation: { // 9.5
     min: 0, max: 100,
     // 0.4.2: 평판을 올릴 길이 명차(+4)뿐이라 리콜(−5)에 깎여 30년 뒤 중앙값이 0이었다(본사 3등급 조건 30에 닿지 못함). 두 가지를 더한다(시상식은 아직 없음)
-    launchBase: 5, launchPer: 1.5, // 신차·풀체인지 출시: 평판 += (평론 평균 − 5) × 1.5(명차·실패작 가감과 별도)
-    yearSoldDiv: 2500, yearMax: 3, // 12월 결산: 평판 += min(3, 그해 판매 대수 / 2,500)
+    launchBase: 5, launchPer: 1, // 신차·풀체인지 출시: 평판 += (평론 평균 − 5) × 1(명차·실패작 가감과 별도)
+    yearSoldDiv: 3000, yearMax: 2, // 12월 결산: 평판 += min(2, 그해 판매 대수 / 3,000)
   },
-  grade: { base: 100, growth: 0.045, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × (1 + growth)^(연도 − 1970), 표시 = 5 × 원점수 / 기준. 3단계 조정 3.5% → 4.5%(설계 결정 d, 허용 3~5%)
-  powertrain: { base: 40, growth: 1.22 }, // 5.3: 동력 점수 = 40 × 1.22^(단계 − 1)
+  grade: { base: 100, max: 10, mid: 5, // 기준(연도) = 100 × 구간별 상승률의 곱(5.1)
+    // 0.4.2: 기준 상승률을 구간별로(사용자 피드백 "다음 작품일수록 좋은 평가가 어렵다"). 1970~80년 7%, 1980~90년 2%, 1990년부터 2.5%.
+    // 신중 봇의 원점수는 1970년대에 빠르게(직원 성장·팀 확대·초기 연구) 오르고 1985년 뒤로 느려져, 단일 4.5%면 등급이 1980년 7.5 → 1995년 5.9로 떨어졌다
+    growthFrom: [1970, 1980, 1990], growthRates: [0.045, 0.03, 0.025],
+  }, // 5.1: 기준(연도) = 100 × (1 + growth)^(연도 − 1970), 표시 = 5 × 원점수 / 기준. 3단계 조정 3.5% → 4.5%(설계 결정 d, 허용 3~5%)
+  powertrain: { base: 40, growth: 1.25 }, // 5.3: 동력 점수 = 40 × 1.25^(단계 − 1). 0.4.2: 1.22 → 1.25(연구 효과를 키워 연구를 게을리하면 등급이 떨어지게)
   salary: { base: 250, perAbility: 12 }, // 9.1: 월급 = 250 + 능력 × 12
   dev: { // 6장
     scale: 1.03, // 0.4.2 시간 척도: 2.4 → 1.03(보통 설계 기간 12 → 28주, 총 점수는 그대로).
@@ -58,13 +62,13 @@ export const config = {
   life: { start: 0.6, rampMonths: 3, plateauMonths: 30, decay: 0.006 }, // 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6%. 0.4.2: 매달 −1.2%(3개월부터)에서 바꿈. 기준 상승(등급 낮아짐)만으로도 판매가 해마다 약 20%씩 줄어, 수명 감소를 늦게·약하게 해야 6~7년에 정점의 25% 아래가 된다
   recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 12, rep: -5, awarenessMult: 0.8 }, // 6.3. 리콜 대당 비용 0.4.1에서 15 → 12만원(결함이 남은 차의 부담 완화)
   factory: { // 9.3 공장. capacity·lines·upkeep·costMult는 1등급 값(화면 호환용), sim은 levels를 쓴다
-    capacity: 300, lines: 1, upkeep: 4000, costMult: 1, // 0.4.1: 1등급 유지비 5,000 → 4,000
+    capacity: 300, lines: 1, upkeep: 3000, costMult: 1, // 0.4.1: 1등급 유지비 5,000 → 4,000. 0.4.2: 4,000 → 3,000(보통에서 서툰 플레이 봇 30년 파산 25% → 15%)
     levels: [ // 월 생산, 생산 라인(동시 차종), 건설비, 월 유지비, 원가 배수
       // 3단계 봇 측정으로 조정(설계서 9.3 표: 건설비 8억/50억/250억/1,200억, 유지비 0.5/1.5/4/10/25억, 원가 배수 1/.95/.9/.85/.8).
       // 후속 보정: 건설비 17억/260억/2,200억/7,000억, 유지비 0.5/1.9/5.2/18.6/52.5억(성장이 30년 이상에 걸치도록)
       // 대당 이익이 판매가의 약 10%라 원가 배수 0.8이면 이익이 3배가 되어 돈이 폭발했다 → 배수를 완만하게, 건설비·유지비를 올림
       // 0.4.1 난이도 완화: 1·2등급 유지비 0.5/1.9억 → 0.4/1.6억(초반 부담), 3등급 건설비 260 → 320억·유지비 15.6 → 22억(초반 완화로 신중 봇의 공장이 너무 빨리 커지지 않게)
-      { capacity: 300, lines: 1, cost: 0, upkeep: 4000, costMult: 1 },
+      { capacity: 300, lines: 1, cost: 0, upkeep: 3000, costMult: 1 },
       { capacity: 1000, lines: 2, cost: 170000, upkeep: 16000, costMult: 0.99 },
       // 4단계 보정: 3~5등급 유지비 5.2/18.6/52.5억 → 15.6/84/240억(연구로 차체·동력이 좋아져 1980년대 이익이 커진 만큼, 큰 공장을 굴리는 비용을 올림)
       { capacity: 3000, lines: 3, cost: 3200000, upkeep: 220000, costMult: 0.98 },
@@ -75,10 +79,10 @@ export const config = {
   },
   hq: { // 9.2 본사. upkeep은 1등급 값(화면 호환용)
     upkeep: 500,
-    levels: [ // 이름, 승급비, 평판 조건, 정원, 개발팀, 옵션 슬롯, 월 유지비(유지비는 설계서에 없어 정한 후보값)
+    levels: [ // 이름, 승급비, 평판 조건, 정원, 개발팀, 옵션 슬롯, 월 유지비(유지비는 설계서에 없어 정한 후보값). 0.4.2: 3등급 평판 조건 30 → 25(신중 봇의 10년 평판 중앙값이 약 28)
       { name: '창고 공장', cost: 0, rep: 0, staff: 4, teams: 1, options: 2, upkeep: 500 },
       { name: '소형 사옥', cost: 50000, rep: 0, staff: 8, teams: 1, options: 2, upkeep: 1500 },
-      { name: '본사 빌딩', cost: 400000, rep: 30, staff: 12, teams: 2, options: 3, upkeep: 5000 },
+      { name: '본사 빌딩', cost: 400000, rep: 25, staff: 12, teams: 2, options: 3, upkeep: 5000 },
       { name: '연구 단지', cost: 3000000, rep: 55, staff: 16, teams: 2, options: 4, upkeep: 15000 },
       { name: '글로벌 본사', cost: 15000000, rep: 80, staff: 20, teams: 3, options: 4, upkeep: 40000 },
     ],
@@ -135,7 +139,7 @@ export const config = {
   },
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
     reserveMonths: 6, // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
-    expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
+    expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, expandFill: 0.75, // expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
     hqCashMult: 6, // 본사 승급: 현금이 승급비 × 6 + 여유분 이상일 때
     tier2Cash: 500000, tier3Cash: 5000000, // 채용 공고 등급: 현금 50억 이상 2등급, 500억 이상 3등급
     salesShare: 0.2, // 정원 중 영업 직원 비율
@@ -145,7 +149,7 @@ export const config = {
     optionCostShare: 0.04, // 4단계: 옵션은 원가가 기준가의 4% 이하인 것만(규제 옵션은 예외, 가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다)
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
-    clumsy: { priceMult: 1.1, changeMonths: 120 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년
+    clumsy: { priceMult: 1.1, changeMonths: 120, testWeeks: 5 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년, 시험 5주(0.4.2 시간 척도 전의 최소 2주와 같은 양)
     novice: { launchDefects: 10, changeMonths: 96, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 8년(0.4.2: 7.5 → 8년, 신중이 6.5년이 되어), 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
   },
   research: { // 10장 연구
@@ -172,7 +176,7 @@ export const config = {
   // cash: 시작 현금, loanBase: 대출 기본 한도, bankruptcyMonths: 파산 유예, rivalMult: 경쟁 차 A 배수, upkeepMult: 본사·공장 유지비 배수,
   // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수
   difficulty: {
-    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 18, rivalMult: 0.88, upkeepMult: 0.8, prototypeMult: 0.8, recallMult: 0.6, manyDefects: 20, bailouts: 2 },
+    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 24, rivalMult: 0.8, upkeepMult: 0.5, prototypeMult: 0.7, recallMult: 0.6, manyDefects: 20, bailouts: 2 },
     normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1 },
     hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
   },

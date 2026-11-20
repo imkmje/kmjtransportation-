@@ -124,9 +124,9 @@ describe('개발(6장)', () => {
     expect(spent).toBeGreaterThan(0);
     expect(g.command({ type: 'cancelProject', projectId: pid })).toEqual({ ok: false, reason: '없는 개발 프로젝트입니다.' });
   });
-  it('동력 단계 1~3: 점수 40 × 1.22^(단계−1)을 P 60 : E 40으로, 원가 가산 0% / +10% / +22%', () => {
+  it('동력 단계 1~3: 점수 40 × growth^(단계−1)을 P 60 : E 40으로, 원가 가산 0% / +10% / +22%', () => {
     expect(partStats('gasoline', 1, []).P).toBeCloseTo(24, 9);
-    expect(partStats('gasoline', 3, []).E).toBeCloseTo(40 * 1.22 ** 2 * 0.4, 9);
+    expect(partStats('gasoline', 3, []).E).toBeCloseTo(40 * config.powertrain.growth ** 2 * 0.4, 9);
     expect(unitCost('sedanS', 'gasoline', 1, [])).toBe(984);
     expect(unitCost('sedanS', 'gasoline', 2, [])).toBeCloseTo(984 * 1.1, 9);
     expect(unitCost('sedanS', 'gasoline', 3, ['radio'])).toBeCloseTo(984 * 1.22 + 15, 9);

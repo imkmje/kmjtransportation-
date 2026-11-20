@@ -552,9 +552,10 @@ export function startApp(): void {
       <p class="hint px-note">이번 달 어림입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>
       <div class="row" id="gprice-apply" data-live style="margin-top:8px"><button class="btn ink" data-act="setPrice" data-id="${g.id}" ${price === e.price ? 'disabled' : ''}>가격 바꾸기</button><span class="hint">지금 가격 ${num(e.price)}만원 · 다음 결산부터 반영</span></div>
       <hr><p class="lbl">광고${ib('term:광고')}(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="setMk" data-id="${g.id}" data-v="${i}" aria-pressed="${g.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div></div>`;
-    const np = Q.nameplateOf(s, g.id)!, fl = elig(Q.faceliftEligibility(s, g.id)), fc = elig(Q.fullChangeEligibility(s, np.id));
+    const np = Q.nameplateOf(s, g.id)!, fl = elig(Q.faceliftEligibility(s, g.id)), fc = elig(Q.fullChangeEligibility(s, np.id)), rf = Q.retrofitInfo(s, g.id);
     const card3 = `<div class="card next-step"><p class="lbl">이 차의 다음 단계 <span class="lblterms">페이스리프트${ib('term:페이스리프트')} 풀체인지${ib('term:풀체인지')}</span></p><div class="row"><button class="btn" data-act="goLift" data-id="${g.id}" ${fl.ok ? '' : 'disabled'}>페이스리프트</button><button class="btn" data-act="goFull" data-id="${np.id}" ${fc.ok ? '' : 'disabled'}>풀체인지</button></div>
       ${fl.ok ? '' : `<p class="note why" data-for="lift">페이스리프트: ${esc(fl.reason ?? '')}</p>`}${fc.ok ? '' : `<p class="note why" data-for="full">풀체인지: ${esc(fc.reason ?? '')}</p>`}
+      ${rf.needed ? `<hr><button class="btn" data-act="retrofit" data-id="${g.id}" ${rf.ok ? '' : 'disabled'} style="width:100%">의무 장비 추가: ${rf.options.map((o) => esc(optionById(o).name)).join('·')} · ${money(rf.cost)} <small>(대당 원가 +${num(rf.unitCostAdd)}만원)</small></button>${rf.ok ? '' : `<p class="note why">${esc(rf.reason ?? '')}</p>`}` : ''}
       <hr><button class="btn danger" data-act="discontinue" data-id="${g.id}" ${ending ? 'disabled' : ''} style="width:100%">${ending ? '이번 달 말에 단종됩니다' : '단종하기'}</button></div>`;
     const planCard = s.projects.length < Q.devTeams(s) ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
     return { ov: ovh, panel: card1 + card3 + card2 + devCard + planCard, look: genLook(g) };
@@ -572,11 +573,11 @@ export function startApp(): void {
     return { ok: false, reason: e ? `「${e.name}」 ${e[k].reason}` : '아직 낸 차종이 없습니다.' };
   }
   function startView(): View {
-    const s = game!.state, list = Q.planEntries(s).nameplates, fc = branchOk(list, 'fullChange'), fl = branchOk(list, 'facelift');
+    const s = game!.state, ent = Q.planEntries(s), list = ent.nameplates, fc = branchOk(list, 'fullChange'), fl = branchOk(list, 'facelift');
     const choice = (act: string, v: string, ok: boolean, head: string, sub: string, why: string | null) =>
       `<button class="choice" data-act="${act}" data-v="${v}" ${ok ? '' : 'disabled'} aria-pressed="${startSel === v}"><b>${head}</b><small>${sub}</small>${ok || !why ? '' : `<em class="why">${esc(why)}</em>`}</button>`;
     const card1 = `<div class="card"><p class="lbl">신차 기획</p><h2>어디서 시작할까요?</h2><div class="choices">
-      ${choice('pickNew', 'new', true, '새 차종 만들기', '새 이름으로 1세대를 만듭니다.', null)}
+      ${choice('pickNew', 'new', ent.newModel.ok, '새 차종 만들기', '새 이름으로 1세대를 만듭니다.', ent.newModel.reason)}
       ${choice('startSel', 'full', fc.ok, '풀체인지', '이름과 이름값을 이어받아 다음 세대를 새로 만듭니다.', fc.reason)}
       ${choice('startSel', 'lift', fl.ok, '페이스리프트', '판매 중인 차의 얼굴과 옵션만 바꿉니다.', fl.reason)}</div></div>`;
     const rows = list.map((e) => {
@@ -742,8 +743,9 @@ export function startApp(): void {
     const s = game!.state, max = Q.optionSlots(s), open = Q.optionsAt(s), req = new Set(Q.activeEvents(s).requiredOptions), st = techStatus();
     const eff = (o: (typeof OPTIONS)[number]) => (['U', 'D', 'Q'] as const).filter((k) => o[k]).map((k) => `${STAT_NAME[k]} +${o[k]}`).join(' · ');
     const locked = OPTIONS.filter((o) => !open.includes(o)), soon = locked.filter((o) => st.get(UNLOCK_TECH.get(`option:${o.id}`)?.id ?? '') !== 'hidden');
-    return `<p class="left">옵션 <b>${chosen.length}</b> / ${max}개</p><div class="opts">${open.map((o) => { const on = chosen.includes(o.id); return `<button class="opt${req.has(o.id) ? ' req' : ''}" data-act="${act}" data-v="${o.id}" data-tip="opt:${o.id}" aria-pressed="${on}" ${!on && chosen.length >= max ? 'disabled' : ''}>${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b>${req.has(o.id) ? '<small class="reqtag">규제: 꼭 넣어야 출시</small>' : ''}<small>${eff(o)}</small><span class="cost">대당 +${num(o.cost)}만원</span></button>`; }).join('')}
-      ${soon.map((o) => lockedOpt('option', o.id, `${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b>${req.has(o.id) ? '<small class="reqtag">규제: 꼭 넣어야 출시</small>' : ''}<small>${eff(o)}</small>`)).join('')}</div>
+    const base = open.filter((o) => req.has(o.id)), free = chosen.filter((id) => !req.has(id)).length; // 0.4.2: 시행된 규제의 의무 장비는 기본 장비(옵션 칸 밖, 원가는 든다)
+    return `${base.length ? `<p class="left">기본 장비(규제 의무): <b>${base.map((o) => esc(o.name)).join(' · ')}</b> · 옵션 칸을 차지하지 않고, 대당 +${num(base.reduce((a, o) => a + o.cost, 0))}만원</p>` : ''}<p class="left">옵션 <b>${free}</b> / ${max}개</p><div class="opts">${open.filter((o) => !req.has(o.id)).map((o) => { const on = chosen.includes(o.id); return `<button class="opt" data-act="${act}" data-v="${o.id}" data-tip="opt:${o.id}" aria-pressed="${on}" ${!on && free >= max ? 'disabled' : ''}>${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b><small>${eff(o)}</small><span class="cost">대당 +${num(o.cost)}만원</span></button>`; }).join('')}
+      ${soon.map((o) => lockedOpt('option', o.id, `${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b>${req.has(o.id) ? '<small class="reqtag">규제 의무 장비: 연구해야 개발할 수 있음</small>' : ''}<small>${eff(o)}</small>`)).join('')}</div>
       <p class="note">옵션은 고르지 않아도 됩니다. 흐린 옵션은 연구로 엽니다.${locked.length > soon.length ? ` 그 밖에 ${locked.length - soon.length}개 옵션은 시대가 흐르면 연구할 수 있습니다.` : ''}${(Q.hqInfo(s).next?.optionSlots ?? 0) > max ? ' 본사를 키우면 옵션 칸이 늘어납니다.' : ''}</p>`;
   }
   /** 연구 기술의 상태(연구 화면과 같은 판단: sim researchInfo) */
@@ -753,7 +755,7 @@ export function startApp(): void {
     const t = UNLOCK_TECH.get(`${type}:${id}`);
     return `<button class="opt locked" data-act="goResearch" data-v="${t?.id ?? ''}" data-lock="${type}:${id}" data-tip="${type === 'option' ? 'opt' : 'body'}:${id}">${inner}<small class="need">연구 필요: ${esc(t?.name ?? '')}${t && t.year > yearOf(game!.state.week) ? ` (${t.year}년쯤)` : ''}</small></button>`;
   }
-  /** 규제 경고(11장): 유예가 끝난 필수 옵션이 빠졌으면 */
+  /** 규제 경고(11장): 의무 장비 기술을 연구하지 않았거나 금지된 동력이면 */
   function regBox(car: { options: string[]; powertrain: string }): string {
     const reg = Q.regulationError(game!.state, car);
     return reg ? `<div class="badbox reg-warn" style="margin-bottom:12px">${esc(reg)} ${ib('term:유예 기간')}</div>` : '';
@@ -853,7 +855,7 @@ export function startApp(): void {
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
     const card1 = `<div class="card price-card"><p class="lbl">판매 가격${fl ? '(다시 정하기)' : ''}</p>${priceBlock('lprice', { price: L.price, base, up,
-      sales: fc ? `${num(fc.min)}~${num(fc.max)}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? pr.map((x) => money(x, true)).join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
+      sales: fc ? `${fc.min === fc.max ? num(fc.min) : `${num(fc.min)}~${num(fc.max)}`}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? [...new Set(pr.map((x) => money(x, true)))].join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
       ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b> 팔릴 것으로 보입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
       ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
     const card2 = `<div class="card"><p class="lbl">색상${fl ? '(그대로 두거나 바꾸기)' : ''}</p>${paints('lset', L.color)}
@@ -1096,7 +1098,7 @@ export function startApp(): void {
     const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">개발에 넣지 않은 엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
       <div class="kpis" style="margin-top:10px">${kpi('한 주 연구 점수', `${pts1(r.pointsPerWeek)}<span>점</span>`)}${kpi('연구 칸', `${r.used}/${r.slots}<span>개 사용</span>`)}${kpi('완료한 기술', `${r.doneCount}<span>개</span>`)}${kpi('전담 연구원', `${labN}<span>명</span>`)}</div>
       ${zero}${act ? `<p class="lbl" style="margin-top:12px">진행 중인 연구</p>${act}` : '<p class="hint" style="margin-top:10px">진행 중인 연구가 없습니다. 아래에서 "가능" 표시가 있는 기술을 눌러 시작합니다.</p>'}
-      <p class="note">개발에 넣지 않은 엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있고, 2개를 함께 연구할 수 있습니다.`} 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
+      <p class="note">개발에 넣지 않은 엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있습니다.`} 본사 등급이 오르면 연구 칸이 늘어납니다(지금 ${r.slots}칸). 점수는 먼저 시작한 연구부터 채웁니다. 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
     const fields = r.fields.map((f) => `<div class="card rfield" data-field="${f.id}"><h3>${esc(f.name)} <small class="hint">${f.techs.filter((t) => t.status === 'done' || t.count).length}/${f.techs.length} 완료</small></h3><div class="techs">${f.techs.map(techCard).join('')}</div></div>`).join('');
     return `<div class="research">${sum}${fields}</div>`;
   }
@@ -1374,6 +1376,7 @@ export function startApp(): void {
       case 'gnext': garageIdx++; render(); return;
       case 'setPrice': { if (!game) return; const id = Number(el.dataset.id), price = garagePrice.get(id); if (price === undefined) return; if (run(game.command({ type: 'setPrice', generationId: id, price }))) { garagePrice.delete(id); toast(`가격을 ${num(price)}만원으로 바꿨습니다. 다음 결산부터 반영됩니다.`); render(); } return; }
       case 'setMk': if (game && run(game.command({ type: 'setMarketing', generationId: Number(el.dataset.id), marketing: Number(v) }))) render(); return;
+      case 'retrofit': if (game && run(game.command({ type: 'retrofit', generationId: Number(el.dataset.id) }))) { toast('의무 장비를 넣었습니다. 대당 원가가 그만큼 오릅니다.'); render(); } return;
       case 'discontinue': {
         if (!game) return; const g = Q.generationById(game.state, Number(el.dataset.id)); if (!g) return;
         if (!(await ask(`「${nameOf(g)}」${josa(nameOf(g), '을/를')} 단종할까요?\n이번 달 말까지만 팔고(마지막 달은 재고 처분이라 판매가 절반), 다음 달부터 생산 라인이 빕니다. 잘 팔리는 차를 단종하면 평판이 ${-config.discontinue.rep} 떨어집니다. 차 이름은 기록에 남습니다.`, '단종하기', true))) return;

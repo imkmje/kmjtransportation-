@@ -299,7 +299,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     }
     expect(got).toEqual([[4, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4]]);
     expect([50000, 400000, 3000000, 15000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억
-    expect([30, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
+    expect([25, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
   });
   it('옵션 슬롯: 본사 1등급은 2개, 3등급이면 3개까지', () => {
@@ -340,7 +340,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     expect(i.next).toMatchObject({ level: 2, name: '소형 사옥', cost: 50000, staffCap: 8 });
     expect(i.canUpgrade).toBe(true); expect(i.staffCount).toBe(4);
     g.state.cash = 1e9; ok(g.command({ type: 'upgradeHQ' }));
-    expect(hqInfo(g.state)).toMatchObject({ canUpgrade: false, reason: '평판 30 이상이어야 합니다(지금 10).' });
+    expect(hqInfo(g.state)).toMatchObject({ canUpgrade: false, reason: '평판 25 이상이어야 합니다(지금 10).' }); // 0.4.2: 30 → 25
   });
 });
 
@@ -536,7 +536,7 @@ describe('3단계 후속 보정 장치', () => {
       expect(Math.abs(md.base - cell - rivalBase(md.start))).toBeLessThanOrEqual(r.noise + 1e-12);
     }
   });
-  it('7) 직원 20명·본사 5등급: 균등 배분·보통 예산·12주 차의 표시 등급 평균이 1985~1995년 기준 6~8.5', () => {
+  it('7) 직원 20명·본사 5등급: 균등 배분·보통 예산·중간 설계 기간 차의 표시 등급 평균이 1985~1995년 기준 6~9(0.4.2: 1990년부터 기준 상승이 느려져 상한 8.5 → 9)', () => {
     for (const year of [1985, 1990, 1995]) {
       const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
       s.week = (year - 1970) * 48; s.hqLevel = 5;
@@ -544,7 +544,7 @@ describe('3단계 후속 보정 장치', () => {
       s.staff = roles.map((role, i) => ({ id: i + 1, name: `직원${i}`, role, ability: 60 + ((i * 7) % 21), potential: 100, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false })); // 능력 60~80
       const avg = planPreview(s, { ...SPEC, body: 'sedanM', segment: 'family' }).avg;
       console.log(`7) ${year}년 20명 팀 예상 등급 ${avg.toFixed(2)}`);
-      expect(avg).toBeGreaterThanOrEqual(6); expect(avg).toBeLessThanOrEqual(8.5);
+      expect(avg).toBeGreaterThanOrEqual(6); expect(avg).toBeLessThanOrEqual(9);
     }
   });
 });
