@@ -14,8 +14,19 @@ export interface RegionMarket { name: string; years: number[]; annual: number[];
 export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
 
 // ---------- 상태 ----------
-export type Role = 'designer' | 'engineer' | 'tester';
-export interface Staff { id: number; name: string; role: Role; ability: number; condition: number; projectId: number | null }
+export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
+/** 개발 직무(프로젝트에 배치할 수 있는 직무). 영업은 배치하지 않는다 */
+export type DevRole = Exclude<Role, 'sales'>;
+export interface Staff {
+  id: number; name: string; role: Role; ability: number;
+  potential: number; // 개인별 능력 상한(9.1)
+  condition: number; // 0~1
+  projectId: number | null;
+  trainings: number[]; // 교육을 시작한 주(연 2회 제한·교육 중 판정). 마지막 값 + 4주 전까지 교육 중
+  restUntil: number | null; // 이 주 전까지 강제 휴식(산출 0, 회복)
+}
+/** 채용 후보(공고 1회에 3명, 4주 뒤 사라짐). salary = 요구 월급(= 250 + 능력 × 12) */
+export interface Candidate { id: number; name: string; role: Role; ability: number; potential: number; salary: number; expiresWeek: number }
 
 export type Budget = 'low' | 'normal' | 'high';
 /** 신차 기획(6.1): 기획 단계에서 정하는 것 전부 */
@@ -67,6 +78,8 @@ export interface Generation {
   sales: number[]; // 출시 달부터 월별 판매 대수
   totalSold: number;
   lastDemand: number; // 지난달 수요(생산 상한 적용 전, 조언용)
+  lostSales: number; // 지난달 생산 한도 때문에 못 판 대수(= 수요 − 판매, 0 이상)
+  allocShare: number | null; // 생산 배분 수동 몫(0~1, 공장 한도 대비). null = 수요 비례 자동
   devCost: number; // 이 세대 개발에 쓴 돈
   profit: number; // 누적 이익(판매가 − 원가 − 마케팅 − 리콜)
   recalls: number;
@@ -81,11 +94,12 @@ export interface RivalState { id: string; name: string; cells: Record<string, nu
 export interface LedgerEntry {
   month: number; year: number; monthOfYear: number;
   revenue: number; cogs: number; salaries: number; upkeep: number; dev: number; marketing: number; interest: number; recall: number;
+  oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
 }
 
 export interface CarState {
-  saveVersion: 2;
+  saveVersion: 3;
   seed: number; rng: number;
   week: number;
   companyName: string;
@@ -95,20 +109,25 @@ export interface CarState {
   negMonths: number; // 현금 음수로 끝난 연속 달 수
   status: 'playing' | 'gameOver';
   staff: Staff[];
+  candidates: Candidate[]; // 채용 후보(공고를 내면 3명)
+  hqLevel: number; // 본사 등급 1~5(9.2)
+  factory: { level: number; build: { level: number; doneMonth: number } | null }; // 공장 등급 1~5, 증설 공사(doneMonth 달 초부터 새 등급)
   projects: Project[];
   nameplates: Nameplate[];
   rivals: RivalState[];
   ledger: LedgerEntry[]; // 최근 24개월
   pendingDev: number; // 이번 달에 쌓인 개발비(월말 정산)
+  pendingOneOff: number; // 이번 달 일회성 지출(이미 현금에서 나감, 장부 기록용)
   nextId: number;
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
 }
 
 // ---------- 명령 ----------
 export type Command =
-  | ({ type: 'startProject'; chassisSeed?: number; faceSeed?: number } & ProjectSpec) // 시드를 빼면 lookCandidates의 첫 후보
-  | { type: 'startFacelift'; generationId: number; options: string[]; tier?: number; faceSeed?: number }
-  | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number } & Omit<ProjectSpec, 'name'>)
+  // team: 배치할 직원 ID(생략하면 쉬고 있는 개발 직무 전원). 시드를 빼면 lookCandidates의 첫 후보
+  | ({ type: 'startProject'; chassisSeed?: number; faceSeed?: number; team?: number[] } & ProjectSpec)
+  | { type: 'startFacelift'; generationId: number; options: string[]; tier?: number; faceSeed?: number; team?: number[] }
+  | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }
   | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
   | { type: 'discontinue'; generationId: number }
@@ -116,11 +135,22 @@ export type Command =
   | { type: 'setMarketing'; generationId: number; marketing: number }
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
-  | { type: 'bailout' };
+  | { type: 'bailout' }
+  // ---------- 회사(9장) ----------
+  | { type: 'postJob'; role: Role; tier: 1 | 2 | 3 }
+  | { type: 'hire'; candidateId: number }
+  | { type: 'dismissCandidates' }
+  | { type: 'fire'; staffId: number }
+  | { type: 'train'; staffId: number }
+  | { type: 'rest'; staffId: number; weeks: number }
+  | { type: 'assign'; staffId: number; projectId: number | null }
+  | { type: 'upgradeHQ' }
+  | { type: 'expandFactory' }
+  | { type: 'setAllocation'; generationId: number; share: number | null };
 /** 성공하면 events에 그 명령이 낸 소식(출시 기사 등)이 올 수 있다 */
 export type CommandResult = { ok: true; events?: GameEvent[] } | { ok: false; reason: string };
 
-export type EventKind = 'designDone' | 'monthEnd' | 'recall' | 'discontinued' | 'unlock' | 'cashWarning' | 'gameOver' | 'news' | 'advice';
+export type EventKind = 'designDone' | 'monthEnd' | 'recall' | 'discontinued' | 'unlock' | 'cashWarning' | 'gameOver' | 'news' | 'advice' | 'company';
 export interface BasicEvent { kind: EventKind; text: string; id?: number }
 /** 주간 개발 기록(사무실 화면용): 직원별로 그 주에 실제로 쌓은 점수와 결함 증감 */
 export interface DevWeekEvent {

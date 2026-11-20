@@ -78,6 +78,11 @@ export function startApp(): void {
     setTimeout(close, ms);
   }
   const err = (reason: string) => toast(reason, 'bad', '할 수 없습니다');
+  /** 넓은 사무실 배치에서는 알림을 무대 아래쪽 가장자리에 띄워 패널 버튼을 가리지 않는다 */
+  function placeToasts(): void {
+    const wide = $('#main').classList.contains('wide');
+    $('#toasts').style.setProperty('--tb', wide ? `${Math.round(innerHeight - $('#stage').getBoundingClientRect().bottom + 12)}px` : '');
+  }
 
   /** 화면 안 확인 창(alert/confirm 대신) */
   function ask(text: string, yes = '예', danger = false, no = '아니요'): Promise<boolean> {
@@ -123,7 +128,7 @@ export function startApp(): void {
     const band = document.querySelector<HTMLElement>('#ov .ofc');
     $('#office').style.setProperty('--office-top-inset', `${band ? Math.round(band.getBoundingClientRect().height) : 0}px`);
   }
-  addEventListener('resize', () => { if (officeOn) setOfficeInset(); }); // 사무실의 크기 감시(ResizeObserver)보다 먼저 돈다
+  addEventListener('resize', () => { if (officeOn) setOfficeInset(); placeToasts(); }); // 사무실의 크기 감시(ResizeObserver)보다 먼저 돈다
   function officeView(p?: Project): OfficeView {
     const s = game!.state;
     return {
@@ -277,6 +282,8 @@ export function startApp(): void {
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : recordsView(), look: undefined };
     $('#main').classList.toggle('full', v.look === undefined && !v.office);
+    $('#main').classList.toggle('wide', !!v.office); // 개발 탭 사무실: 위에 넓게, 아래에 패널 세 칸
+    placeToasts();
     if (v.ov !== lastOv) { ov.innerHTML = v.ov; lastOv = v.ov; } // 띠 높이를 사무실보다 먼저 정한다(--office-top-inset)
     showOffice(v.office ?? null);
     if (v.look !== undefined && !v.office) showLook(v.look);
@@ -497,16 +504,17 @@ export function startApp(): void {
     const ovh = `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>${kindLabel(p)} · ${phase}</div><b>${esc(p.name)}</b><span class="ofc-s">${STATS.map((k) => `${STAT_NAME[k]} ${score(pv.grades[k])}`).join(' · ')} · 결함 약 ${num(p.defectEst)}개</span></div><div class="ofc-g"><small>지금 등급</small><b>${score(pv.avg)}</b></div></div>`;
     const pct = p.phase === 'design' ? (p.weeksDone / p.designWeeks) * 100 : 100;
     const log = devLog.get(p.id) ?? [];
+    // 넓은 화면에서는 사무실 아래에 [진행·능력치] [결함·개발비·버튼] [주간 기록] 세 칸으로 나란히
     const card1 = `<div class="card"><p class="lbl">${kindLabel(p)} · ${p.phase === 'design' ? '설계 단계' : '시험 단계'}</p><h2>${esc(p.name)}<small>${phase}</small></h2>
       <div class="prog ${p.phase === 'test' ? 'test' : ''}"><u style="width:${pct.toFixed(1)}%"></u></div>
-      <p class="hint">${p.phase === 'design' ? (p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.') : '시험할수록 결함이 줄어 리콜 위험이 낮아집니다. 대신 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.'}</p>
-      <hr><p class="lbl">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}
-      <div class="kpis" style="margin-top:10px">${kpi('남은 결함', `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>
-      ${p.phase === 'test' ? defectBox(adv) : ''}
+      <p class="lbl" style="margin-top:12px">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}</div>`;
+    const card2 = `<div class="card"><div class="kpis">${kpi('남은 결함', `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>
+      ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}
       <button class="go" data-act="toLaunch" ${ready ? '' : 'disabled'}>${ready ? '출시 준비 →' : p.phase === 'design' ? '설계가 끝나면 시험을 시작합니다' : `시험 ${minT}주 뒤 출시할 수 있습니다`}</button>
-      <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:8px">개발 취소</button></div>`;
-    const card2 = `<div class="card"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽에서 빠르기를 고르세요.</p>'}</div>`;
-    return { ov: ovh, panel: card1 + card2, office: officeView(p) };
+      <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:8px">개발 취소</button>
+      ${p.phase === 'test' ? '<p class="note">시험할수록 결함이 줄어 리콜 위험이 낮아집니다. 대신 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.</p>' : ''}</div>`;
+    const card3 = `<div class="card"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽에서 빠르기를 고르세요.</p>'}</div>`;
+    return { ov: ovh, panel: card1 + card2 + card3, office: officeView(p) };
   }
 
   /** 결함 안내 한 줄(시험 단계·출시 화면) */

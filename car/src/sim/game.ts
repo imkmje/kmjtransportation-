@@ -3,16 +3,17 @@ import { config } from '../config';
 import { BODIES, NAMES, OPTIONS, POWERTRAINS, bodyById } from '../data';
 import { avgGrade, defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
 import { specError, stepProject } from './dev';
+import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, faceliftEligibility, fullChangeEligibility, lookCandidates, latestGen, launchAvgGrade, nameplateById, rebuyPerMonth } from './lifecycle';
 import { awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals } from './market';
 import { criticScores, mean } from './reviews';
 import { Rng, hash32 } from './rng';
 import { dateLabel, isMonthEnd, isYearStart, monthLabel, monthOf, monthTime, yearOf } from './time';
-import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type Project, type ProjectKind, type ProjectSpec, type Stats } from './types';
+import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type Project, type ProjectKind, type ProjectSpec, type Staff, type Stats } from './types';
 
-/** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 형식 1은 fromJSON이 올린다 */
-export const SAVE_VERSION = 2;
+/** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 형식 1·2는 fromJSON이 올린다 */
+export const SAVE_VERSION = 3;
 export interface GameOptions { seed: number; companyName?: string }
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
@@ -44,17 +45,19 @@ export class Game {
   static create(opts: GameOptions): Game {
     const rng = new Rng(opts.seed);
     const pool = [...NAMES.staff];
-    const staff = config.start.roles.map((role, i) => ({
+    const staff: Staff[] = config.start.roles.map((role, i) => ({
       id: i + 1, name: pool.splice(rng.intIn(0, pool.length - 1), 1)[0], role,
-      ability: rng.intIn(config.start.abilityMin, config.start.abilityMax), condition: 1, projectId: null,
+      ability: rng.intIn(config.start.abilityMin, config.start.abilityMax), potential: 0, condition: 1, projectId: null, trainings: [], restUntil: null,
     }));
     const rivals = initRivals(rng, opts.seed);
+    for (const x of staff) x.potential = rng.intIn(config.start.potentialMin, config.start.potentialMax); // 경쟁사 뒤에 뽑아 2단계까지의 난수 순서를 지킨다
     const state: CarState = {
       saveVersion: SAVE_VERSION, seed: opts.seed, rng: rng.getState(), week: 0,
       companyName: opts.companyName?.trim() || NAMES.defaultCompany,
       reputation: config.start.reputation, cash: config.start.cash,
       loan: { balance: 0, limitMult: 1, bailoutUsed: false }, negMonths: 0, status: 'playing',
-      staff, projects: [], nameplates: [], rivals, ledger: [], pendingDev: 0, nextId: staff.length + 1, history: [],
+      staff, candidates: [], hqLevel: 1, factory: { level: 1, build: null },
+      projects: [], nameplates: [], rivals, ledger: [], pendingDev: 0, pendingOneOff: 0, nextId: staff.length + 1, history: [],
     };
     return new Game(state);
   }
@@ -72,9 +75,12 @@ export class Game {
       });
       if (log.designDone) ev.push({ kind: 'designDone', id: p.id, text: `「${p.name}」 설계가 끝났습니다. 시험을 시작합니다.` });
     }
+    this.staffWeek(ev);
     if (isMonthEnd(s.week)) this.monthEnd(ev);
     if (s.status === 'playing') {
       s.week++;
+      const gone = s.candidates.filter((c) => s.week >= c.expiresWeek);
+      if (gone.length) { s.candidates = s.candidates.filter((c) => s.week < c.expiresWeek); ev.push({ kind: 'company', text: `채용 후보 ${gone.length}명이 다른 회사로 갔습니다.` }); }
       if (isYearStart(s.week)) {
         const y = yearOf(s.week);
         for (const x of [...BODIES, ...POWERTRAINS, ...OPTIONS]) if (x.year === y) ev.push({ kind: 'unlock', text: `${y}년: 「${x.name}」을(를) 쓸 수 있게 되었습니다.` });
@@ -82,6 +88,18 @@ export class Game {
     }
     s.rng = this.rng.getState();
     return ev;
+  }
+
+  /** 9.1 주간 직원: 컨디션(프로젝트에서 일한 주 −, 아니면 +0.05), 교육·휴식 끝 알림. 직원 ID 순 */
+  private staffWeek(ev: GameEvent[]): void {
+    const s = this.state, c = config.staff.condition, next = s.week + 1;
+    for (const x of [...s.staff].sort((a, b) => a.id - b.id)) {
+      const p = x.projectId === null ? undefined : s.projects.find((q) => q.id === x.projectId);
+      const d = p && !isAway(x, s.week) ? -c.perWeek[p.budget] : c.recover;
+      x.condition = Math.min(1, Math.max(0, x.condition + d));
+      if (x.trainings.length && x.trainings[x.trainings.length - 1] + config.staff.train.weeks === next) ev.push({ kind: 'company', id: x.id, text: `${x.name} 교육을 마쳤습니다(능력 ${x.ability}).` });
+      if (x.restUntil !== null && x.restUntil <= next) { x.restUntil = null; ev.push({ kind: 'company', id: x.id, text: `${x.name} 휴식을 마치고 돌아왔습니다.` }); }
+    }
   }
 
   private addRep(d: number): void { this.state.reputation = Math.min(config.reputation.max, Math.max(config.reputation.min, this.state.reputation + d)); }
@@ -100,18 +118,21 @@ export class Game {
       if (g.status === 'ending') d *= config.discontinue.lastMonthMult; // 단종 달: 재고 처분
       return d;
     });
-    const total = demand.reduce((a, b) => a + b, 0);
-    const fill = total > config.factory.capacity ? config.factory.capacity / total : 1; // 생산 상한을 수요 비례로 나눈다
+    // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로
+    const cap = capacityOf(s), manual = gens.reduce((a, g) => a + (g.allocShare ?? 0), 0), autoCap = Math.max(0, cap * (1 - manual));
+    const autoTotal = gens.reduce((a, g, i) => a + (g.allocShare === null ? demand[i] : 0), 0);
+    const fill = autoTotal > autoCap ? autoCap / autoTotal : 1;
     let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
     gens.forEach((g, i) => {
-      const ed = currentEdition(g), n = Math.round(demand[i] * fill), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options);
+      const n = Math.round(g.allocShare === null ? demand[i] * fill : Math.min(demand[i], cap * g.allocShare));
+      const ed = currentEdition(g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s));
       const mk = config.awareness.marketingCost[g.marketing];
-      g.lastDemand = demand[i];
+      g.lastDemand = demand[i]; g.lostSales = Math.max(0, demand[i] - n);
       g.sales.push(n); g.totalSold += n; sold += n;
       revenue += n * ed.price; cogs += n * uc; marketing += mk;
       g.profit += n * (ed.price - uc) - mk;
       const target = awarenessTarget(s.reputation, g.marketing, grade(ed.stats.Q, year));
-      g.awareness += (target - g.awareness) * config.awareness.rate;
+      g.awareness += (target - g.awareness) * (config.awareness.rate + salesAwarenessBonus(s)); // 영업 직원이 수렴을 빠르게(9.1)
       if (ed.defects > 0) { // 6.3 리콜: 연 확률 min(40%, 결함 × 2%)을 달로 나눠 굴린다
         const pYear = Math.min(config.recall.maxYear, ed.defects * config.recall.perDefect);
         if (this.rng.next() < 1 - (1 - pYear) ** (1 / config.time.monthsPerYear)) {
@@ -128,13 +149,18 @@ export class Game {
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
     const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
-    const upkeep = config.factory.upkeep + config.hq.upkeep, dev = s.pendingDev, interest = s.loan.balance * loanRate(s);
-    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall;
-    s.cash += profit; s.pendingDev = 0;
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, dev, marketing, interest, recall, profit, cash: s.cash, sold };
+    const upkeep = upkeepOf(s), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
+    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff;
+    s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
     s.ledger.push(e);
     if (s.ledger.length > config.ledgerMonths) s.ledger.splice(0, s.ledger.length - config.ledgerMonths);
     ev.push({ kind: 'monthEnd', text: `${monthLabel(m)} 결산: 판매 ${sold}대, 이익 ${Math.round(profit).toLocaleString()}만원` });
+    const b = s.factory.build; // 9.3 증설 공사: doneMonth 달부터 새 등급
+    if (b && m + 1 >= b.doneMonth) {
+      s.factory = { level: b.level, build: null };
+      ev.push({ kind: 'company', text: `공장 ${b.level}등급 증설을 마쳤습니다. 한 달 생산 ${capacityOf(s).toLocaleString()}대, 생산 라인 ${linesOf(s)}개.` });
+    }
     // 9.4 파산: 현금 음수로 6개월 연속이면 게임 오버
     if (s.cash < 0) {
       s.negMonths++;
@@ -158,10 +184,10 @@ export class Game {
     if (s.status !== 'playing' && cmd?.type !== 'bailout') return fail('게임이 끝났습니다.'); // 9.4: 파산 화면에서도 구제 금융은 받을 수 있다
     switch (cmd?.type) {
       case 'startProject': {
-        const err = this.teamError() ?? specError(s, cmd) ?? seedError(cmd.chassisSeed) ?? seedError(cmd.faceSeed) ?? this.staffError();
+        const team = this.teamFor(cmd.team), err = this.teamError() ?? specError(s, cmd) ?? seedError(cmd.chassisSeed) ?? seedError(cmd.faceSeed) ?? (typeof team === 'string' ? team : null);
         if (err) return fail(err);
         this.addProject('new', null, { ...cmd, name: cmd.name?.trim() || `${NAMES.cars[s.nameplates.length % NAMES.cars.length]}` },
-          cmd.chassisSeed ?? lookCandidates(s, 0, 'chassis')[0], cmd.faceSeed ?? lookCandidates(s, 0, 'face')[0]);
+          cmd.chassisSeed ?? lookCandidates(s, 0, 'chassis')[0], cmd.faceSeed ?? lookCandidates(s, 0, 'face')[0], team as Staff[]);
         return OK;
       }
       case 'startFacelift': { // 8.2
@@ -173,10 +199,11 @@ export class Game {
           name: n.name, body: g.body, segment: g.segment, powertrain: g.powertrain, tier, options: cmd.options,
           direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.lifecycle.facelift.designWeeks,
         };
+        const team = this.teamFor(cmd.team);
         const err = this.teamError() ?? specError(s, { ...spec, designWeeks: d.designWeeks[0] }) ?? (tier < ed.tier ? '동력 단계는 낮출 수 없습니다(같은 종류의 최신 단계로만 바꿀 수 있습니다).' : null)
-          ?? seedError(cmd.faceSeed) ?? this.staffError();
+          ?? seedError(cmd.faceSeed) ?? (typeof team === 'string' ? team : null);
         if (err) return fail(err);
-        const p = this.addProject('facelift', g.id, spec, g.chassisSeed, cmd.faceSeed ?? lookCandidates(s, n.id, 'face', 'facelift')[0]);
+        const p = this.addProject('facelift', g.id, spec, g.chassisSeed, cmd.faceSeed ?? lookCandidates(s, n.id, 'face', 'facelift')[0], team as Staff[]);
         p.defects = ed.defects * config.lifecycle.facelift.defectKeep; // 남은 결함 × 0.5로 시작
         return OK;
       }
@@ -185,9 +212,9 @@ export class Game {
         if (!el.ok) return fail(el.reason!);
         const n = nameplateById(s, cmd.nameplateId)!;
         const spec: ProjectSpec = { name: n.name, body: cmd.body, segment: cmd.segment, powertrain: cmd.powertrain, tier: cmd.tier, options: cmd.options, direction: cmd.direction, budget: cmd.budget, designWeeks: cmd.designWeeks };
-        const err = this.teamError() ?? specError(s, spec) ?? seedError(cmd.chassisSeed) ?? seedError(cmd.faceSeed) ?? this.staffError();
+        const team = this.teamFor(cmd.team), err = this.teamError() ?? specError(s, spec) ?? seedError(cmd.chassisSeed) ?? seedError(cmd.faceSeed) ?? (typeof team === 'string' ? team : null);
         if (err) return fail(err);
-        this.addProject('fullchange', n.id, spec, cmd.chassisSeed ?? lookCandidates(s, n.id, 'chassis')[0], cmd.faceSeed ?? lookCandidates(s, n.id, 'face', 'nextGen')[0]);
+        this.addProject('fullchange', n.id, spec, cmd.chassisSeed ?? lookCandidates(s, n.id, 'chassis')[0], cmd.faceSeed ?? lookCandidates(s, n.id, 'face', 'nextGen')[0], team as Staff[]);
         return OK;
       }
       case 'cancelProject': {
@@ -235,14 +262,126 @@ export class Game {
         if (s.status === 'gameOver') { s.status = 'playing'; s.week++; } // 파산한 주는 월말 정산까지 끝났으므로 다음 주부터 이어 간다
         return OK;
       }
+      case 'postJob': { // 9.1 채용 공고: 후보 3명
+        const H = config.staff.hire, cost = H.postCost[cmd.tier - 1];
+        if (!(config.staff.roles as readonly string[]).includes(cmd.role)) return fail('없는 직무입니다.');
+        if (cost === undefined || !Number.isInteger(cmd.tier)) return fail('공고 등급은 1~3 중에서 고르세요.');
+        if (s.staff.length >= staffCap(s)) return fail(`정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.`);
+        if (s.candidates.length) return fail('이미 공고한 후보가 있습니다. 먼저 채용하거나 돌려보내세요.');
+        if (s.cash < cost) return fail('현금이 모자랍니다.');
+        this.spend(cost);
+        const bonus = Math.floor(Math.min(H.repBonusMax, s.reputation / H.repBonusDiv));
+        for (let i = 0; i < H.candidates; i++) {
+          const ability = Math.min(100, this.rng.intIn(H.abilityMin[cmd.tier - 1], H.abilityMax[cmd.tier - 1]) + bonus);
+          const potential = Math.min(100, ability + this.rng.intIn(H.potentialMin, H.potentialMax));
+          s.candidates.push({ id: s.nextId++, name: this.newName(), role: cmd.role, ability, potential, salary: salaryOf(ability), expiresWeek: s.week + H.expireWeeks });
+        }
+        return OK;
+      }
+      case 'hire': {
+        const c = s.candidates.find((x) => x.id === cmd.candidateId);
+        if (!c) return fail('없는 후보입니다.');
+        if (s.staff.length >= staffCap(s)) return fail(`정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.`);
+        s.candidates = s.candidates.filter((x) => x !== c);
+        s.staff.push({ id: c.id, name: c.name, role: c.role, ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null });
+        return OK;
+      }
+      case 'dismissCandidates': {
+        if (!s.candidates.length) return fail('돌려보낼 후보가 없습니다.');
+        s.candidates = [];
+        return OK;
+      }
+      case 'fire': { // 퇴직금 = 월급 2개월분(현금이 모자라도 낸다), 배치 중이면 빠진다
+        const x = s.staff.find((y) => y.id === cmd.staffId);
+        if (!x) return fail('없는 직원입니다.');
+        this.spend(severanceOf(salaryOf(x.ability)));
+        s.staff = s.staff.filter((y) => y !== x);
+        return OK;
+      }
+      case 'train': {
+        const x = s.staff.find((y) => y.id === cmd.staffId);
+        if (!x) return fail('없는 직원입니다.');
+        const err = trainError(s, x);
+        if (err) return fail(err);
+        const T = config.staff.train;
+        this.spend(trainCost(x.ability));
+        x.ability = Math.min(x.potential, x.ability + this.rng.intIn(T.gainMin, T.gainMax)); // 능력은 바로 오르고, 4주 동안 산출 0
+        x.trainings.push(s.week);
+        return OK;
+      }
+      case 'rest': {
+        const x = s.staff.find((y) => y.id === cmd.staffId);
+        if (!x) return fail('없는 직원입니다.');
+        if (!Number.isInteger(cmd.weeks) || cmd.weeks < 1 || cmd.weeks > config.staff.restMaxWeeks) return fail(`휴식은 1~${config.staff.restMaxWeeks}주 사이로 정하세요.`);
+        if (isAway(x, s.week) && x.restUntil === null) return fail('교육 중에는 휴식할 수 없습니다.');
+        x.restUntil = s.week + cmd.weeks;
+        return OK;
+      }
+      case 'assign': {
+        const x = s.staff.find((y) => y.id === cmd.staffId);
+        if (!x) return fail('없는 직원입니다.');
+        if (!isDevRole(x.role)) return fail('영업 직원은 개발에 배치할 수 없습니다.');
+        if (cmd.projectId !== null && !s.projects.some((p) => p.id === cmd.projectId)) return fail('없는 개발 프로젝트입니다.');
+        x.projectId = cmd.projectId;
+        return OK;
+      }
+      case 'upgradeHQ': {
+        const err = hqUpgradeError(s);
+        if (err) return fail(err);
+        this.spend(config.hq.levels[s.hqLevel].cost);
+        s.hqLevel++;
+        return OK;
+      }
+      case 'expandFactory': {
+        const err = factoryExpandError(s);
+        if (err) return fail(err);
+        this.spend(config.factory.levels[s.factory.level].cost);
+        s.factory.build = { level: s.factory.level + 1, doneMonth: monthOf(s.week) + config.factory.buildMonths };
+        return OK;
+      }
+      case 'setAllocation': {
+        const g = allGens(s).find((x) => x.id === cmd.generationId);
+        if (!g || g.status === 'discontinued') return fail('판매 중인 차가 아닙니다.');
+        if (cmd.share !== null && (typeof cmd.share !== 'number' || !Number.isFinite(cmd.share) || cmd.share < 0 || cmd.share > 1)) return fail('배분 몫은 0~100% 사이여야 합니다.');
+        const others = sellingGens(s).filter((x) => x !== g).reduce((a, x) => a + (x.allocShare ?? 0), 0);
+        if (others + (cmd.share ?? 0) > 1 + 1e-9) return fail('차종별 배분의 합이 100%를 넘습니다.');
+        g.allocShare = cmd.share;
+        return OK;
+      }
       default: return fail('알 수 없는 명령입니다.');
     }
   }
 
-  private teamError(): string | null { return this.state.projects.length >= config.dev.teams ? '개발팀이 모두 바쁩니다. 진행 중인 개발을 끝내거나 취소하세요.' : null; }
-  private staffError(): string | null { return this.state.staff.some((x) => x.projectId === null) ? null : '배치할 직원이 없습니다.'; }
-  /** 프로젝트를 만들고 쉬는 직원을 모두 배치한다(검증은 호출하는 쪽에서) */
-  private addProject(kind: ProjectKind, targetId: number | null, spec: ProjectSpec, chassisSeed: number, faceSeed: number): Project {
+  /** 일회성 지출: 현금에서 바로 빼고 장부(이달 oneOff)에 적는다 */
+  private spend(cost: number): void { this.state.cash -= cost; this.state.pendingOneOff += cost; }
+  /** 채용 후보 이름(성 + 이름, 지금 직원·후보와 겹치지 않게 최대 20번 다시 뽑는다) */
+  private newName(): string {
+    const s = this.state, used = new Set([...s.staff, ...s.candidates].map((x) => x.name));
+    let name = '';
+    for (let i = 0; i < 20 && (!name || used.has(name)); i++) name = NAMES.family[this.rng.intIn(0, NAMES.family.length - 1)] + NAMES.given[this.rng.intIn(0, NAMES.given.length - 1)];
+    return name;
+  }
+  private teamError(): string | null { return this.state.projects.length >= devTeams(this.state) ? '개발팀이 모두 바쁩니다. 진행 중인 개발을 끝내거나 취소하세요.' : null; }
+  /** 배치할 팀: 생략하면 쉬고 있는 개발 직무 전원. 문제가 있으면 이유(문자열) */
+  private teamFor(ids?: number[]): Staff[] | string {
+    const s = this.state;
+    if (ids === undefined) {
+      const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role));
+      return idle.length ? idle : '배치할 직원이 없습니다.';
+    }
+    if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length) return '배치할 직원을 한 명 이상, 겹치지 않게 고르세요.';
+    const team: Staff[] = [];
+    for (const id of ids) {
+      const x = s.staff.find((y) => y.id === id);
+      if (!x) return '없는 직원입니다.';
+      if (!isDevRole(x.role)) return '영업 직원은 개발에 배치할 수 없습니다.';
+      if (x.projectId !== null) return `${x.name}은(는) 이미 다른 개발에 배치되어 있습니다.`;
+      team.push(x);
+    }
+    return team;
+  }
+  /** 프로젝트를 만들고 팀을 배치한다(검증은 호출하는 쪽에서) */
+  private addProject(kind: ProjectKind, targetId: number | null, spec: ProjectSpec, chassisSeed: number, faceSeed: number, team: Staff[]): Project {
     const s = this.state, id = s.nextId++;
     const p: Project = {
       id, startWeek: s.week, kind, targetId, chassisSeed, faceSeed, name: spec.name,
@@ -251,7 +390,7 @@ export class Game {
       phase: 'design', weeksDone: 0, testWeeks: 0, points: zeroStats(), defects: 0, defectEst: 0, spent: 0,
     };
     s.projects.push(p);
-    for (const x of s.staff) if (x.projectId === null) x.projectId = id;
+    for (const x of team) x.projectId = id;
     return p;
   }
 
@@ -271,7 +410,7 @@ export class Game {
     if (p.kind === 'facelift' && liftGen?.status !== 'onSale') return fail('판매 중인 세대가 아니어서 페이스리프트를 출시할 수 없습니다. 개발을 취소하세요.');
     if (p.kind === 'fullchange' && !prev) return fail('없는 차종입니다.');
     const inherits = p.kind === 'facelift' || (prev !== undefined && prev.status !== 'discontinued'); // 같은 생산 라인을 이어 쓴다
-    if (!inherits && sellingGens(s).length >= config.factory.lines) return fail('생산 라인이 없습니다. 기존 차를 단종하세요.');
+    if (!inherits && sellingGens(s).length >= linesOf(s)) return fail('생산 라인이 없습니다. 기존 차를 단종하세요. 공장을 증설하면 라인이 늘어납니다.');
     const base = bodyById(p.body).basePrice, bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing);
     if (bad) return fail(bad);
     if (cmd.wheels !== 0 && cmd.wheels !== 1 && cmd.wheels !== 2) return fail('바퀴 모양은 0~2 중에서 고르세요.');
@@ -311,15 +450,15 @@ export class Game {
         launchWeek: s.week, launchMonth: month, lifeMonth: month, chassisSeed: p.chassisSeed, points: { ...p.points }, equity, rebuy,
         marketing: cmd.marketing, awareness: Math.min(1, awarenessStart(s.reputation, avg) + equity),
         status: 'onSale', endMonth: null, editions: [],
-        reviews, reviewAvg: avg, masterpiece: avg >= c.masterpiece, sales: [], totalSold: 0, lastDemand: 0, devCost: p.spent, profit: 0, recalls: 0,
+        reviews, reviewAvg: avg, masterpiece: avg >= c.masterpiece, sales: [], totalSold: 0, lastDemand: 0, lostSales: 0, allocShare: null, devCost: p.spent, profit: 0, recalls: 0,
       };
       gen.editions.push(edition(stats, 'initial', headline));
       if (np) np.generations.push(gen); else s.nameplates.push({ id: s.nextId++, name: p.name, generations: [gen] });
     }
-    // 9.1 최소 구현(3단계 전 임시): 프로젝트를 마친 직원 능력 +1~2(상한 60), 직원 ID 순
-    const sg = config.staffGrowth;
+    // 9.1 경험: 프로젝트를 마친(출시) 참여 직원 능력 +1~2(잠재력 상한), 직원 ID 순
+    const ex = config.staff.exp;
     for (const x of s.staff.filter((y) => y.projectId === p.id).sort((a, b) => a.id - b.id))
-      x.ability = Math.max(x.ability, Math.min(sg.cap, x.ability + this.rng.intIn(sg.min, sg.max)));
+      x.ability = Math.max(x.ability, Math.min(x.potential, x.ability + this.rng.intIn(ex.min, ex.max)));
     this.closeProject(p);
     return events.length ? { ok: true, events } : OK;
   }
@@ -334,6 +473,7 @@ export class Game {
       throw new Error('저장 파일이 손상되었습니다');
     const st = JSON.parse(JSON.stringify(d)) as CarState;
     if ((st.saveVersion as number) === 1) migrateV1(st);
+    if ((st.saveVersion as number) === 2) migrateV2(st);
     return new Game(st);
   }
 
@@ -359,5 +499,15 @@ function migrateV1(st: CarState): void {
     fill(r, 'models', {});
     for (const body of Object.keys(r.cells).sort()) fill(r.models, body, firstRivalModel(st.seed, ri, body, r.cells[body]));
   });
-  st.saveVersion = 2;
+  (st as { saveVersion: number }).saveVersion = 2;
+}
+
+/** 저장 형식 2 → 3: 직원(잠재력·교육·휴식), 채용 후보, 본사·공장 등급(1), 생산 배분(자동), 장부 일회성 지출.
+ *  잠재력은 0.2.0의 임시 성장 상한 60과 지금 능력 중 큰 값 */
+function migrateV2(st: CarState): void {
+  for (const x of st.staff) { x.potential ??= Math.max(x.ability, 60); x.trainings ??= []; x.restUntil ??= null; }
+  st.candidates ??= []; st.hqLevel ??= 1; st.factory ??= { level: 1, build: null }; st.pendingOneOff ??= 0;
+  for (const n of st.nameplates) for (const g of n.generations) { g.lostSales ??= 0; g.allocShare ??= null; }
+  for (const e of st.ledger) e.oneOff ??= 0;
+  st.saveVersion = 3;
 }

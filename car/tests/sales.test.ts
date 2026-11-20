@@ -150,7 +150,7 @@ describe('단종(8.6)과 생산 라인', () => {
     const { g } = launched(1);
     ok(g.command({ type: 'startProject', name: '둘째', body: 'sedanS', segment: 'youth', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'low', designWeeks: 8 }));
     for (let i = 0; i < 10; i++) g.tick();
-    expect(g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 0, color: 'red', wheels: 0 })).toEqual({ ok: false, reason: '생산 라인이 없습니다. 기존 차를 단종하세요' + '.' });
+    expect(g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 0, color: 'red', wheels: 0 })).toEqual({ ok: false, reason: '생산 라인이 없습니다. 기존 차를 단종하세요. 공장을 증설하면 라인이 늘어납니다.' });
   });
   it('단종: 그 달 말까지 판매(마지막 달 ×0.5), 다음 달부터 라인이 비어 새 차를 낼 수 있다', () => {
     const { g, gen } = launched(1);

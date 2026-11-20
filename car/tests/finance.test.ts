@@ -26,7 +26,7 @@ describe('재무(9.4)', () => {
     expect(g.command({ type: 'borrow', amount: 150000 }).ok).toBe(true);
     expect(g.state.cash).toBe(config.start.cash + 150000); expect(g.state.loan.balance).toBe(150000);
     expect(g.command({ type: 'borrow', amount: 60000 }).ok).toBe(false);
-    g.state.ledger.push({ month: 0, year: 1970, monthOfYear: 1, revenue: 100000, cogs: 0, salaries: 0, upkeep: 0, dev: 0, marketing: 0, interest: 0, recall: 0, profit: 0, cash: 0, sold: 0 });
+    g.state.ledger.push({ month: 0, year: 1970, monthOfYear: 1, revenue: 100000, cogs: 0, salaries: 0, upkeep: 0, dev: 0, marketing: 0, interest: 0, recall: 0, oneOff: 0, profit: 0, cash: 0, sold: 0 });
     expect(loanLimit(g.state)).toBe(230000);
   });
   it('월 이율 0.6%, 한도의 70%를 넘게 쓰면 1.0%', () => {

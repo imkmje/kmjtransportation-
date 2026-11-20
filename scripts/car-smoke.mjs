@@ -303,13 +303,20 @@ await tick(2);
 check('한 주가 지나면 사무실에 점수 연출이 나감', (await G(() => window.__car.office.scores)) > sc0, `${sc0} → ${await G(() => window.__car.office.scores)}`);
 check('사무실 칸에 위쪽 띠 높이(--office-top-inset)를 넣음', await G(() => { const v = parseFloat(document.getElementById('office').style.getPropertyValue('--office-top-inset')), h = document.querySelector('#ov .ofc').getBoundingClientRect().height; return v > 0 && Math.abs(v - h) <= 1; }));
 check('사무실 위 글자는 위쪽 가장자리에만(무대 위 1/3 안)', await G(() => { const o = document.querySelector('#ov .ofc').getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect(); return o.bottom <= st.top + st.height / 3; }));
+check('개발 탭 배치(1366×1024): 사무실이 패널 위에 화면 폭 80% 이상으로', await G(() => { const st = document.getElementById('stage').getBoundingClientRect(), pn = document.getElementById('panel').getBoundingClientRect(); return st.bottom <= pn.top + 1 && st.width >= innerWidth * 0.8; }));
 await page.waitForTimeout(1200);
 await shot('office-design');
-await page.setViewportSize({ width: 1480, height: 925 }); await page.waitForTimeout(800); await shot('office-1480');
+for (const [w, h] of [[1366, 1024], [1480, 925], [400, 800]]) {
+  await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(500);
+  check(`개발 탭 ${w}×${h}: 본문 스크롤·가로 넘침 없음`, (await overflow()) <= 0);
+  if (w === 1480) await shot('office-1480');
+}
 await page.setViewportSize({ width: 1366, height: 1024 });
 await page.click('#tabs button[data-tab="garage"]');
 check('차고로 가면 사무실을 멈추고 3D를 다시 그림', await G(() => !window.__car.office.on && window.__car.stage?.active === true));
 await page.click('#tabs button[data-tab="dev"]');
+await page.waitForTimeout(300);
+check('개발 탭 → 차고 → 개발 탭: 사무실이 살아 있음(보이고, 직원이 그려지고, 무대 칸이 넓은 배치)', await G(() => { const o = document.getElementById('office'), svg = o.querySelector('svg'), r = o.getBoundingClientRect(); return window.__car.office.on && !o.hidden && !!svg?.getAttribute('viewBox') && o.querySelectorAll('.pp').length === 4 && r.width >= innerWidth * 0.8 && r.height > 300; }));
 await act('cancelDev'); await page.click('#ask-yes');
 
 // ---- 페이스리프트(출시 18개월 뒤) ----

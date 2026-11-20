@@ -26,6 +26,17 @@ h2,h3,p{margin:0}
 #main.full{grid-template-columns:minmax(0,1fr)}
 #main.full .stage{display:none}
 #panel{min-height:0;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+/* 개발 탭(사무실): 쿼터뷰 사무실은 옆으로 넓으니 위에 가로로 넓게(높이 약 60%), 패널은 아래에 세 칸으로 나란히 */
+@media (min-width:900px){
+  #main.wide{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,3fr) minmax(0,2fr)}
+  #main.wide #panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;align-content:start}
+  #main.wide #panel>.card:only-child{grid-column:1/-1}
+  #main.wide #panel>.card:only-child .go{max-width:360px}
+  #main.wide .ov.ofc{align-items:center;padding:10px 16px 12px}
+  #main.wide .ofc-t{flex-direction:row;align-items:baseline;flex-wrap:wrap;column-gap:14px}
+  #main.wide .ofc-t b{font-size:clamp(18px,1.8vw,24px)}
+  #main.wide .ofc-g{display:flex;align-items:baseline;gap:8px}
+}
 @media (max-width:899px){
   #app{display:flex;flex-direction:column}
   #top{flex:none;flex-wrap:wrap;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top,0px));row-gap:6px}
@@ -250,7 +261,7 @@ input[type=range]{width:100%;accent-color:var(--ink);margin:10px 0 2px;min-heigh
 .over .big{font-weight:900;font-size:clamp(34px,7vw,56px);letter-spacing:-.04em;line-height:1.05}
 
 /* ---- 알림 ---- */
-#toasts{position:fixed;z-index:50;left:calc(108px + env(safe-area-inset-left,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none;width:min(440px,calc(100vw - 140px))}
+#toasts{position:fixed;z-index:50;left:calc(108px + env(safe-area-inset-left,0px));bottom:var(--tb,max(16px,env(safe-area-inset-bottom,0px)));display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none;width:min(440px,calc(100vw - 140px))}
 @media (max-width:899px){#toasts{right:12px;left:12px;width:auto;top:var(--tt,64px);bottom:auto;flex-direction:column-reverse;align-items:stretch} /* 폰: 무대 위쪽(상단바 아래)에 띄워 패널 맨 아래 버튼 줄을 가리지 않는다 */#toasts .toast:nth-last-child(n+3){display:none}.toast{font-size:12.5px;padding:8px 12px}.held{display:none}}
 .toast{pointer-events:auto;background:var(--ink);color:#fff;border-radius:16px;padding:10px 14px;font-size:13px;font-weight:600;line-height:1.45;box-shadow:0 10px 30px -12px #000a;animation:rise .3s cubic-bezier(.2,.8,.2,1);display:flex;gap:10px;align-items:flex-start;max-width:100%}
 .toast.alert{background:#fff;color:var(--ink);border:2px solid var(--accent)}

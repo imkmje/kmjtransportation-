@@ -1,7 +1,7 @@
 /** 카 컴퍼니의 모든 튜닝 수치(설계서 docs/car/design.md의 초기 후보값, 봇 측정으로 조정). 금액 단위는 만원 */
 export const config = {
   time: { startYear: 1970, weeksPerMonth: 4, monthsPerYear: 12 }, // 4장: 1 tick = 1주, 4주 = 1개월, 48주 = 1년
-  start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
+  start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35, potentialMin: 50, potentialMax: 75 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
   reputation: { min: 0, max: 100 },
   grade: { base: 100, growth: 0.035, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × 1.035^(연도 − 1970), 표시 = 5 × 원점수 / 기준
   powertrain: { base: 40, growth: 1.22 }, // 5.3: 동력 점수 = 40 × 1.22^(단계 − 1)
@@ -17,7 +17,7 @@ export const config = {
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
-    maxOptions: 2, teams: 1, // 본사 1등급: 옵션 슬롯 2, 개발팀 1
+    maxOptions: 2, teams: 1, // 본사 1등급 값(화면 호환용). 실제 옵션 슬롯·개발팀 수는 hq.levels를 쓴다
   },
   critics: { // 7.2
     list: [
@@ -35,6 +35,7 @@ export const config = {
     scale: 2.1, // 시장 규모 배수(보정용). 2단계 조정 1.15 → 2.1: 연 규모를 달마다 기하 보간하자 1970년대 시장이 직선 보간의 1/2~1/4로 줄어서
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
+    overpriceExp: 0, // 3단계 추가 계수: 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^이 값(0.2 자르기에 막히지 않게 자르기 뒤에 곱한다)
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -47,8 +48,47 @@ export const config = {
   },
   life: { start: 0.6, rampMonths: 3, decay: 0.012 }, // 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2%
   recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 15, rep: -5, awarenessMult: 0.8 }, // 6.3
-  factory: { capacity: 300, lines: 1, upkeep: 5000, costMult: 1 }, // 9.3 공장 1등급: 월 300대, 라인 1, 유지비 0.5억
-  hq: { upkeep: 500 }, // 본사 1등급 월 유지비(설계서에 값이 없어 정함)
+  factory: { // 9.3 공장. capacity·lines·upkeep·costMult는 1등급 값(화면 호환용), sim은 levels를 쓴다
+    capacity: 300, lines: 1, upkeep: 5000, costMult: 1,
+    levels: [ // 월 생산, 생산 라인(동시 차종), 건설비, 월 유지비, 원가 배수
+      { capacity: 300, lines: 1, cost: 0, upkeep: 5000, costMult: 1 },
+      { capacity: 1000, lines: 2, cost: 80000, upkeep: 15000, costMult: 0.95 },
+      { capacity: 3000, lines: 3, cost: 500000, upkeep: 40000, costMult: 0.9 },
+      { capacity: 8000, lines: 5, cost: 2500000, upkeep: 100000, costMult: 0.85 },
+      { capacity: 20000, lines: 8, cost: 12000000, upkeep: 250000, costMult: 0.8 },
+    ],
+    buildMonths: 6, // 증설 공사 6개월
+  },
+  hq: { // 9.2 본사. upkeep은 1등급 값(화면 호환용)
+    upkeep: 500,
+    levels: [ // 이름, 승급비, 평판 조건, 정원, 개발팀, 옵션 슬롯, 월 유지비(유지비는 설계서에 없어 정한 후보값)
+      { name: '창고 공장', cost: 0, rep: 0, staff: 4, teams: 1, options: 2, upkeep: 500 },
+      { name: '소형 사옥', cost: 50000, rep: 0, staff: 8, teams: 1, options: 2, upkeep: 1500 },
+      { name: '본사 빌딩', cost: 400000, rep: 30, staff: 12, teams: 2, options: 3, upkeep: 5000 },
+      { name: '연구 단지', cost: 3000000, rep: 55, staff: 16, teams: 2, options: 4, upkeep: 15000 },
+      { name: '글로벌 본사', cost: 15000000, rep: 80, staff: 20, teams: 3, options: 4, upkeep: 40000 },
+    ],
+  },
+  staff: { // 9.1 직원
+    roles: ['designer', 'engineer', 'tester', 'sales'] as const,
+    hire: {
+      postCost: [500, 2000, 10000], // 공고 1~3등급 비용
+      abilityMin: [15, 30, 50], abilityMax: [35, 55, 80], // 등급별 후보 능력 범위
+      repBonusDiv: 20, repBonusMax: 5, // 평판 보너스: 능력 + 평판/20(최대 +5)
+      potentialMin: 10, potentialMax: 35, // 잠재력 = 능력 + 10~35(최대 100)
+      candidates: 3, expireWeeks: 4,
+    },
+    severanceMonths: 2, // 퇴직금 = 월급 2개월분
+    train: { perAbility: 20, min: 300, gainMin: 3, gainMax: 6, weeks: 4, perYear: 2 }, // 교육비 = 능력 × 20만원(최소 300만), 능력 +3~6, 4주, 연 2회
+    exp: { min: 1, max: 2 }, // 프로젝트를 마치면(출시) 참여 직원 능력 +1~2(잠재력 상한)
+    condition: { // 컨디션 0~1
+      perWeek: { low: 0.005, normal: 0.01, high: 0.025 }, // 프로젝트에서 일한 주마다 감소(예산 등급별)
+      recover: 0.05, // 프로젝트에서 일하지 않은 주마다 회복
+      low: 0.3, lowMult: 0.6, mid: 0.6, midMult: 0.85, // 0.3 미만 산출 ×0.6, 0.3~0.6 ×0.85
+    },
+    restMaxWeeks: 12,
+    sales: { awarenessDiv: 400, awarenessMax: 0.15, fleetDiv: 1000, fleetMax: 1.3, fleetSegment: 'fleet' }, // 영업: 인지도 수렴 +합/400(최대 +0.15), 법인 매력 ×(1 + 합/1000, 최대 1.3)
+  },
   discontinue: { lastMonthMult: 0.5, recentMonths: 3, wellSelling: 0.7, rep: -2, adviceSales: 10, adviceMonths: 6, adviceDrop: 0.6 }, // 8.6
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
@@ -75,7 +115,16 @@ export const config = {
     },
     lookCandidates: 3, // 3D 모양 후보 수
   },
-  staffGrowth: { min: 1, max: 2, cap: 60 }, // 9.1 최소 구현(3단계 전 임시): 프로젝트를 출시로 마치면 참여 직원 능력 +1~2, 상한 60
+  bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
+    reserveMonths: 6, // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
+    expandRatio: 1.3, expandMonths: 3, // 주문이 한도의 1.3배를 3개월 넘으면 공장 증설
+    hqCashMult: 6, // 본사 승급: 현금이 승급비 × 6 + 여유분 이상일 때
+    tier2Cash: 500000, tier3Cash: 5000000, // 채용 공고 등급: 현금 50억 이상 2등급, 500억 이상 3등급
+    salesShare: 0.2, // 정원 중 영업 직원 비율
+    leadMonths: 5, // 후속 차 개발을 시작하는 시점(교체 몇 개월 전)
+    modelsPerBody: 1, // 차종 수 상한 = 쓸 수 있는 차체 수 × 이 값(생산 라인 수 이내)
+    gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
+  },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
 };

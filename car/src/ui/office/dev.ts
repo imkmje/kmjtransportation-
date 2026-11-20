@@ -15,7 +15,8 @@ const pool: OfficeStaff[] = Array.from({ length: 24 }, (_, i) => ({
 }));
 const st = { level: 1 as OfficeView['level'], count: 4, phase: 'design' as OfficeView['phase'], budget: 'normal' as OfficeView['budget'], tired: 0, idle: 0, car: true, size: 'tablet' };
 let defects = 2, progress = 0.35;
-const SIZES: Record<string, [number, number]> = { tablet: [700, 940], phone: [360, 300], wide: [900, 600] };
+// [폭, 높이, 위쪽 띠 높이]. wide2 = 게임 개발 탭의 넓은 칸(아이패드 가로)
+const SIZES: Record<string, [number, number, number]> = { tablet: [700, 940, 90], phone: [360, 300, 90], wide: [900, 600, 90], wide2: [1270, 560, 52] };
 const car = silhouetteSvg(lookOf({ body: 'sedanM', powertrain: 'gas', tier: 2, color: '#ff5a1f', wheels: 1, year: 2020 }), { color: '#ff5a1f' });
 
 function view(): OfficeView {
@@ -23,8 +24,9 @@ function view(): OfficeView {
   return { level: st.level, staff, phase: st.phase, budget: st.budget, projectName: '모닝스타 1세대', carSvg: st.car ? car : undefined, progress, defects };
 }
 function apply() {
-  const [w, h] = SIZES[st.size];
+  const [w, h, inset] = SIZES[st.size];
   stage.style.width = w + 'px'; stage.style.height = h + 'px';
+  stage.style.setProperty('--office-top-inset', inset + 'px'); (stage.querySelector('.band') as HTMLElement).style.height = inset + 'px';
   office.update(view());
   ctl.querySelectorAll<HTMLButtonElement>('button[data-k]').forEach((b) => b.setAttribute('aria-pressed', String(String((st as Record<string, unknown>)[b.dataset.k!]) === b.dataset.v)));
   (document.getElementById('cnt') as HTMLOutputElement).value = String(st.count);
@@ -39,7 +41,7 @@ ctl.innerHTML =
   seg('예산', 'budget', [['low', '절약'], ['normal', '보통'], ['high', '과감']]) +
   seg('지침 비율', 'tired', [['0', '0'], ['0.25', '1/4'], ['0.5', '1/2'], ['1', '전부']]) +
   seg('미배치', 'idle', [['0', '0'], ['0.25', '1/4'], ['0.5', '1/2']]) +
-  seg('무대', 'size', [['tablet', '태블릿 700×940'], ['phone', '폰 360×300'], ['wide', '넓은 칸 900×600']]) +
+  seg('무대', 'size', [['tablet', '태블릿 700×940'], ['phone', '폰 360×300'], ['wide', '넓은 칸 900×600'], ['wide2', '개발 탭 1270×560']]) +
   `<div class="row"><button id="score">점수 이벤트 한 주 발생</button><button id="found">결함 발견</button><button id="fixed">결함 제거</button>
    <button id="say">말풍선</button><button id="launch">출시 대사</button><button id="act">멈춤/재개</button></div>`;
 
