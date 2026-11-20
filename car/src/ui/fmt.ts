@@ -9,8 +9,8 @@ export const money = (v: number, sign = false): string => {
 /** 0~10 점수 한 자리 */
 export const score = (v: number): string => v.toFixed(1);
 export const STAT_NAME = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' } as const;
-export const ROLE_NAME = { designer: '디자이너', engineer: '엔지니어', tester: '테스터' } as const;
-export const ROLE_SKILL = { designer: '디자인', engineer: '기술', tester: '꼼꼼함' } as const;
+export const ROLE_NAME = { designer: '디자이너', engineer: '엔지니어', tester: '테스터', sales: '영업' } as const;
+export const ROLE_SKILL = { designer: '디자인', engineer: '기술', tester: '꼼꼼함', sales: '영업력' } as const;
 export const MARKETING = ['안 함', '조금', '보통', '많이'];
 export const BUDGET = { low: { name: '절약', sub: '점수 조금 적게 · 비용 절반' }, normal: { name: '보통', sub: '기본' }, high: { name: '과감', sub: '점수 많이 · 비용 2배' } } as const;
 export const TIER_SUB = ['연비가 좋고 값이 쌈', '균형', '힘이 좋음 · 원가 비쌈'];

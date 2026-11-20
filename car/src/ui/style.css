@@ -322,3 +322,87 @@ input[type=range]{width:100%;accent-color:var(--ink);margin:10px 0 2px;min-heigh
 .news.paper{margin:10px 0 12px}.news.paper h3{font-size:clamp(22px,3vw,30px)}
 @media (prefers-reduced-motion:reduce){.report,.toast,.critic.pop,.badge{animation:none}.stat .track u,.prog u{transition:none}.opt,.go,.later{transition:none}}
 .lift-est .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* ---- 3단계: 회사 안쪽 탭(재무·직원·본사·공장), 팀 고르기, 동시 개발 ---- */
+@media (min-width:900px){
+  #toasts.inofc{left:auto;right:var(--or,16px);top:var(--ot,80px);bottom:auto;width:min(300px,30vw);align-items:stretch} /* 사무실 칸 오른쪽 위(띠 아래), 작게 */
+  #toasts.inofc .toast:nth-last-child(n+3){display:none}
+  #toasts.inofc .toast{font-size:12px;padding:8px 10px;border-radius:12px}
+}
+.cotabs{max-width:560px;width:100%;margin-bottom:0;flex:none}
+.cotabs button{min-height:46px;font-size:14px}
+.colstack{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (min-width:1100px){.cols.co-staff{grid-template-columns:minmax(0,1.5fr) minmax(340px,1fr)}}
+.card h3 small{font-weight:700;margin-left:6px}
+/* 직원 표 */
+.srow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.5fr) 74px minmax(0,1fr) minmax(0,1.3fr);gap:10px;align-items:center;width:100%;text-align:left;border:0;background:transparent;border-radius:12px;padding:8px 10px;min-height:48px;font-size:13px}
+button.srow{border:1.5px solid transparent}
+button.srow:hover{background:var(--soft)}
+button.srow[aria-pressed="true"]{border-color:var(--ink);background:var(--soft)}
+.srow.head{min-height:0;padding:0 10px 4px;font-size:11px;font-weight:800;color:var(--ink3)}
+.lbl.grp{margin:10px 0 2px}
+.s-name b{display:block;font-size:14px}.s-name small{color:var(--ink3);font-size:11px;font-weight:700}
+.s-abil{display:flex;align-items:center;gap:6px;min-width:0}
+.s-abil b{font-size:14px}
+.abil2{position:relative;flex:1;min-width:40px;height:8px;border-radius:4px;background:var(--soft);overflow:visible}
+.abil2 u{display:block;height:100%;border-radius:4px;background:var(--ink)}
+.abil2 em{position:absolute;top:-3px;bottom:-3px;border-left:2px dotted var(--accent2);transform:translateX(-1px)}
+.cap{font-size:10.5px;font-weight:800;color:var(--accent2);white-space:nowrap}
+.s-pay{font-weight:700;font-variant-numeric:tabular-nums}
+.s-cond{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px}
+.cbar{width:48px;height:6px;border-radius:3px;background:var(--soft);overflow:hidden;flex:none}
+.cbar u{display:block;height:100%}
+.cbar.c0 u{background:var(--pos)}.cbar.c1 u{background:#e0a020}.cbar.c2 u{background:var(--neg)}
+.s-do{font-size:12.5px;font-weight:700;color:var(--ink2)}
+.s-do.s-working{color:var(--ink)}.s-do.s-training,.s-do.s-resting{color:var(--warn)}
+@media (max-width:640px){
+  .srow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"n d" "a c";row-gap:6px}
+  .srow.head,.s-pay{display:none}
+  .s-name{grid-area:n}.s-do{grid-area:d;text-align:right}.s-abil{grid-area:a}.s-cond{grid-area:c;justify-content:flex-end}
+}
+/* 채용 후보 */
+.cands{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin-top:10px}
+.cand{background:var(--soft);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cand > b{font-size:16px;font-weight:900}
+.cand small{font-size:12px;color:var(--ink2);line-height:1.4}
+.cand .chip{align-self:flex-start;background:#fff}
+.cand .btn{margin-top:auto}
+/* 본사 5등급 */
+.lv5{list-style:none;margin:10px 0 12px;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.lv5 li{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;font-size:11px;font-weight:700;color:var(--ink3);position:relative}
+.lv5 li b{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-size:14px;color:var(--ink3)}
+.lv5 li.done b{background:var(--ink);color:#fff}
+.lv5 li.on b{background:var(--accent);color:#fff;box-shadow:0 0 0 4px #ff5a1f2e}
+.lv5 li.on{color:var(--ink)}
+.lv5 small{line-height:1.25}
+/* 공장 */
+.build{margin-top:12px;background:#fff4e5;border:1px solid #f3d4a6;border-radius:14px;padding:10px 12px}
+.build .lbl{color:#6b4300;margin-bottom:2px}
+.build .prog{background:#fff}.build .prog u{background:var(--accent)}
+.prod{padding:10px 0;border-top:1px solid var(--soft)}
+.prod-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.prod-h b{font-size:15px;font-weight:900}.prod-h small{font-size:12.5px;color:var(--ink2);font-weight:600}
+.pbar{display:flex;height:12px;border-radius:6px;background:var(--soft);overflow:hidden;margin:8px 0}
+.pbar u{display:block;height:100%;background:var(--ink)}
+.pbar i{display:block;height:100%;background:repeating-linear-gradient(45deg,var(--accent) 0 6px,#ffb15c 6px 12px)}
+.alloc{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.alloc .seg{margin:0;flex:none;width:150px}
+.alloc input[type=range]{flex:1;min-width:120px;margin:0}
+.alloc-v{font-size:16px;font-weight:900;min-width:44px;text-align:right}
+/* 팀 고르기 */
+.team-n{color:var(--accent2);letter-spacing:0}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:8px}
+.pick{display:flex;align-items:center;gap:10px;text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:14px;padding:8px 10px;min-height:52px;min-width:0}
+.pick i{width:20px;height:20px;border-radius:6px;border:2px solid var(--ink3);flex:none;display:grid;place-items:center}
+.pick[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.pick[aria-pressed="true"] i{background:var(--ink);border-color:var(--ink)}
+.pick[aria-pressed="true"] i::after{content:"";width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.pick span{min-width:0}.pick b{display:block;font-size:14px}.pick small{display:block;font-size:11.5px;color:var(--ink2);line-height:1.35}
+/* 동시 개발: 프로젝트 전환 칩 */
+.pchips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#main.wide #panel>.pchips{grid-column:1/-1}
+.pchips .lbl{margin:0 4px 0 0}
+.pchip{display:flex;flex-direction:column;align-items:flex-start;border:1.5px solid var(--line);background:var(--card);border-radius:14px;padding:6px 14px;min-height:46px;justify-content:center;min-width:0}
+.pchip b{font-size:14px;font-weight:900}.pchip small{font-size:11px;color:var(--ink2);font-weight:700}
+.pchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}.pchip[aria-pressed="true"] small{color:#fffc}
+.pchips .btn{min-height:46px}
+.team-line{margin-bottom:4px}

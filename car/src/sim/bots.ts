@@ -148,8 +148,8 @@ function startProjects(g: Game, o: SteadyOptions): void {
   const targeted = (id: number | null) => s.projects.some((p) => p.targetId === id);
   const npOf = (x: Generation) => s.nameplates.find((n) => n.generations.includes(x))!;
   for (const x of onSale) {
-    if (o.faceliftMonths !== Infinity && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && age(x) < changeAt(s, o, x) - B.leadMonths && !targeted(x.id)) {
-      g.command({ type: 'startFacelift', generationId: x.id, options: opts, team: pickTeam(s) });
+    if (o.faceliftMonths !== Infinity && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && changeAt(s, o, x) === o.changeMonths && x.lostSales < 1 && age(x) < o.changeMonths - B.leadMonths && !targeted(x.id)) { // 약한 차는 리프트 없이 교체, 생산 한도에 묶인 차는 리프트를 미룬다(늘어난 주문을 팔 수 없으므로)
+      g.command({ type: 'startFacelift', generationId: x.id, options: currentEdition(x).options, team: pickTeam(s) }); // 옵션은 그대로(가격을 안 올리므로 원가가 늘면 대당 이익이 준다)
       return;
     }
   }
