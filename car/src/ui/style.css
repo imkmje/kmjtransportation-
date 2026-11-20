@@ -643,3 +643,23 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
 #sheet:not([hidden]) ~ #toasts{top:max(12px,env(safe-area-inset-top,0px));right:12px;left:auto;bottom:auto;width:min(340px,calc(100vw - 24px))} /* 창이 떠 있으면 경고 알림은 오른쪽 위로(창 아래쪽 버튼을 가리지 않게) */
 button.pill{min-height:44px;align-items:center} /* 상단바의 누르는 알약(사건·결정 대기) */
 .cover.more::after{content:"";position:fixed;left:0;right:0;bottom:0;height:56px;pointer-events:none;background:linear-gradient(#c9d0d900,#c9d0d9e6)} /* 새 게임 화면: 아래로 더 있음 */
+
+/* ---------- 0.5.1: 상단바가 좁을 때(1024px 등) 넘치지 않게 ---------- */
+.pill.evchip,.pill.pend{display:inline-flex;align-items:center;gap:5px;min-height:44px;max-width:none;overflow:visible}
+.pill.pend svg{width:16px;height:16px;flex:none}
+.pill.pend b{color:#fff;font-size:15px}
+.ev-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.ev-m{white-space:nowrap;flex:none}
+.speeds.held{box-shadow:0 0 0 2px var(--accent)}
+@media (max-width:1240px){
+  .pd-t,#held{display:none}
+  .ev-n{max-width:110px}
+  #top{gap:6px}
+  .pill{padding:7px 10px}
+  .brand span:last-child{max-width:120px}
+}
+@media (max-width:1100px) and (min-width:900px){.brand #co{display:none}} /* 좁으면 회사 이름은 로고만(이름은 메뉴·기록에) */
+.rivals div{grid-template-columns:28px minmax(96px,1fr) minmax(0,1fr)}
+.rivals div>span{word-break:keep-all}
+.rv-strong{text-align:right;line-height:1.35;word-break:keep-all}
+.ov .ib{pointer-events:auto}

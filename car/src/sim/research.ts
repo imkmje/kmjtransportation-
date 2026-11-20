@@ -4,6 +4,7 @@ import { BODIES, OPTIONS, POWERTRAINS, TECHS, bodyById, optionById, powertrainBy
 import { isAway } from './company';
 import { josa } from './josa';
 import { yearOf } from './time';
+import { REGION, eraTimeline } from './events';
 import type { BodyDef, CarState, GameEvent, OptionDef, PowertrainDef, Staff, TechDef, TechEffect, TechField } from './types';
 
 const R = config.research;
@@ -132,13 +133,45 @@ export function unlockText(t: TechDef): string {
   return out.join(' ');
 }
 
-/** 한 주 연구: 주간 점수를 진행 중인 연구에 시작 순으로 채운다(남는 점수는 다음 연구로, 연구가 없으면 사라짐). 완료하면 이벤트 */
+/** 진행 중 연구별 이번 주 점수(0.5.1): 우선 연구(맨 앞)가 있으면 그 연구에 priorityShare, 나머지는 고르게. 다 채워 남는 점수는 남은 연구에 고르게 다시 나눈다.
+ *  need: 연구별 남은 점수(생략하면 지금 상태). pts: 이번 주 점수 */
+export function researchShares(s: CarState, pts: number, need = s.research.active.map((a) => a.need - a.points)): number[] {
+  const act = s.research.active, got = act.map(() => 0), pri = act.findIndex((a) => a.techId === s.research.priority);
+  let left = pts;
+  for (let round = 0; round < act.length && left > 1e-9; round++) {
+    const open = act.map((_, i) => i).filter((i) => need[i] - got[i] > 1e-9);
+    if (!open.length) break;
+    const priOpen = pri >= 0 && open.includes(pri) && open.length > 1, pool = left;
+    for (const i of open) {
+      const share = priOpen ? (i === pri ? R.priorityShare : (1 - R.priorityShare) / (open.length - 1)) : 1 / open.length;
+      const use = Math.min(pool * share, need[i] - got[i]);
+      got[i] += use; left -= use;
+    }
+  }
+  return got;
+}
+/** 0.5.1: 예고(또는 시행)된 국내 규제의 의무 장비를 여는 기술(선행 포함) 중 아직 안 한 것과 그 시행 주. 연구 화면·우선순위용 */
+export function regulatedTechs(s: CarState): Map<string, { eventName: string; week: number }> {
+  const out = new Map<string, { eventName: string; week: number }>(), m = Math.floor(s.week / config.time.weeksPerMonth);
+  for (const sp of eraTimeline(s.seed)) for (const e of sp.def.effects) {
+    if (e.type !== 'regulation' || e.region !== REGION || !e.options?.length || m < sp.start - config.events.warnMonths) continue;
+    const week = (sp.start + e.graceMonths) * config.time.weeksPerMonth;
+    const add = (id: string) => { if (isDone(s, id) || out.has(id)) return; out.set(id, { eventName: sp.def.name, week }); for (const q of techById(id).pre) add(q); };
+    for (const o of e.options) { const t = TECHS.find((x) => !x.repeatable && x.effects.some((f) => f.type === 'option' && f.id === o)); if (t) add(t.id); }
+  }
+  return out;
+}
+
+/** 한 주 연구(0.5.1): 주간 점수를 진행 중인 연구에 고르게 나눈다(우선 연구는 50%). 규제로 필요한 기술이 진행 중이면 자동으로 우선. 완료하면 이벤트 */
 export function researchWeek(s: CarState, ev: GameEvent[]): void {
-  let pts = weeklyResearchPoints(s);
-  for (const a of s.research.active) { const use = Math.min(pts, a.need - a.points); a.points += use; pts -= use; }
+  const req = regulatedTechs(s), cur = s.research.priority;
+  if (!(cur && req.has(cur) && s.research.active.some((a) => a.techId === cur))) { const r = s.research.active.find((a) => req.has(a.techId)); if (r) { s.research.priority = r.techId; s.research.active = [r, ...s.research.active.filter((a) => a !== r)]; } }
+  const got = researchShares(s, weeklyResearchPoints(s));
+  s.research.active.forEach((a, i) => { a.points += got[i]; });
   const done = s.research.active.filter((a) => a.points >= a.need - 1e-9);
   if (!done.length) return;
   s.research.active = s.research.active.filter((a) => !done.includes(a));
+  if (s.research.priority && !s.research.active.some((a) => a.techId === s.research.priority)) delete s.research.priority;
   for (const a of done) {
     const t = techById(a.techId), early = yearOf(s.week) < t.year;
     s.research.done.push(t.id);
@@ -162,17 +195,24 @@ export interface TechRow {
   pointsLeft: number; weeksLeft: number | null; // 남은 점수, 지금 주간 점수로 예상 주(점수가 0이면 null)
   effects: string; pre: { id: string; name: string; done: boolean }[];
   reason: string | null; // 시작할 수 없는 이유(가능하면 null)
+  requiredBy: { eventName: string; week: number } | null; // 0.5.1: 예고·시행된 규제의 의무 장비에 필요한 기술이면 그 사건 이름과 시행 주(아직 안 했을 때만)
 }
 export const FIELD_NAMES: Record<TechField, string> = { powertrain: '동력', body: '차체·안전', electronics: '편의 장비', production: '생산', eco: '친환경' };
 export interface ResearchInfo {
   fields: { id: TechField; name: string; techs: TechRow[] }[];
   pointsPerWeek: number; slots: number; used: number;
-  active: { techId: string; name: string; points: number; need: number; weeksLeft: number | null }[];
+  active: { techId: string; name: string; points: number; need: number; weeksLeft: number | null; pointsPerWeek: number; priority: boolean; requiredBy: { eventName: string; week: number } | null }[]; // 0.5.1: pointsPerWeek 이번 주 실제로 받는 점수, weeksLeft 나눠 받기·먼저 끝난 연구의 몫 넘김을 따라간 남은 주, priority 우선 연구
   doneCount: number; // 완료한 기술 수(반복 기술은 횟수만큼)
 }
 export function researchInfo(s: CarState): ResearchInfo {
-  const ppw = weeklyResearchPoints(s), y = yearOf(s.week);
+  const ppw = weeklyResearchPoints(s), y = yearOf(s.week), req = regulatedTechs(s);
   const weeks = (left: number) => (left <= 0 ? 0 : ppw > 0 ? Math.ceil(left / ppw) : null);
+  // 진행 중 연구의 남은 주: 지금 주간 점수가 그대로라고 보고 나눠 받기를 주마다 따라간다(최대 10년)
+  const need = s.research.active.map((a) => a.need - a.points), now = researchShares(s, ppw, need), wl: (number | null)[] = need.map((x) => (x <= 1e-9 ? 0 : null));
+  for (let w = 1, left = [...need]; ppw > 0 && w <= 480 && wl.some((x) => x === null); w++) {
+    const got = researchShares(s, ppw, left);
+    left = left.map((x, i) => x - got[i]); left.forEach((x, i) => { if (wl[i] === null && x <= 1e-9) wl[i] = w; });
+  }
   const row = (t: TechDef): TechRow => {
     const act = s.research.active.find((a) => a.techId === t.id), done = !t.repeatable && isDone(s, t.id);
     const hidden = !done && !act && t.year - y > R.earlyMax, reason = act || done ? null : researchError(s, t.id);
@@ -181,13 +221,13 @@ export function researchInfo(s: CarState): ResearchInfo {
       id: t.id, name: t.name, desc: hidden ? '' : t.desc, info: hidden ? '' : t.info, field: t.field, year: t.year, repeatable: !!t.repeatable, count: doneCount(s, t.id),
       status: done ? 'done' : act ? 'active' : hidden ? 'hidden' : missingPre(s, t).length ? 'locked' : 'available',
       cost, pointsLeft: left, weeksLeft: weeks(left), effects: hidden ? '' : techEffectsText(t),
-      pre: t.pre.map((id) => ({ id, name: techById(id).name, done: isDone(s, id) })), reason,
+      pre: t.pre.map((id) => ({ id, name: techById(id).name, done: isDone(s, id) })), reason, requiredBy: req.get(t.id) ?? null,
     };
   };
   return {
     fields: (Object.keys(FIELD_NAMES) as TechField[]).map((f) => ({ id: f, name: FIELD_NAMES[f], techs: TECHS.filter((t) => t.field === f).map(row) })),
     pointsPerWeek: ppw, slots: researchSlots(s), used: s.research.active.length,
-    active: s.research.active.map((a) => ({ techId: a.techId, name: techById(a.techId).name, points: a.points, need: a.need, weeksLeft: weeks(a.need - a.points) })),
+    active: s.research.active.map((a, i) => ({ techId: a.techId, name: techById(a.techId).name, points: a.points, need: a.need, weeksLeft: wl[i], pointsPerWeek: now[i], priority: a.techId === s.research.priority, requiredBy: req.get(a.techId) ?? null })),
     doneCount: s.research.done.length,
   };
 }

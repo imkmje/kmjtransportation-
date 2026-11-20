@@ -3,7 +3,7 @@ import { config } from '../config';
 import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
 import { defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
 import { specError, stepProject, withRequired } from './dev';
-import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
 import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
@@ -37,6 +37,8 @@ const marketingError = (m: number): string | null =>
 /** 판매 중(생산 라인을 차지하는) 세대: 단종 신청한 달까지 포함 */
 export const sellingGens = (s: CarState): Generation[] =>
   s.nameplates.flatMap((n) => n.generations).filter((g) => g.status !== 'discontinued').sort((a, b) => a.id - b.id);
+/** 쓰고 있는 생산 라인 수(0.5.1): 판매 중인 차종 수. 풀체인지 달에 단종되는 전 세대는 새 세대와 같은 라인이라 한 번만 센다 */
+export const linesUsed = (s: CarState): number => new Set(sellingGens(s).map((g) => s.nameplates.find((n) => n.generations.includes(g))!.id)).size;
 export const allGens = (s: CarState): Generation[] => s.nameplates.flatMap((n) => n.generations).sort((a, b) => a.id - b.id);
 
 export class Game {
@@ -98,6 +100,7 @@ export class Game {
         this.applyChoice(pc, RANDOM_EVENTS.find((d) => d.id === pc.eventId)!.defaultChoice, ev, true);
       if (s.week % config.time.weeksPerMonth === 0) monthStart(s, ev); // 11장: 시대 사건 뉴스·무작위 사건
     }
+    ev.push(...this.repEvents); this.repEvents = [];
     s.rng = this.rng.getState();
     return ev;
   }
@@ -114,7 +117,14 @@ export class Game {
     }
   }
 
-  private addRep(d: number): void { this.state.reputation = Math.min(config.reputation.max, Math.max(config.reputation.min, this.state.reputation + d)); }
+  /** 평판 변화: 감점(d < 0)은 난이도 감점 배수(repLossMult)를 곱한다(구제 금융 제외). 바뀐 만큼 이유와 함께 평판 이벤트를 쌓아 tick·명령 결과로 내보낸다(0.5.1) */
+  private addRep(d: number, reason: string, scaleLoss = true): void {
+    const s = this.state, before = s.reputation, dd = d < 0 && scaleLoss ? d * diffOf(s).repLossMult : d;
+    s.reputation = Math.min(config.reputation.max, Math.max(config.reputation.min, before + dd));
+    const delta = s.reputation - before;
+    if (Math.abs(delta) >= 0.05) this.repEvents.push({ kind: 'reputation', delta, reason, text: `평판 ${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)}(${reason})` });
+  }
+  private repEvents: GameEvent[] = [];
 
   /** 월말 정산: 판매·인지도·리콜·재무·장부·파산 */
   private monthEnd(ev: GameEvent[]): void {
@@ -151,8 +161,9 @@ export class Game {
           const cost = g.totalSold * config.recall.costPerCar * diffOf(s).recallMult;
           recall += cost; g.profit -= cost; g.recalls++;
           g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
-          this.addRep(config.recall.rep);
-          ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜 실시. 수리비 ${Math.round(cost).toLocaleString()}만원이 들고 평판이 ${-config.recall.rep} 떨어졌습니다.` });
+          const R = config.reputation, before = s.reputation; // 0.5.1: 평판 감점은 규모 비례(누적 판매 / 5,000, 0.5~3) × 난이도 배수
+          this.addRep(-Math.min(-config.recall.rep, Math.max(R.recallMin, g.totalSold / R.recallPer)), `「${this.nameOf(g)}」 리콜`);
+          ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜 실시. 수리비 ${Math.round(cost).toLocaleString()}만원이 들고 평판이 ${(before - s.reputation).toFixed(1)} 떨어졌습니다.` });
         }
       }
       const dc = config.discontinue, last = g.sales.slice(-dc.adviceMonths); // 8.6: 월 10대 미만이 6개월째가 된 달에 한 번 조언
@@ -161,16 +172,20 @@ export class Game {
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
     const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
-    const upkeep = upkeepOf(s), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
+    const upkeep = upkeepOf(s), upkeepHq = hqUpkeep(s, s.hqLevel), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
     const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
     s.ledger.push(e);
     if (s.ledger.length > config.ledgerMonths) s.ledger.splice(0, s.ledger.length - config.ledgerMonths);
     ev.push({ kind: 'monthEnd', text: `${monthLabel(m)} 결산: 판매 ${sold}대, 이익 ${Math.round(profit).toLocaleString()}만원` });
-    if ((m + 1) % config.time.monthsPerYear === 0) { // 0.4.2 연간 판매 실적만큼 평판(9.5)
-      const R = config.reputation, yearSold = s.ledger.slice(-config.time.monthsPerYear).reduce((a, x) => a + x.sold, 0), gain = Math.min(R.yearMax, yearSold / R.yearSoldDiv);
-      if (gain > 0) this.addRep(gain);
+    const R = config.reputation, total = allGens(s).reduce((a, x) => a + x.totalSold, 0); // 0.5.1 누적 판매 마일스톤
+    R.milestones.forEach((n, i) => { if (total >= n && total - sold < n) this.addRep(R.milestoneRep[i], `누적 판매 ${n.toLocaleString()}대`); });
+    if ((m + 1) % config.time.monthsPerYear === 0) { // 연간 판매 실적만큼 평판(9.5, 0.4.2), 판매 중인 차의 평론이 좋으면 +1(0.5.1)
+      const yearSold = s.ledger.slice(-config.time.monthsPerYear).reduce((a, x) => a + x.sold, 0), gain = Math.min(R.yearMax, yearSold / R.yearSoldDiv);
+      if (gain > 0) this.addRep(gain, `올해 판매 ${yearSold.toLocaleString()}대`);
+      const on = sellingGens(s).filter((x) => x.status === 'onSale');
+      if (on.length && mean(on.map((x) => x.reviewAvg)) >= R.yearGoodReview) this.addRep(R.yearGoodRep, '판매 중인 차들의 좋은 평판');
     }
     const b = s.factory.build; // 9.3 증설 공사: doneMonth 달부터 새 등급
     if (b && m + 1 >= b.doneMonth) {
@@ -192,8 +207,10 @@ export class Game {
 
   // ---------- 명령 ----------
   command(cmd: Command): CommandResult {
-    const r = this.exec(cmd);
+    let r = this.exec(cmd);
     if (r.ok) this.state.history.push({ week: this.state.week, cmd: JSON.parse(JSON.stringify(cmd)) });
+    if (r.ok && this.repEvents.length) r = { ok: true, events: [...(r.events ?? []), ...this.repEvents] };
+    this.repEvents = [];
     this.state.rng = this.rng.getState();
     return r;
   }
@@ -248,7 +265,7 @@ export class Game {
         const g = allGens(s).find((x) => x.id === cmd.generationId);
         if (!g || g.status !== 'onSale') return fail('판매 중인 차가 아닙니다.');
         const d = config.discontinue, recent = g.sales.slice(-d.recentMonths), peak = Math.max(0, ...g.sales);
-        if (recent.length && peak > 0 && mean(recent) >= peak * d.wellSelling) this.addRep(d.rep); // 잘 팔리는 차의 "아쉬운 퇴장"
+        if (recent.length && peak > 0 && mean(recent) >= peak * d.wellSelling) this.addRep(d.rep, '잘 팔리던 차의 단종'); // 잘 팔리는 차의 "아쉬운 퇴장"
         g.status = 'ending'; g.endMonth = monthOf(s.week);
         return OK;
       }
@@ -288,7 +305,7 @@ export class Game {
         if (usedB >= maxB) return fail(maxB === 1 ? '구제 금융은 한 번만 받을 수 있습니다.' : `구제 금융은 ${maxB}번까지만 받을 수 있습니다.`);
         if (s.cash >= 0) return fail('현금이 마이너스일 때만 받을 수 있습니다.');
         s.cash = 0; s.negMonths = 0; s.loan.bailouts = usedB + 1; s.loan.bailoutUsed = usedB + 1 >= maxB; s.loan.limitMult *= config.loan.bailoutLimitMult;
-        this.addRep(config.bankruptcy.bailoutRep);
+        this.addRep(config.bankruptcy.bailoutRep, '구제 금융', false);
         if (s.status === 'gameOver') { s.status = 'playing'; s.week++; } // 파산한 주는 월말 정산까지 끝났으므로 다음 주부터 이어 간다
         return OK;
       }
@@ -393,9 +410,16 @@ export class Game {
         s.research.active.push({ techId: cmd.techId, points: 0, need: c.points, startWeek: s.week });
         return OK;
       }
+      case 'prioritizeResearch': { // 0.5.1: 맨 앞으로(주간 점수의 50%)
+        const a = s.research.active.find((x) => x.techId === cmd.techId);
+        if (!a) return fail('진행 중인 연구가 아닙니다.');
+        s.research.active = [a, ...s.research.active.filter((x) => x !== a)]; s.research.priority = a.techId;
+        return OK;
+      }
       case 'cancelResearch': {
         if (!s.research.active.some((a) => a.techId === cmd.techId)) return fail('진행 중인 연구가 아닙니다.');
         s.research.active = s.research.active.filter((a) => a.techId !== cmd.techId); // 쓴 돈은 돌아오지 않는다
+        if (s.research.priority === cmd.techId) delete s.research.priority;
         return OK;
       }
       case 'resolveEvent': {
@@ -411,7 +435,7 @@ export class Game {
         const ev: GameEvent[] = [];
         switch (cmd.kind) {
           case 'cash': s.cash += config.devCheat.cash; break;
-          case 'reputation': this.addRep(config.devCheat.reputation); break;
+          case 'reputation': this.addRep(config.devCheat.reputation, '개발자 메뉴'); break;
           case 'finishResearch': for (const a of s.research.active) a.points = a.need; researchWeek(s, ev); break;
           case 'finishDev': for (const p of [...s.projects].sort((a, b) => a.id - b.id)) if (!p.waiting) {
             const team = s.staff.filter((x) => x.projectId === p.id).sort((a, b) => a.id - b.id);
@@ -438,7 +462,7 @@ export class Game {
     s.events.pending = s.events.pending.filter((x) => x !== pc);
     for (const e of choice.effects) switch (e.type) {
       case 'cash': this.spend(-(e.base + (e.revenue ?? 0) * avgRev + (e.salaries ?? 0) * salaries)); break;
-      case 'rep': this.addRep(e.value); break;
+      case 'rep': this.addRep(e.value, def.name); break;
       case 'awareness': for (const x of e.target === 'car' ? (g ? [g] : []) : sellingGens(s)) x.awareness = Math.min(1, x.awareness + e.value); break;
       case 'awarenessMult': if (g) g.awareness *= e.value; break;
       case 'condition': for (const x of s.staff) x.condition = Math.min(1, x.condition + e.value); break;
@@ -511,7 +535,7 @@ export class Game {
     if (p.kind === 'facelift' && liftGen?.status !== 'onSale') return fail('판매 중인 세대가 아니어서 페이스리프트를 출시할 수 없습니다. 개발을 취소하세요.');
     if (p.kind === 'fullchange' && !prev) return fail('없는 차종입니다.');
     const inherits = p.kind === 'facelift' || (prev !== undefined && prev.status !== 'discontinued'); // 같은 생산 라인을 이어 쓴다
-    if (!inherits && sellingGens(s).length >= linesOf(s)) return fail('빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.');
+    if (!inherits && linesUsed(s) >= linesOf(s)) return fail('빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.');
     const base = basePriceOf(s, p.body), bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing); // 시장 기준가(의무 장비 원가 포함, 0.4.2)
     if (bad) return fail(bad);
     if (cmd.wheels !== 0 && cmd.wheels !== 1 && cmd.wheels !== 2) return fail('바퀴 모양은 0~2 중에서 고르세요.');
@@ -556,8 +580,8 @@ export class Game {
         events.push({ kind: 'news', id: prev.id, text: headline, category: 'other' });
       }
       const avg = mean(reviews);
-      if (avg >= c.masterpiece) this.addRep(c.masterpieceRep); else if (avg <= c.flop) this.addRep(c.flopRep);
-      this.addRep((avg - config.reputation.launchBase) * config.reputation.launchPer); // 0.4.2: 평론만큼 평판이 오르내린다
+      if (avg >= c.masterpiece) this.addRep(c.masterpieceRep, `「${p.name}」 명차 선정`); else if (avg <= c.flop) this.addRep(c.flopRep, `「${p.name}」 혹평`);
+      if (avg > config.reputation.launchBase) this.addRep((avg - config.reputation.launchBase) * config.reputation.launchPer, `「${p.name}」 좋은 평론`); // 평론이 좋으면 오른다(0.5.1: 5 미만이어도 감점하지 않는다)
       const gen: Generation = {
         id: s.nextId++, number: prev ? prev.number + 1 : 1, body: p.body, segment: p.segment, powertrain: p.powertrain,
         launchWeek: s.week, launchMonth: month, lifeMonth: month, chassisSeed: p.chassisSeed, points: { ...p.points }, equity, rebuy,

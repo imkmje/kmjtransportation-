@@ -1,11 +1,16 @@
 // 화면 글자 꾸미기. 금액 단위는 만원(sim과 같음), 1억 이상은 억으로 줄여 보인다.
 export const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 export const num = (n: number): string => Math.round(n).toLocaleString('ko-KR');
-/** 금액: 1억(1만 만원) 이상이면 "12.3억", 아니면 "4,500만원" */
+/** 금액: 1조 이상 "1조 2,345억", 1억(1만 만원) 이상 "1,023.2억", 아니면 "4,500만원" */
 export const money = (v: number, sign = false): string => {
   const s = sign && v > 0 ? '+' : v < 0 ? '−' : '', a = Math.abs(v);
-  return a >= 10000 ? `${s}${(a / 10000).toFixed(1).replace(/\.0$/, '')}억` : `${s}${num(a)}만원`;
+  if (a >= 1e8) { const jo = Math.floor(a / 1e8), eok = Math.round((a % 1e8) / 1e4); return `${s}${num(jo)}조${eok ? ` ${num(eok)}억` : ''}`; }
+  return a >= 10000 ? `${s}${(a / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}억` : `${s}${num(a)}만원`;
 };
+/** 큰 수량: 1만 이상이면 "3.3만" (좁은 칸용) */
+export const qty = (n: number): string => (Math.abs(n) >= 10000 ? `${(n / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만` : num(n));
+/** sim 문장 속 "1,234,567만원"을 money 표기로 */
+export const moneyText = (t: string): string => t.replace(/(\d[\d,]*)만원/g, (_, n: string) => money(Number(n.replace(/,/g, ''))));
 /** 0~10 점수 한 자리 */
 export const score = (v: number): string => v.toFixed(1);
 export const STAT_NAME = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' } as const;

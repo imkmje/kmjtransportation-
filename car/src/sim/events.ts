@@ -210,7 +210,9 @@ const modText = (x: EventMod): string =>
   : `경쟁 차가 크게 히트해 ${x.body ? bodyById(x.body).name : '그 차급'} 손님을 한동안 많이 빼앗아 갑니다.`;
 export interface ActiveEvent { id: string; name: string; text: string; effects: string[]; startMonth: number; monthsLeft: number | null; kind: 'era' | 'random' }
 /** 진행 중인 사건 효과와 남은 기간(쉬운 설명): 고정 사건 + 무작위 사건의 기간 효과 */
-export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfra: number; requiredOptions: string[] } {
+/** 0.5.1: 예고됐지만 아직 시행 전인 국내 규제(예고~시행): 이름, 의무 장비, 예고·발표·시행 주, 아직 안 한 필요 기술 이름 */
+export interface RegulationDeadline { name: string; options: string[]; warnWeek: number; startWeek: number; enforceWeek: number; missingTechs: string[] }
+export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfra: number; requiredOptions: string[]; regulations: RegulationDeadline[] } {
   const m = monthOf(s.week);
   const era = eraTimeline(s.seed).filter((sp) => activeAt(sp, m)).map((sp): ActiveEvent => ({
     id: sp.def.id, name: sp.def.name, text: sp.def.start, effects: sp.def.effects.map((e) => eraEffectText(e, m - sp.start)), startMonth: sp.start, monthsLeft: sp.end === null ? null : sp.end - m, kind: 'era',
@@ -218,7 +220,14 @@ export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfr
   const mods = s.events.mods.filter((x) => m < x.untilMonth).map((x, i): ActiveEvent => ({
     id: `mod${i}`, name: x.label, text: x.label, kind: 'random', startMonth: m, monthsLeft: x.untilMonth - m, effects: [modText(x)],
   }));
-  return { events: [...era, ...mods], chargingInfra: chargingInfra(s.seed, m), requiredOptions: regulationsNow(s.seed, m).flatMap((r) => r.rule.options ?? []) };
+  const W = config.time.weeksPerMonth, regulations = eraTimeline(s.seed).flatMap((sp) => sp.def.effects.flatMap((e): RegulationDeadline[] => {
+    if (e.type !== 'regulation' || e.region !== REGION || !e.options?.length) return [];
+    const enforce = sp.start + e.graceMonths;
+    if (m < sp.start - E.warnMonths || m >= enforce) return [];
+    const missing = e.options.map(optionTech).filter((t): t is TechDef => !!t && !s.research.done.includes(t.id)).map((t) => t.name);
+    return [{ name: sp.def.name, options: e.options, warnWeek: (sp.start - E.warnMonths) * W, startWeek: sp.start * W, enforceWeek: enforce * W, missingTechs: missing }];
+  }));
+  return { events: [...era, ...mods], chargingInfra: chargingInfra(s.seed, m), requiredOptions: regulationsNow(s.seed, m).flatMap((r) => r.rule.options ?? []), regulations };
 }
 /** 판매 중인 차 한 대에 지금 걸린 사건 효과(쉬운 문장, "사건 이름: 내용"): 그 차의 차체·동력·고객층에 걸린 것과,
  *  모든 차에 걸리지만 이 차에 특히 유리·불리한 것(고객이 더 따지는 능력치가 이 차에서 높거나 낮을 때) */
