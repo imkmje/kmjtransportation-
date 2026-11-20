@@ -13,7 +13,7 @@ export const config = {
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
     designWeeks: [8, 12, 16], minTestWeeks: 2,
-    prototypePerWeek: 4000, // 시제차 비용(주당). 12주 설계 + 시험이면 개발비 약 8.5억이 되도록(설계자 결정 6~12억)
+    prototypePerWeek: 5800, // 시제차 비용(주당). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
@@ -32,7 +32,7 @@ export const config = {
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
   market: { // 7.3
-    scale: 1.15, // 시장 규모 배수(보정용, 설계서 연 규모 × 1.15)
+    scale: 2.1, // 시장 규모 배수(보정용). 2단계 조정 1.15 → 2.1: 연 규모를 달마다 기하 보간하자 1970년대 시장이 직선 보간의 1/2~1/4로 줄어서
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
@@ -52,7 +52,30 @@ export const config = {
   discontinue: { lastMonthMult: 0.5, recentMonths: 3, wellSelling: 0.7, rep: -2, adviceSales: 10, adviceMonths: 6, adviceDrop: 0.6 }, // 8.6
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
-  rivals: { base: 1, noise: 0.1 }, // 경쟁 차 A = 기본값 + 강약 ± 0.1
+  rivals: { // 7.4·8.4: 경쟁 차 A = 기본값 + 강약 ± 0.1. 4~7년 주기로 새 모델, 주기 중간에 페이스리프트(2단계 단순 규칙, 5단계에서 완성)
+    base: 1, noise: 0.1,
+    cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
+    fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
+    faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
+  },
+  lifecycle: { // 8장
+    facelift: {
+      afterMonths: 18, designWeeks: 4, costShare: 0.35, // 출시 18개월 뒤, 설계 4주, 비용 = 그 세대 개발비의 35%(설계 4주 + 최소 시험 2주에 나눠 낸다). 설계서 25% → 35%(설계자 허용 25~40%, 리프트가 필수가 되지 않게)
+      dCap: 0.1, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +10%(설계서 +15% → 허용 8~15% 안)
+      defectKeep: 0.5, defectRate: 1 / 3, // 남은 결함 × 0.5로 시작, 새 결함은 1/3 속도
+      lifeKeep: 0.6, lateMonths: 60, lateLifeKeep: 0.8, // 수명 나이를 60%로(세대 나이 60개월 이후면 80%로). 설계서 40%/70% → 허용 45~65%/75~85% 안
+      awareness: 0.06, switchMonthMult: 0.7, // 인지도 +0.06(설계서 +0.1 → 허용 0.04~0.10 안), 전환 달 생산 −30%
+    },
+    fullChange: {
+      afterMonths: 36, sameBodyCost: 0.85, newBodyCost: 1, // 출시 36개월 뒤(또는 단종 상태), 비용 85%(같은 차체) / 100%
+      equityPerReview: 0.03, equityReviewBase: 0.12, equityReviewMax: 0.2, equitySalesDiv: 500000, equitySalesMax: 0.1, equityMax: 0.3, // 자산 = clamp(0.03 × 평론 − 0.12, 0, 0.2) + min(0.1, 누적/50만)
+      recallEquity: -0.05, newBodyEquity: 0.5, revivalMonths: 36, revivalEquity: 0.5, // 리콜 −0.05, 차체 변경 ×0.5, 단종 36개월 넘으면 부활 ×0.5
+      worseReview: -1, betterReview: 0.5, // 전작 비교: 표시 등급 평균이 낮으면 평론 전원 −1, 높으면 +0.5
+      rebuyShare: 0.03, rebuyMonths: 12, rebuyMinQ: 5, // 전 세대 누적 판매의 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 5 미만이면 0)
+    },
+    lookCandidates: 3, // 3D 모양 후보 수
+  },
+  staffGrowth: { min: 1, max: 2, cap: 60 }, // 9.1 최소 구현(3단계 전 임시): 프로젝트를 출시로 마치면 참여 직원 능력 +1~2, 상한 60
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
 };

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CarLook } from './look';
-import { BODY, FACE, WHEEL_GROW, eraStyle } from './shapes';
+import { FACE, WHEEL_GROW, eraStyle } from './shapes';
+import { chassisOf, faceOf } from './variant';
 
 export interface CarMaterials {
   paint: THREE.MeshPhysicalMaterial;
@@ -42,13 +43,14 @@ export function disposeCar(group: THREE.Object3D): void {
    ring(x)를 함수로 빼 두어 얼굴 데칼·도어 선·아치 테를 같은 곡면 위에 정확히 붙인다. */
 export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const carG = new THREE.Group();
-  const p = { ...BODY[look.bodyId] };
+  const p = chassisOf(look), fc = faceOf(look);
   p.wr += WHEEL_GROW[look.wheel];
   const E = eraStyle(look), ev = look.powertrain === 'ev', F = FACE;
+  let decalMiss = 0; // 데칼 점이 차체 곡면을 못 찾은 횟수(검사용, 0이어야 정상)
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], x = 0, y = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; carG.add(m); return m;
   };
-  const h = p.L / 2, hw = p.W / 2, N = 184, J = 32, RN = 2 * J, ar = p.wr + .055, mid = (p.cR + p.cF) / 2;
+  const h = p.L / 2, hw = p.W / 2, N = 184, J = 32, RN = 2 * J, ar = p.wr + p.archGap, mid = (p.cR + p.cF) / 2;
   const ym = p.clr + (p.belt - p.clr) * .55;
 
   // 옆모습 윗선: 꺾은선을 찍고 두 번 문질러 둥글린다
@@ -60,7 +62,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const xs: number[] = [];
   for (let i = 0; i <= N; i++) xs.push(Math.max(-h + .004, Math.min(h - .004, -h + p.L * i / N)));
   let Ts = xs.map(lin);
-  for (let k = 0; k < 2; k++) Ts = Ts.map((_, i) => { let a = 0; for (let j = -4; j <= 4; j++) a += Ts[Math.max(0, Math.min(N, i + j))]; return a / 9; });
+  for (let k = 0; k < E.smooth; k++) Ts = Ts.map((_, i) => { let a = 0; for (let j = -4; j <= 4; j++) a += Ts[Math.max(0, Math.min(N, i + j))]; return a / 9; });
   const Tat = (x: number) => { const f = Math.max(0, Math.min(N, (x + h) / p.L * N)), i = Math.min(N - 1, Math.floor(f)); return Ts[i] + (Ts[i + 1] - Ts[i]) * (f - i); };
 
   // 단면 반쪽(z≥0): [y0,z0,y1,z1,…] 33점. 바닥 가운데 → 옆 → 지붕 가운데
@@ -68,7 +70,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     const d = Math.min(x + h, h - x);
     let arch = 0;
     for (const xw of [-p.wb, p.wb]) { const dx = Math.abs(x - xw); if (dx < ar) arch = p.wr + Math.sqrt(ar * ar - dx * dx); }
-    let yb = Math.max(p.clr, arch), ys = p.belt + .03 - .07 * (x + h) / p.L, T = Tat(x);
+    let yb = Math.max(p.clr, arch), ys = p.belt + .03 - E.wedge * (x + h) / p.L, T = Tat(x);
     if (arch) ys = Math.max(ys, arch + .08);
     T = Math.max(T, ys + .09);
     const e = d < E.re ? Math.sqrt(1 - (1 - d / E.re) ** 2) : 1;
@@ -105,7 +107,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const surfX = (y: number, z: number, s: 1 | -1) => {
     let lo = p.wb + ar + .01, hi = h - .004;
     if (inside(ring(s * hi).P, y, z)) return s * hi;
-    if (!inside(ring(s * lo).P, y, z)) return s * lo;
+    if (!inside(ring(s * lo).P, y, z)) { decalMiss++; return s * lo; }
     for (let it = 0; it < 14; it++) { const m = (lo + hi) / 2; if (inside(ring(s * m).P, y, z)) lo = m; else hi = m; }
     return s * lo;
   };
@@ -121,13 +123,31 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   // 앞뒤 끝면에 붙는 데칼: 평면 도형(x→가로, y→높이)을 곡면에 투영
   const decal = (geo: THREE.BufferGeometry, mat: THREE.Material, s: 1 | -1, lift: number = F.lift) => {
     const pa = geo.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < pa.count; i++) { const gz = pa.getX(i), gy = pa.getY(i); pa.setXYZ(i, surfX(gy, gz, s) + s * lift, gy, -s * gz); }
-    geo.deleteAttribute('normal'); geo.deleteAttribute('uv'); geo.computeVertexNormals();
+    for (let i = 0; i < pa.count; i++) { const gz = pa.getX(i), gy = pa.getY(i); pa.setXYZ(i, surfX(gy, gz, s), gy, -s * gz); }
+    // 곡면의 법선 방향으로 띄운다(아래로 말려 들어가는 범퍼 끝에서도 차체에 묻히지 않게)
+    geo.computeVertexNormals();
+    const na = geo.getAttribute('normal') as THREE.BufferAttribute;
+    for (let i = 0; i < pa.count; i++) {
+      const sn = na.getX(i) * s < 0 ? -1 : 1; // 감김과 상관없이 바깥(앞이면 +x) 쪽으로
+      pa.setXYZ(i, pa.getX(i) + sn * na.getX(i) * lift, pa.getY(i) + sn * na.getY(i) * lift, pa.getZ(i) + sn * na.getZ(i) * lift);
+    }
+    geo.computeVertexNormals();
     return add(geo, mat);
   };
-  const rect = (z0: number, z1: number, y0: number, y1: number, sz = 6, sy = 3) =>
-    new THREE.PlaneGeometry(Math.abs(z1 - z0), y1 - y0, sz, sy).translate((z0 + z1) / 2, (y0 + y1) / 2, 0);
-  const circle = (zc: number, yc: number, r: number) => new THREE.CircleGeometry(r, 20).translate(zc, yc, 0);
+  // 평면 격자를 f(u,v)→[가로,높이]로 휘어 만든 도형(곡면에 투영되도록 잘게 나눈다). 감김 방향은 PlaneGeometry와 같게 맞춘다
+  const grid = (sz: number, sy: number, f: (u: number, v: number) => number[]) => {
+    const vs: number[] = [], ix: number[] = [], [za, ya] = f(.4, .5), [zb, yb] = f(.6, .5), [zc, yc] = f(.4, .6);
+    const flip = (zb - za) * (yc - ya) - (yb - ya) * (zc - za) < 0;
+    for (let iy = 0; iy <= sy; iy++) for (let i = 0; i <= sz; i++) { const [z, y] = f(i / sz, 1 - iy / sy); vs.push(z, y, 0); }
+    for (let iy = 0; iy < sy; iy++) for (let i = 0; i < sz; i++) {
+      const a = i + (sz + 1) * iy, b = a + sz + 1, c = b + 1, d = a + 1;
+      if (flip) ix.push(a, d, b, b, d, c); else ix.push(a, b, d, b, c, d);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(vs, 3)); g.setIndex(ix); return g;
+  };
+  const rect = (z0: number, z1: number, y0: number, y1: number, sz = 6, sy = 3) => grid(sz, sy, (u, v) => [z0 + (z1 - z0) * u, y0 + (y1 - y0) * v]);
+  const ellipse = (zc: number, yc: number, rz: number, ry = rz) => grid(20, 2, (u, v) => [zc + rz * v * Math.cos(u * 6.2832), yc + ry * v * Math.sin(u * 6.2832)]);
+  const circle = ellipse;
   const pair = (fn: (sg: number) => void) => { fn(1); fn(-1); };
 
   // ── 차체 곡면 ──
@@ -192,36 +212,78 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   sg.setIndex(sIdx); sg.computeVertexNormals();
   add(sg, M.trim).castShadow = false;
 
-  // ── 앞얼굴 ──
-  const lampY = p.belt - F.lampDrop;
-  if (E.classic) {
-    pair(sgn => {
-      decal(circle(sgn * hw * F.roundLampZ, lampY, F.roundLampR + F.roundRing), M.chrome, 1);
-      decal(circle(sgn * hw * F.roundLampZ, lampY, F.roundLampR), M.lamp, 1, F.lift * 2);
-    });
-  } else {
-    const lh = ev ? F.lampH * .55 : F.lampH, ly = ev ? lampY + F.lampH * .2 : lampY;
-    pair(sgn => decal(rect(sgn * hw * F.lampZ0, sgn * hw * F.lampZ1, ly - lh / 2, ly + lh / 2), M.lamp, 1));
-    if (ev) decal(rect(-hw * F.barZ, hw * F.barZ, ly + lh / 2 - F.barH, ly + lh / 2, 12, 1), M.lamp, 1, F.lift * 2);
+  // ── 앞얼굴(faceOf) ── fw: 얼굴이 쓰는 반폭
+  const fw = hw * E.faceW;
+  const L2 = F.lift * 2, L3 = F.lift * 3, plateTop = p.clr + F.plateY + F.plateH;
+  const lampY = p.belt - F.lampDrop + fc.lampDy, lw = fc.lampW;
+  let lampTop = lampY + F.lampH / 2, lampIn = fw * .5; // 라이트 바 높이, 그릴이 넘지 말아야 할 전조등 안쪽 끝
+  const ring2 = (zc: number, yc: number, r: number) => { decal(circle(zc, yc, r + F.roundRing), M.chrome, 1); decal(circle(zc, yc, r), M.lamp, 1, L2); };
+  switch (fc.lamp) {
+    case 'round': { const r = F.roundLampR * lw; pair(g => ring2(g * fw * F.roundLampZ, lampY, r)); lampIn = fw * F.roundLampZ - r - F.roundRing; break; }
+    case 'twin': { const r = .062 * lw; pair(g => { ring2(g * fw * .58, lampY, r); ring2(g * fw * .82, lampY, r); }); lampIn = fw * .58 - r - F.roundRing; break; }
+    case 'oval': { const rz = .12 * lw, ry = .055; pair(g => decal(ellipse(g * fw * .68, lampY, rz, ry), M.lamp, 1)); lampIn = fw * .68 - rz; break; }
+    case 'vertical': { const z0 = fw * (.88 - .16 * lw); pair(g => decal(rect(g * z0, g * fw * .88, lampY - .1, lampY + .05, 3, 6), M.lamp, 1)); lampIn = z0; lampTop = lampY + .05; break; }
+    case 'swept': { // 안쪽은 가늘고 낮게, 바깥으로 갈수록 두껍고 높게
+      const z0 = fw * (.88 - .4 * lw);
+      pair(g => decal(grid(8, 3, (u, v) => [g * (z0 + (fw * .88 - z0) * u), lampY - .01 + .05 * u + (v - .5) * (.03 + .05 * u)]), M.lamp, 1));
+      lampIn = z0; lampTop = lampY + .055; break;
+    }
+    case 'slim': { const z0 = fw * (.88 - .38 * lw), y = lampY + F.lampH * .2, lh = F.lampH * .55; pair(g => decal(rect(g * z0, g * fw * .88, y - lh / 2, y + lh / 2), M.lamp, 1)); lampIn = z0; lampTop = y + lh / 2; break; }
+    default: { // rect
+      const z0 = fw * (F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), lh = E.classic ? .1 : F.lampH;
+      pair(g => { if (E.classic) decal(rect(g * (z0 - .015), g * (fw * F.lampZ1 + .015), lampY - lh / 2 - .015, lampY + lh / 2 + .015), M.chrome, 1); decal(rect(g * z0, g * fw * F.lampZ1, lampY - lh / 2, lampY + lh / 2), M.lamp, 1, L2); });
+      lampIn = z0;
+    }
   }
+  if (fc.bar) decal(rect(-fw * F.barZ, fw * F.barZ, lampTop - F.barH, lampTop, 12, 1), M.lamp, 1, L2);
+  if (fc.bumper === 'black' && !E.classic) for (const s of [1, -1] as const) decal(rect(-fw * .8, fw * .8, p.clr + .06, p.clr + .22, 24, 6), M.trim, s, F.lift * 1.5);
   if (!ev) {
-    const gz = hw * (E.classic ? F.classicGrilleZ : F.grilleZ), g0 = lampY - F.grilleDown, g1 = lampY + F.grilleUp, fr = F.grilleFrame;
-    decal(rect(-gz - fr, gz + fr, g0 - fr, g1 + fr, 8, 3), M.chrome, 1);
-    decal(rect(-gz, gz, g0, g1, 8, 3), M.trim, 1, F.lift * 2);
+    const gz = Math.min(fw * (E.classic ? F.classicGrilleZ : F.grilleZ) * fc.grilleW, lampIn - .04), fr = F.grilleFrame;
+    const g1 = fc.bar ? Math.min(lampY + F.grilleUp, lampTop - F.barH - .015) : lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * fc.grilleH, plateTop + .03);
+    const framed = (z0: number, z1: number, y0: number, y1: number) => { decal(rect(z0 - fr, z1 + fr, y0 - fr, y1 + fr, 8, 3), M.chrome, 1); decal(rect(z0, z1, y0, y1, 8, 3), M.trim, 1, L2); };
+    switch (fc.grille) {
+      case 'hex': { // 위는 좁고 가운데가 가장 넓고 아래로 범퍼까지 내려오는 육각
+        const y0 = Math.max(lampY - .17 * fc.grilleH, plateTop + .03), hx = (e: number) => grid(8, 6, (u, v) => {
+          const fwv = v > .6 ? gz - (gz * .2) * (v - .6) / .4 : gz * .72 + gz * .28 * v / .6;
+          return [(2 * u - 1) * (fwv + e), y0 - e + (g1 - y0 + 2 * e) * v];
+        });
+        decal(hx(fr), M.chrome, 1); decal(hx(0), M.trim, 1, L2); break;
+      }
+      case 'twin': framed(-gz * .85, gz * .85, lampY - .01, g1); framed(-gz, gz, Math.max(lampY - .14, plateTop + .03), lampY - .05); break;
+      case 'bars': decal(rect(-gz, gz, g0, g1, 8, 3), M.trim, 1);
+        for (let i = 1; i <= 3; i++) { const y = g0 + (g1 - g0) * i / 4; decal(rect(-gz, gz, y - .007, y + .007, 8, 1), M.chrome, 1, L2); }
+        break;
+      case 'none': decal(rect(-gz * .8, gz * .8, lampY - .015, lampY + .01, 8, 1), M.trim, 1); break; // 얇은 틈만
+      default: framed(-gz, gz, g0, g1);
+    }
   }
-  const iz = hw * (ev ? F.evIntakeZ : F.intakeZ);
-  decal(rect(-iz, iz, p.clr + F.intakeY0, p.clr + F.intakeY1, 8, 2), M.trim, 1);
-  decal(rect(-F.plateW / 2, F.plateW / 2, p.clr + F.plateY, p.clr + F.plateY + F.plateH, 4, 2), M.plate, 1);
+  const iy0 = p.clr + F.intakeY0, iy1 = p.clr + F.intakeY1;
+  switch (fc.intake) {
+    case 'wide': { const iz = fw * (ev ? F.evIntakeZ : F.intakeZ); decal(rect(-iz, iz, iy0, iy1, 8, 2), M.trim, 1, L2); break; }
+    case 'slim': decal(rect(-fw * F.evIntakeZ, fw * F.evIntakeZ, iy0, iy1 - .02, 8, 2), M.trim, 1, L2); break;
+    case 'three': decal(rect(-fw * .22, fw * .22, iy0, iy1, 6, 2), M.trim, 1, L2); pair(g => decal(rect(g * fw * .5, g * fw * .76, iy0 - .01, iy1 + .03, 4, 2), M.trim, 1, L2)); break;
+  }
+  const pz = fc.plateF === 'offset' ? fw * .4 : 0;
+  decal(rect(pz - F.plateW / 2, pz + F.plateW / 2, p.clr + F.plateY, plateTop, 4, 2), M.plate, 1, L3);
 
   // ── 뒷모습 ──
-  const tailY = p.belt - F.tailDrop;
-  if (E.classic) pair(sgn => decal(rect(sgn * hw * F.classicTailZ0, sgn * hw * F.classicTailZ1, tailY - F.classicTailH / 2, tailY + F.classicTailH / 2, 4, 3), M.tail, -1));
-  else {
-    pair(sgn => decal(rect(sgn * hw * F.tailZ0, sgn * hw * F.tailZ1, tailY - F.tailH / 2, tailY + F.tailH / 2), M.tail, -1));
-    if (ev) decal(rect(-hw * F.tailZ0, hw * F.tailZ0, tailY + F.tailH / 2 - F.barH, tailY + F.tailH / 2, 8, 1), M.tail, -1);
+  const tailY = p.belt - F.tailDrop + fc.tailDy, tl = (z0: number, z1: number, y0: number, y1: number, sy = 3) => pair(g => decal(rect(g * fw * z0, g * fw * z1, y0, y1, 4, sy), M.tail, -1));
+  let tailIn: number = F.tailZ0, tailTop = tailY + .05;
+  switch (fc.tail) {
+    case 'vertical': tl(.76, .9, tailY - .13, tailY + .05, 6); tailIn = .76; break;
+    case 'L': tl(.5, .9, tailY, tailY + .05); tl(.8, .9, tailY - .12, tailY); tailIn = .5; break;
+    case 'split':
+      if (E.classic) pair(g => { for (const z of [.6, .8]) decal(circle(g * fw * z, tailY, .05), M.tail, -1); });
+      else { tl(.48, .64, tailY - .035, tailY + .035); tl(.7, .9, tailY - .035, tailY + .035); }
+      tailIn = .48; tailTop = tailY + .035; break;
+    case 'full': tl(F.tailZ0, F.tailZ1, tailY - .03, tailY + .03); tailTop = tailY + .03; break;
+    default: tailTop = tailY + (E.classic ? F.classicTailH : F.tailH) / 2;
+      if (E.classic) tl(F.classicTailZ0, F.classicTailZ1, tailY - F.classicTailH / 2, tailY + F.classicTailH / 2); else tl(F.tailZ0, F.tailZ1, tailY - F.tailH / 2, tailY + F.tailH / 2);
   }
-  decal(rect(-F.plateW / 2, F.plateW / 2, p.clr + F.rearPlateY, p.clr + F.rearPlateY + F.plateH, 4, 2), M.plate, -1);
-  decal(rect(-hw * F.diffZ, hw * F.diffZ, p.clr + F.diffY0, p.clr + F.diffY1, 8, 2), M.trim, -1);
+  if (ev || fc.tail === 'full') decal(rect(-fw * tailIn, fw * tailIn, tailTop - F.barH, tailTop, 8, 1), M.tail, -1);
+  const ry = p.clr + (fc.plateR === 'high' ? F.rearPlateY : F.rearPlateLowY);
+  decal(rect(-F.plateW / 2, F.plateW / 2, ry, ry + F.plateH, 4, 2), M.plate, -1, L3);
+  decal(rect(-fw * F.diffZ, fw * F.diffZ, p.clr + F.diffY0, p.clr + F.diffY1, 8, 2), M.trim, -1, L2);
 
   // 1970 크롬 범퍼: 앞뒤 가로 막대
   if (E.classic) for (const s of [1, -1] as const) {
@@ -263,5 +325,6 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     }
     part(hub, M.chrome, .115);
   }
+  carG.userData.decalMiss = decalMiss;
   return carG;
 }

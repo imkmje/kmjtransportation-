@@ -16,3 +16,15 @@ export class Rng {
   getState(): number { return this.s; }
   setState(s: number): void { this.s = s >>> 0; }
 }
+
+/** 순수 해시(게임 난수를 소비하지 않는다): 같은 정수 목록 = 같은 32비트 결과. 3D 모양 후보·경쟁 차 교체에 쓴다 */
+export function hash32(...xs: number[]): number {
+  let h = 0x811c9dc5;
+  for (const x of xs) {
+    h = Math.imul(h ^ (x >>> 0), 0x01000193) >>> 0;
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d) >>> 0; h ^= h >>> 12; h = Math.imul(h, 0x297a2d39) >>> 0; h ^= h >>> 15;
+  }
+  return h >>> 0;
+}
+/** hash32를 0 이상 1 미만으로 */
+export const hash01 = (...xs: number[]): number => hash32(...xs) / 4294967296;

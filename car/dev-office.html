@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>사무실 장면 확인</title>
+<style>
+/* 개발용 확인 페이지(게임에는 안 들어감). 무대 배경은 게임 .stage와 같다. */
+body{margin:0;padding:12px 16px;background:#e7eaee;color:#14171c;font-family:system-ui,sans-serif;font-size:14px}
+.stage{position:relative;border-radius:24px;overflow:hidden;width:700px;height:900px;max-width:100%;
+  background:radial-gradient(120% 90% at 50% 62%,#ffffff 0,#dfe4ea 48%,#c9d0d9 100%);border:1px solid #fff;--office-top-inset:90px}
+/* 게임이 무대 위쪽에 얹는 반투명 띠 흉내 */
+.band{position:absolute;left:0;right:0;top:0;height:90px;z-index:2;pointer-events:none;background:linear-gradient(#ffffffd0,#ffffff90);border-bottom:1px solid #fff;font-weight:800;padding:14px 18px;box-sizing:border-box}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;align-items:center}
+.row b{min-width:4.5em}
+.row button{min-height:34px;border:1.5px solid #d8dde4;background:#fff;border-radius:10px;padding:0 10px;font:inherit}
+.row button[aria-pressed="true"]{border-color:#14171c;background:#14171c;color:#fff}
+</style>
+</head>
+<body>
+<div id="ctl"></div>
+<section class="stage" id="stage"><div class="band">노바 · 성능 2.7 · 연비 2.7</div></section>
+<script type="module" src="./src/ui/office/dev.ts"></script>
+</body>
+</html>

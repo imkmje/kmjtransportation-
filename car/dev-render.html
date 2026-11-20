@@ -17,7 +17,12 @@ body{margin:0;padding:12px 16px;background:#e7eaee;color:#14171c;font-family:sys
 .row button{min-height:36px;border:1.5px solid #d8dde4;background:#fff;border-radius:10px;padding:0 10px;font:inherit}
 .row button[aria-pressed="true"]{border-color:#14171c}
 .row button svg{width:72px;height:28px;display:block}
-#info{font-size:13px;color:#5b6470}
+#info,#desc{font-size:13px;color:#5b6470}
+.row b{font-size:13px;font-weight:600;min-width:64px}
+#cmp{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+#cmp figure{margin:0;background:#fff;border-radius:12px;padding:6px;max-width:100%}
+#cmp img{width:220px;max-width:100%;display:block}
+#cmp figcaption{font-size:13px;max-width:440px}
 </style>
 </head>
 <body>
@@ -26,6 +31,10 @@ body{margin:0;padding:12px 16px;background:#e7eaee;color:#14171c;font-family:sys
 <div class="row" id="eras"></div>
 <div class="row" id="pts"></div>
 <div class="row" id="colors"></div>
+<div class="row"><b>차대 시드</b><span class="row" id="cseeds" style="margin:0"></span></div>
+<div class="row"><b>얼굴 시드</b><span class="row" id="fseeds" style="margin:0"></span></div>
+<div class="row"><button id="cmpFace">같은 차대 + 얼굴 3개</button><button id="cmpChassis">차대 3개</button><span id="desc"></span></div>
+<div id="cmp"></div>
 <div class="row"><button id="sporty">스포티</button><button id="wheel">휠</button><button id="rot">자동 회전</button><button id="snap">스냅샷</button><span id="info"></span></div>
 <script type="module" src="./src/render/dev.ts"></script>
 </body>
