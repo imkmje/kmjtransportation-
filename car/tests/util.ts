@@ -1,6 +1,13 @@
 // 테스트 공용 도우미(테스트 파일이 아니라 직접 실행되지 않는다)
 import { Game, allGens } from '../src/sim/game';
+import { TECHS, techById } from '../src/data';
 import type { Generation, ProjectSpec } from '../src/sim/types';
+
+/** 테스트용: 기술을 연구 완료로 표시(선행 기술 포함, 이미 한 것은 건너뜀). ids를 빼면 반복 기술을 뺀 전부 */
+export function grant(g: Game, ...ids: string[]): void {
+  const add = (id: string) => { if (g.state.research.done.includes(id)) return; for (const q of techById(id).pre) add(q); g.state.research.done.push(id); };
+  for (const id of ids.length ? ids : TECHS.filter((t) => !t.repeatable).map((t) => t.id)) add(id);
+}
 
 export const SPEC: ProjectSpec = { name: '테스트카', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 12 };
 

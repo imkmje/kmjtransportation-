@@ -26,7 +26,7 @@ const stage = Stage.supported() ? new Stage($('cv') as HTMLCanvasElement, $('sta
 (window as unknown as { stage: Stage | null }).stage = stage;
 // 자동 검사용(Playwright): 썸네일, 시드 일괄 생성 검사
 (window as unknown as { __dev: unknown }).__dev = {
-  thumb: (l: CarLook, w: number, h: number, yaw?: number) => stage!.renderThumb(l, w, h, yaw),
+  thumb: (l: CarLook, w: number, h: number, yaw?: number, fit?: number) => stage!.renderThumb(l, w, h, yaw, fit),
   describeLook, buildCar, createCarMaterials, disposeCar,
 };
 
@@ -56,9 +56,15 @@ function render() {
   $('desc').textContent = `차대: ${d.chassis} / 얼굴: ${d.face}`;
   // 비교 보기: 지금 시드부터 3개(기본이면 1·2·3)
   const base = (n?: number) => n ?? 1;
+  if (compare === 'all') { // 10종 나란히: 같은 시대·색·시드, 같은 배율(실제 크기 비교)로 앞 3/4와 옆
+    $('cmp').innerHTML = stage ? (Object.keys(BODY) as BodyId[]).map(k => {
+      const l = { ...look, bodyId: k };
+      return `<figure>${[-.65, 0].map(y => `<img src="${stage.renderThumb(l, 320, 200, y, 5.6)}">`).join('')}<figcaption>${k}</figcaption></figure>`;
+    }).join('') : '';
+  }
   const set: CarLook[] = compare === 'face' ? [0, 1, 2].map(i => ({ ...look, faceSeed: base(look.faceSeed) + i }))
     : compare === 'chassis' ? [0, 1, 2].map(i => ({ ...look, chassisSeed: base(look.chassisSeed) + i })) : [];
-  $('cmp').innerHTML = stage ? set.map(l => {
+  if (compare !== 'all') $('cmp').innerHTML = stage ? set.map(l => {
     const t = describeLook(l), views = compare === 'face' ? [-Math.PI / 2, Math.PI / 2, -.65] : [0, -.65];
     return `<figure>${views.map(y => `<img src="${stage.renderThumb(l, 320, 200, y)}">`).join('')}<figcaption>${compare === 'face' ? `얼굴 ${l.faceSeed}: ${t.face}` : `차대 ${l.chassisSeed}: ${t.chassis}`}</figcaption></figure>`;
   }).join('') : '';
@@ -73,6 +79,7 @@ $('sporty').onclick = () => { look.sporty = !look.sporty; render(); };
 $('wheel').onclick = () => { look.wheel = ((look.wheel + 1) % 3) as CarLook['wheel']; render(); };
 $('rot').onclick = () => { rot = !rot; render(); };
 $('cmpFace').onclick = () => { compare = compare === 'face' ? '' : 'face'; render(); };
+$('cmpAll').onclick = () => { compare = compare === 'all' ? '' : 'all'; render(); };
 $('cmpChassis').onclick = () => { compare = compare === 'chassis' ? '' : 'chassis'; render(); };
 $('snap').onclick = () => { if (stage) window.open()?.document.write(`<img src="${stage.snapshot()}">`); };
 render();

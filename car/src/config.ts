@@ -131,7 +131,29 @@ export const config = {
     leadMonths: 5, // 후속 차 개발을 시작하는 시점(교체 몇 개월 전)
     modelsPerBody: 1, // 차종 수 상한 = 쓸 수 있는 차체 수 × 이 값(생산 라인 수 이내)
     gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
+    optionCostShare: 0.02, // 4단계: 옵션은 원가가 기준가의 2% 이하인 것만(규제 옵션은 예외)
+    bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
+  },
+  research: { // 10장 연구
+    pointsDiv: 10, // 프로젝트·교육·휴식에 없는 엔지니어 1명이 매주 능력 / 10 점
+    labMult: 1.5, labHq: 4, // 전담 연구원(본사 4등급부터): 산출 × 1.5
+    slots: [1, 1, 1, 2, 2], // 본사 등급별 동시 연구 수
+    earlyRate: 0.25, earlyMax: 4, // 등장 연도보다 먼저: 비용 × (1 + 0.25 × 앞당긴 햇수), 최대 4년
+    lateYears: 8, lateMult: 0.5, // 등장 연도 + 8년이 지나면 비용 × 0.5
+    repeatGrowth: 1.5, // 반복 기술(차세대)은 할 때마다 비용 × 1.5
+    worldFirst: 1, // 먼저 연구한 기술을 쓴 첫 차의 평론 +1(기술마다 한 번)
+  },
+  events: { // 11장 시대 사건
+    shiftYears: 1, // 고정 사건 연도 ±1년(시드로 확정)
+    warnMonths: 6, // 예고 뉴스: 시작 6개월 전
+    lastEraYear: 2035, // 이 해 뒤로는 고정 사건이 없다(무작위 사건만)
+    randomFrom: 1971, randomPerYear: [0.3, 0.5, 0.2], // 무작위 사건: 1971년부터 해마다 0/1/2회 확률
+    choiceWeeks: 4, // 답하지 않으면 4주 뒤 기본 선택
+    revenueMonths: 12, // 선택지 비용의 "최근 월평균 매출" 기간
+    newsMax: 60, // 뉴스 기록 보관 개수
+    trendMin: 0.2, // 유행 계수 하한
+    charging: { powertrain: 'ev', start: 0.05, perYear: 0.045 }, // 충전 인프라: 전기차 등장 사건부터 0.05, 해마다 +0.045(최대 1)
   },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },

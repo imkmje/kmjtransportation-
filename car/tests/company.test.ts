@@ -12,7 +12,7 @@ import { monthOf } from '../src/sim/time';
 import { NAMES, RIVALS } from '../src/data';
 import { config } from '../src/config';
 import type { Staff } from '../src/sim/types';
-import { SPEC, launched, ok, toMonthEnd } from './util';
+import { SPEC, grant, launched, ok, toMonthEnd } from './util';
 
 const reason = (r: { ok: boolean; reason?: string }) => (r.ok ? '' : r.reason);
 const H = config.staff.hire, C = config.staff.condition;
@@ -84,7 +84,7 @@ describe('채용(9.1)', () => {
     ok(g.command({ type: 'postJob', role: 'tester', tier: 2 }));
     const c = g.state.candidates[1];
     ok(g.command({ type: 'hire', candidateId: c.id }));
-    expect(g.state.staff.at(-1)).toEqual({ id: c.id, name: c.name, role: 'tester', ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null });
+    expect(g.state.staff.at(-1)).toEqual({ id: c.id, name: c.name, role: 'tester', ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
     expect(g.state.candidates.length).toBe(2);
     expect(reason(g.command({ type: 'hire', candidateId: c.id }))).toBe('없는 후보입니다.');
     while (g.state.staff.length < 8) g.state.staff.push({ ...g.state.staff[0], id: 900 + g.state.staff.length });
@@ -272,7 +272,7 @@ describe('팀 배치와 영업(9.1)', () => {
     const run = (sales: boolean) => {
       const { g, gen } = launched(5);
       g.state.cash = 1e9;
-      if (sales) g.state.staff.push({ id: 999, name: '영업왕', role: 'sales', ability: 60, potential: 60, condition: 1, projectId: null, trainings: [], restUntil: null });
+      if (sales) g.state.staff.push({ id: 999, name: '영업왕', role: 'sales', ability: 60, potential: 60, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
       gen.awareness = 0;
       toMonthEnd(g); toMonthEnd(g);
       return gen.awareness;
@@ -304,7 +304,8 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
   });
   it('옵션 슬롯: 본사 1등급은 2개, 3등급이면 3개까지', () => {
     const g = Game.create({ seed: 1 });
-    g.state.week = 48 * 10; // 1980년: 옵션 3개 해금
+    g.state.week = 48 * 10; // 1980년: 옵션 3개 연구
+    grant(g, 'el_aircon', 'el_powerSteering');
     const three = { ...SPEC, options: ['radio', 'aircon', 'powerSteering'] };
     expect(reason(g.command({ type: 'startProject', ...three }))).toBe('옵션은 최대 2개까지 고를 수 있습니다(본사 등급을 올리면 늘어납니다).');
     g.state.cash = 1e9; g.state.reputation = 30;
@@ -465,12 +466,12 @@ describe('조회 함수(화면용)', () => {
   });
 });
 
-describe('저장 형식 2 → 3', () => {
+describe('저장 형식 2 → 4', () => {
   it('형식 2 파일(0.2.0 코드로 만든 픽스처)을 올려서 불러오고 이어서 실행할 수 있다', () => {
     const v2 = JSON.parse(readFileSync('car/tests/fixtures/save-v2.json', 'utf8'));
     expect(v2.saveVersion).toBe(2);
     const g = Game.fromJSON(v2), s = g.state;
-    expect(s.saveVersion).toBe(3);
+    expect(s.saveVersion).toBe(4);
     expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]); expect(s.pendingOneOff).toBe(0);
     for (const x of s.staff) { expect(x.potential).toBe(Math.max(60, x.ability)); expect(x.trainings).toEqual([]); expect(x.restUntil).toBeNull(); }
     for (const x of allGens(s)) { expect(x.allocShare).toBeNull(); expect(x.lostSales).toBe(0); }
@@ -540,7 +541,7 @@ describe('3단계 후속 보정 장치', () => {
       const g = Game.create({ seed: 1 }), s = g.state;
       s.week = (year - 1970) * 48; s.hqLevel = 5;
       const roles = [...Array(5).fill('designer'), ...Array(10).fill('engineer'), ...Array(5).fill('tester')] as Staff['role'][];
-      s.staff = roles.map((role, i) => ({ id: i + 1, name: `직원${i}`, role, ability: 60 + ((i * 7) % 21), potential: 100, condition: 1, projectId: null, trainings: [], restUntil: null })); // 능력 60~80
+      s.staff = roles.map((role, i) => ({ id: i + 1, name: `직원${i}`, role, ability: 60 + ((i * 7) % 21), potential: 100, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false })); // 능력 60~80
       const avg = planPreview(s, { ...SPEC, body: 'sedanM', segment: 'family' }).avg;
       console.log(`7) ${year}년 20명 팀 예상 등급 ${avg.toFixed(2)}`);
       expect(avg).toBeGreaterThanOrEqual(6); expect(avg).toBeLessThanOrEqual(8.5);

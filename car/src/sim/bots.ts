@@ -1,7 +1,9 @@
-// 균형 점검 봇(설계서 16장): 방치·신중·리프트 안 함·새 이름만·가격 올리기·확장 안 함
+// 균형 점검 봇(설계서 16장): 방치·신중·리프트 안 함·새 이름만·가격 올리기·확장 안 함·연구 안 함
 import { config } from '../config';
-import { COMPAT, MARKET, SEGMENTS, bodyById } from '../data';
+import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS, bodyById } from '../data';
 import { bodiesAt, optionsAt, salaryOf, unitCost } from './cars';
+import { eraTimeline } from './events';
+import { researchCost, researchError } from './research';
 import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, optionSlots, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { Game, allGens, sellingGens } from './game';
 import { REGION, cellMonthly, currentEdition } from './market';
@@ -23,10 +25,11 @@ export interface SteadyOptions {
   manage: boolean; // 직원 채용·교육(9.1)
   expand: boolean; // 본사 승급·공장 증설(9.2·9.3)
   gouge: boolean; // 주문이 밀리면 매달 가격 +5%, 남으면 −5%(기준가 아래로는 안 내림)
+  research: boolean; // 연구(10장): 그해까지 등장한 기술 중 차체 해금 → 가솔린 단계 → 규제 옵션·옵션 → 나머지, 같은 순위면 싼 것
 }
 const STEADY: SteadyOptions = {
   budget: 'normal', designWeeks: 12, marketing: 1, launchDefects: 5, maxTestWeeks: 12, faceliftMonths: 30, changeMonths: 60, successor: 'fullchange',
-  manage: true, expand: true, gouge: false,
+  manage: true, expand: true, gouge: false, research: true,
 };
 const B = config.bots;
 
@@ -37,9 +40,11 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
   return { // 봇은 기억을 두지 않는다(저장 → 불러오기 뒤 새 봇으로 이어도 같은 결과)
     name: 'steady',
     step(g) {
+      for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
       launchReady(g, o);
       startProjects(g, o);
       hireBest(g);
+      if (o.research) research(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -52,6 +57,37 @@ export const newNameOnly = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...ste
 export const gouger = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ gouge: true, ...opts }), name: 'gouger' });
 /** 확장 안 함: 신중과 같되 본사·공장을 키우지 않는다 */
 export const noExpand = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ expand: false, ...opts }), name: 'noExpand' });
+/** 연구 안 함: 신중과 같되 연구를 전혀 하지 않는다(소형 세단·가솔린 3단계·옵션 없음으로만) */
+export const noResearch = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ research: false, ...opts }), name: 'noResearch' });
+
+const RANDOM_DEFAULT = (eventId: string): number => RANDOM_EVENTS_BY_ID.get(eventId)!.defaultChoice;
+const RANDOM_EVENTS_BY_ID = new Map(RANDOM_EVENTS.map((d) => [d.id, d]));
+
+/** 연구 순위: 차체 해금·규제 옵션(과 그 선행) 0 → 가솔린 단계 1 → 옵션 2 → 나머지 3(값싼 것 먼저). 등장 연도 전에는 하지 않는다(할증) */
+const techRank = (s: CarState, id: string): number => {
+  const e = TECHS.find((t) => t.id === id)!.effects, req = regulatedOptions(s, true);
+  const leadsToReq = TECHS.some((t) => t.pre.includes(id) && t.effects.some((x) => x.type === 'option' && req.includes(x.id)));
+  return e.some((x) => x.type === 'body' || (x.type === 'option' && req.includes(x.id))) || leadsToReq ? 0 : e.some((x) => x.type === 'ptLevel' && x.id === 'gasoline') ? 1 : e.some((x) => x.type === 'option') ? 2 : 3;
+};
+function research(g: Game): void {
+  const s = g.state, y = yearOf(s.week), reserve = fixedCost(s) * B.reserveMonths;
+  const cands = TECHS.filter((t) => t.year <= y && !researchError(s, t.id) && s.cash >= researchCost(s, t).money + reserve)
+    .sort((a, b) => techRank(s, a.id) - techRank(s, b.id) || researchCost(s, a).money - researchCost(s, b).money || (a.id < b.id ? -1 : 1));
+  if (cands.length) g.command({ type: 'startResearch', techId: cands[0].id });
+}
+/** 규제 옵션(발표된 국내 규제, 유예 중 포함). early: 예고 뉴스가 나온 것까지 */
+const regulatedOptions = (s: CarState, early = false): string[] => {
+  const m = monthOf(s.week) + (early ? config.events.warnMonths : 0);
+  return eraTimeline(s.seed).filter((sp) => m >= sp.start).flatMap((sp) => sp.def.effects.flatMap((e) => (e.type === 'regulation' && e.region === REGION ? e.options ?? [] : [])));
+};
+/** 옵션 고르기: 쓸 수 있는 규제 옵션 먼저, 나머지는 원가가 기준가의 optionCostShare 이하인 최신 옵션(가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다).
+ *  keep을 주면 그 옵션을 남기고 규제 옵션만 끼워 넣는다 */
+function pickOptions(s: CarState, body: string, keep?: string[]): string[] {
+  const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), slots = optionSlots(s);
+  const cheap = optionsAt(s).filter((o) => o.cost <= bodyPrice(body) * B.optionCostShare).map((o) => o.id);
+  const rest = keep ? keep.filter((o) => !req.includes(o)) : cheap.filter((o) => !req.includes(o)).reverse();
+  return [...req, ...rest].slice(0, slots);
+}
 
 const bodyPrice = (id: string) => bodyById(id).basePrice;
 const fixedCost = (s: CarState) => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + upkeepOf(s);
@@ -141,7 +177,7 @@ function launchReady(g: Game, o: SteadyOptions): void {
 
 /** 빈 개발팀이 있으면: 페이스리프트 → 후속(풀체인지) → 새 차종(생산 라인 수, 쓸 수 있는 차체 수까지) 순서로 하나 시작 */
 function startProjects(g: Game, o: SteadyOptions): void {
-  const s = g.state, m = monthOf(s.week), year = yearOf(s.week);
+  const s = g.state, m = monthOf(s.week);
   if (s.projects.length >= devTeams(s) || !pickTeam(s).length) return;
   const onSale = sellingGens(s).filter((x) => x.status === 'onSale');
   const age = (x: Generation) => m - x.launchMonth;
@@ -149,7 +185,7 @@ function startProjects(g: Game, o: SteadyOptions): void {
   const npOf = (x: Generation) => s.nameplates.find((n) => n.generations.includes(x))!;
   for (const x of onSale) {
     if (o.faceliftMonths !== Infinity && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && changeAt(s, o, x) === o.changeMonths && x.lostSales < 1 && age(x) < o.changeMonths - B.leadMonths && !targeted(x.id)) { // 약한 차는 리프트 없이 교체, 생산 한도에 묶인 차는 리프트를 미룬다(늘어난 주문을 팔 수 없으므로)
-      g.command({ type: 'startFacelift', generationId: x.id, options: currentEdition(x).options, team: pickTeam(s) }); // 옵션은 그대로(가격을 안 올리므로 원가가 늘면 대당 이익이 준다)
+      g.command({ type: 'startFacelift', generationId: x.id, options: pickOptions(s, x.body, currentEdition(x).options), team: pickTeam(s) }); // 옵션은 그대로(가격을 안 올리므로 원가가 늘면 대당 이익이 준다), 규제 옵션만 넣는다
       return;
     }
   }
@@ -159,7 +195,7 @@ function startProjects(g: Game, o: SteadyOptions): void {
   }
   const aged = o.successor === 'newName' ? onSale.filter((x) => age(x) >= changeAt(s, o, x) - B.leadMonths).length : 0;
   const newProjects = s.projects.filter((p) => p.kind === 'new').length;
-  const want = Math.min(linesOf(s), bodiesAt(year).length * B.modelsPerBody);
+  const want = Math.min(linesOf(s), bodiesAt(s).length * B.modelsPerBody);
   if (onSale.length - aged + newProjects < Math.max(1, want)) start(g, o, null, undefined);
 }
 
@@ -167,11 +203,11 @@ function startProjects(g: Game, o: SteadyOptions): void {
 function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Generation | undefined): void {
   const s = g.state, year = yearOf(s.week), team = pickTeam(s);
   const others = sellingGens(s).filter((x) => x !== prev && x.status === 'onSale');
-  const body = bestBody(year, others);
+  const body = bestBody(s, year, others);
   const mix = MARKET[REGION].mix[body], used = new Set(others.filter((x) => x.body === body).map((x) => x.segment));
   const segment = [...SEGMENTS].sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)) || COMPAT[body][b.id] * mix[b.id] - COMPAT[body][a.id] * mix[a.id])[0].id;
   const spec = {
-    body, segment, powertrain: 'gasoline', tier: 2, options: optionsAt(year).slice(-optionSlots(s)).map((x) => x.id),
+    body, segment, powertrain: 'gasoline', tier: 2, options: pickOptions(s, body),
     direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: o.budget, designWeeks: o.designWeeks,
   };
   // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다
@@ -183,9 +219,9 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   else g.command({ type: 'startProject', name: '', ...pick, team });
 }
 
-/** 쓸 수 있는 차체 중 (칸 규모 × 기준가 대당 이익)이 가장 큰 것. 이미 파는 차체는 그 차 수만큼 칸 규모를 나눠 본다 */
-const bestBody = (year: number, selling: Generation[]): string =>
-  bodiesAt(year).map((b) => ({ id: b.id, v: (cellMonthly(b.id, year) * (b.basePrice - unitCost(b.id, 'gasoline', 2, []))) / (1 + selling.filter((x) => x.body === b.id).length) }))
+/** 쓸 수 있는 차체 중 (칸 규모 × 기준가 대당 이익)이 가장 큰 것. 이미 파는 차체는 (1 + 그 차 수)^bodySpread로 나눠 본다(새 차체 활용) */
+const bestBody = (s: CarState, year: number, selling: Generation[]): string =>
+  bodiesAt(s).map((b) => ({ id: b.id, v: (cellMonthly(b.id, year) * (b.basePrice - unitCost(b.id, 'gasoline', 2, []))) / (1 + selling.filter((x) => x.body === b.id).length) ** B.bodySpread }))
     .sort((a, b) => b.v - a.v || (a.id < b.id ? -1 : 1))[0].id;
 
 export interface RunResult {

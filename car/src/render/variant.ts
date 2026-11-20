@@ -1,5 +1,6 @@
 import type { CarLook } from './look';
-import { ARCH_GAP, BODY, ERA_FACE, VARY, eraOf, type BodyShape, type FaceSpec, type GrilleKind, type LampKind, type TailKind } from './shapes';
+import type { BodyId } from './look';
+import { ARCH_GAP, BODY, ERA_FACE, MIN_CABIN, MIN_ROOF_GAP, VARY, eraOf, type BodyShape, type FaceSpec, type GrilleKind, type LampKind, type TailKind } from './shapes';
 
 // 시드 → 값. 같은 시드면 항상 같은 수열(mulberry32). Math.random은 쓰지 않는다.
 export function rng(seed: number): () => number {
@@ -15,23 +16,34 @@ export function rng(seed: number): () => number {
 type DevKey = keyof typeof VARY;
 export interface Chassis extends BodyShape { archGap: number; dev: Record<DevKey, number> } // dev: 뽑힌 값(−1~+1), 설명용
 
+const warned = new Set<string>();
+/** 차체 기본값. 모르는 id면 중형 세단으로 그리고 콘솔에 한 번만 경고 */
+export function bodyOf(id: string): BodyShape {
+  const b = BODY[id as BodyId];
+  if (b) return b;
+  if (!warned.has(id)) { warned.add(id); console.warn(`알 수 없는 차체 '${id}': 중형 세단으로 그린다`); }
+  return BODY.sedanM;
+}
+
 /** 차체 기본값 + chassisSeed 변형. 시드가 없으면 BODY 그대로 */
 export function chassisOf(look: CarLook): Chassis {
-  const b = BODY[look.bodyId], keys = Object.keys(VARY) as DevKey[];
+  const b = bodyOf(look.bodyId), keys = Object.keys(VARY) as DevKey[];
   const r = rng(look.chassisSeed ?? 0), has = look.chassisSeed != null;
   const dev = Object.fromEntries(keys.map(k => [k, has ? r() * 2 - 1 : 0])) as Record<DevKey, number>;
   if (!b.deck) dev.deck = 0;
   const s = 1 + VARY.len * dev.len, h = b.L * s / 2;
   const rf = b.rf * s * (1 + VARY.rake * dev.rake), rr = b.rr * s * (1 + VARY.rear * dev.rear);
-  // 객실이 보닛 끝·차 꼬리를 넘지 않게 묶는다(옆선 꺾은선 점이 앞뒤 순서를 지키게)
-  const cF = Math.min(b.cF * s + VARY.cab * dev.cab, h - .65 - rf);
+  // 앞유리 아래 끝(보닛 길이)은 객실 이동만 따르고, 기울기는 지붕 앞 끝을 옮긴다. 보닛 .65m·꼬리 .2m는 남긴다
+  const base = Math.min((b.cF + b.rf) * s + VARY.cab * dev.cab, h - .65);
   const cR = Math.max(b.cR * s + VARY.cab * dev.cab + VARY.deck * dev.deck, -h + rr + .2);
-  const dm = (cR + cF) / 2 - (b.cR + b.cF) / 2 * s; // B필러(가운데 도어 선)가 객실을 따라간다
-  const n = b.doors.length;
+  const cF = Math.max(base - rf, cR + MIN_CABIN);
+  const belt = b.belt + VARY.belt * dev.belt;
+  // 가운데 도어 선은 객실 안 같은 비율 자리를 따라간다(필러와 어긋나지 않게)
+  const n = b.doors.length, at = (d: number) => cR + (cF - cR) * (d * s - b.cR * s) / ((b.cF - b.cR) * s);
   return {
-    ...b, dev, L: b.L * s, W: b.W + VARY.wid * dev.wid, roof: b.roof + VARY.roof * dev.roof, belt: b.belt + VARY.belt * dev.belt,
-    cR, cF, rr, rf, wb: b.wb * s, archGap: ARCH_GAP + VARY.arch * dev.arch,
-    doors: b.doors.map((d, i) => d * s + (i > 0 && (i < n - 1 || !b.deck) ? dm : 0)),
+    ...b, dev, L: b.L * s, W: b.W + VARY.wid * dev.wid, belt, roof: Math.max(b.roof + VARY.roof * dev.roof, belt + MIN_ROOF_GAP),
+    cR, cF, rr, rf: base - cF, wb: b.wb * s, archGap: ARCH_GAP + VARY.arch * dev.arch,
+    doors: b.doors.map((d, i) => i > 0 && (i < n - 1 || !b.deck) ? at(d) : d * s),
   };
 }
 
@@ -39,10 +51,8 @@ export function chassisOf(look: CarLook): Chassis {
 export function faceOf(look: CarLook): FaceSpec {
   const era = eraOf(look), T = ERA_FACE[era], ev = look.powertrain === 'ev';
   let f: FaceSpec;
-  if (look.faceSeed == null) {
-    f = { ...T.def };
-    if (ev && era === 2020) Object.assign(f, { lamp: 'slim', bar: true });
-  } else {
+  if (look.faceSeed == null) f = { ...T.def };
+  else {
     const r = rng(Math.imul(look.faceSeed, 0x9e3779b1) ^ 0x5bd1e995);
     const pick = <K>(a: K[]) => a[Math.floor(r() * a.length)];
     const range = (lo: number, hi: number) => lo + (hi - lo) * r();
@@ -65,7 +75,7 @@ const TAIL: Record<TailKind, string> = { bar: '가로 후미등', vertical: '세
 
 /** 후보 고르기 화면용 쉬운 한 줄 설명. 시드에서 실제로 뽑힌 값에서 만든다 */
 export function describeLook(look: CarLook): { chassis: string; face: string } {
-  const c = chassisOf(look), d = c.dev, deck = BODY[look.bodyId].deck;
+  const c = chassisOf(look), d = c.dev, deck = c.deck;
   const words: [number, string][] = [
     [d.len, d.len > 0 ? '긴 차체' : '짧은 차체'],
     [d.roof, d.roof > 0 ? '높은 지붕' : '낮은 지붕'],

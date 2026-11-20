@@ -140,14 +140,14 @@ export class Stage {
   setAutoRotate(on: boolean): void { this.auto = on; }
 
   /** 작은 PNG(data URL): 후보 썸네일·차종 계보 사진. 본 무대의 차·회전·크기를 잠시 바꿨다가 같은 틱 안에 되돌린다.
-      yaw: 무대 회전(기본 앞 3/4, 0=옆, −π/2=정면, π/2=뒷면) */
-  renderThumb(look: CarLook, w: number, h: number, yaw = -.65): string {
+      yaw: 무대 회전(기본 앞 3/4, 0=옆, −π/2=정면, π/2=뒷면). fit: 보이는 폭(m)을 고정해 여러 차의 실제 크기를 비교할 때 */
+  renderThumb(look: CarLook, w: number, h: number, yaw = -.65, fit?: number): string {
     const { R, table, carG, blob } = this, M = createCarMaterials(look.color), car = buildCar(look, M), c = chassisOf(look);
     const old = { pr: R.getPixelRatio(), size: R.getSize(new THREE.Vector2()), yaw: table.rotation.y, vis: blob.visible, sc: blob.scale.clone() };
     carG.visible = false; table.add(car); table.rotation.y = yaw;
     blob.visible = true; blob.scale.set(c.L * 1.25, c.W * 1.7, 1);
     // 보이는 폭(길이·폭을 각도로 섞음)에 맞춰 거리를 정한다: 정면 사진도 차가 작아지지 않게
-    const ext = Math.max(2.6, Math.abs(Math.cos(yaw)) * c.L + Math.abs(Math.sin(yaw)) * c.W);
+    const ext = fit ?? Math.max(2.6, Math.abs(Math.cos(yaw)) * c.L + Math.abs(Math.sin(yaw)) * c.W);
     const cam = new THREE.PerspectiveCamera(28, w / h, .1, 100), d = Math.max(ext * 1.4, ext * 2 * h / w) + Math.abs(Math.sin(yaw)) * (c.L - c.W) / 2; // 정면·뒷면이면 가까운 끝까지의 거리를 더한다
     cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .62, 0);
     let url = '';

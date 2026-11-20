@@ -1,5 +1,5 @@
 // 렌더가 받는 차 모양 값. sim을 모르게 하려고 렌더 쪽에 따로 둔다.
-export type BodyId = 'sedanS' | 'hatch' | 'sedanM' | 'coupe' | 'suv';
+export type BodyId = 'sedanS' | 'hatch' | 'sedanM' | 'coupe' | 'suv' | 'sedanL' | 'minivan' | 'kei' | 'pickup' | 'sports';
 
 export interface CarLook {
   bodyId: BodyId;
