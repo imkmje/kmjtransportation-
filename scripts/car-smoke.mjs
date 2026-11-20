@@ -183,8 +183,10 @@ check('출시 순간 3D 사진이 저장 데이터에 들어감', await G(() => 
 
 // ---- 판매 ----
 await tick(16);
+// 0.4.2 시간 척도에서 첫 차는 인지도가 낮아 첫 몇 달 판매가 0~몇 대일 수 있다(시드는 무작위). 4달 안에 없으면 4달 더 본다
+if (!(await G(() => window.__car.game.state.nameplates[0].generations[0].totalSold))) await tick(16);
 const gen = await G(() => window.__car.game.state.nameplates[0].generations[0]);
-check('몇 달 진행: 판매 발생', gen.totalSold > 0 && gen.sales.length >= 3, `누적 ${gen.totalSold}대, 달별 ${gen.sales.join(',')}`);
+check('몇 달 진행: 판매 발생(8개월 안)', gen.totalSold > 0 && gen.sales.length >= 3, `누적 ${gen.totalSold}대, 달별 ${gen.sales.join(',')}`);
 const gtext = await page.locator('#panel').innerText();
 check('차고 카드: 판매·누적·대당 이익·평론·수명·조언·단종 버튼', ['지난달 판매', '누적 판매', '대당 이익', '평론 평균', '수명'].every((t) => gtext.includes(t)) && (await page.locator('#panel .advice').count()) === 1 && (await page.locator('[data-act="discontinue"]').count()) === 1);
 check('차고: 출시 직후 [페이스리프트][풀체인지]는 흐리게 + 이유·남은 개월', (await page.locator('[data-act="goLift"]').isDisabled()) && (await page.locator('[data-act="goFull"]').isDisabled()) && /페이스리프트: 출시 후 18개월이 지나야 합니다\. 앞으로 \d+개월/.test(gtext) && /풀체인지: 출시 후 36개월이 지나야 합니다\. 앞으로 \d+개월/.test(gtext));
@@ -698,11 +700,11 @@ check('연구 시작: 화면 안 확인 창', (await page.locator('#ask').isVisi
 await page.waitForTimeout(600); await shot('tech-ask');
 await page.click('#ask-yes');
 check('연구 시작: 진행 중 1개, 카드에 진행 막대와 남은 주', (await S4(() => window.__car.game.state.research.active.length)) === 1 && (await page.locator('.tc.active[data-v="bd_hatch"] .prog').count()) === 1 && /약 \d+주 남음/.test(await page.locator('.tc.active[data-v="bd_hatch"]').innerText()) && (await page.locator('.ract').count()) === 1);
-// 0.4.2: 연구 칸은 본사 등급별(1등급 3칸). 남은 칸을 다른 기술로 채운 뒤 거부 이유를 보고, 채운 연구는 취소한다
-const filled = await S4(() => { const c = window.__car, s = c.game.state; s.cash += 1000000; const ids = [...document.querySelectorAll('.tc[data-v]:not(.done):not(.active):not(.hidden):not(.locked)')].map((x) => x.dataset.v).filter((v) => v !== 'el_radio' && v !== 'bd_hatch'), got = [];
-  const why = []; for (const v of ids) { const r = c.game.command({ type: 'startResearch', techId: v }); if (r.ok) got.push(v); else { why.push(`${v}:${r.reason}`); if (r.reason.includes('연구 칸')) break; } } c.render(); got.why = `${ids.length}개 후보 ${why.slice(-2).join(' / ')}`; return { got, why: got.why }; });
-check('연구 칸(1등급 3칸)이 차면 다른 기술은 시작 거부 이유', filled.got.length === 2 && (await S4(() => window.__car.game.state.research.active.length)) === 3 && (await page.locator('.tc[data-v="el_radio"] .why').innerText()).includes('연구 칸이 찼습니다'), `${filled.got.join(',')} ${filled.why}`);
-await S4((ids) => { const c = window.__car; for (const v of ids) c.game.command({ type: 'cancelResearch', techId: v }); c.render(); }, filled.got);
+// 0.4.2: 연구 칸은 본사 등급별(1등급 3칸). 1970년에는 연구할 수 있는 기술이 적어, 점검용으로 진행 중 연구 2개를 상태에 직접 넣어 칸을 채운다
+const filled = await S4(() => { const c = window.__car, s = c.game.state, ids = ['ec_light', 'pw_carb'].filter((v) => !s.research.done.includes(v)); for (const v of ids) s.research.active.push({ techId: v, points: 0, need: 9999, startWeek: s.week }); c.render(); return ids; });
+const fullWhy = await S4(() => { const r = window.__car.game.command({ type: 'startResearch', techId: 'el_radio' }); return r.ok ? 'ok' : r.reason; });
+check('연구 칸(1등급 3칸)이 차면 다른 기술은 시작 거부 이유(화면·명령)', (await S4(() => window.__car.game.state.research.active.length)) === 3 && fullWhy.includes('연구 칸') && (await page.locator('.tc[data-v="el_radio"] .why').innerText()).includes('연구 칸이 찼습니다'), fullWhy);
+await S4((ids) => { const s = window.__car.game.state; s.research.active = s.research.active.filter((a) => !ids.includes(a.techId)); window.__car.render(); }, filled);
 await tick(3); await page.waitForTimeout(100);
 await shot('research-active');
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 200 && c.game.state.research.active.length) c.tick(1); c.render(); });
@@ -915,9 +917,9 @@ await act('closeSheet');
 // ---- 설정: 자동 멈춤 항목별 켬/끔(기기 저장소) ----
 await openMenu();
 check('메뉴: 자동 멈춤 3항목(후보·출시 대기·결정 사건), 기본 켬', (await page.locator('#sheet [data-act="autoPause"]').count()) === 3 && (await page.locator('#sheet [data-act="autoPause"][aria-pressed="true"]').count()) === 3);
-await act('autoPause', '[data-v="cands"]');
+await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act="autoPause"][data-v="cands"][aria-pressed="false"]').waitFor({ timeout: 3000 }).catch(() => {});
 check('자동 멈춤 끄기: 버튼 꺼짐·기기 저장소에 저장', (await page.locator('#sheet [data-act="autoPause"][data-v="cands"]').getAttribute('aria-pressed')) === 'false' && (await G(() => JSON.parse(localStorage.getItem('car-company-autopause')).cands)) === false);
-await act('autoPause', '[data-v="cands"]'); await act('closeSheet');
+await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act="autoPause"][data-v="cands"][aria-pressed="true"]').waitFor({ timeout: 3000 }).catch(() => {}); await act('closeSheet');
 { const raw = await G(() => { const o = window.__car.game.toJSON(); delete o.difficulty; return JSON.stringify(o); }); await openMenu();
   const [fch] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#sheet [data-act="import"]').click()]);
   await fch.setFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(raw) });
