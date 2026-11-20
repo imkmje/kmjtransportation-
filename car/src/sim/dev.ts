@@ -14,7 +14,7 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
   if (!SEGMENTS.some((x) => x.id === s.segment)) return '없는 고객층입니다.';
   const pt = POWERTRAINS.find((p) => p.id === s.powertrain);
   if (!pt || !unlockedIds(state, 'powertrain').has(pt.id)) return '아직 쓸 수 없는 동력입니다(연구가 필요합니다).';
-  if (!Number.isInteger(s.tier) || s.tier < 1 || s.tier > pt.tiers.length) return `동력 단계는 1~${pt.tiers.length} 중에서 고르세요.`;
+  if (!Number.isInteger(s.tier) || s.tier < 1 || s.tier > pt.tiers.length) return `동력 등급은 1~${pt.tiers.length} 중에서 고르세요.`;
   if (!Array.isArray(s.options)) return '옵션 목록이 올바르지 않습니다.';
   if (s.options.length > optionSlots(state)) return `옵션은 최대 ${optionSlots(state)}개까지 고를 수 있습니다(본사 등급을 올리면 늘어납니다).`;
   if (new Set(s.options).size !== s.options.length) return '같은 옵션을 두 번 고를 수 없습니다.';

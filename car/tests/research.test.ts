@@ -8,13 +8,14 @@ import { capacityOf, costMultOf } from '../src/sim/company';
 import { loanRate } from '../src/sim/finance';
 import { chargingInfra, eraNow, eraStart, eraTimeline, marketMult, randomMonths, regulationError } from '../src/sim/events';
 import { monthlyDemand, type SaleCar } from '../src/sim/market';
-import { activeEvents, comboMark, comboNotes, newsLog, pendingChoices } from '../src/sim/queries';
+import { activeEvents, comboMark, comboNotes, eventImpactOn, newsLog, pendingChoices } from '../src/sim/queries';
+import { josa } from '../src/sim/josa';
 import { levelForTier, powertrainLevels, ptCostAdd, ptLevel, researchCost, researchInfo, unlockedBodies, unlockedOptions, unlockedPowertrains, weeklyResearchPoints } from '../src/sim/research';
 import { monthOf, monthTime } from '../src/sim/time';
 import { BODIES, COMPAT, ERA_EVENTS, MARKET, OPTIONS, POWERTRAINS, RANDOM_EVENTS, SEGMENTS, TECHS, techById } from '../src/data';
 import { config } from '../src/config';
 import type { CarState } from '../src/sim/types';
-import { SPEC, grant, ok } from './util';
+import { SPEC, grant, launched, ok } from './util';
 
 const reason = (r: { ok: boolean; reason?: string }) => (r.ok ? '' : r.reason);
 const WPY = 48;
@@ -291,13 +292,33 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
       return g.command({ type: 'launch', projectId: p.id, ...LAUNCH });
     };
     expect(launchAt(sp.start + 30, []).ok).toBe(true); // 유예 중
-    expect(reason(launchAt(sp.start + 40, ['radio']))).toBe('안전 규제: ABS·에어백 옵션이 없는 신차는 출시할 수 없습니다. 페이스리프트나 다음 세대에서 옵션을 넣으세요.');
+    expect(reason(launchAt(sp.start + 40, ['radio']))).toBe('안전 규제: 이제 ABS·에어백이 없는 차는 출시할 수 없습니다. 이 차는 그대로 낼 수 없으니 개발을 취소하고 신차 기획을 다시 하면서 옵션에 ABS·에어백을 넣으세요.');
     expect(launchAt(sp.start + 40, ['abs', 'airbag', 'radio']).ok).toBe(true);
     const s = Game.create({ seed }).state; s.week = (sp.start + 40) * 4;
-    expect(regulationError(s, { options: ['abs'], powertrain: 'gasoline' })).toContain('에어백');
+    expect(regulationError(s, { options: ['abs'], powertrain: 'gasoline' })).toBe('안전 규제: 이제 에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서 에어백을 넣으세요.'); // 기획 중(kind 없음)
     expect(activeEvents(s).requiredOptions).toEqual(['abs', 'airbag']);
     s.week = (sp.start + 12 * 60) * 4; // 2032 유럽 내연기관 규제는 국내에 영향 없음
     expect(regulationError(s, { options: ['abs', 'airbag'], powertrain: 'gasoline' })).toBeNull();
+  });
+});
+
+describe('사건 문구(쉬운 말)', () => {
+  it('조사 도우미: 받침에 따라 을/를·이/가·으로/로(ㄹ 받침은 로), 숫자·영문은 읽는 소리로', () => {
+    expect(['해치백', '노바', 'ABS·에어백', 'SUV', '2', '3'].map((w) => josa(w, '을/를'))).toEqual(['을', '를', '을', '를', '를', '을']);
+    expect(['서울', '본사 빌딩', '연구 단지', '1'].map((w) => josa(w, '으로/로'))).toEqual(['로', '으로', '로', '로']);
+    expect(josa('「아리아」', '이/가')).toBe('가');
+  });
+  it('eventImpactOn: 그 차에 걸린 사건만 쉬운 문장으로(차체 수요, 고객이 더 따지는 능력치가 이 차에 유리한지)', () => {
+    const { g, gen } = launched(7), sp = eraTimeline(7).find((x) => x.def.id === 'oil1')!;
+    gen.body = 'sedanL'; const ed = gen.editions[gen.editions.length - 1]; ed.stats = { ...ed.stats, E: 1000 };
+    g.state.week = sp.start * 4;
+    const t = eventImpactOn(g.state, gen.id);
+    expect(t).toContain('1차 오일쇼크: 이 차는 대형 세단이라 35% 덜 팔립니다.');
+    expect(t).toContain('1차 오일쇼크: 고객이 연비를 더 따지는데, 이 차는 연비가 좋아 유리합니다.');
+    expect(activeEvents(g.state).events.find((x) => x.id === 'oil1')!.effects).toEqual(['고객이 차를 고를 때 연비를 훨씬 더 따집니다.', '대형 세단·쿠페가 35% 덜 팔립니다.']);
+    g.state.week = (sp.start - 1) * 4;
+    expect(eventImpactOn(g.state, gen.id)).toEqual([]);
+    expect(eventImpactOn(g.state, -1)).toEqual([]);
   });
 });
 

@@ -2,6 +2,7 @@
 import { config } from '../config';
 import { BODIES, OPTIONS, POWERTRAINS, TECHS, bodyById, optionById, powertrainById, techById } from '../data';
 import { isAway } from './company';
+import { josa } from './josa';
 import { yearOf } from './time';
 import type { BodyDef, CarState, GameEvent, OptionDef, PowertrainDef, Staff, TechDef, TechEffect, TechField } from './types';
 
@@ -65,7 +66,6 @@ export function researchCost(s: CarState, t: TechDef): { money: number; points: 
 /** 동시 연구 칸(본사 등급) */
 export const researchSlots = (s: CarState): number => R.slots[s.hqLevel - 1];
 const missingPre = (s: CarState, t: TechDef): TechDef[] => t.pre.filter((id) => !isDone(s, id)).map(techById);
-const josa = (w: string) => { const c = w.charCodeAt(w.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? '을' : '를'; };
 
 /** 연구를 시작할 수 없는 이유(없으면 null) */
 export function researchError(s: CarState, techId: string): string | null {
@@ -75,7 +75,7 @@ export function researchError(s: CarState, techId: string): string | null {
   if (s.research.active.some((a) => a.techId === t.id)) return '이미 연구 중인 기술입니다.';
   if (t.year - yearOf(s.week) > R.earlyMax) return `${t.year - R.earlyMax}년부터 연구할 수 있습니다.`;
   const pre = missingPre(s, t);
-  if (pre.length) { const names = pre.map((x) => `「${x.name}」`).join(', '); return `먼저 ${names}${josa(pre[pre.length - 1].name)} 연구해야 합니다.`; }
+  if (pre.length) { const names = pre.map((x) => `「${x.name}」`).join(', '); return `먼저 ${names}${josa(names, '을/를')} 연구해야 합니다.`; }
   if (s.research.active.length >= researchSlots(s)) return researchSlots(s) < R.slots[R.slots.length - 1] ? '연구 칸이 찼습니다(본사 4등급부터 2개를 함께 연구할 수 있습니다).' : '연구 칸이 찼습니다.';
   if (s.cash < researchCost(s, t).money) return '현금이 모자랍니다.';
   return null;
@@ -86,21 +86,51 @@ export const staffResearchPoints = (x: Staff, week: number): number =>
   x.role !== 'engineer' || x.projectId !== null || isAway(x, week) ? 0 : (x.ability / R.pointsDiv) * (x.lab ? R.labMult : 1);
 export const weeklyResearchPoints = (s: CarState): number => s.staff.reduce((a, x) => a + staffResearchPoints(x, s.week), 0);
 
-/** 효과 한 줄(쉬운 말) */
-export function effectText(e: TechEffect): string {
+/** 전기차 추가 원가(%)가 이 기술 직전·직후에 얼마인지: 자료 순서대로 앞선 배터리 연구를 모두 했다고 본다 */
+function evCostSpan(t: TechDef, cut: number): [number, number] {
+  const ev = POWERTRAINS.find((p) => p.id === config.events.charging.powertrain)!, prior = TECHS.slice(0, TECHS.indexOf(t)).flatMap((x) => x.effects).reduce((a, e) => a + (e.type === 'evCostCut' ? e.value : 0), 0);
+  const before = Math.max(ev.minCostAdd ?? 0, ev.costAdd - prior);
+  return [Math.round(before * 100), Math.round(Math.max(ev.minCostAdd ?? 0, before - cut) * 100)];
+}
+/** 효과 한 줄(연구 카드용 짧은 말) */
+export function effectText(e: TechEffect, t?: TechDef): string {
   switch (e.type) {
-    case 'body': return `${bodyById(e.id).name} 차체`;
-    case 'option': return `${optionById(e.id).name} 옵션`;
-    case 'powertrain': return `${powertrainById(e.id).name} 동력`;
-    case 'ptLevel': return `${powertrainById(e.id).name} 단계 +${e.amount}`;
-    case 'costCut': return `원가 −${Math.round(e.value * 100)}%`;
-    case 'defectCut': return `개발 결함 −${Math.round(e.value * 100)}%`;
-    case 'upkeepCut': return `공장 유지비 −${Math.round(e.value * 100)}%`;
-    case 'devSpeed': return `개발 속도 +${Math.round(e.value * 100)}%`;
-    case 'evCostCut': return `전기 원가 가산 −${Math.round(e.value * 100)}%p`;
+    case 'body': return `${bodyById(e.id).name} 차체를 쓸 수 있음`;
+    case 'option': return `${optionById(e.id).name} 옵션을 쓸 수 있음`;
+    case 'powertrain': return `${powertrainById(e.id).name} 동력을 쓸 수 있음`;
+    case 'ptLevel': return `${powertrainById(e.id).name} 동력 ${e.amount === 1 ? '한' : e.amount} 단계 향상`;
+    case 'costCut': return `차 원가 ${Math.round(e.value * 100)}% 절감`;
+    case 'defectCut': return `개발 중 생기는 결함 ${Math.round(e.value * 100)}% 감소`;
+    case 'upkeepCut': return `공장 유지비 ${Math.round(e.value * 100)}% 절감`;
+    case 'devSpeed': return `개발 속도 ${Math.round(e.value * 100)}% 향상`;
+    case 'evCostCut': { if (!t) return '전기차 추가 원가 감소'; const [a, b] = evCostSpan(t, e.value); return `전기차 추가 원가 ${a}% → ${b}%`; }
   }
 }
-export const techEffectsText = (t: TechDef): string => t.effects.map(effectText).join(', ');
+/** 카드용 효과 줄. 동력 단계 효과는 하나로 묶는다("가솔린·디젤 동력 한 단계 향상") */
+// shortcut: 묶을 때(여기와 unlockText) 단계 수를 1로 본다(자료가 모두 1), 2 이상인 기술이 생기면 따로 적을 것
+export function techEffectsText(t: TechDef): string {
+  const lv = t.effects.filter((e) => e.type === 'ptLevel').map((e) => powertrainById((e as { id: string }).id).name).join('·');
+  return [...(lv ? [`${lv} 동력 한 단계 향상`] : []), ...t.effects.filter((e) => e.type !== 'ptLevel').map((e) => effectText(e, t))].join(', ');
+}
+/** 연구 완료 알림 문장: 해금은 "이제 ○○을 만들 수 있습니다.", 단계·비율 효과는 바뀐 결과를 문장으로 */
+export function unlockText(t: TechDef): string {
+  const names = (type: TechEffect['type'], name: (id: string) => string) => t.effects.flatMap((e) => (e.type === type && 'id' in e ? [name(e.id)] : [])).join('·');
+  const body = names('body', (id) => bodyById(id).name), opt = names('option', (id) => optionById(id).name), pt = names('powertrain', (id) => powertrainById(id).name), lv = names('ptLevel', (id) => powertrainById(id).name);
+  const out: string[] = [];
+  if (body) out.push(`이제 ${body}${josa(body, '을/를')} 만들 수 있습니다.`);
+  if (opt) out.push(`이제 차에 ${opt}${josa(opt, '을/를')} 넣을 수 있습니다.`);
+  if (pt) out.push(`이제 ${pt} 동력을 쓸 수 있습니다.`);
+  if (lv) out.push(`${lv} 동력이 한 단계 좋아졌습니다.`);
+  for (const e of t.effects) switch (e.type) {
+    case 'costCut': out.push(`차 원가가 ${Math.round(e.value * 100)}% 줄었습니다.`); break;
+    case 'defectCut': out.push(`개발 중 생기는 결함이 ${Math.round(e.value * 100)}% 줄었습니다.`); break;
+    case 'upkeepCut': out.push(`공장 유지비가 ${Math.round(e.value * 100)}% 줄었습니다.`); break;
+    case 'devSpeed': out.push(`개발 속도가 ${Math.round(e.value * 100)}% 빨라졌습니다.`); break;
+    case 'evCostCut': { const [a, b] = evCostSpan(t, e.value); out.push(`전기차를 만들 때 더 드는 원가가 ${a}%에서 ${b}%로 줄었습니다.`); break; }
+    default: break;
+  }
+  return out.join(' ');
+}
 
 /** 한 주 연구: 주간 점수를 진행 중인 연구에 시작 순으로 채운다(남는 점수는 다음 연구로, 연구가 없으면 사라짐). 완료하면 이벤트 */
 export function researchWeek(s: CarState, ev: GameEvent[]): void {
@@ -113,7 +143,7 @@ export function researchWeek(s: CarState, ev: GameEvent[]): void {
     const t = techById(a.techId), early = yearOf(s.week) < t.year;
     s.research.done.push(t.id);
     if (early && !s.research.early.includes(t.id)) s.research.early.push(t.id);
-    ev.push({ kind: 'unlock', text: `연구 완료: 「${t.name}」 — ${techEffectsText(t)}${early ? '. 세계 최초! 이 기술을 쓴 첫 차는 평론 +1' : ''}` });
+    ev.push({ kind: 'unlock', category: 'research', text: `「${t.name}」 연구를 마쳤습니다. ${unlockText(t)}${early ? ' 세계 최초입니다! 이 기술을 처음 쓰는 차는 평론 점수를 1점씩 더 받습니다.' : ''}` });
   }
 }
 
@@ -133,7 +163,7 @@ export interface TechRow {
   effects: string; pre: { id: string; name: string; done: boolean }[];
   reason: string | null; // 시작할 수 없는 이유(가능하면 null)
 }
-export const FIELD_NAMES: Record<TechField, string> = { powertrain: '동력', body: '차체·안전', electronics: '전장·편의', production: '생산', eco: '친환경' };
+export const FIELD_NAMES: Record<TechField, string> = { powertrain: '동력', body: '차체·안전', electronics: '편의 장비', production: '생산', eco: '친환경' };
 export interface ResearchInfo {
   fields: { id: TechField; name: string; techs: TechRow[] }[];
   pointsPerWeek: number; slots: number; used: number;

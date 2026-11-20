@@ -14,5 +14,5 @@ export const ROLE_SKILL = { designer: '디자인', engineer: '기술', tester: '
 export const MARKETING = ['안 함', '조금', '보통', '많이'];
 export const BUDGET = { low: { name: '절약', sub: '점수 조금 적게 · 비용 절반' }, normal: { name: '보통', sub: '기본' }, high: { name: '과감', sub: '점수 많이 · 비용 2배' } } as const;
 export const TIER_SUB = ['연비가 좋고 값이 쌈', '균형', '힘이 좋음 · 원가 비쌈'];
-/** "을/를" 고르기 */
-export const eulReul = (w: string): string => { const c = w.charCodeAt(w.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? '을' : '를'; };
+/** 조사 고르기(sim과 같은 함수): josa('해치백', '을/를') → '을' */
+export { josa } from '../sim/josa';

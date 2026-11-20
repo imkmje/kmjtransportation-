@@ -34,7 +34,7 @@ describe('페이스리프트(8.2)', () => {
   it('조건: 출시 18개월 뒤부터(이유와 남은 개월), 판매 중인 세대만', () => {
     const { g, gen } = aged(10);
     const r = g.command({ type: 'startFacelift', generationId: gen.id, options: [] });
-    expect(reason(r)).toBe(`출시 후 18개월이 지나야 합니다. 앞으로 ${18 - (monthOf(g.state.week) - gen.launchMonth)}개월`);
+    expect(reason(r)).toBe(`출시 후 18개월이 지나야 합니다. 앞으로 ${18 - (monthOf(g.state.week) - gen.launchMonth)}개월 남았습니다.`);
     while (monthOf(g.state.week) - gen.launchMonth < 18) g.tick();
     expect(g.command({ type: 'startFacelift', generationId: 999, options: [] })).toEqual({ ok: false, reason: '없는 세대입니다.' });
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
@@ -48,7 +48,7 @@ describe('페이스리프트(8.2)', () => {
     grant(g, 'el_radio');
     expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [], tier: 1 }))).toContain('낮출 수 없습니다');
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: ['radio'], tier: 3 }));
-    expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }))).toContain('이미 개발 중');
+    expect(reason(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }))).toContain('이미 개발하고 있습니다');
     const p = toTest(g);
     ok(g.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
     expect(gen.editions.map((e) => e.kind)).toEqual(['initial', 'facelift']);
@@ -122,11 +122,11 @@ describe('풀체인지(8.3)', () => {
   it('조건: 현 세대 출시 36개월 뒤이거나 단종 상태', () => {
     const { g, gen } = aged(20);
     const np = g.state.nameplates[0];
-    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toBe(`출시 후 36개월이 지나야 합니다. 앞으로 ${36 - (monthOf(g.state.week) - gen.launchMonth)}개월`);
+    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toBe(`출시 후 36개월이 지나야 합니다. 앞으로 ${36 - (monthOf(g.state.week) - gen.launchMonth)}개월 남았습니다.`);
     expect(reason(g.command({ type: 'startFullChange', nameplateId: 999, ...FULL }))).toBe('없는 차종입니다.');
     ok(g.command({ type: 'discontinue', generationId: gen.id }));
     ok(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }));
-    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toContain('이미 개발 중');
+    expect(reason(g.command({ type: 'startFullChange', nameplateId: np.id, ...FULL }))).toContain('이미 개발하고 있습니다');
     const b = aged(36, 2);
     ok(b.g.command({ type: 'startFullChange', nameplateId: b.g.state.nameplates[0].id, ...FULL }));
   });
@@ -264,8 +264,8 @@ describe('기획 첫 화면(8.7)과 조언', () => {
     const left18 = 18 - (monthOf(g.state.week) - gen.launchMonth), left36 = left18 + 18;
     const e = planEntries(g.state).nameplates[0];
     expect(e).toMatchObject({ name: '테스트카', generation: 1, generationId: gen.id, status: 'onSale', reviewAvg: gen.reviewAvg, totalSold: gen.totalSold });
-    expect(e.facelift).toEqual({ ok: false, reason: `출시 후 18개월이 지나야 합니다. 앞으로 ${left18}개월`, monthsLeft: left18 });
-    expect(e.fullChange).toEqual({ ok: false, reason: `출시 후 36개월이 지나야 합니다. 앞으로 ${left36}개월`, monthsLeft: left36 });
+    expect(e.facelift).toEqual({ ok: false, reason: `출시 후 18개월이 지나야 합니다. 앞으로 ${left18}개월 남았습니다.`, monthsLeft: left18 });
+    expect(e.fullChange).toEqual({ ok: false, reason: `출시 후 36개월이 지나야 합니다. 앞으로 ${left36}개월 남았습니다.`, monthsLeft: left36 });
     while (monthOf(g.state.week) - gen.launchMonth < 18) g.tick();
     expect(planEntries(g.state).nameplates[0].facelift).toEqual({ ok: true, reason: null, monthsLeft: 0 });
     ok(g.command({ type: 'discontinue', generationId: gen.id }));

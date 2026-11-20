@@ -498,10 +498,10 @@ button.srow[aria-pressed="true"]{border-color:var(--ink);background:var(--soft)}
 .nl{width:100%;text-align:left;border:0;border-bottom:1px solid var(--soft);background:transparent;display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:4px 10px;align-items:baseline;padding:10px 4px;min-height:44px}
 .nl small{color:var(--ink3);font-size:11.5px;white-space:nowrap}
 .nl .nt{font-size:13.5px;font-weight:600;line-height:1.45}
-.nl.k-warn .chip{background:#fff4e5;color:#6b4300}
-.nl.k-start .chip,.nl.k-rule .chip{background:var(--ink);color:#fff}
+.nl.k-preview .chip{background:#fff4e5;color:#6b4300}
+.nl.k-start .chip,.nl.k-regulation .chip{background:var(--ink);color:#fff}
 .nl.k-end .chip{background:#dff3e9;color:#0d6b41}
 @media (max-width:560px){.nl{grid-template-columns:auto minmax(0,1fr)}.nl .nt{grid-column:1/-1}}
 /* 화면 안 창이 떠 있으면 알림(나쁜 소식 제외)은 창을 가리지 않게 잠시 숨긴다 */
 #sheet:not([hidden]) ~ #toasts .toast:not(.bad),#sheet:not([hidden]) ~ #toasts .more{display:none}
-.nl.k-ask .chip{background:#ffe7dc;color:var(--accent2)}
+.nl.k-choice .chip{background:#ffe7dc;color:var(--accent2)}

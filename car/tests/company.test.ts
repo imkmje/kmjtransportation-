@@ -383,7 +383,7 @@ describe('공장(9.3)', () => {
     ok(g.command({ type: 'startProject', ...SPEC, name: '셋째' }));
     const p = g.state.projects[0];
     while (p.phase === 'design' || p.testWeeks < 2) g.tick();
-    expect(reason(g.command({ type: 'launch', projectId: p.id, price: 1200, marketing: 0, color: 'red', wheels: 0 }))).toBe('생산 라인이 없습니다. 기존 차를 단종하세요. 공장을 증설하면 라인이 늘어납니다.');
+    expect(reason(g.command({ type: 'launch', projectId: p.id, price: 1200, marketing: 0, color: 'red', wheels: 0 }))).toBe('빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.');
   });
   it('생산 배분: 자동은 수요 비례, 수동 몫은 한도 × 몫까지, 남은 한도는 자동 차에. 합이 1을 넘으면 거부, null이면 자동', () => {
     const { g, a, b } = twoCars(2);
@@ -417,13 +417,13 @@ describe('공장(9.3)', () => {
     expect(gen.lostSales).toBeGreaterThan(0);
     const r = gen.lastDemand / 300;
     expect(r).toBeGreaterThanOrEqual(1.3);
-    expect(capacityAdvice(g.state)).toBe(`주문이 한도의 ${r.toFixed(1)}배입니다. 공장 증설을 고려하세요`);
+    expect(capacityAdvice(g.state)).toBe(`주문이 한도의 ${r.toFixed(1)}배입니다. 공장 증설을 고려하세요.`);
     ok(g.command({ type: 'expandFactory' }));
-    expect(capacityAdvice(g.state)).toBe(`주문이 한도의 ${r.toFixed(1)}배입니다. 증설 공사가 6개월 남았습니다`);
+    expect(capacityAdvice(g.state)).toBe(`주문이 한도의 ${r.toFixed(1)}배입니다. 증설 공사가 6개월 남았습니다.`);
     gen.lastDemand = 100;
-    expect(capacityAdvice(g.state)).toBe('생산에 여유가 있습니다(한도의 33%만 주문)');
+    expect(capacityAdvice(g.state)).toBe('생산에 여유가 있습니다(한도의 33%만 주문).');
     gen.lastDemand = 250;
-    expect(capacityAdvice(g.state)).toBe('생산량이 주문에 잘 맞습니다');
+    expect(capacityAdvice(g.state)).toBe('생산량이 주문에 잘 맞습니다.');
     expect(capacityAdvice(Game.create({ seed: 1 }).state)).toBe('판매 중인 차가 없습니다.');
   });
 });

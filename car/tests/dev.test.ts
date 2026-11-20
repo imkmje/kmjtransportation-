@@ -102,7 +102,7 @@ describe('개발(6장)', () => {
     expect(bad({ direction: { P: 2, E: 2, U: 2, D: 2, Q: 1 } })).toContain('합계 10점');
     expect(bad({ options: ['radio', 'radio'] })).toBe('같은 옵션을 두 번 고를 수 없습니다.');
     expect(bad({ designWeeks: 10 })).toContain('설계 기간');
-    expect(bad({ tier: 4 })).toContain('동력 단계');
+    expect(bad({ tier: 4 })).toContain('동력 등급');
     expect(bad({ budget: 'x' })).toBe('예산 등급이 올바르지 않습니다.');
     expect(bad({ segment: 'x' })).toBe('없는 고객층입니다.');
     ok(g.command({ type: 'startProject', ...SPEC, options: ['radio'] }));
@@ -155,7 +155,7 @@ describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () =
     const { g, pid } = devReady(1);
     const p = g.state.projects.find((x) => x.id === pid)!;
     const at = (n: number) => { p.defectEst = n; return defectAdvice(p); };
-    expect(at(15).level).toBe('many'); expect(at(15).text).toContain('평론가 전원이 1점씩');
+    expect(at(15).level).toBe('many'); expect(at(15).text).toContain('평론가 4명이 모두 1점씩');
     expect(at(14).level).toBe('some'); expect(at(6).level).toBe('some');
     expect(at(5).level).toBe('ok'); expect(at(0).level).toBe('ok');
     expect(at(10).recallYear).toBeCloseTo(0.2); expect(at(40).recallYear).toBe(config.recall.maxYear);

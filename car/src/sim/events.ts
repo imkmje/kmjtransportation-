@@ -2,9 +2,11 @@
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
 import { config } from '../config';
 import { ERA_EVENTS, MARKET, RANDOM_EVENTS, optionById, powertrainById, bodyById, segmentById } from '../data';
+import { grades } from './cars';
+import { josa } from './josa';
 import { hash01 } from './rng';
-import { monthOf, monthLabel, yearOfMonth } from './time';
-import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type Stat, type Stats } from './types';
+import { monthOf, monthLabel, yearOf, yearOfMonth } from './time';
+import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type ProjectKind, type Stat, type Stats } from './types';
 
 const E = config.events, MPY = config.time.monthsPerYear;
 export const REGION = 'domestic';
@@ -79,12 +81,16 @@ type Regulation = Extract<EraEffect, { type: 'regulation' }>;
 /** 지금 국내에서 효력이 있는 규제(유예가 끝난 것) */
 export const regulationsNow = (seed: number, m: number): { name: string; rule: Regulation }[] =>
   eraTimeline(seed).flatMap((sp) => sp.def.effects.filter((e): e is Regulation => e.type === 'regulation' && e.region === REGION && m >= sp.start + e.graceMonths).map((rule) => ({ name: sp.def.name, rule })));
-/** 규제 때문에 신규 출시를 못 하는 이유(없으면 null) */
-export function regulationError(s: CarState, car: { options: string[]; powertrain: string }): string | null {
+const optNames = (ids: string[]) => ids.map((o) => optionById(o).name).join('·');
+const PLAN_NAME: Record<ProjectKind, string> = { new: '신차', facelift: '페이스리프트', fullchange: '풀체인지' };
+/** 규제 때문에 신규 출시를 못 하는 이유(없으면 null). kind가 있으면 이미 개발 중인 차(출시 화면), 없으면 기획 중인 차 */
+export function regulationError(s: CarState, car: { options: string[]; powertrain: string; kind?: ProjectKind }): string | null {
   for (const { name, rule } of regulationsNow(s.seed, monthOf(s.week))) {
-    const missing = (rule.options ?? []).filter((o) => !car.options.includes(o));
-    if (missing.length) return `${name}: ${missing.map((o) => optionById(o).name).join('·')} 옵션이 없는 신차는 출시할 수 없습니다. 페이스리프트나 다음 세대에서 옵션을 넣으세요.`;
-    if (rule.powertrains?.includes(car.powertrain)) return `${name}: ${powertrainById(car.powertrain).name} 신차는 출시할 수 없습니다.`;
+    const missing = (rule.options ?? []).filter((o) => !car.options.includes(o)), list = optNames(missing);
+    if (missing.length) return `${name}: 이제 ${list}${josa(list, '이/가')} 없는 차는 출시할 수 없습니다. ${car.kind
+      ? `이 차는 그대로 낼 수 없으니 개발을 취소하고 ${PLAN_NAME[car.kind]} 기획을 다시 하면서 옵션에 ${list}${josa(list, '을/를')} 넣으세요.`
+      : `옵션 단계에서 ${list}${josa(list, '을/를')} 넣으세요.`}`;
+    if (rule.powertrains?.includes(car.powertrain)) { const pt = powertrainById(car.powertrain).name; return `${name}: 이제 ${pt}차는 출시할 수 없습니다.`; }
   }
   return null;
 }
@@ -101,10 +107,10 @@ export const loanRateMult = (s: CarState): number => eraNow(s.seed, monthOf(s.we
 export const rivalHitAdd = (s: CarState, rivalId: string, body: string, m: number): number =>
   modsNow(s, 'rivalHit', m).filter((x) => x.rivalId === rivalId && x.body === body).reduce((a, x) => a + x.value, 0);
 
-function addNews(s: CarState, ev: GameEvent[], text: string, kind: 'news' | 'choice' = 'news', id?: number): void {
-  s.events.news.push({ week: s.week, text });
+function addNews(s: CarState, ev: GameEvent[], text: string, category: NewsCategory, kind: 'news' | 'choice' = 'news', id?: number): void {
+  s.events.news.push({ week: s.week, text, category });
   if (s.events.news.length > E.newsMax) s.events.news.splice(0, s.events.news.length - E.newsMax);
-  ev.push(id === undefined ? { kind, text } : { kind, text, id });
+  ev.push(id === undefined ? { kind, text, category } : { kind, text, id, category });
 }
 export { addNews };
 
@@ -113,11 +119,13 @@ export function monthStart(s: CarState, ev: GameEvent[]): void {
   const m = monthOf(s.week);
   s.events.mods = s.events.mods.filter((x) => m < x.untilMonth);
   for (const sp of eraTimeline(s.seed)) {
-    if (m === sp.start - E.warnMonths) addNews(s, ev, `[예고] ${sp.def.warn}`);
-    if (m === sp.start) addNews(s, ev, `[${sp.def.name}] ${sp.def.start}`);
-    for (const e of sp.def.effects) if (e.type === 'regulation' && e.region === REGION && e.graceMonths > 0 && m === sp.start + e.graceMonths)
-      addNews(s, ev, `[${sp.def.name}] 오늘부터 ${(e.options ?? []).map((o) => optionById(o).name).join('·')} 없는 신차는 출시할 수 없습니다.`);
-    if (sp.end !== null && m === sp.end && sp.def.end) addNews(s, ev, `[${sp.def.name}] ${sp.def.end}`);
+    if (m === sp.start - E.warnMonths) addNews(s, ev, `[예고] ${sp.def.warn}`, 'preview');
+    if (m === sp.start) addNews(s, ev, `[${sp.def.name}] ${sp.def.start}`, 'start');
+    for (const e of sp.def.effects) if (e.type === 'regulation' && e.region === REGION && e.graceMonths > 0 && m === sp.start + e.graceMonths) {
+      const list = optNames(e.options ?? []);
+      addNews(s, ev, `[${sp.def.name}] 오늘부터 ${list}${josa(list, '이/가')} 없는 신차는 출시할 수 없습니다.`, 'regulation');
+    }
+    if (sp.end !== null && m === sp.end && sp.def.end) addNews(s, ev, `[${sp.def.name}] ${sp.def.end}`, 'end');
   }
   rollRandom(s, m, ev);
 }
@@ -149,46 +157,86 @@ function rollRandom(s: CarState, m: number, ev: GameEvent[]): void {
       s.events.mods.push({ kind: 'rivalHit', value: def.onFire.add, untilMonth: m + def.onFire.months, body: g.body, rivalId: r.id, label: `${r.name} ${bodyById(g.body).name} 히트작` });
     }
     if (def.onFire?.type === 'fxRoll') fx = hash01(s.seed, 56, year, k) < def.onFire.goodShare ? def.onFire.good : def.onFire.bad;
-    const id = s.nextId++, text = def.text.replace('{car}', g ? genName(s, g) : '');
+    const car = g ? genName(s, g) : '', id = s.nextId++;
+    const text = def.text.replace('{car}', car).replace(/\{(을\/를|이\/가|은\/는|과\/와|으로\/로)\}/g, (_, p) => josa(car, p)); // 「{car}」{을/를}: 차 이름에 맞는 조사
     s.events.pending.push({ id, eventId: def.id, text, week: s.week, deadline: s.week + E.choiceWeeks, genId: g?.id ?? null, fx });
-    addNews(s, ev, `[${def.name}] ${text}`, 'choice', id);
+    addNews(s, ev, `[${def.name}] ${text}`, 'choice', 'choice', id);
   });
 }
 
 // ---------- 조회 ----------
-/** 고정 사건 효과 한 줄 */
-function eraEffectText(e: EraEffect): string {
-  const pct = (x: number) => `${x >= 1 ? '+' : '−'}${Math.round(Math.abs(x - 1) * 100)}%`;
-  const STAT: Record<Stat, string> = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' };
+const STAT_WORD: Record<Stat, string> = { P: '성능', E: '연비', U: '실용성', D: '디자인', Q: '품질' };
+const pct = (x: number) => Math.round(Math.abs(x - 1) * 100);
+const sells = (x: number) => `${pct(x)}% ${x < 1 ? '덜' : '더'} 팔립니다`;
+const ptCar = (id: string) => `${powertrainById(id).name}차`;
+const trendName = (id: string) => (MARKET[REGION].bodyShare[id] ? bodyById(id).name : ptCar(id));
+/** 유행 효과의 서술부(주어 뒤): "유행해 인기가 20% 오릅니다." / "인기가 해마다 3%씩 줄어듭니다." */
+const trendText = (e: Extract<EraEffect, { type: 'trend' }>) => [
+  e.add ? `${e.add > 0 ? '유행해 인기가' : '인기가'} ${Math.round(Math.abs(e.add) * 100)}% ${e.add > 0 ? '오릅니다' : '떨어집니다'}.` : '',
+  e.perYear ? `인기가 해마다 ${Math.round(Math.abs(e.perYear) * 100)}%씩 ${e.perYear < 0 ? '줄어듭니다' : '늘어납니다'}.` : '',
+].filter(Boolean).join(' ');
+/** 고정 사건 효과 한 문장(쉬운 말). since: 사건이 시작한 뒤 지난 달 수(규제의 봐주는 기간 계산) */
+function eraEffectText(e: EraEffect, since: number): string {
   switch (e.type) {
-    case 'statWeight': return `고객이 ${STAT[e.stat]}을(를) 더 중시(가중치 ×${e.mult})`;
-    case 'bodyDemand': return `${e.bodies.map((b) => bodyById(b).name).join('·')} 수요 ${pct(e.mult)}`;
-    case 'ptDemand': return `${powertrainById(e.powertrain).name} 수요 ${pct(e.mult)}`;
-    case 'segDemand': return `${segmentById(e.segment).name} 구매 ${pct(e.mult)}`;
-    case 'marketSize': return `${e.region === 'all' ? '전 지역' : MARKET[e.region]?.name ?? e.region} 시장 ${pct(e.mult)}`;
-    case 'trend': {
-      const name = MARKET[REGION].bodyShare[e.id] ? bodyById(e.id).name : powertrainById(e.id).name;
-      return e.perYear ? `${name} 인기 해마다 ${Math.round(e.perYear * 100)}%` : `${name} 유행 +${Math.round(e.add * 100)}%`;
+    case 'statWeight': { const n = STAT_WORD[e.stat]; return `고객이 차를 고를 때 ${n}${josa(n, '을/를')} ${e.mult >= 1.5 ? '훨씬 더' : e.mult > 1 ? '더' : '덜'} 따집니다.`; }
+    case 'bodyDemand': { const n = e.bodies.map((b) => bodyById(b).name).join('·'); return `${n}${josa(n, '이/가')} ${sells(e.mult)}.`; }
+    case 'ptDemand': { const n = ptCar(e.powertrain); return `${n}${josa(n, '이/가')} ${sells(e.mult)}.`; }
+    case 'segDemand': { const n = segmentById(e.segment).name; return `${n}${josa(n, '이/가')} 차를 ${pct(e.mult)}% ${e.mult < 1 ? '덜' : '더'} 삽니다.`; }
+    case 'marketSize': return `${e.region === 'all' ? '모든 지역의' : MARKET[e.region]?.name ?? e.region} 자동차 시장이 ${pct(e.mult)}% ${e.mult < 1 ? '줄어듭니다' : '커집니다'}.`;
+    case 'trend': { const n = trendName(e.id); return `${n}${josa(n, '이/가')} ${trendText(e)}`; }
+    case 'loanRate': return `대출 이자가 ${e.mult === 2 ? '두 배' : `${e.mult}배`}${e.mult > 1 ? '로 오릅니다' : '로 내립니다'}.`;
+    case 'production': return `모든 공장의 생산이 ${e.mult === 0.5 ? '절반으로' : `${pct(e.mult)}%`} 줄어듭니다.`;
+    case 'regulation': {
+      if (e.region !== REGION) return '외국에만 해당하는 규제라, 국내에서 차를 파는 우리 회사에는 영향이 없습니다.';
+      const n = optNames(e.options ?? []), left = e.graceMonths - since;
+      return left > 0 ? `${left}개월 뒤부터 ${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다(그때까지는 봐주는 기간입니다).` : `${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다.`;
     }
-    case 'loanRate': return `대출 이율 ×${e.mult}`;
-    case 'production': return `전 공장 생산 ${pct(e.mult)}`;
-    case 'regulation': return e.region === REGION ? `${(e.options ?? []).map((o) => optionById(o).name).join('·')} 없는 신차 출시 불가${e.graceMonths ? `(${e.graceMonths}개월 유예)` : ''}` : '해외 규제(수출 전에는 영향 없음)';
-    case 'charging': return '충전 인프라가 해마다 늘어남(전기차 수요에 곱해짐)';
-    case 'exportEase': return '수출 지역 해금 조건 완화(수출 전에는 영향 없음)';
+    case 'charging': return '충전소가 해마다 늘어 전기차가 점점 더 잘 팔립니다.';
+    case 'exportEase': return '외국 시장 이야기라, 국내에서 차를 파는 우리 회사에는 영향이 없습니다.';
   }
 }
+/** 무작위 사건이 남긴 기간 효과 한 문장 */
+const modText = (x: EventMod): string =>
+  x.kind === 'production' ? `공장 생산이 ${x.value === 0.5 ? '절반으로' : `${pct(x.value)}%`} 줄어듭니다.`
+  : x.kind === 'cost' ? `차 한 대 원가가 ${pct(x.value)}% ${x.value < 1 ? '내립니다' : '오릅니다'}.`
+  : `경쟁 차가 크게 히트해 ${x.body ? bodyById(x.body).name : '그 차급'} 손님을 한동안 많이 빼앗아 갑니다.`;
 export interface ActiveEvent { id: string; name: string; text: string; effects: string[]; startMonth: number; monthsLeft: number | null; kind: 'era' | 'random' }
 /** 진행 중인 사건 효과와 남은 기간(쉬운 설명): 고정 사건 + 무작위 사건의 기간 효과 */
 export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfra: number; requiredOptions: string[] } {
   const m = monthOf(s.week);
   const era = eraTimeline(s.seed).filter((sp) => activeAt(sp, m)).map((sp): ActiveEvent => ({
-    id: sp.def.id, name: sp.def.name, text: sp.def.start, effects: sp.def.effects.map(eraEffectText), startMonth: sp.start, monthsLeft: sp.end === null ? null : sp.end - m, kind: 'era',
+    id: sp.def.id, name: sp.def.name, text: sp.def.start, effects: sp.def.effects.map((e) => eraEffectText(e, m - sp.start)), startMonth: sp.start, monthsLeft: sp.end === null ? null : sp.end - m, kind: 'era',
   }));
   const mods = s.events.mods.filter((x) => m < x.untilMonth).map((x, i): ActiveEvent => ({
-    id: `mod${i}`, name: x.label, text: x.label, kind: 'random', startMonth: m, monthsLeft: x.untilMonth - m,
-    effects: [x.kind === 'production' ? `생산 ×${x.value}` : x.kind === 'cost' ? `원가 ×${x.value}` : `경쟁 차 매력 +${x.value}`],
+    id: `mod${i}`, name: x.label, text: x.label, kind: 'random', startMonth: m, monthsLeft: x.untilMonth - m, effects: [modText(x)],
   }));
   return { events: [...era, ...mods], chargingInfra: chargingInfra(s.seed, m), requiredOptions: regulationsNow(s.seed, m).flatMap((r) => r.rule.options ?? []) };
+}
+/** 판매 중인 차 한 대에 지금 걸린 사건 효과(쉬운 문장, "사건 이름: 내용"): 그 차의 차체·동력·고객층에 걸린 것과,
+ *  모든 차에 걸리지만 이 차에 특히 유리·불리한 것(고객이 더 따지는 능력치가 이 차에서 높거나 낮을 때) */
+export function eventImpactOn(s: CarState, generationId: number): string[] {
+  const g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === generationId);
+  if (!g) return [];
+  const m = monthOf(s.week), body = bodyById(g.body).name, pt = ptCar(g.powertrain), seg = segmentById(g.segment).name;
+  const gr = grades(g.editions[g.editions.length - 1].stats, yearOf(s.week));
+  const one = (e: EraEffect): string | null => {
+    switch (e.type) {
+      case 'bodyDemand': return e.bodies.includes(g.body) ? `이 차는 ${body}${josa(body, '이라/라')} ${sells(e.mult)}.` : null;
+      case 'ptDemand': return e.powertrain === g.powertrain ? `이 차는 ${pt}${josa(pt, '이라/라')} ${sells(e.mult)}.` : null;
+      case 'segDemand': return e.segment === g.segment ? `이 차를 사는 ${seg}${josa(seg, '이/가')} 차를 ${pct(e.mult)}% ${e.mult < 1 ? '덜' : '더'} 삽니다.` : null;
+      case 'trend': { const n = e.id === g.body ? body : e.id === g.powertrain ? pt : null; return n && trendText(e) ? `이 차는 ${n}${josa(n, '이라/라')} ${trendText(e)}` : null; }
+      case 'charging': return g.powertrain === E.charging.powertrain ? `충전소가 늘수록 이 차가 잘 팔립니다(지금 충전소 보급 ${Math.round(chargingInfra(s.seed, m) * 100)}%).` : null;
+      case 'statWeight': {
+        const n = STAT_WORD[e.stat], v = gr[e.stat];
+        if (e.mult <= 1 || (v > 4 && v < 6)) return null;
+        return `고객이 ${n}${josa(n, '을/를')} 더 따지는데, 이 차는 ${n}${josa(n, '이/가')} ${v >= 6 ? '좋아 유리합니다' : '약해 불리합니다'}.`;
+      }
+      default: return null; // 시장 규모·대출·생산·규제는 모든 차에 똑같이 걸린다
+    }
+  };
+  const out = eraTimeline(s.seed).filter((sp) => activeAt(sp, m)).flatMap((sp) => sp.def.effects.map(one).filter((t): t is string => !!t).map((t) => `${sp.def.name}: ${t}`));
+  for (const x of s.events.mods) if (x.kind === 'rivalHit' && x.body === g.body && m < x.untilMonth) out.push(`${x.label}: 경쟁 차가 크게 히트해 이 차의 손님을 빼앗아 갑니다.`);
+  return out;
 }
 /** 답을 기다리는 무작위 사건: 선택지·기본 선택·남은 주 */
 export function pendingChoices(s: CarState) {
@@ -197,9 +245,9 @@ export function pendingChoices(s: CarState) {
     return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c) => ({ label: c.label, result: c.result })), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
   });
 }
-/** 뉴스 기록(최신이 앞) */
-export const newsLog = (s: CarState): { week: number; text: string; date: string }[] =>
-  [...s.events.news].reverse().map((x) => ({ ...x, date: monthLabel(monthOf(x.week)) }));
+/** 뉴스 기록(최신이 앞). category가 없는 예전 항목은 'other' */
+export const newsLog = (s: CarState): { week: number; text: string; date: string; category: NewsCategory }[] =>
+  [...s.events.news].reverse().map((x) => ({ week: x.week, text: x.text, category: x.category ?? 'other', date: monthLabel(monthOf(x.week)) }));
 /** 다가오는 고정 사건(예고가 나온 것만, 시작 전) */
 export const upcomingEvents = (s: CarState) => {
   const m = monthOf(s.week);

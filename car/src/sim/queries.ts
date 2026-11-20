@@ -38,9 +38,9 @@ export function expectedReviews(s: CarState, projectId: number, price: number): 
 /** 남은 결함(화면에 보이는 "약 N개") 판단: 15개 이상 많음 / 6~14 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
 export function defectAdvice(p: Project): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
   const c = config.critics, n = p.defectEst, recallYear = Math.min(config.recall.maxYear, n * config.recall.perDefect);
-  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `아직 많습니다: 지금 출시하면 평론가 전원이 ${c.manyDefectsPenalty}점씩 깎고 리콜 위험이 큽니다` };
-  if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다' };
-  return { level: 'ok', recallYear, text: '출시해도 좋습니다' };
+  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `결함이 아직 많습니다. 지금 출시하면 평론가 4명이 모두 ${c.manyDefectsPenalty}점씩 깎고, 리콜 위험이 큽니다.` };
+  if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다.' };
+  return { level: 'ok', recallYear, text: '출시해도 좋습니다.' };
 }
 
 /** 쉬고 있는 개발 직무 직원(팀을 고르지 않았을 때의 기본 팀) */
@@ -105,7 +105,7 @@ export function advice(g: Generation, s?: CarState): string {
     if (age >= L.fullChange.afterMonths) return `${head} 풀체인지를 고려하세요.`;
     return `${head} 후속 모델을 준비하세요.`;
   }
-  if (g.lostSales >= 1) return '주문이 생산량을 넘습니다. 공장을 증설하거나 가격을 올려도 잘 팔립니다.';
+  if (g.lostSales >= 1) return '주문이 생산량을 넘습니다. 공장을 증설하세요. 가격을 올려도 잘 팔립니다.';
   if (currentEdition(g).defects > 0) return '남은 결함이 있어 리콜 위험이 있습니다.';
   return '판매가 순조롭습니다.';
 }
@@ -176,7 +176,7 @@ export { grade, grades, avgGrade, standard, unitCost, bodiesAt, powertrainsAt, o
 
 // ---------- 연구(10장)·시대 사건(11장)·조합 노트(5.5) ----------
 export { researchInfo, researchError, researchCost, researchSlots, weeklyResearchPoints, unlockedBodies, unlockedOptions, unlockedPowertrains, powertrainLevels, ptLevel, levelForTier, ptCostAdd, techEffectsText, FIELD_NAMES, type ResearchInfo, type TechRow, type TechStatus } from './research';
-export { activeEvents, pendingChoices, newsLog, upcomingEvents, regulationError, chargingInfra, type ActiveEvent } from './events';
+export { activeEvents, eventImpactOn, pendingChoices, newsLog, upcomingEvents, regulationError, chargingInfra, type ActiveEvent } from './events';
 
 /** 궁합 기호(◎ 1.2 / ○ 1.0 / △ 0.8 / × 0.6) */
 export const compatMark = (v: number): string => (v >= 1.2 ? '◎' : v >= 1 ? '○' : v >= 0.8 ? '△' : '×');
@@ -266,10 +266,10 @@ export function capacityAdvice(s: CarState): string {
   const f = factoryInfo(s), r = f.ratio;
   if (!f.cars.length || f.demand <= 0) return '판매 중인 차가 없습니다.';
   const x = `한도의 ${r.toFixed(1)}배`;
-  if (r >= 1.3) return f.building ? `주문이 ${x}입니다. 증설 공사가 ${f.building.monthsLeft}개월 남았습니다` : f.next ? `주문이 ${x}입니다. 공장 증설을 고려하세요` : `주문이 ${x}입니다. 가격을 올려도 잘 팔립니다`;
-  if (r > 1) return `주문이 한도를 조금 넘습니다(${x})`;
-  if (r < 0.7) return `생산에 여유가 있습니다(한도의 ${Math.round(r * 100)}%만 주문)`;
-  return '생산량이 주문에 잘 맞습니다';
+  if (r >= 1.3) return f.building ? `주문이 ${x}입니다. 증설 공사가 ${f.building.monthsLeft}개월 남았습니다.` : f.next ? `주문이 ${x}입니다. 공장 증설을 고려하세요.` : `주문이 ${x}입니다. 가격을 올려도 잘 팔립니다.`;
+  if (r > 1) return `주문이 한도를 조금 넘습니다(${x}).`;
+  if (r < 0.7) return `생산에 여유가 있습니다(한도의 ${Math.round(r * 100)}%만 주문).`;
+  return '생산량이 주문에 잘 맞습니다.';
 }
 
 export { hqDef, factoryDef, staffCap, devTeams, optionSlots, capacityOf, linesOf, costMultOf, upkeepOf } from './company';

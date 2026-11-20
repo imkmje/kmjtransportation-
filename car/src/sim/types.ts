@@ -154,7 +154,9 @@ export interface ResearchState {
 export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null }
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
 export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
-export interface NewsItem { week: number; text: string }
+/** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
+export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'other';
+export interface NewsItem { week: number; text: string; category?: NewsCategory } // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
 export interface CarState {
@@ -218,7 +220,7 @@ export type CommandResult = { ok: true; events?: GameEvent[] } | { ok: false; re
 
 // unlock: 연구 완료, news: 시대 사건 예고·시작·끝, choice: 답을 기다리는 무작위 사건(id = 선택 ID)
 export type EventKind = 'designDone' | 'monthEnd' | 'recall' | 'discontinued' | 'unlock' | 'cashWarning' | 'gameOver' | 'news' | 'advice' | 'company' | 'choice';
-export interface BasicEvent { kind: EventKind; text: string; id?: number }
+export interface BasicEvent { kind: EventKind; text: string; id?: number; category?: NewsCategory } // category: news·choice·unlock의 뉴스 종류
 /** 주간 개발 기록(사무실 화면용): 직원별로 그 주에 실제로 쌓은 점수와 결함 증감 */
 export interface DevWeekEvent {
   kind: 'devWeek'; text: string; id: number; projectId: number;

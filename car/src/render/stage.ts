@@ -138,6 +138,8 @@ export class Stage {
   }
 
   setAutoRotate(on: boolean): void { this.auto = on; }
+  /** 무대의 회전(기본 앞 3/4 = −0.65, 0=옆, −π/2=정면, π/2=뒷면)을 정한다. 이후 끌기·자동 회전은 여기서 이어진다 */
+  setYaw(rad: number): void { this.table.rotation.y = rad; }
 
   /** 작은 PNG(data URL): 후보 썸네일·차종 계보 사진. 본 무대의 차·회전·크기를 잠시 바꿨다가 같은 틱 안에 되돌린다.
       yaw: 무대 회전(기본 앞 3/4, 0=옆, −π/2=정면, π/2=뒷면). fit: 보이는 폭(m)을 고정해 여러 차의 실제 크기를 비교할 때 */

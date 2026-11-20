@@ -331,7 +331,7 @@ check('18개월 뒤 차고 [페이스리프트]가 열림', await page.locator('
 await act('goLift');
 check('페이스리프트 화면: 지금 얼굴 + 새 얼굴 후보 3개(정면 썸네일)', (await G(() => window.__car.screen)) === 'lift' && (await page.locator('.faces .face.now').count()) === 1 && (await page.locator('.faces .opt.face img, .faces .opt.face svg').count()) === 3);
 const ltext = await page.locator('#panel').innerText();
-check('페이스리프트 예상: 비용·기간·디자인·수명 전후·인지도 전후', ['비용', '기간', '디자인', '수명', '인지도', '손본 뒤'].every((t) => ltext.includes(t)));
+check('페이스리프트 예상: 비용·기간·디자인·수명 전후·인지도 전후', ['비용', '기간', '디자인', '수명', '인지도', '바꾼 뒤'].every((t) => ltext.includes(t)));
 check('동력 단계는 낮출 수 없음', await G(() => { const g = window.__car.game.state.nameplates[0].generations[0], t = g.editions[0].tier; return [...document.querySelectorAll('[data-act="liftPick"][data-k="tier"]')].every((b) => b.disabled === Number(b.dataset.v) < t); }));
 const face2 = Number(await page.locator('.faces .opt.face').nth(1).getAttribute('data-v'));
 await page.locator('.faces .opt.face').nth(1).click();
@@ -604,7 +604,7 @@ check('0.3.0 형식 저장(형식 3) 불러와 이어 하기(연구·사건·조
 // ---- 4단계: 연구·시대 사건·조합 노트·차체 10종 ----
 const S4 = (fn, arg) => G(fn, arg);
 await openMenu();
-check('메뉴: 역사 사건·시장 수치는 게임용 근사라는 한 줄', (await page.locator('#sheet .help-line').innerText()).includes('게임용 근사'));
+check('메뉴: 역사 사건·시장 수치는 게임에 맞게 어림한 것이라는 한 줄', (await page.locator('#sheet .help-line').innerText()).includes('어림한 것'));
 await act('home'); await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
 await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '4'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
@@ -612,9 +612,9 @@ await page.click('#tabs button[data-tab="company"]');
 check('회사 탭 안쪽 탭 5개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구');
 await act('cotab', '[data-v="research"]');
 const r0 = await page.locator('#panel').innerText();
-check('연구 화면: 분야 5개와 기술 카드 40개 이상', (await page.locator('.rfield').count()) === 5 && (await page.locator('.tc').count()) >= 40 && ['동력', '차체·안전', '전장·편의', '생산', '친환경'].every((t) => r0.includes(t)));
-check('연구 화면: 놀고 있는 엔지니어의 주간 연구 점수가 0보다 큼', /주당 [\d.]+점/.test(r0) && (await S4(() => window.__car.game.state.staff.some((x) => x.role === 'engineer'))) && !r0.includes('연구 점수가 0'), r0.match(/주당 [\d.]+점/)?.[0]);
-check('연구 카드: 일찍 연구 할증 표시(해치백 차체 ×2)', (await page.locator('.tc[data-v="bd_hatch"]').innerText()).includes('일찍 연구 ×2'));
+check('연구 화면: 분야 5개와 기술 카드 40개 이상', (await page.locator('.rfield').count()) === 5 && (await page.locator('.tc').count()) >= 40 && ['동력', '차체·안전', '편의 장비', '생산', '친환경'].every((t) => r0.includes(t)));
+check('연구 화면: 놀고 있는 엔지니어의 주간 연구 점수가 0보다 큼', /한 주에 [\d.]+점/.test(r0) && (await S4(() => window.__car.game.state.staff.some((x) => x.role === 'engineer'))) && !r0.includes('연구 점수가 0'), r0.match(/한 주에 [\d.]+점/)?.[0]);
+check('연구 카드: 일찍 연구 할증 표시(해치백 차체 비용 2배)', (await page.locator('.tc[data-v="bd_hatch"]').innerText()).includes('일찍 연구: 비용 2배'));
 check('아직 먼 기술은 이름만 흐리게', (await page.locator('.tc.hidden[data-v="ec_ev"]').count()) === 1 && !(await page.locator('.tc[data-v="ec_ev"]').innerText()).includes('배터리'));
 await page.waitForTimeout(200); await shot('research-early');
 await page.locator('.tc[data-v="bd_hatch"]').click();
@@ -631,6 +631,8 @@ await tick(3); await page.waitForTimeout(100);
 await shot('research-active');
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 200 && c.game.state.research.active.length) c.tick(1); c.render(); });
 check('연구 완료 알림', (await page.locator('#toasts').innerText()).includes('연구 완료') && (await S4(() => window.__car.game.state.research.done.includes('bd_hatch'))));
+await shot('unlock-toast');
+check('연구 완료 알림 문장: 이름이 겹치지 않음', (await page.locator('#toasts').innerText()).includes('「해치백 차체」 연구를 마쳤습니다. 이제 해치백을 만들 수 있습니다.'));
 check('연구 완료 뒤 카드 ✓ 완료', (await page.locator('.tc.done[data-v="bd_hatch"]').count()) === 1);
 // 기획: 연구한 차체만 열림, 나머지는 흐리게 "연구 필요"
 await page.click('#tabs button[data-tab="garage"]'); await planNew();
@@ -677,7 +679,7 @@ await act('cancelPlan');
 // 선택 사건: 시간을 보내 무작위 사건을 발생시킨다(창 띄우기 켬)
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 400 && !c.game.state.events.pending.length) c.tick(1, true); });
 await page.waitForTimeout(300);
-check('선택 사건: 자동 멈춤 + 화면 안 창(제목·설명·선택지·남은 주)', (await page.locator('#sheet .choice-sheet').isVisible()) && (await page.locator('.evc').count()) >= 2 && /\d+주 안에 고르지 않으면 「.+」(으)?로 처리됩니다/.test(await page.locator('.choice-sheet').innerText()) && (await S4(() => window.__car.held())));
+check('선택 사건: 자동 멈춤 + 화면 안 창(제목·설명·선택지·남은 주)', (await page.locator('#sheet .choice-sheet').isVisible()) && (await page.locator('.evc').count()) >= 2 && /\d+주 안에 고르지 않으면 「.+」(으)?로 정해집니다/.test(await page.locator('.choice-sheet').innerText()) && (await S4(() => window.__car.held())));
 await page.waitForTimeout(600); await shot('choice');
 await act('later');
 check('[나중에]: 창이 닫히고 상단바에 "결정 대기 1"', (await page.locator('#sheet').isHidden()) && (await page.locator('#pend').innerText()) === '결정 대기 1');
@@ -696,11 +698,11 @@ await page.waitForTimeout(600); await shot('events');
 await act('closeSheet');
 await page.click('#tabs button[data-tab="garage"]');
 await S4(() => { const g = window.__car.game.state.nameplates[0].generations[0]; g.body = 'sedanL'; window.__car.render(); }); // 점검용: 차고 카드의 사건 영향 줄
-check('차고 카드: 이 차가 받는 사건 영향 한 줄', (await page.locator('.ev-line').first().innerText()).includes('1차 오일쇼크: 대형 세단·쿠페 수요 −35%'));
+check('차고 카드: 이 차가 받는 사건 영향 한 줄', (await page.locator('.ev-line').allInnerTexts()).some((t) => t.includes('1차 오일쇼크: 이 차는 대형 세단이라 35% 덜 팔립니다.')));
 await page.waitForTimeout(400); await shot('garage-event');
 await S4(() => { const g = window.__car.game.state.nameplates[0].generations[0]; g.body = 'sedanS'; window.__car.render(); });
 await page.click('#tabs button[data-tab="records"]'); await act('rectab', '[data-v="news"]');
-check('기록 뉴스: 최신이 위, 예고와 사건 시작 구분', (await page.locator('.nl').count()) >= 2 && (await page.locator('.nl.k-warn').count()) >= 1 && (await page.locator('.nl.k-start').count()) >= 1 && (await page.locator('.nl .nt').first().innerText()) === (await S4(() => window.__car.game.state.events.news.at(-1).text.replace(/^\[[^\]]*\]\s*/, ''))));
+check('기록 뉴스: 최신이 위, 예고와 사건 시작 구분', (await page.locator('.nl').count()) >= 2 && (await page.locator('.nl.k-preview').count()) >= 1 && (await page.locator('.nl.k-start').count()) >= 1 && (await S4(() => window.__car.game.state.events.news.at(-1).text)).endsWith(await page.locator('.nl .nt').first().innerText().then((t) => t.replace(/^[^:]*: /, ''))));
 await page.locator('.nl.k-start').first().click();
 check('뉴스를 누르면 신문 한 장(지금 걸린 효과)', (await page.locator('#sheet .news.paper').isVisible()) && (await page.locator('#sheet').innerText()).includes('효과'));
 await page.waitForTimeout(600); await shot('news-paper');
@@ -734,13 +736,13 @@ await act('closeSheet');
 await S4(() => { const s = window.__car.game.state; s.week = 27 * 48; s.factory.level = 2; window.__car.render(); }); // 점검용: 생산 라인 2개(규제 이유만 남게)
 await page.click('#tabs button[data-tab="garage"]');
 await planNew();
-check('규제 경고(기획): "ABS·에어백이 있어야 출시할 수 있습니다"', (await page.locator('.reg-warn').innerText()).includes('ABS·에어백이 있어야 출시할 수 있습니다'));
+check('규제 경고(기획): "ABS·에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서 …"', (await page.locator('.reg-warn').innerText()).includes('ABS·에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서'));
 await act('ptab', '[data-v="opt"]');
 check('규제 옵션 강조', (await page.locator('.opt.req').count()) >= 1 && (await page.locator('.opt .reqtag').count()) >= 1);
 await shot('reg-plan');
 await page.fill('#pname', '규제'); await startDev();
 await untilReady(); await act('toLaunch');
-check('출시 화면: 규제 거부 이유 + [출시하기] 막힘', (await page.locator('.reg-why').innerText()).includes('출시할 수 없습니다') && (await page.locator('[data-act="doLaunch"]').isDisabled()));
+check('출시 화면: 규제 거부 이유(개발을 취소하고 다시 기획) + [출시하기] 막힘', (await page.locator('.reg-why').innerText()).includes('개발을 취소하고 신차 기획을 다시') && (await page.locator('[data-act="doLaunch"]').isDisabled()));
 check('sim 출시 명령도 같은 이유로 거부', await S4(() => { const c = window.__car, p = c.game.state.projects[0], r = c.game.command({ type: 'launch', projectId: p.id, price: 1000, marketing: 0, color: '#c8202f', wheels: 1 }); return !r.ok && r.reason.includes('ABS'); }));
 await shot('reg-launch');
 await act('tab', '[data-v="dev"]'); await act('cancelDev'); await page.click('#ask-yes');
@@ -774,6 +776,13 @@ await act('cancelPlan');
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 600 && !c.game.state.events.pending.length) c.tick(1, true); });
 if (await page.locator('.choice-sheet').count()) { await page.waitForTimeout(700); await shot('phone-choice'); check('폰: 선택 사건 창 가로 넘침 없음', (await G(() => document.querySelector('#sheet-body').scrollWidth - document.querySelector('#sheet-body').clientWidth)) <= 0); await act('later'); }
 await page.setViewportSize({ width: 1366, height: 1024 });
+
+// 전기차 앞모습(막힌 그릴): 점검용으로 판매 중인 차를 전기로 바꿔 차고 무대를 정면으로 돌린다
+await page.click('#tabs button[data-tab="garage"]');
+await S4(() => { const c = window.__car, g = c.game.state.nameplates.flatMap((n) => n.generations).find((x) => x.status === 'onSale'); if (!g) return; g.powertrain = 'ev'; c.render(); c.stage?.setAutoRotate(false); c.stage?.setYaw(-Math.PI / 2); });
+await page.waitForTimeout(900);
+check('전기차 앞모습: 무대에 전기차(막힌 그릴 모양 값)', (await S4(() => window.__car.look)).includes('"powertrain":"ev"'));
+await shot('ev-front');
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);
