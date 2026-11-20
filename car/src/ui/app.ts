@@ -120,13 +120,12 @@ export function startApp(): void {
       progress: p ? (p.phase === 'design' ? p.weeksDone / p.designWeeks : 1) : undefined, defects: p?.defectEst,
     };
   }
-  /** 주간 개발 기록 → 사무실 연출: 직원마다 가장 큰 능력치 1~2개(0은 생략), 결함 증감 */
+  /** 주간 개발 기록 → 사무실 연출: 직원마다 가장 큰 능력치 1개(정수, 0이면 생략), 결함 증감 */
   function officeFromWeek(e: DevWeekEvent): OfficeEvent[] {
     const out: OfficeEvent[] = [];
     for (const x of e.staff) {
-      const top = STATS.map((k) => [k, x.stats[k]] as [Stat, number]).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]);
-      const n = top.length > 1 && top[1][1] >= top[0][1] * 0.5 ? 2 : 1;
-      for (const [k, v] of top.slice(0, n)) out.push({ kind: 'score', staffId: String(x.id), stat: STAT_NAME[k], amount: Math.round(v * 10) / 10 });
+      const [k, v] = STATS.map((k) => [k, Math.round(x.stats[k])] as [Stat, number]).sort((a, b) => b[1] - a[1])[0];
+      if (v > 0) out.push({ kind: 'score', staffId: String(x.id), stat: STAT_NAME[k], amount: v });
     }
     if (e.defectsAdded >= 0.5) out.push({ kind: 'defectFound' });
     if (e.defectsRemoved >= 0.5) out.push({ kind: 'defectFixed' });
@@ -202,7 +201,7 @@ export function startApp(): void {
   function logDev(): void {
     const s = game!.state;
     for (const p of s.projects) {
-      const pv = Q.projectPreview(s, p.id);
+      const pv = devGrades(p);
       if (!pv) continue;
       const prev = devPrev.get(p.id) ?? 0, d = pv.avg - prev, list = devLog.get(p.id) ?? [];
       const phase = p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`;
@@ -467,6 +466,11 @@ export function startApp(): void {
 
   // ----- 개발 진행(사무실) -----
   const kindLabel = (p: Project) => p.kind === 'facelift' ? '페이스리프트 중' : p.kind === 'fullchange' ? `풀체인지 중 · ${(prevOf(p)?.number ?? 0) + 1}세대` : '개발 중';
+  /** 개발 중 표시 등급. shortcut: 페이스리프트는 sim의 projectPreview가 디자인 점수만 보고 계산해 등급이 0에 가깝게 나오므로, 지금 판매 중인 판의 등급을 보여 준다(sim에 페이스리프트용 미리보기가 생기면 바꿀 것) */
+  function devGrades(p: Project): { grades: Stats; avg: number } | null {
+    const s = game!.state, g = p.kind === 'facelift' ? Q.generationById(s, p.targetId ?? -1) : undefined;
+    return g ? { grades: Q.generationGrades(s, g), avg: Q.avgGrade(currentEdition(g).stats, yearOf(s.week)) } : Q.projectPreview(s, p.id);
+  }
   function devView(): View {
     const s = game!.state, p = s.projects[0];
     if (!p) {
@@ -474,7 +478,7 @@ export function startApp(): void {
       return { ov: `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>개발팀 · 쉬는 중</div><b>진행 중인 개발이 없습니다</b><span class="ofc-s">새 차를 기획하면 직원들이 설계를 시작합니다.</span></div>${canPlan ? '<button class="go" data-act="plan">신차 기획</button>' : ''}</div>`,
         panel: `<div class="card"><p class="lbl">개발</p><h2>개발팀이 쉬고 있습니다</h2><p class="hint" style="margin-top:8px">직원 ${s.staff.length}명이 모두 한 차에 매달립니다. 개발팀은 1개라 한 번에 한 차만 개발할 수 있습니다.</p>${canPlan ? '<button class="go" data-act="plan">신차 기획 시작</button>' : ''}</div>`, office: officeView() };
     }
-    const pv = Q.projectPreview(s, p.id)!, minT = config.dev.minTestWeeks, ready = p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p);
+    const pv = devGrades(p)!, minT = config.dev.minTestWeeks, ready = p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p);
     const phase = p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`;
     const ovh = `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>${kindLabel(p)} · ${phase}</div><b>${esc(p.name)}</b><span class="ofc-s">${STATS.map((k) => `${STAT_NAME[k]} ${score(pv.grades[k])}`).join(' · ')} · 결함 약 ${num(p.defectEst)}개</span></div><div class="ofc-g"><small>지금 등급</small><b>${score(pv.avg)}</b></div></div>`;
     const pct = p.phase === 'design' ? (p.weeksDone / p.designWeeks) * 100 : 100;
@@ -482,7 +486,7 @@ export function startApp(): void {
     const card1 = `<div class="card"><p class="lbl">${kindLabel(p)} · ${p.phase === 'design' ? '설계 단계' : '시험 단계'}</p><h2>${esc(p.name)}<small>${phase}</small></h2>
       <div class="prog ${p.phase === 'test' ? 'test' : ''}"><u style="width:${pct.toFixed(1)}%"></u></div>
       <p class="hint">${p.phase === 'design' ? (p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.') : '시험할수록 결함이 줄어 리콜 위험이 낮아집니다. 대신 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.'}</p>
-      <hr><p class="lbl">지금 능력치(등급)</p>${statBars(pv.grades)}
+      <hr><p class="lbl">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}
       <div class="kpis" style="margin-top:10px">${kpi('남은 결함', `약 ${num(p.defectEst)}<span>개</span>`)}${kpi('지금까지 쓴 개발비', money(p.spent))}</div>
       ${p.phase === 'test' ? defectBox(adv) : ''}
       <button class="go" data-act="toLaunch" ${ready ? '' : 'disabled'}>${ready ? '출시 준비 →' : p.phase === 'design' ? '설계가 끝나면 시험을 시작합니다' : `시험 ${minT}주 뒤 출시할 수 있습니다`}</button>

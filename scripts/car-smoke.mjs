@@ -323,6 +323,9 @@ const face2 = Number(await page.locator('.faces .opt.face').nth(1).getAttribute(
 await page.locator('.faces .opt.face').nth(1).click();
 await page.waitForTimeout(500);
 await shot('lift');
+await page.locator('.lift-est').scrollIntoViewIfNeeded(); await page.waitForTimeout(200);
+check('페이스리프트 예상 칸 숫자가 잘리지 않음', await G(() => [...document.querySelectorAll('.lift-est .kpi b')].every((b) => b.scrollWidth <= b.clientWidth)));
+await shot('lift-est');
 await act('startLift');
 check('페이스리프트 시작: 종류·고른 얼굴 시드', await G(([f]) => { const p = window.__car.game.state.projects[0]; return p?.kind === 'facelift' && p.faceSeed === f; }, [face2]) && (await page.locator('#ov').innerText()).includes('페이스리프트 중'));
 await untilReady();
