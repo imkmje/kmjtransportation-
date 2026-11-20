@@ -5,15 +5,49 @@ import { config } from '../src/config';
 const sb = () => { const g = new Game(3, undefined, { sandbox: true }); g.state.cash = 9999; g.state.rights = undefined; return g; };
 const months = (g: Game, n: number) => g.advanceDays(30 * n);
 /** 2년차까지 돌려 후보를 만들고, 자회사 하나(51%)를 만든다 */
-const setup = () => { const g = sb(); months(g, 25); g.state.cash = 9999; const c = g.state.competitors.find((x) => !x.major)!; expect(g.buyStake(c.id, 0.51).ok).toBe(true); return { g, c }; };
+const setup = () => { const g = sb(); months(g, 25); g.state.cash = 9999; const c = g.state.competitors.find((x) => !x.major)!; expect(g.buyStake(c.id, 0.51).ok).toBe(true); expect(g.postMgrAd(1).ok).toBe(true); months(g, config.mgr.ads[1].months); return { g, c }; };
 const cand = (g: Game, o: Partial<{ style: 'bold' | 'careful' | 'steady'; skill: number }> = {}) => { const x = g.state.mgrPool![0]; Object.assign(x, o); return x; };
 
 describe('위임 경영진(3.14.0)', () => {
-  it('2년차부터 해마다 후보 3명이 오고, 같은 이름은 겹치지 않는다', () => {
-    const g = sb(); months(g, 23); expect(g.state.mgrPool).toBeUndefined(); months(g, 2); expect(g.state.mgrPool!.length).toBe(config.mgr.pool);
-    expect(new Set(g.state.mgrPool!.map((x) => x.name)).size).toBe(config.mgr.pool); const year = g.state.mgrPoolYear, ids = g.state.mgrPool!.map((x) => x.id);
-    months(g, 11); expect(g.state.mgrPoolYear).toBe(year! + 1); expect(g.state.mgrPool!.map((x) => x.id)).not.toEqual(ids);
-    for (const x of g.state.mgrPool!) { expect(x.skill).toBeGreaterThanOrEqual(0.7); expect(x.skill).toBeLessThanOrEqual(1.3); expect(Math.abs(x.shown - g.mgrStars(x.skill))).toBeLessThanOrEqual(1); }
+  it('구인 광고: 광고를 내야만 후보가 오고(자동 후보 없음), 기간이 지나면 도착하며 광고는 하나씩만 낼 수 있다', () => {
+    const g = sb(); g.state.cash = 9999; months(g, 23); expect(g.postMgrAd(0).ok).toBe(false); months(g, 30); expect(g.state.mgrPool ?? []).toHaveLength(0); // 2년차 전엔 못 내고, 광고 없으면 후보도 없다
+    const ad = config.mgr.ads[2], c0 = g.state.cash; expect(g.postMgrAd(2).ok).toBe(true); expect(c0 - g.state.cash).toBeCloseTo(ad.cost, 6); expect(g.postMgrAd(0).ok).toBe(false);
+    months(g, ad.months - 1); expect(g.state.mgrPool ?? []).toHaveLength(0); months(g, 1); const pool = g.state.mgrPool!; expect(pool).toHaveLength(ad.n); expect(new Set(pool.map((x) => x.name)).size).toBe(ad.n); expect(g.state.mgrAd).toBeNull();
+    for (const x of pool) { expect(x.skill).toBeGreaterThanOrEqual(ad.lo); expect(x.skill).toBeLessThanOrEqual(ad.hi); expect(x.shown).toBe(g.mgrStars(x.skill)); } // 최고 단계는 별점이 정확
+    expect(g.postMgrAd(9).ok).toBe(false); expect(g.postMgrAd(-1).ok).toBe(false);
+  });
+  it('구인 광고: 비싼 단계일수록 능력이 높고, 돈이 모자라면 못 낸다', () => {
+    const avg = (tier: number) => { let sum = 0, n = 0; for (let k = 0; k < 6; k++) { const g = new Game(k + 1, undefined, { sandbox: true }); g.state.cash = 9999; g.state.rights = undefined; months(g, 24); g.postMgrAd(tier); months(g, config.mgr.ads[tier].months); for (const x of g.state.mgrPool!) { sum += x.skill; n++; } } return sum / n; };
+    const a0 = avg(0), a1 = avg(1), a2 = avg(2); expect(a0).toBeLessThan(a1); expect(a1).toBeLessThan(a2);
+    const g = sb(); months(g, 24); g.state.cash = config.mgr.ads[0].cost - 1; expect(g.postMgrAd(0).ok).toBe(false); expect(g.state.mgrAd ?? null).toBeNull();
+  });
+  it('후보는 정해진 기간이 지나면 사라진다', () => {
+    const { g } = setup(); expect(g.state.mgrPool!.length).toBeGreaterThan(0); months(g, config.mgr.stay - 1); expect(g.state.mgrPool!.length).toBeGreaterThan(0); months(g, 2); expect(g.state.mgrPool).toHaveLength(0);
+  });
+  it('담당 변경: 월급 2개월치를 내고 자회사 효율이 옮겨 가며, 성과는 새 자리부터 다시 잰다. 빈 자리가 아니면 안 된다', () => {
+    const { g, c } = setup(), o = g.state.competitors.find((x) => !x.major && x.id !== c.id)!; g.buyStake(o.id, 0.51); const x = cand(g, { skill: 1.3, style: 'steady' }); g.hireMgr(x.id, c.id); const m = g.mgrOf(c.id)!;
+    const e1 = c.eff ?? 1, e2 = o.eff ?? 1, cash0 = g.state.cash, fee = Math.round(m.salary * config.mgr.moveMonths * 10) / 10; months(g, 3); const cash1 = g.state.cash;
+    expect(g.moveMgr(m.id, c.id).ok).toBe(false); expect(g.moveMgr(9999, o.id).ok).toBe(false); expect(g.moveMgr(m.id, o.id).ok).toBe(true);
+    expect(m.post).toBe(o.id); expect(c.eff).toBeCloseTo(e1 - m.effBonus, 6); expect(o.eff).toBeCloseTo(e2 + m.effBonus, 6); expect(g.mgrOf(c.id)).toBeUndefined(); expect(g.mgrReport(m).months).toBe(0); expect(g.mgrReport(m).expense).toBeCloseTo(m.salary * config.mgr.feeMonths + fee, 1);
+    expect(cash1 - g.state.cash).toBeGreaterThanOrEqual(fee - 1e-6); expect(cash0).toBeGreaterThan(0);
+    g.state.cash = 0; const p = g.mgrPosts()[0]; if (p) expect(g.moveMgr(m.id, p.post).ok).toBe(false); // 돈이 없으면 옮길 수 없다
+  });
+  it('자회사 이름 바꾸기: 자회사만, 1~16자, 같은 이름은 안 된다', () => {
+    const { g, c } = setup(), o = g.state.competitors.find((x) => !x.major && x.id !== c.id)!;
+    expect(g.renameSub(c.id, '  새이름  ').ok).toBe(true); expect(c.name).toBe('새이름'); expect(g.renameSub(c.id, '').ok).toBe(false); expect(g.renameSub(c.id, 'a'.repeat(17)).ok).toBe(false);
+    expect(g.renameSub(o.id, '남의회사').ok).toBe(false); /* 지분 51% 미만은 불가 */ g.buyStake(o.id, 0.51); expect(g.renameSub(o.id, '새이름').ok).toBe(false); expect(g.renameSub(o.id, '둘째').ok).toBe(true); expect(g.renameSub(c.id, config.competitors.major.name).ok).toBe(false);
+  });
+  it('경영진 합병 제안: 재직이 길어진 자회사 담당자가 더 작은 자회사를 합치자고 하고, 수락하면 합병·거절하면 한동안 안 한다', () => {
+    const { g, c } = setup(), o = g.state.competitors.find((x) => !x.major && x.id !== c.id)!; g.buyStake(o.id, 0.51); c.planes = 9; o.planes = 3; g.hireMgr(cand(g).id, c.id); const k = config.mgr.prop, save = k.chance; k.chance = 1;
+    try {
+      months(g, k.minStay - 1); expect(g.state.mgrProp ?? null).toBeNull(); g.state.cash = 9999; months(g, 2); const p = g.state.mgrProp!; expect(p).toBeTruthy(); expect([p.into, p.from]).toEqual([c.id, o.id]);
+      expect(g.answerMergeProp(false).ok).toBe(true); expect(g.state.mgrProp).toBeNull(); months(g, k.cool - 1); expect(g.state.mgrProp ?? null).toBeNull(); g.state.cash = 9999; months(g, 2); expect(g.state.mgrProp).toBeTruthy();
+      expect(g.answerMergeProp(true).ok).toBe(true); expect(g.state.competitors.some((x) => x.id === o.id)).toBe(false); expect(g.answerMergeProp(true).ok).toBe(false);
+    } finally { k.chance = save; }
+  });
+  it('합병 제안은 답이 없으면 기한이 지나 사라지고, 돈이 모자라면 수락할 수 없다', () => {
+    const { g, c } = setup(), o = g.state.competitors.find((x) => !x.major && x.id !== c.id)!; g.buyStake(o.id, 0.51); c.planes = 9; o.planes = 3; g.hireMgr(cand(g).id, c.id); const k = config.mgr.prop, save = k.chance; k.chance = 1;
+    try { months(g, k.minStay + 1); expect(g.state.mgrProp).toBeTruthy(); g.state.cash = 0; expect(g.answerMergeProp(true).ok).toBe(false); expect(g.state.mgrProp).toBeTruthy(); k.chance = 0; months(g, k.until + 1); expect(g.state.mgrProp ?? null).toBeNull(); } finally { k.chance = save; }
   });
   it('영입: 계약금을 내고 후보가 빠지며, 자회사 효율이 능력만큼 오르고 해임하면 돌아온다', () => {
     const { g, c } = setup(), x = cand(g, { skill: 1.3, style: 'steady' }), eff0 = c.eff ?? 1, cash0 = g.state.cash, fee = g.mgrFee(x);

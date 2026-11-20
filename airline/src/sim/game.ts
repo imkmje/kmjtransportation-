@@ -1557,10 +1557,39 @@ export class Game {
     if (s.alliance?.length && !this.mgrOf('alli')) out.push({ post: 'alli', name: s.alli?.name ?? '우리 동맹' });
     for (const c of this.groupSubs) if (!this.mgrOf(c.id)) out.push({ post: c.id, name: c.name }); return out;
   }
-  private mgrRefresh(): void {
-    const s = this.state, k = config.mgr, taken = new Set((s.mgrs ?? []).map((m) => m.name)), names = config.extra.ceos.filter((n) => !taken.has(n)), styles = Object.keys(k.styles) as MgrCand['style'][];
-    s.mgrPool = Array.from({ length: k.pool }, () => { const skill = Math.round((0.7 + this.rng.next() * 0.6) * 100) / 100, name = names.splice(this.rng.int(names.length), 1)[0]; return { id: s.nextId++, name, style: styles[this.rng.int(styles.length)], skill, shown: Math.max(1, Math.min(5, this.mgrStars(skill) + this.rng.int(3) - 1)) }; });
-    s.mgrPoolYear = Math.floor(this.monthsPassed / 12);
+  /** 구인 광고(3.20.0): 단계가 높을수록 비싸고 오래 걸리지만 후보 능력이 높고 별점이 정확하다. 광고 기간이 끝나면 후보가 도착하고, 후보는 stay개월 뒤 사라진다 */
+  postMgrAd(tier: number): Result<{ cost: number; due: number }> {
+    const s = this.state, k = config.mgr, ad = k.ads[tier], mp = this.monthsPassed; if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!ad) return fail('없는 광고입니다');
+    if (mp < k.minMonth) return fail(`${k.minMonth / 12 + 1}년차부터 낼 수 있습니다`); if (s.mgrAd) return fail('이미 구인 광고가 나가는 중입니다'); if (s.cash < ad.cost) return fail('현금이 모자랍니다');
+    s.cash -= ad.cost; s.cur.cost += ad.cost; s.mgrAd = { tier, due: mp + ad.months }; s.log.push(`${mp + 1}개월차: 경영자 구인 광고(${ad.name})를 냈습니다($${ad.cost}M). ${ad.months}개월 뒤 후보가 옵니다.`); return { ok: true, cost: ad.cost, due: mp + ad.months };
+  }
+  private mgrAdStep(m: number): void {
+    const s = this.state, k = config.mgr; if (s.mgrPool) s.mgrPool = s.mgrPool.filter((c) => c.until === undefined || c.until > m);
+    if (!s.mgrAd || m < s.mgrAd.due) return; const ad = k.ads[s.mgrAd.tier]; s.mgrAd = null;
+    const taken = new Set([...(s.mgrs ?? []), ...(s.mgrPool ?? [])].map((x) => x.name)), names = config.extra.ceos.filter((n) => !taken.has(n)), styles = Object.keys(k.styles) as MgrCand['style'][];
+    const fresh = Array.from({ length: Math.min(ad.n, names.length) }, () => { const skill = Math.round((ad.lo + this.rng.next() * (ad.hi - ad.lo)) * 100) / 100, name = names.splice(this.rng.int(names.length), 1)[0]; return { id: s.nextId++, name, style: styles[this.rng.int(styles.length)], skill, shown: Math.max(1, Math.min(5, this.mgrStars(skill) + this.rng.int(2 * ad.noise + 1) - ad.noise)), until: m + k.stay }; });
+    s.mgrPool = [...(s.mgrPool ?? []), ...fresh]; s.log.push(`${m + 1}개월차: 구인 광고(${ad.name})로 경영자 후보 ${fresh.length}명이 지원했습니다. ${k.stay}개월 안에 정하세요.`);
+  }
+  /** 담당 변경: 다른 빈 자리로 옮긴다. 월급 2개월치가 들고, 성과는 새 자리부터 다시 잰다 */
+  moveMgr(id: number, post: 'alli' | number): Result<{ fee: number }> {
+    const s = this.state, k = config.mgr, g = s.mgrs?.find((x) => x.id === id); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!g) return fail('없는 경영자입니다');
+    if (!this.mgrPosts().some((x) => x.post === post)) return fail('비어 있는 자리로만 옮길 수 있습니다'); const fee = Math.round(g.salary * k.moveMonths * 10) / 10; if (s.cash < fee) return fail('현금이 모자랍니다');
+    const old = typeof g.post === 'number' ? s.competitors.find((x) => x.id === g.post) : undefined, c = typeof post === 'number' ? s.competitors.find((x) => x.id === post) : undefined;
+    if (old) old.eff = Math.round(((old.eff ?? 1) - g.effBonus) * 1000) / 1000; g.effBonus = c ? Math.round((g.skill - 1) * k.effPerSkill * 1000) / 1000 : 0; if (c) c.eff = Math.round(((c.eff ?? 1) + g.effBonus) * 1000) / 1000;
+    s.cash -= fee; s.cur.cost += fee; const from = old?.name ?? s.alli?.name ?? '동맹';
+    Object.assign(g, { post, hired: this.monthsPassed, used: 0, spent: 0, lost: 0, earned: 0, paid: Math.round(g.salary * k.feeMonths * 100) / 100 + fee, base: Math.round((c?.hist ?? []).slice(-12).reduce((a, h) => a + h.profit, 0) * 10) / 10, divAt: c?.divTotal ?? 0, membersAt: s.alliance?.length ?? 0, xpAt: s.alli?.xp ?? 0, acts: { fund: 0, inject: 0, dir: 0, agenda: 0, keep: 0, join: 0, recruit: 0 }, stars: undefined });
+    s.log.push(`${this.monthsPassed + 1}개월차: 경영자 ${g.name}의 담당을 ${from}에서 ${c?.name ?? s.alli?.name ?? '동맹'}(으)로 바꿨습니다(이동 비용 $${fee}M). 성과는 새 자리부터 다시 잽니다.`); return { ok: true, fee };
+  }
+  /** 자회사 이름 바꾸기 */
+  renameSub(id: number, name: string): Result {
+    const s = this.state, c = s.competitors.find((x) => x.id === id), n = name.replace(/[<>&"']/g, '').trim(); if (!s.sandbox) return fail('자유 모드에서만 쓸 수 있습니다'); if (!c || (c.stake ?? 0) < 0.51) return fail('내 자회사(51% 이상)만 이름을 바꿀 수 있습니다');
+    if (n.length < 1 || n.length > 16) return fail('이름은 1~16자로 지어 주세요'); if (s.competitors.some((x) => x !== c && x.name === n) || [config.competitors.major.name, config.competitors.major2.name].includes(n)) return fail('같은 이름의 항공사가 있습니다');
+    if (c.major && !c.hubs) c.hubs = this.majorHubs(c); const old = c.name; c.name = n; s.log.push(`${this.monthsPassed + 1}개월차: 자회사 ${old}의 이름을 ${n}(으)로 바꿨습니다.`); return { ok: true };
+  }
+  /** 경영진 합병 제안에 답한다(수락하면 합병 비용이 든다) */
+  answerMergeProp(yes: boolean): Result {
+    const s = this.state, p = s.mgrProp; if (!p) return fail('받은 제안이 없습니다'); s.mgrProp = null; s.mgrPropAt = this.monthsPassed + config.mgr.prop.cool; if (!yes) return { ok: true };
+    const r = this.mergeSubs(p.into, p.from); if (!r.ok) { s.mgrProp = p; s.mgrPropAt = undefined; return fail(r.error); } return { ok: true };
   }
   hireMgr(candId: number, post: 'alli' | number, budget = config.mgr.startBudget): Result<{ fee: number }> {
     const s = this.state, k = config.mgr, cand = s.mgrPool?.find((x) => x.id === candId);
@@ -1593,7 +1622,13 @@ export class Game {
   }
   private mgrStep(m: number): void {
     const s = this.state, k = config.mgr; if (!s.sandbox) return;
-    if (m >= k.minMonth && (s.mgrPool === undefined || s.mgrPoolYear !== Math.floor(m / 12))) this.mgrRefresh();
+    this.mgrAdStep(m);
+    const pr = s.mgrProp; if (pr && (m >= pr.until || !s.mgrs?.some((x) => x.id === pr.mgr) || this.groupSubs.filter((x) => x.id === pr.into || x.id === pr.from).length < 2)) s.mgrProp = null;
+    if (!s.mgrProp && m >= (s.mgrPropAt ?? 0)) for (const g of [...(s.mgrs ?? [])].sort((a, b) => a.id - b.id)) { /* 재직이 길어진 자회사 담당자가 같은 그룹의 더 작은 자회사를 합치자고 제안한다 */
+      const a = typeof g.post === 'number' ? this.groupSubs.find((x) => x.id === g.post) : undefined, b = a ? this.groupSubs.filter((x) => x !== a && x.planes <= a.planes).sort((x, y) => x.planes - y.planes || x.id - y.id)[0] : undefined;
+      if (!a || !b || m - g.hired < k.prop.minStay || this.rng.next() >= k.prop.chance) continue;
+      s.mgrProp = { mgr: g.id, into: a.id, from: b.id, until: m + k.prop.until }; s.log.push(`${m + 1}개월차: 경영자 ${g.name}이(가) ${b.name}을(를) ${a.name}에 합병하자고 제안했습니다(합병 비용 $${this.mergeCost(b)}M).`); break;
+    }
     for (const g of [...(s.mgrs ?? [])].sort((a, b) => a.id - b.id)) {
       const st = k.styles[g.style], c = typeof g.post === 'number' ? s.competitors.find((x) => x.id === g.post) : undefined;
       if (typeof g.post === 'number' ? !c || (c.stake ?? 0) < 0.51 : !s.alliance?.length) { this.fireMgr(g.id, '맡은 곳이 없어져 계약이 끝났습니다'); continue; }

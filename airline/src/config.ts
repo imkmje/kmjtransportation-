@@ -140,7 +140,11 @@ export const config = {
     dirs: { grow: { name: '확장', desc: '항공기를 빨리 늘립니다(배당 적음)' }, profit: { name: '수익', desc: '배당을 많이 줍니다(성장 느림)' }, attack: { name: '공세', desc: '다른 경쟁사 노선에 들어가 손님을 빼앗습니다' } } as Record<string, { name: string; desc: string }>,
   },
   acquire: { min: 6, perPlane: 0.3, perRoute: 0.8, distress: 0.55, maxPlanes: 8, slots: 2, rep: 0.03 }, // 경쟁사 인수: 가격 = (항공기 × B7-37 값 × perPlane + 노선 × perRoute) (자금난이면 ×distress). 항공기(최대 maxPlanes)·거점 슬롯·평판을 받는다
-  mgr: { minMonth: 24, pool: 3, maxHired: 4, slotCost: [60, 120, 200, 300], // 3.18.0 경영진 본부 확장: 자리 1칸씩($M), 최대 +4칸(총 8명)
+  mgr: { minMonth: 24, pool: 3,
+    ads: [{ name: '지역 구인 광고', cost: 8, months: 1, lo: 0.7, hi: 1.0, noise: 2, n: 2 }, { name: '온라인 채용 공고', cost: 25, months: 2, lo: 0.8, hi: 1.15, noise: 1, n: 3 }, { name: '헤드헌팅 의뢰', cost: 80, months: 3, lo: 1.0, hi: 1.3, noise: 0, n: 3 }], // 3.20.0 구인 광고: 돈을 많이 넣을수록 오래 걸리지만 능력 범위가 높고 평판 별점이 정확하다. 후보는 stay개월 뒤 사라진다(자동 후보 없음)
+    stay: 6, moveMonths: 2, // 담당 변경 비용 = 월급 2개월치
+    prop: { chance: 0.06, minStay: 6, until: 3, cool: 6 }, // 경영진의 자회사 합병 제안: 재직 6개월 넘은 자회사 담당자가 매달 6%, 답 기한 3개월, 거절하면 6개월 쉼
+ maxHired: 4, slotCost: [60, 120, 200, 300], // 3.18.0 경영진 본부 확장: 자리 1칸씩($M), 최대 +4칸(총 8명)
      feeMonths: 6, salary: { base: 0.3, perSkill: 1.0 }, budgets: [20, 50, 100], startBudget: 20, effPerSkill: 0.1, poachChance: 0.12, // 3.14.0 위임 경영진: 2년차부터 해마다 후보 3명, 최대 4명, 계약금 = 월급 6개월치, 월급 = $0.3M + (능력 − 0.7) × $1.0M, 자회사 운영 효율 ±(능력 − 1) × 10%, 1년 평가 때 능력 1.1 이상이면 12% 확률로 스카우트
     styles: { bold: { name: '공격형', desc: '돈을 아끼지 않고 키웁니다. 큰 성과와 큰 실수가 함께 옵니다.', mistake: 0.03, low: 40, inject: 0.5, slip: ['무리한 확장 계약', '과욕 섞인 인수 시도', '검증 없는 신사업'] }, careful: { name: '신중형', desc: '위험을 피하고 현금을 지킵니다. 느리지만 사고가 적습니다.', mistake: 0.005, low: 12, inject: 0.2, slip: ['지나치게 보수적인 운영', '늦은 판단'] }, steady: { name: '균형형', desc: '상황을 보고 움직입니다. 무난합니다.', mistake: 0.015, low: 25, inject: 0.3, slip: ['어긋난 시장 판단', '비싼 외주 계약'] } } as Record<string, { name: string; desc: string; mistake: number; low: number; inject: number; slip: string[] }> },
   power: { factions: [{ id: 'mine', name: '내 그룹', color: '#1f7ae0' }, { id: 'alli', name: '내 동맹', color: '#2f9e5b' }, { id: 'sky', name: '스카이 동맹', color: '#8e44ad' }, { id: 'major', name: '대형', color: '#d64545' }, { id: 'other', name: '기타', color: '#8a96a3' }], contest: 0.4 }, // 3.13.0 세력도: 도시를 지나는 하루 좌석을 누가 차지하나. 1위 몫이 contest(40%) 미만이면 접전

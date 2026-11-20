@@ -703,11 +703,13 @@ check('자회사에 자본금 넣기(+$10M)', Math.abs((await page.evaluate(() =
 { await page.evaluate(() => { const g = window.__air.game; g.state.cash += 500; g.state.mgrPool = [{ id: 9991, name: '시험 경영자', style: 'steady', skill: 1, shown: 3 }]; window.__air.render(); });
   await page.click('#tabs button[data-tab="group"]'); await page.evaluate(() => document.querySelector('#panel button[data-act="groupSub"][data-v="mgr"]')?.click());
   check('경영진 본부 확장 버튼', (await page.locator('#panel button[data-act="expandMgr"]').count()) === 1);
+  check('경영진: 구인 광고 3단계 버튼', (await page.locator('#panel button[data-act="mgrAd"]').count()) === 3);
   check('그룹 탭: 경영진 화면(영입 후보 카드·맡길 곳)', (await page.locator('#panel').innerText()).includes('영입 후보') && (await page.locator('#panel button[data-act="hireMgr"]').count()) === 1 && (await page.locator('#panel select[data-mgrpost]').count()) === 1);
   await page.locator('#panel button[data-act="hireMgr"]').evaluate((el) => el.click());
   check('경영자 영입(화면에서 맡길 곳 고르고 영입)', (await page.evaluate(() => window.__air.game.state.mgrs?.length ?? 0)) === 1 && (await page.locator('#panel button[data-act="fireMgr"]').count()) === 1 && (await page.locator('#panel button[data-act="mgrBudget"]').count()) === 3);
+  check('경영자 카드: 담당 변경 칸', (await page.locator('#panel button[data-act="moveMgr"]').count()) <= 1 && (await page.evaluate(() => window.__air.game.mgrPosts().length)) === (await page.locator('#panel select[data-mgrmove]').count()));
   check('경영자 카드: 성과(순성과·산출·비용) 줄', (await page.locator('#panel').innerText()).includes('순성과') && (await page.locator('#panel').innerText()).includes('비용'));
-  await page.evaluate(() => { const g = window.__air.game; for (const m of [...(g.state.mgrs ?? [])]) g.fireMgr(m.id); document.querySelector('#panel button[data-act="groupSub"][data-v="subs"]')?.click(); }); await pickComp(); } // 경영진 화면을 거치면 선택한 회사가 풀리므로 다시 고른다
+  await page.evaluate(() => { const g = window.__air.game; g.state.mgrProp = null; for (const m of [...(g.state.mgrs ?? [])]) g.fireMgr(m.id); document.querySelector('#panel button[data-act="groupSub"][data-v="subs"]')?.click(); }); await pickComp(); } // 경영진 화면을 거치면 선택한 회사가 풀리므로 다시 고른다
 // 2.32.0: 일부 상장, 노선 넘겨주기, 그룹 시너지
 await page.evaluate(() => { const g = window.__air.game, c = g.state.competitors.find((x) => !x.major && x.stake >= 0.51); c.stake = 1; delete c.listed; window.__air.render(); });
 check('자회사 카드: 일부 상장 버튼(51% 넘는 지분)', (await page.locator('#panel button[data-act="spinOff"]').count()) === 1);
