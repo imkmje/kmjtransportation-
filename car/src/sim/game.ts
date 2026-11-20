@@ -457,8 +457,6 @@ export class Game {
   private applyChoice(pc: PendingChoice, idx: number, ev: GameEvent[], auto: boolean): void {
     const s = this.state, def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, choice = def.choices[idx], m = monthOf(s.week);
     const g = pc.genId === null ? undefined : allGens(s).find((x) => x.id === pc.genId && x.status !== 'discontinued');
-    const rev = s.ledger.slice(-config.events.revenueMonths), avgRev = rev.length ? rev.reduce((a, e) => a + e.revenue, 0) / rev.length : 0;
-    const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
     this.spend(-choiceMoney(s, pc, idx)); // 현금·결함 수리비(화면 pendingChoices의 cost와 같은 계산)
     s.events.pending = s.events.pending.filter((x) => x !== pc);
     for (const e of choice.effects) switch (e.type) {

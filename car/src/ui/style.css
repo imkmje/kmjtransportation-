@@ -663,3 +663,7 @@ button.pill{min-height:44px;align-items:center} /* 상단바의 누르는 알약
 .rivals div>span{word-break:keep-all}
 .rv-strong{text-align:right;line-height:1.35;word-break:keep-all}
 .ov .ib{pointer-events:auto}
+.tc .req{color:var(--neg);font-weight:800;font-size:12px}
+.ract.pri{border-left:3px solid var(--accent);padding-left:8px}
+.ract .row{margin-top:6px}
+.chip.bad{background:#fdecec;color:#8a1f1f}

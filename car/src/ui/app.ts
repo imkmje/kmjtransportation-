@@ -470,11 +470,12 @@ export function startApp(): void {
     put($('#rep'), String(Math.round(s.reputation)));
     for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.classList.toggle('on', Number(b.dataset.speed) === speed);
     const held = decisionHeld(); $('#held').hidden = !held; $('#speeds').classList.toggle('held', held); // 좁은 화면에서는 글자 대신 빠르기 버튼 테두리로
-    const ae = Q.activeEvents(s).events, up = Q.upcomingEvents(s), pc = Q.pendingChoices(s).length, chip = $('#evchip');
+    const AE = Q.activeEvents(s), ae = AE.events, up = Q.upcomingEvents(s), pc = Q.pendingChoices(s).length, chip = $('#evchip');
     const lead = ae.find((x) => x.monthsLeft !== null) ?? ae[0];
     chip.hidden = !lead && !up.length;
-    const full = lead ? `${lead.name} · ${lead.monthsLeft === null ? '계속' : `앞으로 ${lead.monthsLeft}개월`}${ae.length > 1 ? ` 외 ${ae.length - 1}` : ''}` : `사건 예고 ${up.length}`;
-    put(chip, lead ? `<span class="ev-n">${esc(lead.name)}</span><span class="ev-m">${lead.monthsLeft === null ? '' : ` · ${lead.monthsLeft}개월`}${ae.length > 1 ? ` +${ae.length - 1}` : ''}</span>` : `<span class="ev-n">사건 예고 ${up.length}</span>`, true);
+    const reg = lead && AE.regulations.find((x) => x.name === lead.name), regAt = reg ? `${Q.monthLabel(Math.floor(reg.enforceWeek / config.time.weeksPerMonth))} 시행` : ''; // 규제는 "계속" 대신 시행 시점
+    const full = lead ? `${lead.name} · ${lead.monthsLeft === null ? regAt || '계속' : `앞으로 ${lead.monthsLeft}개월`}${ae.length > 1 ? ` 외 ${ae.length - 1}` : ''}` : `사건 예고 ${up.length}`;
+    put(chip, lead ? `<span class="ev-n">${esc(lead.name)}</span><span class="ev-m">${lead.monthsLeft === null ? (regAt ? ` · ${regAt}` : '') : ` · ${lead.monthsLeft}개월`}${ae.length > 1 ? ` +${ae.length - 1}` : ''}</span>` : `<span class="ev-n">사건 예고 ${up.length}</span>`, true);
     chip.title = full; chip.setAttribute('aria-label', `시대 사건: ${full}. 눌러서 효과 보기`);
     const pd = $('#pend'); pd.hidden = !pc; put(pd, `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4M12 17v.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><b>${pc}</b><span class="pd-t">결정 대기</span>`, true);
     pd.setAttribute('aria-label', `결정 대기 ${pc}건 보기`);
@@ -1187,11 +1188,13 @@ export function startApp(): void {
     return m > 1 && y < t.year ? `일찍 연구: ${x}` : m < 1 ? `따라잡기: ${x}` : m > 1 ? `반복 연구: ${x}` : '';
   };
   const preNeed = (t: Q.TechRow) => t.pre.filter((p) => !p.done).map((p) => `「${p.name}」`).join(', ');
+  /** 규제 필수 표시: "규제 필수 · 1975년 3월 시행" */
+  const regTag = (r: { week: number }) => `규제 필수 · ${Q.monthLabel(Math.floor(r.week / config.time.weeksPerMonth))} 시행`;
   function techCard(t: Q.TechRow): string {
     if (t.status === 'hidden') return `<button class="tc hidden" data-act="techSel" data-v="${t.id}" data-tip="tech:${t.id}"><span class="tc-h"><b>${esc(t.name)}</b>${ib(`tech:${t.id}`, t.name)}</span><small class="yr">${t.year}년쯤 · 아직 먼 기술</small></button>`;
     const mt = multTag(t), prog = t.status === 'active' ? Math.min(1, 1 - t.pointsLeft / Math.max(1, t.cost.points)) : 0;
     return `<button class="tc ${t.status}" data-act="techSel" data-v="${t.id}" data-tip="tech:${t.id}"><span class="tc-h"><b>${esc(t.name)}</b>${ib(`tech:${t.id}`, t.name)}<em>${t.repeatable && t.count ? `✓ ${t.count}번` : ST_BADGE[t.status]}</em></span>
-      <small class="yr">${t.year}년 기술</small><small class="desc">${esc(t.desc)}</small><small class="eff">${esc(t.effects)}</small>
+      <small class="yr">${t.year}년 기술</small>${t.requiredBy ? `<small class="req">${regTag(t.requiredBy)}</small>` : ''}<small class="desc">${esc(t.desc)}</small><small class="eff">${esc(t.effects)}</small>
       ${t.status === 'done' ? '' : t.status === 'active' ? `<span class="prog"><u style="width:${(prog * 100).toFixed(1)}%"></u></span><small class="left">${t.weeksLeft === null ? '연구 점수가 없어 멈춤' : `약 ${t.weeksLeft}주 남음`}</small>`
         : `<small class="cost">${money(t.cost.money)} + ${num(t.cost.points)}점${mt ? ` · <i>${mt}</i>` : ''}</small>`}
       ${t.status === 'locked' ? `<small class="why">${esc(preNeed(t))} 먼저</small>` : t.status === 'available' && t.reason ? `<small class="why">${esc(t.reason)}</small>` : ''}</button>`;
@@ -1200,7 +1203,7 @@ export function startApp(): void {
     const s = game!.state, r = Q.researchInfo(s), engs = s.staff.filter((x) => x.role === 'engineer'), labN = s.staff.filter((x) => x.lab).length;
     const back = draft || lift ? `<button class="btn ink back-plan" data-act="backPlan" style="width:100%;margin-top:10px">← 기획으로 돌아가기</button>` : '';
     const zero = r.pointsPerWeek > 0 ? '' : `<div class="warnbox r-zero" style="margin-top:10px">${engs.length ? '엔지니어가 모두 교육·휴식 중이라 지금 연구 점수가 0입니다. 교육·휴식이 끝나면 다시 연구합니다.' : '엔지니어가 없어 연구 점수가 0입니다. 직원 탭에서 엔지니어를 뽑으세요.'}</div>`;
-    const act = r.active.map((a) => `<div class="ract"><div class="prod-h"><b>${esc(a.name)}</b><small>${num(a.points)} / ${num(a.need)}점 · ${a.weeksLeft === null ? '연구 점수가 없어 멈춤' : `약 ${a.weeksLeft}주 남음`}</small></div><div class="prog"><u style="width:${((a.points / Math.max(1, a.need)) * 100).toFixed(1)}%"></u></div><button class="btn" data-act="techSel" data-v="${a.techId}">자세히 · 취소</button></div>`).join('');
+    const act = r.active.map((a) => `<div class="ract${a.priority ? ' pri' : ''}"><div class="prod-h"><b>${esc(a.name)}${a.priority ? ' <span class="chip on">먼저 하는 중</span>' : ''}${a.requiredBy ? ` <span class="chip bad">${regTag(a.requiredBy)}</span>` : ''}</b><small>${num(a.points)} / ${num(a.need)}점 · 한 주 ${pts1(a.pointsPerWeek)}점 · ${a.weeksLeft === null ? '연구 점수가 없어 멈춤' : `약 ${a.weeksLeft}주 남음`}</small></div><div class="prog"><u style="width:${((a.points / Math.max(1, a.need)) * 100).toFixed(1)}%"></u></div><div class="row">${r.active.length > 1 && !a.priority ? `<button class="btn ink" data-act="priRes" data-v="${a.techId}">먼저 하기 <small>(점수의 ${Math.round(config.research.priorityShare * 100)}%)</small></button>` : ''}<button class="btn" data-act="techSel" data-v="${a.techId}">자세히 · 취소</button></div></div>`).join('');
     const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
       <div class="kpis" style="margin-top:10px">${kpi('한 주 연구 점수', `${pts1(r.pointsPerWeek)}<span>점</span>`)}${kpi('연구 칸', `${r.used}/${r.slots}<span>개 사용</span>`)}${kpi('완료한 기술', `${r.doneCount}<span>개</span>`)}${kpi('전담 연구원', `${labN}<span>명</span>`)}</div>
       ${zero}${act ? `<p class="lbl" style="margin-top:12px">진행 중인 연구</p>${act}` : '<p class="hint" style="margin-top:10px">진행 중인 연구가 없습니다. 아래에서 "가능" 표시가 있는 기술을 눌러 시작합니다.</p>'}
@@ -1221,6 +1224,7 @@ export function startApp(): void {
       <div class="kpis" style="margin-top:12px">${t.status === 'done' ? '' : `${kpi(t.status === 'active' ? '남은 점수' : '비용', t.status === 'active' ? `${num(t.pointsLeft)}<span>점</span>` : money(t.cost.money))}${t.status === 'active' ? '' : kpi('연구 점수', `${num(t.cost.points)}<span>점</span>`)}${kpi('예상 기간', t.weeksLeft === null ? '점수 0' : `약 ${t.weeksLeft}<span>주</span>`)}`}</div>
       ${costNote && t.status !== 'done' && t.status !== 'active' ? `<p class="hint" style="margin-top:8px">${esc(costNote)}</p>` : ''}
       ${t.pre.length ? `<p class="lbl" style="margin-top:12px">먼저 할 연구</p><ul class="pre">${t.pre.map((p) => `<li class="${p.done ? 'ok' : ''}">${p.done ? '✓' : '✗'} ${esc(p.name)}</li>`).join('')}</ul>` : ''}`}
+      ${t.requiredBy ? `<div class="warnbox tech-req" style="margin-top:12px">${esc(t.requiredBy.eventName)}: ${regTag(t.requiredBy)}. 이 기술이 없으면 시행 뒤에는 신차를 출시할 수 없습니다. 진행 중이면 자동으로 먼저 연구합니다.</div>` : ''}
       ${why ? `<div class="badbox tech-why" style="margin-top:12px">${esc(why)}</div>` : ''}
       ${t.status === 'active' ? `<p class="hint" style="margin-top:10px">지금 한 주에 ${pts1(ppw)}점씩 쌓이고 있습니다.</p>` : ''}
       <div class="row end" style="margin-top:14px"><button class="btn" data-act="closeSheet">닫기</button>${t.status === 'active' ? `<button class="btn danger" data-act="cancelResearch" data-v="${t.id}">연구 취소</button>` : t.status === 'done' ? '' : `<button class="go" data-act="startResearch" data-v="${t.id}" ${why ? 'disabled' : ''}>연구 시작</button>`}</div></div>`;
@@ -1508,6 +1512,7 @@ export function startApp(): void {
       }
       // ---- 회사(9장) ----
       case 'techSel': showTech(v); return;
+      case 'priRes': if (game && run(game.command({ type: 'prioritizeResearch', techId: v }))) { toast(`이 연구가 주간 연구 점수의 ${Math.round(config.research.priorityShare * 100)}%를 받습니다. 나머지는 다른 연구가 나눠 받습니다.`); render(); } return;
       case 'resolveEv': {
         if (!game) return; const r = game.command({ type: 'resolveEvent', eventId: Number(el.dataset.id), choice: Number(v) });
         if (!r.ok) return err(r.reason);
