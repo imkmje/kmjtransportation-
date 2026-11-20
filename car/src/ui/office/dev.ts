@@ -15,7 +15,7 @@ const pool: OfficeStaff[] = Array.from({ length: 24 }, (_, i) => ({
 }));
 const st = { level: 1 as OfficeView['level'], count: 4, phase: 'design' as OfficeView['phase'], budget: 'normal' as OfficeView['budget'], tired: 0, idle: 0, car: true, size: 'tablet' };
 let defects = 2, progress = 0.35;
-const SIZES: Record<string, [number, number]> = { tablet: [700, 900], phone: [360, 300], wide: [900, 600] };
+const SIZES: Record<string, [number, number]> = { tablet: [700, 940], phone: [360, 300], wide: [900, 600] };
 const car = silhouetteSvg(lookOf({ body: 'sedanM', powertrain: 'gas', tier: 2, color: '#ff5a1f', wheels: 1, year: 2020 }), { color: '#ff5a1f' });
 
 function view(): OfficeView {
@@ -39,7 +39,7 @@ ctl.innerHTML =
   seg('예산', 'budget', [['low', '절약'], ['normal', '보통'], ['high', '과감']]) +
   seg('지침 비율', 'tired', [['0', '0'], ['0.25', '1/4'], ['0.5', '1/2'], ['1', '전부']]) +
   seg('미배치', 'idle', [['0', '0'], ['0.25', '1/4'], ['0.5', '1/2']]) +
-  seg('무대', 'size', [['tablet', '태블릿 700×900'], ['phone', '폰 360×300'], ['wide', '넓은 칸 900×600']]) +
+  seg('무대', 'size', [['tablet', '태블릿 700×940'], ['phone', '폰 360×300'], ['wide', '넓은 칸 900×600']]) +
   `<div class="row"><button id="score">점수 이벤트 한 주 발생</button><button id="found">결함 발견</button><button id="fixed">결함 제거</button>
    <button id="say">말풍선</button><button id="launch">출시 대사</button><button id="act">멈춤/재개</button></div>`;
 

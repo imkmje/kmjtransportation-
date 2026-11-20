@@ -265,7 +265,7 @@ export function createOffice(host: HTMLElement): Office {
   let cam = { cx: 0, cy: 0, s: 1, mode: 'auto' as 'auto' | 'free' };   // auto=기본 화면(가까이), free=사용자가 옮긴 뒤
   let hostW = 1, hostH = 1, fitS = 1;
   let active = true, disposed = false, raf = 0, idle = 0, last = 0, nextErrand = 0, nextTalk = 0;
-  const bubbles: { id: string; g: SVGGElement }[] = [];
+  const bubbles: { id: string; g: SVGGElement; box: [number, number, number, number] }[] = [];
   const timeouts = new Set<number>();
   const later = (fn: () => void, ms: number) => { const t = window.setTimeout(() => { timeouts.delete(t); fn(); }, ms); timeouts.add(t); };
   let signEls: { name: SVGTextElement; bar: SVGRectElement; barW: number; bugs: SVGGElement; bugn: SVGTextElement; bugi: SVGGElement } | null = null;
@@ -515,8 +515,9 @@ export function createOffice(host: HTMLElement): Office {
   const maxS = () => Math.max(fitS, hostH / 6 / 58);          // 사람(키 58단위)이 화면 높이의 1/6
   function applyCam() {
     const vw = hostW / cam.s, vh = hostH / cam.s;
-    const cx = vw >= vb.w ? vb.x + vb.w / 2 : Math.max(vb.x + vw / 2, Math.min(vb.x + vb.w - vw / 2, cam.cx));
-    const cy = vh >= vb.h ? vb.y + vb.h / 2 : Math.max(vb.y + vh / 2, Math.min(vb.y + vb.h - vh / 2, cam.cy));
+    // 화면 가운데가 방 범위 안에 있게만 묶는다(방이 화면 밖으로 다 나가지 않음). 방보다 넓게 보면 방 가운데로
+    const cx = vw >= vb.w && cam.mode === 'free' ? vb.x + vb.w / 2 : Math.max(vb.x, Math.min(vb.x + vb.w, cam.cx));
+    const cy = vh >= vb.h && cam.mode === 'free' ? vb.y + vb.h / 2 : Math.max(vb.y, Math.min(vb.y + vb.h, cam.cy));
     cam.cx = cx; cam.cy = cy;
     svg.setAttribute('viewBox', `${f(cx - vw / 2)} ${f(cy - vh / 2)} ${f(vw)} ${f(vh)}`);
   }
@@ -524,15 +525,28 @@ export function createOffice(host: HTMLElement): Office {
   function setDefault() {
     cam.mode = 'auto';
     const all = [...actors.values()], st = all.filter((a) => a.home.kind === 'spot');
-    const busy = all.filter((a) => view && view.phase !== 'rest' && a.staff.working);
-    const list = st.length >= 2 ? [...st, ...busy] : busy.length ? busy : all;
-    const ps = list.map((a) => P(a.home.x, a.home.y, 0.9));
-    if (!ps.length) { const z = room?.zones.find((q) => q.kind === 'office'); if (z) ps.push(P(z.x, z.y), P(z.x + z.w, z.y + z.d)); }
-    const xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]), pad = 90;
-    const bw = Math.max(...xs) - Math.min(...xs) + pad * 2, bh = Math.max(...ys) - Math.min(...ys) + pad * 2;
-    const cover = Math.max(hostW / vb.w, hostH / vb.h);
-    cam.s = Math.max(fitS, Math.min(maxS(), Math.max(cover, Math.min(hostW / bw, hostH / bh, maxS() * 0.55))));
-    cam.cx = (Math.max(...xs) + Math.min(...xs)) / 2; cam.cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+    const busy = all.filter((a) => view && view.phase !== 'rest' && a.staff.working && a.home.kind === 'seat');
+    const list = st.length || busy.length ? [...st, ...busy] : all;
+    // 일하는 구역: 앉은 사람은 책상 묶음 둘레(±1m), 서서 일하는 사람은 차·장비 둘레(±1.6m), 머리 높이까지
+    const ps: [number, number][] = [];
+    for (const a of list) {
+      const m = a.home.kind === 'spot' ? 1.6 : 1.0;
+      for (const [dx, dy] of [[-m, -m], [m, -m], [-m, m], [m, m]]) ps.push(P(a.home.x + dx, a.home.y + dy), P(a.home.x + dx, a.home.y + dy, 1.8));
+    }
+    if (!ps.length) { const z = room?.zones.find((q) => q.kind === 'office'); if (z) ps.push(P(z.x, z.y), P(z.x + z.w, z.y + z.d), P(z.x, z.y + z.d), P(z.x + z.w, z.y)); }
+    const xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    // 위쪽 띠(게임이 얹는 반투명 띠)는 가려진 곳으로 보고 그 아래 공간의 가운데에 맞춘다
+    const inset = Math.max(0, Math.min(hostH * 0.4, parseFloat(getComputedStyle(root).getPropertyValue('--office-top-inset')) || 0));
+    const availH = hostH - inset;
+    // 구역이 더 빡빡한 쪽의 약 70%를 차지하게. 사람 키는 화면 높이의 8%~1/7 사이로(구역이 넓으면 가장자리는 잘린다)
+    const want = 0.7 * Math.min(hostW / (x1 - x0), availH / (y1 - y0));
+    cam.s = Math.max(fitS, Math.min(hostH / 7 / 58, Math.max(hostH * 0.08 / 58, want)));
+    // 가운데는 사람들의 평균 위치(잘릴 때 사람이 많은 쪽이 남게), 구역이 다 들어가면 구역 가운데
+    const fits = want >= cam.s;
+    const hp = list.map((a) => P(a.home.x, a.home.y, 0.9));
+    cam.cx = fits || !hp.length ? (x0 + x1) / 2 : hp.reduce((t, q) => t + q[0], 0) / hp.length;
+    cam.cy = (fits || !hp.length ? (y0 + y1) / 2 : hp.reduce((t, q) => t + q[1], 0) / hp.length) - (inset / 2) / cam.s;
     applyCam();
   }
   function measure() {
@@ -616,7 +630,8 @@ export function createOffice(host: HTMLElement): Office {
       at = [at[0], at[1]];
       for (let moved = true, n = 0; moved && n < 6; n++) {
         moved = false;
-        for (const r of recentPops) if (now - r.t < 2600 && Math.abs(r.x - at[0]) < (r.w + w) / 2 && Math.abs(r.y - at[1]) < fs * 1.5) { at[1] = r.y - fs * 1.5; moved = true; }
+        for (const r of recentPops) if (now - r.t < 2600 && Math.abs(r.x - at[0]) < (r.w + w) / 2 + fs * 0.3 && Math.abs(r.y - at[1]) < fs * 2.2) { at[1] = r.y - fs * 2.2; moved = true; }
+        for (const { box: [bx, by, bw, bh] } of bubbles) if (at[0] + w / 2 > bx && at[0] - w / 2 < bx + bw && at[1] > by - fs * 0.3 && at[1] - fs < by + bh + fs * 0.5) { at[1] = by - fs * 0.6; moved = true; }
       }
       recentPops.push({ x: at[0], y: at[1], w, t: now });
       while (recentPops.length > 30) recentPops.shift();
@@ -641,7 +656,7 @@ export function createOffice(host: HTMLElement): Office {
     const w = ((g.firstChild as SVGTextElement).getComputedTextLength() || text.length * fs) + fs * 1.2;
     const x = ax - w / 2, y = ay - h - fs * 0.5, tl = fs * 0.35, r = fs * 0.35;
     g.innerHTML = `<path stroke-width="${f(1 / cam.s)}" d="M${f(x + r)},${f(y)} h${f(w - 2 * r)} q${f(r)},0 ${f(r)},${f(r)} v${f(h - 2 * r)} q0,${f(r)} ${f(-r)},${f(r)} H${f(ax + tl)} l${f(-tl)},${f(tl * 1.3)} l${f(-tl)},${f(-tl * 1.3)} H${f(x + r)} q${f(-r)},0 ${f(-r)},${f(-r)} v${f(2 * r - h)} q0,${f(-r)} ${f(r)},${f(-r)} z"/><text x="${f(ax)}" y="${f(y + h / 2 + fs * 0.36)}" text-anchor="middle" font-size="${f(fs)}">${esc(text)}</text>`;
-    const b = { id: a.staff.id, g };
+    const b = { id: a.staff.id, g, box: [x, y, w, h + tl] as [number, number, number, number] };
     bubbles.push(b);
     later(() => { const i = bubbles.indexOf(b); if (i >= 0) dropBubble(i); }, 3500);
   }
