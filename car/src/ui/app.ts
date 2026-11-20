@@ -1400,7 +1400,12 @@ export function startApp(): void {
   /** 명령이 성공했을 때의 소리(누른 버튼의 data-act 기준). 실패는 err()가 error 소리 */
   const ACT_SFX: Record<string, Sfx> = { startDev: 'devStart', startLift: 'devStart', doLaunch: 'launch', hire: 'hire', fire: 'fire', train: 'train', upgradeHQ: 'hqUpgrade', expandFactory: 'cashOut', borrow: 'cashIn', repay: 'cashOut', retrofit: 'cashOut' };
   let curAct = '';
-  function run(r: { ok: true } | { ok: false; reason: string }): boolean { if (!r.ok) err(r.reason); else if (ACT_SFX[curAct]) sfx(ACT_SFX[curAct]); return r.ok; }
+  function run(r: CommandResult): boolean {
+    if (!r.ok) { err(r.reason); return false; }
+    if (ACT_SFX[curAct]) sfx(ACT_SFX[curAct]);
+    if (curAct !== 'doLaunch') for (const e of r.events ?? []) if (e.kind === 'reputation') onEvent(e); // 출시는 평론 창 배지가 평판 변화를 보여 준다
+    return true;
+  }
   async function act(a: string, el: HTMLElement): Promise<void> {
     const v = el.dataset.v ?? '', s = game?.state;
     switch (a) {

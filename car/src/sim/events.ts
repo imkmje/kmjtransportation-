@@ -2,11 +2,12 @@
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
 import { config } from '../config';
 import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, segmentById } from '../data';
-import { grades } from './cars';
+import { grades, salaryOf } from './cars';
+import { diffOf } from './difficulty';
 import { josa } from './josa';
 import { hash01 } from './rng';
 import { monthOf, monthLabel, yearOf, yearOfMonth } from './time';
-import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type Stat, type Stats, type TechDef } from './types';
+import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type PendingChoice, type Stat, type Stats, type TechDef } from './types';
 
 const E = config.events, MPY = config.time.monthsPerYear;
 export const REGION = 'domestic';
@@ -256,10 +257,19 @@ export function eventImpactOn(s: CarState, generationId: number): string[] {
   return out;
 }
 /** 답을 기다리는 무작위 사건: 선택지·기본 선택·남은 주 */
+/** 선택지의 돈 변화(만원, 0.5.1): +수입 / −지출. 현금 효과(기본 + 최근 월평균 매출 × 비율 + 월급 합 × 비율)와 결함 수리비(대상 차 누적 판매 × 리콜 대당 비용 × 난이도 × 비율) */
+export function choiceMoney(s: CarState, pc: PendingChoice, idx: number): number {
+  const def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, g = pc.genId === null ? undefined : s.nameplates.flatMap((n) => n.generations).find((x) => x.id === pc.genId && x.status !== 'discontinued');
+  const rev = s.ledger.slice(-E.revenueMonths), avgRev = rev.length ? rev.reduce((a, e) => a + e.revenue, 0) / rev.length : 0, salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
+  return def.choices[idx].effects.reduce((a, e) => a + (e.type === 'cash' ? e.base + (e.revenue ?? 0) * avgRev + (e.salaries ?? 0) * salaries
+    : e.type === 'fixDefects' && g ? -g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare : 0), 0);
+}
+const moneyText = (x: number): string | null => { const v = Math.abs(x); if (v < 1) return null; const t = v >= 10000 ? `${(v / 10000).toFixed(1)}억원` : `${Math.round(v).toLocaleString()}만원`; return `${x < 0 ? '비용' : '수입'} 약 ${t}`; };
+/** 답을 기다리는 사건. choices[].cost: 지출(만원, 수입이면 음수), costText: "비용 약 3.2억원"(돈 변화가 없으면 null). 0.5.1 */
 export function pendingChoices(s: CarState) {
   return s.events.pending.map((p) => {
     const def = RANDOM_EVENTS.find((d) => d.id === p.eventId)!;
-    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c) => ({ label: c.label, result: c.result })), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
+    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c, i) => { const mny = choiceMoney(s, p, i); return { label: c.label, result: c.result, cost: -mny, costText: moneyText(mny) }; }), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
   });
 }
 /** 뉴스 기록(최신이 앞). category가 없는 예전 항목은 'other' */

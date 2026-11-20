@@ -7,7 +7,7 @@ import { hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgra
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
 import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
-import { addNews, monthStart, regulationError } from './events';
+import { addNews, choiceMoney, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
 import { criticScores, mean } from './reviews';
 import { josa } from './josa';
@@ -459,14 +459,15 @@ export class Game {
     const g = pc.genId === null ? undefined : allGens(s).find((x) => x.id === pc.genId && x.status !== 'discontinued');
     const rev = s.ledger.slice(-config.events.revenueMonths), avgRev = rev.length ? rev.reduce((a, e) => a + e.revenue, 0) / rev.length : 0;
     const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
+    this.spend(-choiceMoney(s, pc, idx)); // 현금·결함 수리비(화면 pendingChoices의 cost와 같은 계산)
     s.events.pending = s.events.pending.filter((x) => x !== pc);
     for (const e of choice.effects) switch (e.type) {
-      case 'cash': this.spend(-(e.base + (e.revenue ?? 0) * avgRev + (e.salaries ?? 0) * salaries)); break;
+      case 'cash': break;
       case 'rep': this.addRep(e.value, def.name); break;
       case 'awareness': for (const x of e.target === 'car' ? (g ? [g] : []) : sellingGens(s)) x.awareness = Math.min(1, x.awareness + e.value); break;
       case 'awarenessMult': if (g) g.awareness *= e.value; break;
       case 'condition': for (const x of s.staff) x.condition = Math.min(1, x.condition + e.value); break;
-      case 'fixDefects': if (g) { this.spend(g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare); currentEdition(g).defects = 0; } break;
+      case 'fixDefects': if (g) currentEdition(g).defects = 0; break;
       case 'mod': s.events.mods.push({ kind: e.mod, value: e.value || (pc.fx ?? 1), untilMonth: m + e.months, label: def.name }); break;
       case 'hire': if (s.staff.length < staffCap(s)) {
         const ability = this.rng.intIn(e.abilityMin, e.abilityMax), id = s.nextId++;
