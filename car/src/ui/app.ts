@@ -1495,17 +1495,30 @@ export function startApp(): void {
     if (t.id === 'lg-border') { logoTarget().border = t.checked; logoChanged(); return; }
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }
     else if (t.id === 'lprice' && launch) { launch.price = Number(t.value); render(); }
-    else if (t.id === 'gprice') { garagePrice.set(Number(t.dataset.gen), Number(t.value)); updateGaragePrice(t); }
+    else if (t.id === 'gprice') { garagePrice.set(Number(t.dataset.gen), Number(t.value)); render(); }
     else if (t.classList.contains('alloc-r')) { const o = t.parentElement?.querySelector('.alloc-v'); if (o) o.textContent = `${t.value}%`; }
   });
-  /** 끄는 중에는 패널 전체를 다시 그리지 않고 숫자만 바꾼다 */
-  function updateGaragePrice(t: HTMLInputElement): void {
-    const g = game && Q.generationById(game.state, Number(t.dataset.gen)); if (!g) return;
-    const e = currentEdition(g), price = Number(t.value), up = Q.unitProfit(g.body, g.powertrain, e.tier, e.options, price, Q.costMultOf(game!.state), Q.ptCostAdd(game!.state, g.powertrain));
-    $('#gp-out').innerHTML = `${num(price)}<span>만원</span>`;
-    const m = $('#gp-margin'); m.textContent = `대당 이익 ${money(up, true)}`; m.className = `margin ${up >= 0 ? 'pos' : 'neg'}`;
-    const btn = panel.querySelector<HTMLButtonElement>('[data-act="setPrice"]'); if (btn) btn.disabled = price === e.price;
-  }
+  // 가격 슬라이더: 손가락 위치를 직접 값으로 바꾼다(브라우저 기본 슬라이더는 작은 손잡이만 잡히고, 패널 스크롤·다시 그리기와 다퉈 놓치기 쉬웠다).
+  // −/+ 단추는 한 번에 한 단계, 길게 누르면 연속. 키보드는 기본 슬라이더 그대로
+  let pxMove = false, pxRep = 0;
+  const setPx = (r: HTMLInputElement, v: number) => {
+    const min = Number(r.min), max = Number(r.max), st = Number(r.step) || 1, x = Math.max(min, Math.min(max, min + Math.round((v - min) / st) * st));
+    if (String(x) !== r.value) { r.value = String(x); r.dispatchEvent(new Event('input', { bubbles: true })); }
+  };
+  const pxAt = (r: HTMLInputElement, x: number) => { const b = r.getBoundingClientRect(), k = Math.max(0, Math.min(1, (x - b.left - 22) / Math.max(1, b.width - 44))); return Number(r.min) + k * (Number(r.max) - Number(r.min)); }; // 22: 손잡이 반지름(CSS 44px)
+  document.addEventListener('pointerdown', (e) => {
+    const t = e.target as Element, tr = t.closest<HTMLElement>('.px-track'), stp = t.closest<HTMLElement>('.px-step');
+    const r = (tr ?? stp?.parentElement)?.querySelector<HTMLInputElement>('.px-r');
+    if (!r || e.button !== 0) return;
+    e.preventDefault(); pxHold = r;
+    if (tr) { tr.setPointerCapture(e.pointerId); pxMove = true; setPx(r, pxAt(r, e.clientX)); return; }
+    const d = Number(stp!.dataset.step) * (Number(r.step) || 1), once = () => setPx(r, Number(r.value) + d);
+    once(); pxRep = window.setTimeout(function rep() { once(); pxRep = window.setTimeout(rep, 70); }, 420);
+  });
+  document.addEventListener('pointermove', (e) => { if (pxMove && pxHold) setPx(pxHold, pxAt(pxHold, e.clientX)); });
+  const pxEnd = () => { if (!pxHold) return; const r = pxHold; pxHold = null; pxMove = false; clearTimeout(pxRep); r.dispatchEvent(new Event('change', { bubbles: true })); };
+  document.addEventListener('pointerup', pxEnd); document.addEventListener('pointercancel', pxEnd);
+  document.addEventListener('click', (e) => { const b = (e.target as Element).closest<HTMLElement>('.px-step'); if (b && e.detail === 0) { const r = b.parentElement?.querySelector<HTMLInputElement>('.px-r'); if (r) { setPx(r, Number(r.value) + Number(b.dataset.step) * (Number(r.step) || 1)); render(); } } }); // 키보드(Enter·Space)로 누른 −/+
   // 두 번 톡·핀치로 게임 화면 전체가 확대되지 않게(CSS touch-action·viewport와 함께. 사무실은 자체 핀치를 쓴다)
   for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => { if (!(e.target as Element).closest?.('#office')) e.preventDefault(); }, { passive: false });
   document.addEventListener('dblclick', (e) => e.preventDefault());
