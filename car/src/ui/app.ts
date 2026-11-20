@@ -922,7 +922,7 @@ export function startApp(): void {
     const s = game!.state, h = Q.hiringInfo(s), r = Q.researchInfo(s);
     const b = (act: string, v: string, name: string, sub: string) => `<button class="btn" data-act="${act}" data-v="${v}"><span>${name}<small>${sub}</small></span><span aria-hidden="true">→</span></button>`;
     return `<p class="lbl">기다리는 동안</p><div class="wait-todo">${b('goCo', 'staff', '직원 채용', h.candidates.length ? `후보 ${h.candidates.length}명이 기다립니다` : h.full ? `정원 ${h.staffCount}/${h.capacity}명이 찼습니다` : `정원 ${h.staffCount}/${h.capacity}명 · 공고를 낼 수 있습니다`)}
-      ${b('goCo', 'research', '연구', r.pointsPerWeek <= 0 ? '쉬는 엔지니어가 없어 지금은 연구 점수가 0입니다' : r.used < r.slots ? `연구 칸 ${r.slots - r.used}개가 비어 있습니다` : `연구 ${r.used}개 진행 중 · 한 주 ${pts1(r.pointsPerWeek)}점`)}
+      ${b('goCo', 'research', '연구', r.pointsPerWeek <= 0 ? '일할 수 있는 엔지니어가 없어 지금은 연구 점수가 0입니다' : r.used < r.slots ? `연구 칸 ${r.slots - r.used}개가 비어 있습니다 · 개발 중에도 연구가 조금씩 됩니다` : `연구 ${r.used}개 진행 중 · 한 주 ${pts1(r.pointsPerWeek)}점`)}
       ${draft || lift ? b('resumePlan', '', '다음 차 기획', '기획 중인 초안을 이어서 합니다') : free ? b('plan', '', '다음 차 기획', '비어 있는 개발팀이 있습니다') : sellingGens(s).length ? b('tab', 'garage', '판매 중인 차 살피기', '가격·광고를 조정합니다') : b('goCo', 'hq', '본사', '본사를 키우면 정원과 개발팀이 늘어납니다')}</div>`;
   }
   /** 결함 안내 한 줄(시험 단계·출시 화면) */
@@ -1078,7 +1078,7 @@ export function startApp(): void {
     if (staffSel !== null && !rows.some((x) => x.id === staffSel)) staffSel = null;
     const pname = (id: number | null) => s.projects.find((p) => p.id === id)?.name ?? '';
     const lab = new Set(s.staff.filter((x) => x.lab).map((x) => x.id));
-    const doing = (x: Q.StaffRow) => x.status === 'working' ? `「${esc(pname(x.projectId))}」 개발` : x.status === 'training' ? `교육 중 · ${x.weeksLeft}주 남음` : x.status === 'resting' ? `휴식 중 · ${x.weeksLeft}주 남음` : x.status === 'sales' ? '영업' : lab.has(x.id) ? '전담 연구원' : x.role === 'engineer' ? '쉬는 중 · 연구' : '쉬는 중';
+    const doing = (x: Q.StaffRow) => x.status === 'working' ? `「${esc(pname(x.projectId))}」 개발${x.role === 'engineer' ? ` · 연구 ${Math.round(config.research.projectShare * 100)}%` : ''}` : x.status === 'training' ? `교육 중 · ${x.weeksLeft}주 남음` : x.status === 'resting' ? `휴식 중 · ${x.weeksLeft}주 남음` : x.status === 'sales' ? '영업' : lab.has(x.id) ? '전담 연구원' : x.role === 'engineer' ? '쉬는 중 · 연구' : '쉬는 중';
     const abil = (x: Q.StaffRow) => `<span class="abil2" title="능력 ${x.ability} · 잠재력 ${x.potential}"><u style="width:${x.ability}%"></u><em style="left:${x.potential}%"></em></span><b>${x.ability}</b>${x.atPotential ? '<small class="cap">더 못 큼</small>' : ''}`;
     const cond = (c: number) => { const w = condWord(c); return `<span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(c * 100)}%"></u></span>${w}`; };
     const list = ROLE_ORDER.map((r) => {
@@ -1101,7 +1101,7 @@ export function startApp(): void {
         <p class="lbl" style="margin-top:14px">교육</p><button class="btn ink" data-act="train" data-id="${x.id}" ${x.canTrain ? '' : 'disabled'} style="width:100%">교육 보내기 · ${money(x.trainCost)} <small>(능력 +${T.gainMin}~${T.gainMax}, ${T.weeks}주 동안 일 못 함)</small></button>${x.canTrain ? '' : `<p class="note why">${esc(x.trainReason ?? '')}</p>`}
         <p class="lbl" style="margin-top:14px">휴식</p><div class="row">${[2, 4].map((w) => `<button class="btn" data-act="rest" data-id="${x.id}" data-v="${w}" ${x.status === 'training' ? 'disabled' : ''}>${w}주 쉬기</button>`).join('')}</div><p class="note">쉬는 동안 일하지 않고 컨디션이 회복됩니다. 개발에서 빠지지는 않습니다.</p>
         <p class="lbl" style="margin-top:14px">개발 배치</p>${assign}${x.role !== 'engineer' ? '' : lab.has(x.id) ? `<p class="hint" style="margin-top:8px">전담 연구원입니다. 개발에 넣지 않고 연구 점수를 1.5배로 냅니다.</p><button class="btn" data-act="assign" data-id="${x.id}" data-v="" style="width:100%;margin-top:6px">연구소에서 빼기</button>`
-          : s.hqLevel >= config.research.labHq ? `<button class="btn lab-btn" data-act="assign" data-id="${x.id}" data-v="lab" style="width:100%;margin-top:8px">전담 연구원으로 <small>(연구 점수 1.5배, 개발에는 못 넣음)</small></button>` : `<p class="note">본사 ${config.research.labHq}등급부터 전담 연구원으로 둘 수 있습니다. 개발에 넣지 않은 엔지니어는 그냥 두어도 연구합니다.</p>`}
+          : s.hqLevel >= config.research.labHq ? `<button class="btn lab-btn" data-act="assign" data-id="${x.id}" data-v="lab" style="width:100%;margin-top:8px">전담 연구원으로 <small>(연구 점수 1.5배, 개발에는 못 넣음)</small></button>` : `<p class="note">본사 ${config.research.labHq}등급부터 전담 연구원으로 둘 수 있습니다. 엔지니어는 그냥 두어도 연구합니다(개발 중이면 ${Math.round(config.research.projectShare * 100)}% 속도).</p>`}
         <hr><button class="btn danger" data-act="fire" data-id="${x.id}" style="width:100%">해고 · 퇴직금 ${money(x.severance)}</button>
         <button class="btn" data-act="staffSel" data-id="${x.id}" style="width:100%;margin-top:8px">닫기</button></div>`;
     }
@@ -1180,12 +1180,12 @@ export function startApp(): void {
   function researchTab(): string {
     const s = game!.state, r = Q.researchInfo(s), engs = s.staff.filter((x) => x.role === 'engineer'), labN = s.staff.filter((x) => x.lab).length;
     const back = draft || lift ? `<button class="btn ink back-plan" data-act="backPlan" style="width:100%;margin-top:10px">← 기획으로 돌아가기</button>` : '';
-    const zero = r.pointsPerWeek > 0 ? '' : `<div class="warnbox r-zero" style="margin-top:10px">${engs.length ? '엔지니어가 모두 개발 중이거나 교육·휴식 중이라 지금 연구 점수가 0입니다. 직원 탭이나 개발 기획에서 엔지니어 한두 명을 개발에서 빼면 연구가 진행됩니다.' : '엔지니어가 없어 연구 점수가 0입니다. 직원 탭에서 엔지니어를 뽑으세요.'}</div>`;
+    const zero = r.pointsPerWeek > 0 ? '' : `<div class="warnbox r-zero" style="margin-top:10px">${engs.length ? '엔지니어가 모두 교육·휴식 중이라 지금 연구 점수가 0입니다. 교육·휴식이 끝나면 다시 연구합니다.' : '엔지니어가 없어 연구 점수가 0입니다. 직원 탭에서 엔지니어를 뽑으세요.'}</div>`;
     const act = r.active.map((a) => `<div class="ract"><div class="prod-h"><b>${esc(a.name)}</b><small>${num(a.points)} / ${num(a.need)}점 · ${a.weeksLeft === null ? '연구 점수가 없어 멈춤' : `약 ${a.weeksLeft}주 남음`}</small></div><div class="prog"><u style="width:${((a.points / Math.max(1, a.need)) * 100).toFixed(1)}%"></u></div><button class="btn" data-act="techSel" data-v="${a.techId}">자세히 · 취소</button></div>`).join('');
-    const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">개발에 넣지 않은 엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
+    const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
       <div class="kpis" style="margin-top:10px">${kpi('한 주 연구 점수', `${pts1(r.pointsPerWeek)}<span>점</span>`)}${kpi('연구 칸', `${r.used}/${r.slots}<span>개 사용</span>`)}${kpi('완료한 기술', `${r.doneCount}<span>개</span>`)}${kpi('전담 연구원', `${labN}<span>명</span>`)}</div>
       ${zero}${act ? `<p class="lbl" style="margin-top:12px">진행 중인 연구</p>${act}` : '<p class="hint" style="margin-top:10px">진행 중인 연구가 없습니다. 아래에서 "가능" 표시가 있는 기술을 눌러 시작합니다.</p>'}
-      <p class="note">개발에 넣지 않은 엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있습니다.`} 본사 등급이 오르면 연구 칸이 늘어납니다(지금 ${r.slots}칸). 점수는 먼저 시작한 연구부터 채웁니다. 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
+      <p class="note">엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 개발에 들어간 엔지니어는 그 ${Math.round(config.research.projectShare * 100)}%만 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있습니다.`} 본사 등급이 오르면 연구 칸이 늘어납니다(지금 ${r.slots}칸). 점수는 먼저 시작한 연구부터 채웁니다. 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
     const fields = r.fields.map((f) => `<div class="card rfield" data-field="${f.id}"><h3>${esc(f.name)} <small class="hint">${f.techs.filter((t) => t.status === 'done' || t.count).length}/${f.techs.length} 완료</small></h3><div class="techs">${f.techs.map(techCard).join('')}</div></div>`).join('');
     return `<div class="research">${sum}${fields}</div>`;
   }
