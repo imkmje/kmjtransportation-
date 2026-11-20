@@ -64,7 +64,11 @@ const lg1 = await page.locator('.lg-prev').innerHTML();
 check('로고 만들기: 모양·색·글자를 바꾸면 미리 보기가 바뀜', lg1.includes('>TM<') && lg1.includes('#1f4fd1') && lg1.includes('M16 2l12 4v9'), lg1.slice(0, 80));
 check('로고 만들기: 회사 이름 입력은 그대로', (await page.inputValue('#t-co')) === '테스트 모터스');
 await shot('logo-maker');
+// ---- 난이도 ----
+check('새 게임: 난이도 세 개(쉬움·보통·어려움), 기본은 쉬움', (await page.locator('[data-act="diff"]').count()) === 3 && (await page.locator('[data-act="diff"][data-v="easy"]').getAttribute('aria-pressed')) === 'true' && (await page.locator('.diffs').innerText()).includes('구제 금융'));
+await act('diff', '[data-v="normal"]'); // 아래 점검 수치는 "보통" 기준
 await act('startNew');
+check('고른 난이도가 상태에 들어감(보통)', (await G(() => window.__car.game.state.difficulty)) === 'normal');
 check('새 게임: 상단바 로고 = 만든 로고', (await page.locator('#mylogo').innerHTML()).includes('>TM<') && (await page.locator('#mylogo').innerHTML()).includes('#1f4fd1'));
 check('새 게임: 회사 이름·날짜·현금 표시', (await page.locator('#co').innerText()) === '테스트 모터스' && (await page.locator('#date').innerText()).startsWith('1970년 1월') && (await page.locator('#cash').innerText()).includes('억'), `${await page.locator('#date').innerText()} ${await page.locator('#cash').innerText()}`);
 check('차고(빈): 첫 차 안내와 신차 기획 버튼', (await page.locator('#ov').innerText()).includes('첫 차를 기획할 차례입니다') && (await page.locator('#ov [data-act="plan"]').count()) === 1);
@@ -142,7 +146,7 @@ const ltop = await page.locator('#panel .card').first().innerText();
 check('출시 화면 맨 위: 남은 결함·경고·예상 리콜 위험', ltop.includes('남은 결함') && ltop.includes('아직 많습니다') && /연 \d+\s*%/.test(ltop.replace(/\n/g, ' ')), ltop.replace(/\n/g, ' ').slice(0, 80));
 check('예상 월 판매를 쉬운 말로', /한 달에 약 \d+~\d+대 팔릴 것으로 보입니다\(공장 한도 300대\)/.test(await page.locator('#panel .sales-fc').innerText()));
 check('출시 화면: 화면에 붙어 있는(sticky·fixed) 버튼 줄 없음', await G(() => [...document.querySelectorAll('#panel *')].every((el) => !['sticky', 'fixed'].includes(getComputedStyle(el).position))));
-check('출시 화면: [출시하기]가 패널 내용 마지막 버튼 줄에 있음(바로 위 요약)', await G(() => { const rows = document.querySelectorAll('#panel .row'), last = rows[rows.length - 1], card = document.querySelector('#panel > .card:last-child'); return !!last && card?.contains(last) && last.lastElementChild?.dataset.act === 'doLaunch' && last.firstElementChild?.dataset.v === 'dev' && card.querySelector('.launch-sum')?.textContent.includes('이 조건으로 출시합니다'); }));
+check('출시 화면: [출시하기]가 패널 내용 마지막 버튼 줄에 있음(바로 위 요약)', await G(() => { const rows = document.querySelectorAll('#panel .row'), last = rows[rows.length - 1], card = document.querySelector('#panel > .card:last-child'); return !!last && card?.contains(last) && last.lastElementChild?.dataset.act === 'doLaunch' && last.firstElementChild?.dataset.act === 'devHome' && card.querySelector('.launch-sum')?.textContent.includes('이 조건으로 출시합니다'); }));
 await page.locator('#panel [data-act="devHome"]').click();
 check('출시 화면 [← 개발 화면으로]: 개발 화면으로 돌아감', (await G(() => window.__car.screen)) === 'dev');
 await act('toLaunch');
@@ -288,14 +292,14 @@ check('구제 금융: 파산 화면이 닫히고 현금 0·평판 −20으로 �
 await tick(8);
 check('구제 금융 뒤 시간이 다시 흐름', (await G(() => window.__car.game.state.week)) >= wk0 + 8 && (await page.locator('#panel').isVisible()));
 await G(() => { const s = window.__car.game.state; s.status = 'gameOver'; s.cash = -1; window.__car.render(); });
-check('두 번째 파산: 구제 금융 버튼 비활성 + 이유', (await page.locator('#title [data-act="bailout"]').isDisabled()) && (await page.locator('#title').innerText()).includes('이미 받았습니다'));
+check('두 번째 파산: 구제 금융 버튼 비활성 + 이유', (await page.locator('#title [data-act="bailout"]').isDisabled()) && (await page.locator('#title').innerText()).includes('한 번만 받을 수 있습니다'));
 
 // ---- 시험을 충분히 한 차(시드 1, 균등·12주·보통·표준 동력·기준가): 평론 4.0 이상, 6개월 뒤 월 30대 이상 ----
 await act('newGame');
 await page.fill('#t-co', '시험 모터스');
 await page.click('#title details summary');
 await page.fill('#t-seed', '1');
-await act('startNew');
+await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]'); // 실제 시간은 멈추고 tick으로만 진행(시드 고정 측정)
 await act('plan');
 await page.locator('[data-act="pick"][data-k="color"][data-v="#1f5c4a"]').click();
@@ -396,7 +400,7 @@ check('페이스리프트 시작: 종류·고른 얼굴 시드', await G(([f]) =
 await untilReady();
 await page.waitForTimeout(800);
 await shot('office-test');
-check('개발 탭: 시험 중 사무실', await G(() => window.__car.office.view?.phase === 'test'));
+check('개발 탭: 시험 중 사무실(결함을 다 잡아 출시 대기면 쉬는 모습)', await G(() => { const p = window.__car.game.state.projects[0], ph = window.__car.office.view?.phase; return p?.waiting ? ph === 'rest' : ph === 'test'; }));
 await act('toLaunch');
 const fltext = await page.locator('#panel').innerText();
 check('페이스리프트 출시 화면: 가격·색·휠만, 평론 예상 없음', fltext.includes('판매 가격') && fltext.includes('색상') && !fltext.includes('예상 평점') && fltext.includes('신문'));
@@ -490,7 +494,7 @@ await shot('garage-cleared');
 const S3 = (fn, arg) => G(fn, arg);
 const staffN = () => S3(() => window.__car.game.state.staff.length);
 await openMenu(); await act('home'); await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
-await act('titleNew'); await page.fill('#t-co', '삼단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '3'); await act('startNew');
+await act('titleNew'); await page.fill('#t-co', '삼단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '3'); await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300);
 const vb1 = await S3(() => document.querySelector('#office svg')?.getAttribute('viewBox') ?? '');
@@ -667,7 +671,7 @@ const S4 = (fn, arg) => G(fn, arg);
 await openMenu();
 check('메뉴: 역사 사건·시장 수치는 게임에 맞게 어림한 것이라는 한 줄', (await page.locator('#sheet .help-line').innerText()).includes('어림한 것'));
 await act('home'); await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
-await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '4'); await act('startNew');
+await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '4'); await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="company"]');
 check('회사 탭 안쪽 탭 5개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구');
@@ -806,7 +810,7 @@ await untilReady(); await act('toLaunch');
 check('출시 화면: 규제 거부 이유(개발을 취소하고 다시 기획) + [출시하기] 막힘', (await page.locator('.reg-why').innerText()).includes('개발을 취소하고 신차 기획을 다시') && (await page.locator('[data-act="doLaunch"]').isDisabled()));
 check('sim 출시 명령도 같은 이유로 거부', await S4(() => { const c = window.__car, p = c.game.state.projects[0], r = c.game.command({ type: 'launch', projectId: p.id, price: 1000, marketing: 0, color: '#c8202f', wheels: 1 }); return !r.ok && r.reason.includes('ABS'); }));
 await shot('reg-launch');
-await act('tab', '[data-v="dev"]'); await act('cancelDev'); await page.click('#ask-yes');
+await page.click('#tabs button[data-tab="dev"]'); await act('cancelDev'); await page.click('#ask-yes');
 // 새 차체 5종 3D
 await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
 await planNew();
@@ -883,11 +887,21 @@ await openMenu(); await act('logoSheet'); await act('lg', '[data-k="mark"][data-
 check('메뉴 → 회사 로고 바꾸기: 상단바 로고가 바로 바뀜', (await page.locator('#mylogo').innerHTML()) !== myLg0 && (await G(() => window.__car.ui.logo.mark)) === 'star');
 await shot('logo-sheet');
 await act('closeSheet');
-{ const raw = await G(() => JSON.stringify(window.__car.game.toJSON())); await openMenu();
-  const [fch] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
+{ const raw = await G(() => { const o = window.__car.game.toJSON(); delete o.difficulty; return JSON.stringify(o); }); await openMenu();
+  const [fch] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#sheet [data-act="import"]').click()]);
   await fch.setFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(raw) });
   await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes'); await page.waitForTimeout(400);
-  check('예전 저장(로고 정보 없음)을 불러오면 기본 로고', await G(() => { const l = window.__car.ui.logo; return l.shape === 'round' && l.mark === 'stripes' && l.bg === '#14171c' && l.fg === '#ff5a1f'; }) && (await page.locator('#mylogo').innerHTML()).includes('#ff5a1f')); }
+  check('예전 저장(로고 정보 없음)을 불러오면 기본 로고', await G(() => { const l = window.__car.ui.logo; return l.shape === 'round' && l.mark === 'stripes' && l.bg === '#14171c' && l.fg === '#ff5a1f'; }) && (await page.locator('#mylogo').innerHTML()).includes('#ff5a1f'));
+  await openMenu(); check('예전 저장(난이도 없음)은 메뉴에 "보통"', (await page.locator('.menu-diff').innerText()).includes('보통')); await act('closeSheet'); }
+// ---- 난이도별 시작 현금 ----
+{ const cash = {};
+  for (const d of ['easy', 'normal', 'hard']) {
+    await openMenu(); await act('home'); if (await page.locator('#ask').isVisible()) await page.click('#ask-yes');
+    await page.waitForSelector('#title:not([hidden])'); await act('titleNew'); await page.fill('#t-co', `난이도 ${d}`); await act('diff', `[data-v="${d}"]`); await act('startNew');
+    await page.click('#speeds button[data-speed="0"]'); cash[d] = await page.locator('#cash').innerText();
+  }
+  check('난이도별 시작 현금 50억 / 30억 / 22억', cash.easy === '50억' && cash.normal === '30억' && cash.hard === '22억', JSON.stringify(cash));
+  await openMenu(); check('메뉴에 진행 중인 게임의 난이도', (await page.locator('.menu-diff').innerText()).includes('어려움')); await act('closeSheet'); }
 
 // ---- 8. 두 번 톡·핀치 확대 막기(터치 화면, 헤드리스 크로미움) ----
 { const tctx = await browser.newContext({ viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
@@ -900,7 +914,7 @@ await act('closeSheet');
   await tp.tap('[data-act="titleNew"]'); await tp.fill('#t-co', '터치'); await tp.tap('[data-act="startNew"]'); await TG(() => window.__car.setSpeed(0));
   const sc = [];
   sc.push(await dtap('#panel .card'));
-  await tp.tap('#ov [data-act="plan"]'); sc.push(await dtap('#panel .card'));
+  await tp.tap('#ov [data-act="plan"]'); sc.push(await dtap('#panel .card')); await tp.tap('#panel [data-act="cancelPlan"]');
   await tp.tap('#tabs button[data-tab="company"]'); sc.push(await dtap('#panel .card'));
   await tp.tap('#tabs button[data-tab="dev"]'); await tp.waitForTimeout(400);
   check('터치: 차고·기획·회사 탭에서 두 번 톡 → 화면 확대 없음', sc.every((x) => x === 1), sc.join(','));

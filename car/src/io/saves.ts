@@ -1,6 +1,6 @@
 // 저장: IndexedDB 칸 3개 + 자동 저장 1칸, JSON 파일 내보내기·가져오기. IndexedDB가 안 되면 localStorage로 대신한다.
 import { Game } from '../sim/game';
-import type { CarState } from '../sim/types';
+import type { CarState, Difficulty } from '../sim/types';
 import { DEFAULT_LOGO, cleanLogo, type LogoSpec } from '../ui/art';
 
 /** 저장 데이터 형식 번호(게임 버전·sim 저장 형식과 따로) */
@@ -48,12 +48,12 @@ export async function del(key: SlotKey): Promise<void> {
 }
 
 /** 저장 칸 요약(목록 표시용) */
-export interface SlotInfo { key: SlotKey; when: string; company: string; week: number; cars: number; logo: LogoSpec }
+export interface SlotInfo { key: SlotKey; when: string; company: string; week: number; cars: number; logo: LogoSpec; difficulty: Difficulty } // difficulty: 예전 저장은 normal
 export async function list(): Promise<SlotInfo[]> {
   const out: SlotInfo[] = [];
   for (const key of ['auto', ...SLOT_KEYS] as SlotKey[]) {
     const d = await get(key);
-    if (d?.game) out.push({ key, when: d.when, company: d.game.companyName, week: d.game.week, cars: d.game.nameplates?.length ?? 0, logo: d.ui?.logo ? cleanLogo(d.ui.logo) : { ...DEFAULT_LOGO } });
+    if (d?.game) out.push({ key, when: d.when, company: d.game.companyName, week: d.game.week, cars: d.game.nameplates?.length ?? 0, difficulty: d.game.difficulty ?? 'normal', logo: d.ui?.logo ? cleanLogo(d.ui.logo) : { ...DEFAULT_LOGO } });
   }
   return out;
 }
