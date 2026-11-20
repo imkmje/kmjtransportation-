@@ -402,10 +402,12 @@ export function startApp(): void {
     for (const p of s.projects) {
       const pv = devGrades(p);
       if (!pv) continue;
-      const prev = devPrev.get(p.id) ?? 0, d = pv.avg - prev, list = devLog.get(p.id) ?? [];
+      // 페이스리프트는 판매 중인 판의 등급이 출시 전까지 그대로라, 대신 이번 리프트에 쌓인 디자인 점수를 보인다
+      const fl = p.kind === 'facelift', val = fl ? p.points.D : pv.avg, prev = devPrev.get(p.id) ?? 0, d = val - prev, list = devLog.get(p.id) ?? [];
       const phase = p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`;
-      list.unshift(`${Q.dateLabel(s.week)} · ${phase} · 등급 ${score(pv.avg)}${p.phase === 'design' ? ` (${d >= 0 ? '+' : '−'}${score(Math.abs(d))})` : ''} · 결함 약 ${p.defectEst}개`);
-      devLog.set(p.id, list.slice(0, 14)); devPrev.set(p.id, pv.avg);
+      const what = fl ? `디자인 점수 ${num(val)}${p.phase === 'design' ? ` (+${num(d)})` : ''}` : `등급 ${score(pv.avg)}${p.phase === 'design' ? ` (${d >= 0 ? '+' : '−'}${score(Math.abs(d))})` : ''}`;
+      list.unshift(`${Q.dateLabel(s.week)} · ${phase} · ${what} · 결함 약 ${p.defectEst}개`);
+      devLog.set(p.id, list.slice(0, 14)); devPrev.set(p.id, val);
     }
   }
   function setSpeed(v: number): void { speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
@@ -849,9 +851,12 @@ export function startApp(): void {
     const bar = (label: string, a: number, b: number, term = '') => `<p class="lbl" style="margin-top:12px">${label}${term ? ib(`term:${term}`) : ''}</p><div class="ba"><span>지금</span><div class="life"><u style="width:${(a * 100).toFixed(1)}%"></u></div><b>${Math.round(a * 100)}%</b></div><div class="ba"><span>바꾼 뒤</span><div class="life"><u style="width:${(b * 100).toFixed(1)}%"></u></div><b>${Math.round(b * 100)}%</b></div>`;
     const card3 = `<div class="card lift-est"><p class="lbl">4. 예상</p><div class="kpis">${kpi('비용', money(pv.cost))}${kpi('기간', `${pv.designWeeks + pv.minTestWeeks}<span>주~</span>`)}${kpi('디자인', `${score(dBefore)}→${score(pv.grades.D)}`)}${kpi('평균 등급', `${score(pv.avgBefore)}→${score(pv.avg)}`)}</div>
       <p class="hint" style="margin-top:6px">설계 ${pv.designWeeks}주 + 시험 ${pv.minTestWeeks}주 이상. 디자이너만 일하고 점수는 디자인에만 쌓입니다. 남은 결함은 절반으로 줄어 시작합니다.</p>
+      <div class="kpis lift-money" style="margin-top:10px">${kpi(`예상 월 판매${ib('term:예상 월 판매')}`, `${num(pv.salesBefore)}→${num(pv.salesAfter)}<span>대</span>`)}${kpi('예상 월 이익', `${money(pv.profitBefore, true)}→${money(pv.profitAfter, true)}`, pv.profitAfter >= pv.profitBefore ? 'pos' : 'neg')}${kpi('비용 회수', pv.paybackMonths === null ? '회수 못 함' : `약 ${pv.paybackMonths}<span>개월</span>`, pv.paybackMonths === null ? 'neg' : '')}</div>
+      <p class="note" style="margin-top:4px">지금 달 시장·같은 가격·광고 기준 어림입니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>
+      ${pv.tooEarly ? `<div class="warnbox lift-early" style="margin-top:8px">출시 ${config.lifecycle.facelift.goodFromMonths}개월 전이라 지금은 효과가 작습니다. 수명이 덜 되돌아갑니다.</div>` : ''}
       ${bar('수명', pv.lifeBefore, pv.lifeAfter, '수명')}${bar('인지도', pv.awarenessBefore, pv.awarenessAfter, '인지도')}
       <p class="note">평론가는 다시 평가하지 않고 신문에 기사가 실립니다. 바꾸는 달에는 생산이 30% 줄어듭니다.</p>
-      ${teamPicker(L.team, 'liftTeam')}<p class="note">페이스리프트는 디자이너만 점수를 냅니다. 위 예상은 쉬고 있는 직원 전원 기준입니다.</p>
+      ${teamPicker(L.team, 'liftTeam')}<p class="note">페이스리프트는 디자이너가 점수를 내고 테스터가 결함을 잡습니다. 처음에는 추천 팀(쉬는 디자이너·테스터, 엔지니어는 연구에 남김)이 골라져 있습니다.</p>
       ${ok.ok ? '' : `<div class="badbox" style="margin-top:10px">${esc(ok.reason ?? '')}</div>`}
       <div class="row" style="margin-top:12px"><button class="btn" data-act="cancelPlan">그만두기</button><button class="go" data-act="startLift" ${ok.ok ? '' : 'disabled'}>페이스리프트 시작 <span aria-hidden="true">→</span></button></div></div>`;
     return { ov: ovh, panel: card1 + card2 + card3, look: cur };
@@ -1435,7 +1440,7 @@ export function startApp(): void {
         if (lift?.genId === id) { go('lift'); return; }
         if (!(await dropDraft())) return;
         const ed = currentEdition(g), opts = new Set(Q.optionsAt(s).map((o) => o.id));
-        lift = { genId: id, faceSeed: liftFaces(g)[0], options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: idleDev().map((x) => x.id) };
+        lift = { genId: id, faceSeed: liftFaces(g)[0], options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: Q.faceliftPreview(s, id, { options: ed.options, tier: ed.tier })?.recommendedTeam ?? idleDev().map((x) => x.id) }; // 기본은 추천 팀(디자이너·테스터)
         go('lift'); return;
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
