@@ -592,3 +592,14 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
 .px-note{margin:6px 0 0;font-size:12px}
 .card.price-card .seg{margin-top:4px}
 @media (max-width:420px){.px-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- 0.4.2: 규제 의무 장비(기본 장비 칩·의무 장비 넣기) ---------- */
+.base-eq{background:var(--soft);border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.base-eq .lbl{margin:0 0 6px}
+.base-eq .hint{margin:6px 0 0;font-size:12px}
+.eqs{display:flex;flex-wrap:wrap;gap:6px}
+.eq{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:999px;background:var(--card);border:1.5px solid var(--ink);font-weight:800;font-size:13px}
+.eq::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--pos)}
+.retrofit .lbl{margin-bottom:4px}
+.retrofit .hint{margin:0;font-size:12.5px;line-height:1.5}
+.speeds button,#menubtn{white-space:nowrap}

@@ -698,7 +698,11 @@ check('연구 시작: 화면 안 확인 창', (await page.locator('#ask').isVisi
 await page.waitForTimeout(600); await shot('tech-ask');
 await page.click('#ask-yes');
 check('연구 시작: 진행 중 1개, 카드에 진행 막대와 남은 주', (await S4(() => window.__car.game.state.research.active.length)) === 1 && (await page.locator('.tc.active[data-v="bd_hatch"] .prog').count()) === 1 && /약 \d+주 남음/.test(await page.locator('.tc.active[data-v="bd_hatch"]').innerText()) && (await page.locator('.ract').count()) === 1);
-check('연구 칸이 차면 다른 기술은 시작 거부 이유', (await page.locator('.tc[data-v="el_radio"] .why').innerText()).includes('연구 칸이 찼습니다'));
+// 0.4.2: 연구 칸은 본사 등급별(1등급 3칸). 남은 칸을 다른 기술로 채운 뒤 거부 이유를 보고, 채운 연구는 취소한다
+const filled = await S4(() => { const c = window.__car, s = c.game.state; s.cash += 1000000; const ids = [...document.querySelectorAll('.tc[data-v]:not(.done):not(.active):not(.hidden):not(.locked)')].map((x) => x.dataset.v).filter((v) => v !== 'el_radio' && v !== 'bd_hatch'), got = [];
+  for (const v of ids) { const r = c.game.command({ type: 'startResearch', techId: v }); if (r.ok) got.push(v); else if (r.reason.includes('연구 칸')) break; } c.render(); return got; });
+check('연구 칸(1등급 3칸)이 차면 다른 기술은 시작 거부 이유', filled.length === 2 && (await S4(() => window.__car.game.state.research.active.length)) === 3 && (await page.locator('.tc[data-v="el_radio"] .why').innerText()).includes('연구 칸이 찼습니다'), filled.join(','));
+await S4((ids) => { const c = window.__car; for (const v of ids) c.game.command({ type: 'cancelResearch', techId: v }); c.render(); }, filled);
 await tick(3); await page.waitForTimeout(100);
 await shot('research-active');
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 200 && c.game.state.research.active.length) c.tick(1); c.render(); });
@@ -804,20 +808,34 @@ check('선행이 필요한 기술: 이유 "「미니밴 차체」 먼저"', (awa
 await page.locator('.tc[data-v="bd_suv"]').click();
 check('선행 필요 기술 상세: 연구 시작 막힘 + 거부 이유', (await page.locator('.tech-sheet [data-act="startResearch"]').isDisabled()) && (await page.locator('.tech-why').innerText()).includes('먼저'));
 await act('closeSheet');
-// 규제(1997년): 기획 경고·출시 거부 이유
-await S4(() => { const s = window.__car.game.state; s.week = 27 * 48; s.factory.level = 2; window.__car.render(); }); // 점검용: 생산 라인 2개(규제 이유만 남게)
+// 규제(1997년, 0.4.2): 의무 장비 기술을 연구하지 않았으면 개발 시작이 막힘 → 연구 → 기본 장비로 자동 포함(옵션 칸 밖) → 판매 중 차에 의무 장비 넣기
+await S4(() => { const s = window.__car.game.state; s.week = 27 * 48; s.factory.level = 2; s.cash = 3000000; s.research.done = s.research.done.filter((x) => x !== 'bd_airbag'); if (!s.research.done.includes('bd_abs')) s.research.done.push('bd_abs'); window.__car.render(); }); // 점검용: 생산 라인 2개
 await page.click('#tabs button[data-tab="garage"]');
-await planNew();
-check('규제 경고(기획): "ABS·에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서 …"', (await page.locator('.reg-warn').innerText()).includes('ABS·에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서'));
-await act('ptab', '[data-v="opt"]');
-check('규제 옵션 강조', (await page.locator('.opt.req').count()) >= 1 && (await page.locator('.opt .reqtag').count()) >= 1);
+check('규제 미연구: 차 카드에 막힌 이유 한 번 + [연구 화면], 페이스리프트·풀체인지·의무 장비 넣기 막힘', (await page.locator('#panel .reg-block').innerText()).includes('「에어백」 연구가 필요합니다') && (await page.locator('#panel .reg-block [data-act="goCo"][data-v="research"]').count()) === 1 && (await page.locator('[data-act="goFull"]').isDisabled()) && (await page.locator('[data-act="retrofit"]').isDisabled()));
+await shot('reg-garage');
+await page.locator('#panel [data-act="plan"]').first().click();
+check('규제 미연구: 기획 첫 화면에 이유 한 번, 새 차종·풀체인지·페이스리프트 모두 흐림', (await G(() => window.__car.screen)) === 'start' && (await page.locator('#panel .reg-block').innerText()).includes('지금은 개발을 시작할 수 없습니다') && (await page.locator('.choice:disabled').count()) === 3 && (await page.locator('.choice .why').count()) === 0);
+await shot('reg-start');
+check('sim 개발 시작 명령도 같은 이유로 거부', await S4(() => { const r = window.__car.game.command({ type: 'startProject', name: '규제', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28, team: [] }); return !r.ok && r.reason.includes('에어백'); }));
+// 에어백 연구 시작 → 개발자 메뉴(로고 두 번 누르기) [진행 중 연구 즉시 완료]
+await S4(() => { const s = window.__car.game.state; s.research.active = []; const r = window.__car.game.command({ type: 'startResearch', techId: 'bd_airbag' }); window.__car.render(); return r; });
+await page.click('#mylogo'); await page.click('#mylogo');
+await page.waitForSelector('#sheet:not([hidden])'); await page.locator('#sheet [data-act="devCheat"][data-v="finishResearch"]').click(); await act('closeSheet');
+check('개발자 메뉴로 에어백 연구 완료 → 기획 첫 화면이 다시 열림', (await S4(() => window.__car.game.state.research.done.includes('bd_airbag'))) && (await page.locator('#panel .reg-block').count()) === 0 && (await page.locator('.choice[data-v="new"]').isEnabled()));
+await act('pickNew'); await act('ptab', '[data-v="opt"]');
+const slots = await S4(() => window.__car.game.state.hqLevel);
+check('기획 옵션: ABS·에어백이 "기본 장비"로 표시, 고르는 칸·옵션 수에 안 잡힘', (await page.locator('.base-eq .eq').allInnerTexts()).join() === 'ABS,에어백' && (await page.locator('.opt[data-act="opt"][data-v="abs"], .opt[data-act="opt"][data-v="airbag"]').count()) === 0 && /옵션 0 \/ \d+개/.test(await page.locator('#panel').innerText()), `본사 ${slots}등급`);
 await shot('reg-plan');
 await page.fill('#pname', '규제'); await startDev();
-await untilReady(); await act('toLaunch');
-check('출시 화면: 규제 거부 이유(개발을 취소하고 다시 기획) + [출시하기] 막힘', (await page.locator('.reg-why').innerText()).includes('개발을 취소하고 신차 기획을 다시') && (await page.locator('[data-act="doLaunch"]').isDisabled()));
-check('sim 출시 명령도 같은 이유로 거부', await S4(() => { const c = window.__car, p = c.game.state.projects[0], r = c.game.command({ type: 'launch', projectId: p.id, price: 1000, marketing: 0, color: '#c8202f', wheels: 1 }); return !r.ok && r.reason.includes('ABS'); }));
-await shot('reg-launch');
+check('개발 시작: 의무 장비가 자동으로 들어감', await S4(() => { const o = window.__car.game.state.projects[0]?.options ?? []; return o.includes('abs') && o.includes('airbag'); }));
 await page.click('#tabs button[data-tab="dev"]'); await act('cancelDev'); await page.click('#ask-yes');
+await page.click('#tabs button[data-tab="garage"]');
+await page.locator('[data-act="retrofit"]').scrollIntoViewIfNeeded(); await page.waitForTimeout(300);
+await shot('reg-retrofit');
+const rfId = Number(await page.locator('[data-act="retrofit"]').getAttribute('data-id'));
+check('판매 중 차: [의무 장비 넣기]가 열림(비용·대당 원가 안내)', (await page.locator('[data-act="retrofit"]').isEnabled()) && /ABS·에어백.*대당 원가 \+\d+만원/.test(await page.locator('.retrofit').innerText()));
+await act('retrofit');
+check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 사라짐', await S4((id) => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), o = g.editions.at(-1).options; return o.includes('abs') && o.includes('airbag'); }, rfId) && (await page.locator('[data-act="retrofit"]').count()) === 0);
 // 새 차체 5종 3D
 await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
 await planNew();
