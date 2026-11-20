@@ -176,6 +176,7 @@ export const config = {
     normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1 },
     hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
   },
+  devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
 };

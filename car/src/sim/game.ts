@@ -407,6 +407,24 @@ export class Game {
         this.applyChoice(pc, cmd.choice, events, false);
         return { ok: true, events };
       }
+      case 'devCheat': { // 개발자 메뉴(개발 단계용)
+        const ev: GameEvent[] = [];
+        switch (cmd.kind) {
+          case 'cash': s.cash += config.devCheat.cash; break;
+          case 'reputation': this.addRep(config.devCheat.reputation); break;
+          case 'finishResearch': for (const a of s.research.active) a.points = a.need; researchWeek(s, ev); break;
+          case 'finishDev': for (const p of [...s.projects].sort((a, b) => a.id - b.id)) if (!p.waiting) {
+            const team = s.staff.filter((x) => x.projectId === p.id).sort((a, b) => a.id - b.id);
+            p.phase = 'test'; p.weeksDone = Math.max(p.weeksDone, p.designWeeks); p.testWeeks = Math.max(p.testWeeks, config.dev.minTestWeeks);
+            p.defects = 0; p.defectEst = 0; p.waiting = true; p.crew = team.map((x) => x.id);
+            for (const x of team) x.projectId = null;
+          } break;
+          case 'restStaff': for (const x of s.staff) x.condition = 1; break;
+          default: return fail('알 수 없는 개발자 메뉴입니다.');
+        }
+        s.devUsed = true;
+        return { ok: true, events: ev };
+      }
       default: return fail('알 수 없는 명령입니다.');
     }
   }
@@ -572,6 +590,9 @@ export class Game {
     if ((st.saveVersion as number) === 3) migrateV3(st);
     return new Game(st);
   }
+
+  /** 개발자 메뉴(개발 단계용): 명령 기록에 남는다(결정론·저장 왕복 유지) */
+  devCheat(kind: 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff'): CommandResult { return this.command({ type: 'devCheat', kind }); }
 
   /** 화면 표시용 날짜 */
   get dateLabel(): string { return dateLabel(this.state.week); }

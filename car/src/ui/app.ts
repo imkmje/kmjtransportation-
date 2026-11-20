@@ -319,6 +319,7 @@ export function startApp(): void {
   const decisionHeld = (): boolean => !!game && title.hidden && (!sheet.hidden || !$('#ask').hidden || deciding());
 
   const waitSeen = new Set<number>(); // 출시 대기 알림을 띄운 프로젝트
+  let skipPause = false; // 개발자 메뉴 1년 건너뛰기: 자동 멈춤 무시
   let quietChoice = false; // 점검용 __car.tick: 사건 창을 띄우지 않는다(popups를 주면 띄움)
   let weekFresh = false; // 한 주에 여러 프로젝트의 주간 기록이 오면 모두 모은다
   function tickOnce(): void {
@@ -375,7 +376,7 @@ export function startApp(): void {
   function setSpeed(v: number): void { speed = v; acc = 0; renderTop(); }
   /** 자동 멈춤(설정에서 항목별로 끔): 알림은 늘 띄우고, 켜져 있으면 시간을 멈춘다 */
   function autoPause(k: PauseKey, text: string, head: string, open: { label: string; fn: () => void }): void {
-    const stop = pauseOn[k] && speed > 0;
+    const stop = pauseOn[k] && speed > 0 && !skipPause;
     if (stop) setSpeed(0);
     toast(`${text}${stop ? ' 시간을 멈췄습니다.' : ''}`, 'alert', head, 20000, `pause-${k}`, open);
   }
@@ -1264,6 +1265,15 @@ export function startApp(): void {
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
     sheet.hidden = false; renderTop();
   }
+  // ---------- 개발자 메뉴(시험용): 상단바 로고를 두 번 톡 ----------
+  const DEV_CHEATS = [['cash', '현금 +500억'], ['reputation', '평판 +10'], ['finishResearch', '진행 중 연구 즉시 완료'], ['finishDev', '진행 중 개발 즉시 완료'], ['restStaff', '직원 컨디션 회복']] as const;
+  function showDevMenu(): void {
+    if (!game || !title.hidden) return;
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    sheetBody.innerHTML = `<div class="eyebrow"><i></i>개발자 메뉴 (시험용)</div><h2>개발자 메뉴</h2><div class="menu-slots dev-menu">${DEV_CHEATS.map(([k, n]) => `<button class="btn" data-act="devCheat" data-v="${k}">${n}</button>`).join('')}<button class="btn" data-act="devYear">1년 건너뛰기(48주)</button></div>
+      <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
+    sheet.hidden = false; renderTop();
+  }
   function download(name: string, text: string): void {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -1479,6 +1489,16 @@ export function startApp(): void {
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
       case 'closeSheet': sheet.hidden = true; render(); return;
       case 'logoSheet': showLogoSheet(); return;
+      case 'devCheat': {
+        if (!game) return; const r: unknown = game.devCheat(v as typeof DEV_CHEATS[number][0]);
+        if (r && typeof r === 'object' && 'ok' in r && !(r as { ok: boolean }).ok) return err((r as { reason?: string }).reason ?? '');
+        toast(`${DEV_CHEATS.find((x) => x[0] === v)?.[1] ?? v} 적용`, '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
+      }
+      case 'devYear': { // 화면 갱신 없이 48주. 사건 창·자동 멈춤 없이
+        if (!game) return; quietChoice = skipPause = true;
+        try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = false; }
+        toast('48주를 건너뛰었습니다.', '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
+      }
       case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); return;
       case 'lg': { const L = logoTarget(), k = el.dataset.k as 'shape' | 'mark' | 'bg' | 'fg'; (L as unknown as Record<string, string>)[k] = v; if (k === 'mark' && v === 'text' && !L.text) L.text = [...(game?.state.companyName || ($<HTMLInputElement>('#t-co')?.value ?? '')).trim()][0] ?? '가'; logoChanged(); return; }
       case 'lgRand': {
@@ -1541,6 +1561,7 @@ export function startApp(): void {
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
   for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); });
   $('#menubtn').addEventListener('click', () => void showMenu());
+  { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 350) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
   document.addEventListener('keydown', (e) => {
