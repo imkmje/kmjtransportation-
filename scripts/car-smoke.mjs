@@ -940,6 +940,13 @@ await act('autoPause', '[data-v="cands"]'); await act('closeSheet');
   const pb = await tp.locator('#panel').boundingBox();
   await cdp.send('Input.synthesizePinchGesture', { x: pb.x + pb.width / 2, y: pb.y + 100, scaleFactor: 2, gestureSourceType: 'touch' }); await tp.waitForTimeout(400);
   check('터치: 패널에서 핀치 → 페이지 확대 없음', (await TG(() => visualViewport.scale)) === 1);
+  // ---- 개발자 메뉴: 상단바 로고 두 번 톡 ----
+  { const c0 = await TG(() => window.__car.game.state.cash), sc0 = await dtap('#mylogo');
+    check('터치: 로고 두 번 톡 → 개발자 메뉴(화면 확대 없음)', sc0 === 1 && (await tp.locator('#sheet').isVisible()) && (await tp.locator('#sheet').innerText()).includes('개발자 메뉴 (시험용)'));
+    await tp.locator('#sheet [data-act="devCheat"][data-v="cash"]').tap();
+    const c1 = await TG(() => window.__car.game.state.cash);
+    check('개발자 메뉴 현금 +500억 → 현금 증가', c1 - c0 >= 4_900_000, `${c0} → ${c1}`);
+    await tp.locator('#sheet [data-act="closeSheet"]').tap(); }
   // ---- 출시 대기 자동 멈춤, 가격 화면(1024×768 터치·1366×1024) ----
   await tp.tap('#tabs button[data-tab="garage"]'); await tp.tap('#ov [data-act="plan"]'); await tp.tap('[data-act="ptab"][data-v="budget"]');
   if (await tp.locator('[data-act="pick"][data-k="designWeeks"][aria-pressed="true"]').count() === 0) await tp.locator('[data-act="pick"][data-k="designWeeks"]').first().tap();

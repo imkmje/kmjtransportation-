@@ -1492,6 +1492,7 @@ export function startApp(): void {
       case 'devCheat': {
         if (!game) return; const r: unknown = game.devCheat(v as typeof DEV_CHEATS[number][0]);
         if (r && typeof r === 'object' && 'ok' in r && !(r as { ok: boolean }).ok) return err((r as { reason?: string }).reason ?? '');
+        for (const e of (r as { events?: GameEvent[] } | null)?.events ?? []) onEvent(e); // 연구 완료 소식 등
         toast(`${DEV_CHEATS.find((x) => x[0] === v)?.[1] ?? v} 적용`, '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
       case 'devYear': { // 화면 갱신 없이 48주. 사건 창·자동 멈춤 없이
