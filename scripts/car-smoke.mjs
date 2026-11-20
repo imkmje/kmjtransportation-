@@ -700,9 +700,9 @@ await page.click('#ask-yes');
 check('연구 시작: 진행 중 1개, 카드에 진행 막대와 남은 주', (await S4(() => window.__car.game.state.research.active.length)) === 1 && (await page.locator('.tc.active[data-v="bd_hatch"] .prog').count()) === 1 && /약 \d+주 남음/.test(await page.locator('.tc.active[data-v="bd_hatch"]').innerText()) && (await page.locator('.ract').count()) === 1);
 // 0.4.2: 연구 칸은 본사 등급별(1등급 3칸). 남은 칸을 다른 기술로 채운 뒤 거부 이유를 보고, 채운 연구는 취소한다
 const filled = await S4(() => { const c = window.__car, s = c.game.state; s.cash += 1000000; const ids = [...document.querySelectorAll('.tc[data-v]:not(.done):not(.active):not(.hidden):not(.locked)')].map((x) => x.dataset.v).filter((v) => v !== 'el_radio' && v !== 'bd_hatch'), got = [];
-  for (const v of ids) { const r = c.game.command({ type: 'startResearch', techId: v }); if (r.ok) got.push(v); else if (r.reason.includes('연구 칸')) break; } c.render(); return got; });
-check('연구 칸(1등급 3칸)이 차면 다른 기술은 시작 거부 이유', filled.length === 2 && (await S4(() => window.__car.game.state.research.active.length)) === 3 && (await page.locator('.tc[data-v="el_radio"] .why').innerText()).includes('연구 칸이 찼습니다'), filled.join(','));
-await S4((ids) => { const c = window.__car; for (const v of ids) c.game.command({ type: 'cancelResearch', techId: v }); c.render(); }, filled);
+  const why = []; for (const v of ids) { const r = c.game.command({ type: 'startResearch', techId: v }); if (r.ok) got.push(v); else { why.push(`${v}:${r.reason}`); if (r.reason.includes('연구 칸')) break; } } c.render(); got.why = `${ids.length}개 후보 ${why.slice(-2).join(' / ')}`; return { got, why: got.why }; });
+check('연구 칸(1등급 3칸)이 차면 다른 기술은 시작 거부 이유', filled.got.length === 2 && (await S4(() => window.__car.game.state.research.active.length)) === 3 && (await page.locator('.tc[data-v="el_radio"] .why').innerText()).includes('연구 칸이 찼습니다'), `${filled.got.join(',')} ${filled.why}`);
+await S4((ids) => { const c = window.__car; for (const v of ids) c.game.command({ type: 'cancelResearch', techId: v }); c.render(); }, filled.got);
 await tick(3); await page.waitForTimeout(100);
 await shot('research-active');
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 200 && c.game.state.research.active.length) c.tick(1); c.render(); });
@@ -819,7 +819,7 @@ await shot('reg-start');
 check('sim 개발 시작 명령도 같은 이유로 거부', await S4(() => { const r = window.__car.game.command({ type: 'startProject', name: '규제', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28, team: [] }); return !r.ok && r.reason.includes('에어백'); }));
 // 에어백 연구 시작 → 개발자 메뉴(로고 두 번 누르기) [진행 중 연구 즉시 완료]
 await S4(() => { const s = window.__car.game.state; s.research.active = []; const r = window.__car.game.command({ type: 'startResearch', techId: 'bd_airbag' }); window.__car.render(); return r; });
-await page.click('#mylogo'); await page.click('#mylogo');
+await page.dblclick('#mylogo');
 await page.waitForSelector('#sheet:not([hidden])'); await page.locator('#sheet [data-act="devCheat"][data-v="finishResearch"]').click(); await act('closeSheet');
 check('개발자 메뉴로 에어백 연구 완료 → 기획 첫 화면이 다시 열림', (await S4(() => window.__car.game.state.research.done.includes('bd_airbag'))) && (await page.locator('#panel .reg-block').count()) === 0 && (await page.locator('.choice[data-v="new"]').isEnabled()));
 await act('pickNew'); await act('ptab', '[data-v="opt"]');
