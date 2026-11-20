@@ -76,7 +76,7 @@ export interface FaceSpec {
   plateF: 'center' | 'offset'; plateR: 'low' | 'high';
 }
 export const ERA_FACE: Record<Era, { lamp: LampKind[]; grille: GrilleKind[]; intake: IntakeKind[]; bumper: FaceSpec['bumper'][]; tail: TailKind[]; bar: number; grilleW: [number, number]; def: FaceSpec }> = {
-  1970: { lamp: ['round', 'twin', 'rect'], grille: ['rect', 'bars', 'twin'], intake: ['slim', 'none', 'wide'], bumper: ['body'], tail: ['bar', 'vertical', 'split'], bar: 0, grilleW: [.85, 1.15],
+  1970: { lamp: ['round', 'twin', 'rect', 'oval'], grille: ['rect', 'bars', 'twin'], intake: ['slim', 'none', 'wide'], bumper: ['body'], tail: ['bar', 'vertical', 'split'], bar: 0, grilleW: [.85, 1.15],
     def: { lamp: 'round', lampW: 1, lampDy: 0, bar: false, grille: 'rect', grilleW: 1, grilleH: 1, intake: 'wide', bumper: 'body', tail: 'bar', tailDy: 0, plateF: 'center', plateR: 'high' } },
   1990: { lamp: ['oval', 'rect', 'vertical', 'oval'], grille: ['rect', 'bars', 'none'], intake: ['wide', 'slim', 'three'], bumper: ['body', 'black'], tail: ['bar', 'L', 'vertical'], bar: 0, grilleW: [.8, 1.1],
     def: { lamp: 'oval', lampW: 1, lampDy: 0, bar: false, grille: 'rect', grilleW: 1, grilleH: 1, intake: 'wide', bumper: 'body', tail: 'bar', tailDy: 0, plateF: 'center', plateR: 'high' } },

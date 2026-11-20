@@ -69,6 +69,21 @@ export function faceOf(look: CarLook): FaceSpec {
   return f;
 }
 
+/** 앞얼굴을 한눈에 가르는 값(전조등·그릴, 전기차는 그릴 대신 흡기구·라이트 바) */
+const frontKey = (look: CarLook): string => { const f = faceOf(look); return `${f.lamp}|${look.powertrain === 'ev' ? f.intake : f.grille}|${f.bar}`; };
+/** 얼굴 후보 시드를 서로(그리고 avoid와) 앞얼굴이 겹치지 않게 고친다. 겹치면 시드를 1씩 올려 다음 값을 본다(같은 입력 = 같은 결과).
+    shortcut: 64번 안에 못 찾으면 원래 시드를 그대로 쓴다(시대 선택지가 아주 좁을 때), 선택지를 넓히면 줄어든다 */
+export function distinctFaces(base: CarLook, seeds: number[], avoid?: CarLook): number[] {
+  const used = new Set(avoid ? [frontKey(avoid)] : []);
+  return seeds.map((s0) => {
+    for (let k = 0; k < 64; k++) {
+      const s = (s0 + k) >>> 0, key = frontKey({ ...base, faceSeed: s });
+      if (!used.has(key)) { used.add(key); return s; }
+    }
+    return s0;
+  });
+}
+
 const LAMP: Record<LampKind, string> = { round: '둥근 전조등', twin: '둥근 전조등 2쌍', rect: '네모난 전조등', oval: '타원형 전조등', vertical: '세로로 긴 전조등', swept: '위로 치켜 올라간 전조등', slim: '가늘고 긴 전조등' };
 const GRILLE: Record<GrilleKind, string> = { rect: '사각 그릴', hex: '육각 그릴', twin: '위아래 2단 그릴', bars: '가로 줄무늬 그릴', none: '그릴 없는 얼굴' };
 const TAIL: Record<TailKind, string> = { bar: '가로 후미등', vertical: '세로 후미등', L: 'L자 후미등', split: '나뉜 후미등', full: '좌우로 이어진 후미등' };
