@@ -143,7 +143,7 @@ export function researchWeek(s: CarState, ev: GameEvent[]): void {
     const t = techById(a.techId), early = yearOf(s.week) < t.year;
     s.research.done.push(t.id);
     if (early && !s.research.early.includes(t.id)) s.research.early.push(t.id);
-    ev.push({ kind: 'unlock', category: 'research', text: `「${t.name}」 연구를 마쳤습니다. ${unlockText(t)}${early ? ' 세계 최초입니다! 이 기술을 처음 쓰는 차는 평론 점수를 1점씩 더 받습니다.' : ''}` });
+    ev.push({ kind: 'unlock', category: 'research', text: `「${t.name}」 연구를 마쳤습니다. ${unlockText(t)}${early ? ' 세계 최초입니다. 이 기술을 처음 쓰는 차는 평론 점수를 1점씩 더 받습니다.' : ''}` });
   }
 }
 
@@ -156,7 +156,7 @@ export function worldFirstTechs(s: CarState, car: { body: string; powertrain: st
 // ---------- 연구 화면 조회 ----------
 export type TechStatus = 'done' | 'active' | 'available' | 'locked' | 'hidden';
 export interface TechRow {
-  id: string; name: string; desc: string; field: TechField; year: number; repeatable: boolean; count: number; // count: 완료 횟수(반복 기술)
+  id: string; name: string; desc: string; info: string; field: TechField; year: number; repeatable: boolean; count: number; // count: 완료 횟수(반복 기술)
   status: TechStatus; // 완료 / 진행 중 / 가능 / 선행 필요 / 아직 이름만 보임(등장 4년 전보다 이름)
   cost: { money: number; points: number; mult: number }; // 지금 시작하면(배수 반영). 진행 중이면 시작 때 값
   pointsLeft: number; weeksLeft: number | null; // 남은 점수, 지금 주간 점수로 예상 주(점수가 0이면 null)
@@ -178,7 +178,7 @@ export function researchInfo(s: CarState): ResearchInfo {
     const hidden = !done && !act && t.year - y > R.earlyMax, reason = act || done ? null : researchError(s, t.id);
     const cost = act ? { money: 0, points: act.need, mult: 1 } : researchCost(s, t), left = act ? act.need - act.points : done ? 0 : cost.points;
     return {
-      id: t.id, name: t.name, desc: hidden ? '' : t.desc, field: t.field, year: t.year, repeatable: !!t.repeatable, count: doneCount(s, t.id),
+      id: t.id, name: t.name, desc: hidden ? '' : t.desc, info: hidden ? '' : t.info, field: t.field, year: t.year, repeatable: !!t.repeatable, count: doneCount(s, t.id),
       status: done ? 'done' : act ? 'active' : hidden ? 'hidden' : missingPre(s, t).length ? 'locked' : 'available',
       cost, pointsLeft: left, weeksLeft: weeks(left), effects: hidden ? '' : techEffectsText(t),
       pre: t.pre.map((id) => ({ id, name: techById(id).name, done: isDone(s, id) })), reason,

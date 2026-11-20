@@ -2,12 +2,14 @@
 import { config } from '../config';
 import { COMPAT, bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
-import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut } from './dev';
+import { designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, sellingGens } from './game';
 import { capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
 import { carriedEquity, faceliftEligibility, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
 import { awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
+import { diffOf } from './difficulty';
+export { difficultyInfo } from './difficulty';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { STATS, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
@@ -31,14 +33,25 @@ export function projectPreview(s: CarState, projectId: number): { stats: Stats; 
 export function expectedReviews(s: CarState, projectId: number, price: number): { scores: number[]; avg: number } | null {
   const p = projectById(s, projectId), pv = projectPreview(s, projectId);
   if (!p || !pv) return null;
-  const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0);
+  const scores = criticScores(pv.stats, yearOf(s.week), bodyById(p.body).basePrice, price, p.defects, () => 0, diffOf(s).manyDefects);
   return { scores, avg: mean(scores) };
 }
 
-/** 남은 결함(화면에 보이는 "약 N개") 판단: 15개 이상 많음 / 6~14 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
-export function defectAdvice(p: Project): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
+/** 개발 진행 상태와 주간 개발비(0.4.1). waiting: 출시 대기(결함을 다 잡아 개발비가 0). weeklyCost: 지금 주마다 드는 개발비(만원) */
+export function projectStatus(s: CarState, projectId: number): { phase: Project['phase']; waiting: boolean; weeklyCost: number; costNote: string } | null {
+  const p = projectById(s, projectId);
+  if (!p) return null;
+  const waiting = !!p.waiting, weeklyCost = waiting ? 0 : weeklyDevCost(s, p), n = Math.round(weeklyCost).toLocaleString();
+  const costNote = waiting ? '출시 대기 중이라 개발비가 들지 않습니다.'
+    : p.kind === 'facelift' ? `페이스리프트 개발 중에는 주마다 약 ${n}만원이 듭니다.`
+    : `${p.phase === 'design' ? '설계' : '시험'} 중에는 주마다 약 ${n}만원이 듭니다(직원 몫 + 시제차).`;
+  return { phase: p.phase, waiting, weeklyCost, costNote };
+}
+
+/** 남은 결함(화면에 보이는 "약 N개") 판단: 감점 기준(보통 15개, s를 주면 난이도 값) 이상 많음 / 6개~기준 미만 조금 더 / 5 이하 출시 좋음. recallYear: 연 리콜 확률(6.3) */
+export function defectAdvice(p: Project, s?: CarState): { level: 'many' | 'some' | 'ok'; text: string; recallYear: number } {
   const c = config.critics, n = p.defectEst, recallYear = Math.min(config.recall.maxYear, n * config.recall.perDefect);
-  if (n >= c.manyDefects) return { level: 'many', recallYear, text: `결함이 아직 많습니다. 지금 출시하면 평론가 4명이 모두 ${c.manyDefectsPenalty}점씩 깎고, 리콜 위험이 큽니다.` };
+  if (n >= (s ? diffOf(s).manyDefects : c.manyDefects)) return { level: 'many', recallYear, text: `결함이 아직 많습니다. 지금 출시하면 평론가 4명이 모두 ${c.manyDefectsPenalty}점씩 깎고, 리콜 위험이 큽니다.` };
   if (n > c.okDefects) return { level: 'some', recallYear, text: '조금 더 시험하면 좋습니다.' };
   return { level: 'ok', recallYear, text: '출시해도 좋습니다.' };
 }
@@ -60,7 +73,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
     return finalStats(spec.body, spec.powertrain, level, spec.options, pts, defects);
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
-  return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget) * (spec.designWeeks + d.minTestWeeks) };
+  return { grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
 }
 
 /** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */

@@ -3,10 +3,10 @@ import { config } from '../config';
 import { avgGrade, grades } from './cars';
 import { STATS, type Stats } from './types';
 
-/** 평론 점수 4개(1~10, 소수 1자리). noise(): −1~1 사이 값을 주면 ±0.7로 흔든다. 미리보기는 () => 0 */
-export function criticScores(stats: Stats, year: number, basePrice: number, price: number, defects: number, noise: () => number): number[] {
+/** 평론 점수 4개(1~10, 소수 1자리). noise(): −1~1 사이 값을 주면 ±0.7로 흔든다. 미리보기는 () => 0. manyDefects: 감점 결함 기준(난이도, 생략하면 config) */
+export function criticScores(stats: Stats, year: number, basePrice: number, price: number, defects: number, noise: () => number, manyDefects = config.critics.manyDefects): number[] {
   const c = config.critics, g = grades(stats, year), avg = avgGrade(stats, year);
-  const penalty = defects >= c.manyDefects ? c.manyDefectsPenalty : 0;
+  const penalty = defects >= manyDefects ? c.manyDefectsPenalty : 0;
   return c.list.map((cr) => {
     const base = cr.w
       ? STATS.reduce((a, k) => a + (cr.w![k] ?? 0) * g[k], 0)

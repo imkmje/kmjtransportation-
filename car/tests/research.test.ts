@@ -20,7 +20,7 @@ import { SPEC, grant, launched, ok } from './util';
 const reason = (r: { ok: boolean; reason?: string }) => (r.ok ? '' : r.reason);
 const WPY = 48;
 /** year년 1월 1주로 옮긴 새 게임(현금 넉넉히) */
-const gameAt = (year: number, seed = 1) => { const g = Game.create({ seed }); g.state.week = (year - 1970) * WPY; g.state.cash = 1e9; return g; };
+const gameAt = (year: number, seed = 1) => { const g = Game.create({ difficulty: 'normal', seed }); g.state.week = (year - 1970) * WPY; g.state.cash = 1e9; return g; };
 /** 개발 중인 첫 프로젝트를 시험 최소 주까지 */
 const toTest = (g: Game) => { const p = g.state.projects[0]; while (p.phase === 'design' || p.testWeeks < config.dev.minTestWeeks) g.tick(); return p; };
 const LAUNCH = { price: 1200, marketing: 1, color: 'red', wheels: 0 as const };
@@ -85,7 +85,7 @@ describe('자료 무결성(4단계)', () => {
 
 describe('해금은 연구로만(10장)', () => {
   it('시작: 소형 세단·가솔린만, 옵션 없음. 몇 년이 지나도 그대로', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     const now = (s: CarState) => [unlockedBodies(s).map((b) => b.id), unlockedPowertrains(s).map((p) => p.id), unlockedOptions(s).map((o) => o.id)];
     expect(now(g.state)).toEqual([['sedanS'], ['gasoline'], []]);
     g.state.week = 30 * WPY;
@@ -99,7 +99,7 @@ describe('해금은 연구로만(10장)', () => {
 
 describe('연구 진행(10장)', () => {
   it('돈은 바로, 쉬는 엔지니어가 매주 능력/10씩 쌓아 완료(이벤트). 프로젝트 중인 엔지니어는 0', () => {
-    const g = Game.create({ seed: 3 }), s = g.state, t = techById('el_radio'), cash = s.cash;
+    const g = Game.create({ difficulty: 'normal', seed: 3 }), s = g.state, t = techById('el_radio'), cash = s.cash;
     const eng = s.staff.filter((x) => x.role === 'engineer'), ppw = eng.reduce((a, x) => a + x.ability / 10, 0);
     expect(weeklyResearchPoints(s)).toBeCloseTo(ppw, 12);
     ok(g.command({ type: 'startResearch', techId: 'el_radio' }));
@@ -224,7 +224,7 @@ describe('동력 단계(5.3)와 등급(tier)', () => {
     const seed = 4, sp = eraTimeline(seed).find((x) => x.def.id === 'evDawn')!;
     expect(chargingInfra(seed, sp.start - 1)).toBe(0); expect(chargingInfra(seed, sp.start)).toBeCloseTo(0.05, 12);
     expect(chargingInfra(seed, sp.start + 24)).toBeCloseTo(0.14, 12); expect(chargingInfra(seed, sp.start + 12 * 40)).toBe(1);
-    const g = Game.create({ seed }), car = (powertrain: string): SaleCar => ({ body: 'sedanS', segment: 'worker', stats: { P: 900, E: 900, U: 900, D: 900, Q: 900 }, price: 1200, awareness: 0.5, life: 1, powertrain });
+    const g = Game.create({ difficulty: 'normal', seed }), car = (powertrain: string): SaleCar => ({ body: 'sedanS', segment: 'worker', stats: { P: 900, E: 900, U: 900, D: 900, Q: 900 }, price: 1200, awareness: 0.5, life: 1, powertrain });
     expect(monthlyDemand(g.state, car('ev'), [], monthTime(sp.start - 1))).toBe(0);
     const t = monthTime(sp.start + 24);
     const ev = monthlyDemand(g.state, car('ev'), [], t), gas = monthlyDemand(g.state, car('gasoline'), [], t);
@@ -253,7 +253,7 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
     const seed = 2, T = eraTimeline(seed), at = (id: string) => T.find((x) => x.def.id === id)!;
     const imf = at('imf');
     expect(marketMult(eraNow(seed, imf.start))).toBeCloseTo(0.6, 12); expect(eraNow(seed, imf.start).loan).toBe(2); expect(imf.end).toBe(imf.start + 24);
-    const g = Game.create({ seed }); g.state.loan.balance = 1000;
+    const g = Game.create({ difficulty: 'normal', seed }); g.state.loan.balance = 1000;
     g.state.week = (imf.start - 1) * 4; const r0 = loanRate(g.state);
     g.state.week = imf.start * 4; expect(loanRate(g.state)).toBeCloseTo(r0 * 2, 12);
     const gfc = at('gfc');
@@ -262,7 +262,7 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
     expect(dg.end).toBeNull(); expect(eraNow(seed, dg.start + 12 * 50).pt.diesel).toBe(0.4);
   });
   it('감염병: 12개월 동안 공장 생산 × 0.7(생산 한도)', () => {
-    const seed = 3, sp = eraTimeline(seed).find((x) => x.def.id === 'pandemic')!, g = Game.create({ seed });
+    const seed = 3, sp = eraTimeline(seed).find((x) => x.def.id === 'pandemic')!, g = Game.create({ difficulty: 'normal', seed });
     g.state.week = sp.start * 4; expect(capacityOf(g.state)).toBeCloseTo(300 * 0.7, 9);
     g.state.week = sp.end! * 4; expect(capacityOf(g.state)).toBe(300);
   });
@@ -272,7 +272,7 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
     expect(eraNow(seed, sp.start + 36).trendAdd.gasoline).toBeCloseTo(-0.09, 12);
   });
   it('예고(6개월 전)·시작·끝 뉴스가 그달 첫 주에 나오고 뉴스 기록에 남는다', () => {
-    const seed = 11, sp = eraTimeline(seed).find((x) => x.def.id === 'oil1')!, g = Game.create({ seed });
+    const seed = 11, sp = eraTimeline(seed).find((x) => x.def.id === 'oil1')!, g = Game.create({ difficulty: 'normal', seed });
     g.state.cash = 1e12; // 방치해도 파산하지 않게
     const texts: string[] = [];
     while (monthOf(g.state.week) <= sp.end!) for (const e of g.tick()) if (e.kind === 'news') texts.push(`${monthOf(g.state.week)}:${e.text}`);
@@ -286,7 +286,7 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
   it('안전 규제: 발표 뒤 36개월 유예, 그 뒤 ABS·에어백이 없는 신차는 출시 거부(이유), 넣으면 된다', () => {
     const seed = 1, sp = eraTimeline(seed).find((x) => x.def.id === 'safety')!;
     const launchAt = (month: number, options: string[]) => {
-      const g = Game.create({ seed }); g.state.cash = 1e9; g.state.week = month * 4 - 24; g.state.hqLevel = 3; grant(g, 'bd_airbag', 'el_radio');
+      const g = Game.create({ difficulty: 'normal', seed }); g.state.cash = 1e9; g.state.week = month * 4 - 24; g.state.hqLevel = 3; grant(g, 'bd_airbag', 'el_radio');
       ok(g.command({ type: 'startProject', ...SPEC, options }));
       const p = toTest(g);
       return g.command({ type: 'launch', projectId: p.id, ...LAUNCH });
@@ -294,7 +294,7 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
     expect(launchAt(sp.start + 30, []).ok).toBe(true); // 유예 중
     expect(reason(launchAt(sp.start + 40, ['radio']))).toBe('안전 규제: 이제 ABS·에어백이 없는 차는 출시할 수 없습니다. 이 차는 그대로 낼 수 없으니 개발을 취소하고 신차 기획을 다시 하면서 옵션에 ABS·에어백을 넣으세요.');
     expect(launchAt(sp.start + 40, ['abs', 'airbag', 'radio']).ok).toBe(true);
-    const s = Game.create({ seed }).state; s.week = (sp.start + 40) * 4;
+    const s = Game.create({ difficulty: 'normal', seed }).state; s.week = (sp.start + 40) * 4;
     expect(regulationError(s, { options: ['abs'], powertrain: 'gasoline' })).toBe('안전 규제: 이제 에어백이 없는 차는 출시할 수 없습니다. 옵션 단계에서 에어백을 넣으세요.'); // 기획 중(kind 없음)
     expect(activeEvents(s).requiredOptions).toEqual(['abs', 'airbag']);
     s.week = (sp.start + 12 * 60) * 4; // 2032 유럽 내연기관 규제는 국내에 영향 없음
@@ -331,7 +331,7 @@ describe('무작위 사건(11.2)', () => {
   });
   it('뜨면 선택 대기(choice 이벤트), 답하면 효과와 뉴스, 4주 동안 답이 없으면 기본 선택', () => {
     const play = (answer: boolean) => {
-      const g = Game.create({ seed: 6 }), bot = steady(); g.state.cash = 1e9;
+      const g = Game.create({ difficulty: 'normal', seed: 6 }), bot = steady(); g.state.cash = 1e9;
       const seen: number[] = [];
       for (let w = 0; w < WPY * 15; w++) {
         bot.step(g); // 봇은 사건에 바로 기본 선택으로 답한다 → answer가 거짓이면 대기 중인 사건을 봇 전에 치운다
@@ -344,7 +344,7 @@ describe('무작위 사건(11.2)', () => {
     expect(seen.length).toBeGreaterThan(3);
     expect(newsLog(g.state).filter((x) => x.text.includes('—')).length).toBeGreaterThan(0); // 선택 결과 뉴스
     // 직접 답하기
-    const h = Game.create({ seed: 6 }); h.state.cash = 1e9;
+    const h = Game.create({ difficulty: 'normal', seed: 6 }); h.state.cash = 1e9;
     h.state.events.pending.push({ id: 999, eventId: 'motorshow', text: '모터쇼', week: 0, deadline: 4, genId: null, fx: null });
     expect(pendingChoices(h.state)[0]).toMatchObject({ id: 999, name: '모터쇼 초청', defaultChoice: 1, weeksLeft: 4 });
     expect(reason(h.command({ type: 'resolveEvent', eventId: 999, choice: 5 }))).toBe('선택지는 0~1 중에서 고르세요.');
@@ -363,7 +363,7 @@ describe('무작위 사건(11.2)', () => {
   });
   it('결함 의심 신고(기존 리콜 규칙과 이어짐): 전량 수리 = 돈을 내고 결함 0(리콜 위험 없음), 버티기 = 평판 −4·인지도 × 0.85', () => {
     const mk = () => {
-      const g = Game.create({ seed: 2 }); g.state.cash = 1e9;
+      const g = Game.create({ difficulty: 'normal', seed: 2 }); g.state.cash = 1e9;
       ok(g.command({ type: 'startProject', ...SPEC })); const p = toTest(g);
       ok(g.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
       const gen = allGens(g.state)[0]; gen.editions[0].defects = 10; gen.totalSold = 1000;
@@ -378,7 +378,7 @@ describe('무작위 사건(11.2)', () => {
     expect(b.g.state.reputation).toBe(rep - 4); expect(b.gen.awareness).toBeCloseTo(aw * 0.85, 12); expect(b.gen.editions[0].defects).toBe(10);
   });
   it('기간 효과: 파업 버티기는 그달 생산 × 0.5, 원자재 감수는 6개월 원가 × 1.04', () => {
-    const g = Game.create({ seed: 1 }); g.state.cash = 1e9;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }); g.state.cash = 1e9;
     g.state.events.pending.push({ id: 1, eventId: 'strike', text: '', week: 0, deadline: 4, genId: null, fx: null }, { id: 2, eventId: 'materials', text: '', week: 0, deadline: 4, genId: null, fx: null });
     ok(g.command({ type: 'resolveEvent', eventId: 1, choice: 1 })); ok(g.command({ type: 'resolveEvent', eventId: 2, choice: 1 }));
     expect(capacityOf(g.state)).toBe(150); expect(unitCost('sedanS', 'gasoline', 1, [], costMultOf(g.state))).toBeCloseTo(984 * 1.04, 9);
@@ -389,7 +389,7 @@ describe('무작위 사건(11.2)', () => {
 
 describe('조합 노트(5.5)', () => {
   it('출시해 본 차체 × 고객층만 공개(궁합 기호와 그때 차·평론)', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     expect(comboNotes(g.state)).toEqual([]); expect(comboMark(g.state, 'sedanS', 'worker')).toBeNull();
     ok(g.command({ type: 'startProject', ...SPEC, name: '노트카' })); const p = toTest(g);
     ok(g.command({ type: 'launch', projectId: p.id, ...LAUNCH }));
@@ -434,8 +434,8 @@ describe('저장 형식 3 → 4', () => {
 describe('결정론(연구·사건 포함)', () => {
   it('같은 시드·같은 명령 = 같은 상태, 저장 → 불러오기 → 이어서 = 끊지 않은 실행(15년, 사건·연구 포함)', () => {
     const run = (g: Game, from: number, to: number) => { const b = steady(); for (let w = from; w < to && g.state.status === 'playing'; w++) { b.step(g); g.tick(); } };
-    const whole = Game.create({ seed: 12 }); run(whole, 0, WPY * 15);
-    const part = Game.create({ seed: 12 }); run(part, 0, WPY * 6 + 9);
+    const whole = Game.create({ difficulty: 'normal', seed: 12 }); run(whole, 0, WPY * 15);
+    const part = Game.create({ difficulty: 'normal', seed: 12 }); run(part, 0, WPY * 6 + 9);
     const loaded = Game.fromJSON(JSON.parse(JSON.stringify(part.toJSON()))); run(loaded, WPY * 6 + 9, WPY * 15);
     expect(JSON.stringify(loaded.toJSON())).toBe(JSON.stringify(whole.toJSON()));
     expect(whole.state.research.done.length).toBeGreaterThan(5);

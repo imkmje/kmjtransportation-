@@ -12,7 +12,7 @@ export const STAT_NAME = { P: '성능', E: '연비', U: '실용', D: '디자인'
 export const ROLE_NAME = { designer: '디자이너', engineer: '엔지니어', tester: '테스터', sales: '영업' } as const;
 export const ROLE_SKILL = { designer: '디자인', engineer: '기술', tester: '꼼꼼함', sales: '영업력' } as const;
 export const MARKETING = ['안 함', '조금', '보통', '많이'];
-export const BUDGET = { low: { name: '절약', sub: '점수 조금 적게 · 비용 절반' }, normal: { name: '보통', sub: '기본' }, high: { name: '과감', sub: '점수 많이 · 비용 2배' } } as const;
-export const TIER_SUB = ['연비가 좋고 값이 쌈', '균형', '힘이 좋음 · 원가 비쌈'];
+export const BUDGET = { low: { name: '절약', sub: '점수 적음 · 비용 절반' }, normal: { name: '보통', sub: '기본' }, high: { name: '과감', sub: '점수 많음 · 비용 2배' } } as const;
+export const TIER_SUB = ['연비 우수 · 원가 낮음', '성능과 원가의 균형', '고출력 · 원가 높음'];
 /** 조사 고르기(sim과 같은 함수): josa('해치백', '을/를') → '을' */
 export { josa } from '../sim/josa';

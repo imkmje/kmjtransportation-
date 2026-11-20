@@ -18,7 +18,7 @@ const reason = (r: { ok: boolean; reason?: string }) => (r.ok ? '' : r.reason);
 const H = config.staff.hire, C = config.staff.condition;
 /** 본사 2등급(정원 8)까지 올린 새 게임 */
 function hq2(seed = 1, cash = 1e7): Game {
-  const g = Game.create({ seed });
+  const g = Game.create({ difficulty: 'normal', seed });
   g.state.cash = cash;
   ok(g.command({ type: 'upgradeHQ' }));
   return g;
@@ -34,7 +34,7 @@ function hireOne(g: Game, role: Staff['role'] = 'designer', tier: 1 | 2 | 3 = 1)
 
 describe('채용(9.1)', () => {
   it('정원이 차 있으면 공고 거부(본사 1등급 정원 4), 본사를 올리면 된다', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     expect(reason(g.command({ type: 'postJob', role: 'designer', tier: 1 }))).toBe('정원(4명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.');
     g.state.cash = 1e7;
     ok(g.command({ type: 'upgradeHQ' }));
@@ -117,7 +117,7 @@ describe('채용(9.1)', () => {
 
 describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
   it('해고: 퇴직금 = 월급 2개월분, 배치 중이면 빠진다', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const x = g.state.staff[1], cash = g.state.cash;
     ok(g.command({ type: 'fire', staffId: x.id }));
@@ -127,7 +127,7 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
     expect(reason(g.command({ type: 'fire', staffId: x.id }))).toBe('없는 직원입니다.');
   });
   it('교육: 비용 = 능력 × 40만원(최소 500만), 능력 +1~3(잠재력 상한), 연 1회, 잠재력에 도달하면 거부', () => {
-    const g = Game.create({ seed: 2 });
+    const g = Game.create({ difficulty: 'normal', seed: 2 });
     g.state.cash = 1e7;
     const x = g.state.staff[0], a0 = x.ability, cash = g.state.cash;
     ok(g.command({ type: 'train', staffId: x.id }));
@@ -149,7 +149,7 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
     expect(reason(g.command({ type: 'train', staffId: g.state.staff[2].id }))).toBe('현금이 모자랍니다.');
   });
   it('교육 중 4주는 프로젝트 산출 0(난수 순서는 그대로), 끝나면 소식', () => {
-    const g = Game.create({ seed: 3 });
+    const g = Game.create({ difficulty: 'normal', seed: 3 });
     ok(g.command({ type: 'startProject', ...SPEC }));
     const x = g.state.staff[0];
     ok(g.command({ type: 'train', staffId: x.id }));
@@ -167,7 +167,7 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
   it('경험: 출시로 마친 직원 능력 +1~2, 잠재력을 넘지 않는다', () => {
     const { g } = launched(4);
     for (const x of g.state.staff) expect(x.ability).toBeLessThanOrEqual(x.potential);
-    const h = Game.create({ seed: 4 });
+    const h = Game.create({ difficulty: 'normal', seed: 4 });
     for (const x of h.state.staff) x.potential = x.ability; // 이미 잠재력
     ok(h.command({ type: 'startProject', ...SPEC }));
     const before = h.state.staff.map((x) => x.ability), p = h.state.projects[0];
@@ -177,7 +177,7 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
   });
   it('컨디션: 프로젝트 주마다 −0.01(보통)/−0.025(과감)/−0.005(절약), 쉬는 주 +0.05(최대 1)', () => {
     for (const budget of ['low', 'normal', 'high'] as const) {
-      const g = Game.create({ seed: 1 });
+      const g = Game.create({ difficulty: 'normal', seed: 1 });
       ok(g.command({ type: 'startProject', ...SPEC, budget }));
       for (let i = 0; i < 10; i++) g.tick();
       for (const x of g.state.staff) expect(x.condition).toBeCloseTo(1 - 10 * C.perWeek[budget], 9);
@@ -188,12 +188,12 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
   });
   it('컨디션 산출 배수: 0.3 미만 ×0.6, 0.3~0.6 ×0.85, 그 이상 ×1', () => {
     expect([0, 0.29, 0.3, 0.59, 0.6, 1].map(conditionMult)).toEqual([0.6, 0.6, 0.85, 0.85, 1, 1]);
-    const s = Game.create({ seed: 1 }).state.staff[1], spec = { budget: 'normal' as const, direction: SPEC.direction };
+    const s = Game.create({ difficulty: 'normal', seed: 1 }).state.staff[1], spec = { budget: 'normal' as const, direction: SPEC.direction };
     const at = (c: number) => designWeekByStaff([{ ...s, condition: c }], spec, () => 1)[0].P;
     expect(at(0.2) / at(1)).toBeCloseTo(0.6, 12); expect(at(0.5) / at(1)).toBeCloseTo(0.85, 12); expect(at(0.7)).toBe(at(1));
   });
   it('휴식: 1~12주, 그동안 산출 0·회복, 끝나면 소식. 교육 중에는 거부', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     ok(g.command({ type: 'startProject', ...SPEC, budget: 'high' }));
     for (let i = 0; i < 8; i++) g.tick();
     const x = g.state.staff[2], c0 = x.condition;
@@ -213,7 +213,7 @@ describe('해고·교육·경험·컨디션·휴식(9.1)', () => {
 
 describe('팀 배치와 영업(9.1)', () => {
   it('startProject의 team: 고른 직원만 배치, 생략하면 쉬는 개발 직무 전원(영업 제외), 잘못된 팀은 거부', () => {
-    const g = Game.create({ seed: 1 }), [a, b] = g.state.staff;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }), [a, b] = g.state.staff;
     expect(reason(g.command({ type: 'startProject', ...SPEC, team: [] }))).toContain('한 명 이상');
     expect(reason(g.command({ type: 'startProject', ...SPEC, team: [a.id, a.id] }))).toContain('겹치지 않게');
     expect(reason(g.command({ type: 'startProject', ...SPEC, team: [999] }))).toBe('없는 직원입니다.');
@@ -245,7 +245,7 @@ describe('팀 배치와 영업(9.1)', () => {
     expect(ev.find((e) => e.kind === 'devWeek' && e.projectId === p2.id)!.staff.map((x) => x.id)).toEqual([a.id, c.id, d.id]);
   });
   it('teamPreview: 팀이 클수록 예상 등급이 높고, 기본 팀(쉬는 개발 직원 전원)이면 planPreview와 같다', () => {
-    const g = Game.create({ seed: 1 }), ids = g.state.staff.map((x) => x.id);
+    const g = Game.create({ difficulty: 'normal', seed: 1 }), ids = g.state.staff.map((x) => x.id);
     expect(teamPreview(g.state, ids, SPEC)).toEqual(planPreview(g.state, SPEC));
     expect(teamPreview(g.state, ids.slice(0, 2), SPEC).avg).toBeLessThan(teamPreview(g.state, ids, SPEC).avg);
   });
@@ -283,7 +283,7 @@ describe('팀 배치와 영업(9.1)', () => {
 
 describe('본사(9.2)와 동시 개발(6.4)', () => {
   it('등급별 정원 4/8/12/16/20, 개발팀 1/1/2/2/3, 옵션 슬롯 2/2/3/4/4, 승급비·평판 조건, 최고 등급', () => {
-    const g = Game.create({ seed: 1 }), s = g.state;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     const got = [];
     s.cash = 0;
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('현금이 모자랍니다.');
@@ -303,7 +303,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
   });
   it('옵션 슬롯: 본사 1등급은 2개, 3등급이면 3개까지', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.state.week = 48 * 10; // 1980년: 옵션 3개 연구
     grant(g, 'el_aircon', 'el_powerSteering');
     const three = { ...SPEC, options: ['radio', 'aircon', 'powerSteering'] };
@@ -326,15 +326,15 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     expect(g.state.projects.every((p) => p.weeksDone > 0)).toBe(true);
   });
   it('월 유지비 = 공장 + 본사(등급별)', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.state.cash = 1e9;
-    expect(upkeepOf(g.state)).toBe(5000 + 500);
+    expect(upkeepOf(g.state)).toBe(config.factory.levels[0].upkeep + config.hq.levels[0].upkeep);
     ok(g.command({ type: 'upgradeHQ' }));
     toMonthEnd(g);
-    expect(g.state.ledger.at(-1)!.upkeep).toBe(5000 + config.hq.levels[1].upkeep);
+    expect(g.state.ledger.at(-1)!.upkeep).toBe(config.factory.levels[0].upkeep + config.hq.levels[1].upkeep);
   });
   it('hqInfo: 지금·다음 등급, 승급 가능 여부와 이유', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     const i = hqInfo(g.state);
     expect(i.current).toMatchObject({ level: 1, name: '창고 공장', staffCap: 4, teams: 1, optionSlots: 2 });
     expect(i.next).toMatchObject({ level: 2, name: '소형 사옥', cost: 50000, staffCap: 8 });
@@ -346,7 +346,7 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
 
 describe('공장(9.3)', () => {
   it('증설: 다음 등급 건설비, 공사 6개월 뒤 반영(공사 중 추가 증설 불가), 생산 한도·라인·유지비·원가 배수가 표대로', () => {
-    const g = Game.create({ seed: 1 }), s = g.state;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     s.cash = 1e9;
     const L = config.factory.levels;
     for (let lv = 1; lv < 5; lv++) {
@@ -367,7 +367,7 @@ describe('공장(9.3)', () => {
     expect(reason(g.command({ type: 'expandFactory' }))).toBe('공장이 최고 등급입니다.');
     toMonthEnd(g);
     expect(s.ledger.at(-1)!.upkeep).toBe(L[4].upkeep + config.hq.levels[0].upkeep);
-    const h = Game.create({ seed: 1 }); h.state.cash = 0;
+    const h = Game.create({ difficulty: 'normal', seed: 1 }); h.state.cash = 0;
     expect(reason(h.command({ type: 'expandFactory' }))).toBe('현금이 모자랍니다.');
   });
   it('원가 배수가 대당 원가(장부 원가)에 들어간다', () => {
@@ -424,7 +424,7 @@ describe('공장(9.3)', () => {
     expect(capacityAdvice(g.state)).toBe('생산에 여유가 있습니다(한도의 33%만 주문).');
     gen.lastDemand = 250;
     expect(capacityAdvice(g.state)).toBe('생산량이 주문에 잘 맞습니다.');
-    expect(capacityAdvice(Game.create({ seed: 1 }).state)).toBe('판매 중인 차가 없습니다.');
+    expect(capacityAdvice(Game.create({ difficulty: 'normal', seed: 1 }).state)).toBe('판매 중인 차가 없습니다.');
   });
 });
 
@@ -443,7 +443,7 @@ function twoCars(seed: number) {
 
 describe('조회 함수(화면용)', () => {
   it('staffInfo: 직무·능력·잠재력 도달·월급·컨디션·상태·교육 가능 여부와 이유', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.state.cash = 1e7;
     ok(g.command({ type: 'startProject', ...SPEC, team: [1, 2] }));
     ok(g.command({ type: 'train', staffId: 3 }));
@@ -456,7 +456,7 @@ describe('조회 함수(화면용)', () => {
     expect(rows[0]).toMatchObject({ id: x.id, role: x.role, ability: x.ability, potential: x.potential, atPotential: false, salary: salaryOf(x.ability), condition: 1, conditionMult: 1, projectId: g.state.projects[0].id, canTrain: true, trainCost: Math.max(500, x.ability * 40), severance: 2 * salaryOf(x.ability) });
   });
   it('hiringInfo: 정원·공고비·후보와 남은 주', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     expect(hiringInfo(g.state)).toMatchObject({ staffCount: 4, capacity: 4, full: true, canPost: false, candidates: [] });
     expect(hiringInfo(g.state).tiers.map((t) => t.cost)).toEqual([500, 2000, 10000]);
     g.state.cash = 1e7; ok(g.command({ type: 'upgradeHQ' })); ok(g.command({ type: 'postJob', role: 'designer', tier: 1 }));
@@ -496,9 +496,9 @@ describe('저장 형식 2 → 4', () => {
         bot.step(g); g.tick();
       }
     };
-    const whole = Game.create({ seed: 11 });
+    const whole = Game.create({ difficulty: 'normal', seed: 11 });
     play(whole, 0, 48 * 5);
-    const part = Game.create({ seed: 11 });
+    const part = Game.create({ difficulty: 'normal', seed: 11 });
     play(part, 0, 48 + 7);
     const loaded = Game.fromJSON(JSON.parse(JSON.stringify(part.toJSON())));
     play(loaded, 48 + 7, 48 * 5);
@@ -514,10 +514,10 @@ describe('3단계 후속 보정 장치', () => {
     expect(k).toBeGreaterThanOrEqual(0); expect(k).toBeLessThanOrEqual(0.6);
     expect(teamSizeMult(1)).toBe(1); expect(teamSizeMult(4)).toBe(1);
     expect(teamSizeMult(8)).toBeCloseTo(2 ** -k, 12); expect(teamSizeMult(20)).toBeCloseTo(5 ** -k, 12);
-    const x = Game.create({ seed: 1 }).state.staff[1], spec = { budget: 'normal' as const, direction: SPEC.direction };
+    const x = Game.create({ difficulty: 'normal', seed: 1 }).state.staff[1], spec = { budget: 'normal' as const, direction: SPEC.direction };
     const one = designWeekByStaff([x], spec, () => 1)[0].P, eight = designWeekByStaff(Array(8).fill(x), spec, () => 1);
     expect(eight[0].P).toBeCloseTo(one * 2 ** -k, 12);
-    const g = Game.create({ seed: 1 }), s = g.state;
+    const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     s.staff = Array.from({ length: 8 }, (_, i) => ({ ...s.staff[i % 4], id: i + 1 }));
     expect(planPreview(s, SPEC).avg).toBeLessThan(planPreview(s, SPEC, s.staff.slice(0, 4)).avg * 2);
     expect(planPreview(s, SPEC).avg).toBeGreaterThan(planPreview(s, SPEC, s.staff.slice(0, 4)).avg);
@@ -527,7 +527,7 @@ describe('3단계 후속 보정 장치', () => {
     expect(rivalBase(0)).toBe(r.base);
     expect(rivalBase(120)).toBeCloseTo(Math.min(r.baseMax, r.base + 10 * r.baseGrowth), 12);
     expect(rivalBase(12 * 60)).toBe(r.baseMax);
-    const g = Game.create({ seed: 8 });
+    const g = Game.create({ difficulty: 'normal', seed: 8 });
     g.state.cash = 1e12;
     for (let i = 0; i < 48 * 30; i++) g.tick();
     for (const rv of g.state.rivals) for (const body of Object.keys(rv.models)) {
@@ -538,7 +538,7 @@ describe('3단계 후속 보정 장치', () => {
   });
   it('7) 직원 20명·본사 5등급: 균등 배분·보통 예산·12주 차의 표시 등급 평균이 1985~1995년 기준 6~8.5', () => {
     for (const year of [1985, 1990, 1995]) {
-      const g = Game.create({ seed: 1 }), s = g.state;
+      const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
       s.week = (year - 1970) * 48; s.hqLevel = 5;
       const roles = [...Array(5).fill('designer'), ...Array(10).fill('engineer'), ...Array(5).fill('tester')] as Staff['role'][];
       s.staff = roles.map((role, i) => ({ id: i + 1, name: `직원${i}`, role, ability: 60 + ((i * 7) % 21), potential: 100, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false })); // 능력 60~80

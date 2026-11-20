@@ -13,7 +13,7 @@ export const config = {
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
     designWeeks: [8, 12, 16], minTestWeeks: 2,
-    prototypePerWeek: 5600, // 시제차 비용(주당). 4단계 5800 → 5600(경쟁사 난수 순서가 바뀌어 첫 차 개발비 중앙값이 12억을 조금 넘어서). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
+    prototypePerWeek: 5000, // 시제차 비용(주당). 0.4.1 난이도 완화 5600 → 5000(첫 차 개발비 약 10.6억). 4단계 5800 → 5600(경쟁사 난수 순서가 바뀌어 첫 차 개발비 중앙값이 12억을 조금 넘어서). 2단계 조정 4000 → 5800: 시장 보간을 바꾸며 시장 배수를 올리자 첫 차 회수가 짧아져서, 개발비를 약 11.8억(설계자 결정 6~12억 안)으로
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
@@ -49,17 +49,18 @@ export const config = {
     rate: 0.15, // 매달 목표값으로 15%씩 다가간다
   },
   life: { start: 0.6, rampMonths: 3, decay: 0.012 }, // 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2%
-  recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 15, rep: -5, awarenessMult: 0.8 }, // 6.3
+  recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 12, rep: -5, awarenessMult: 0.8 }, // 6.3. 리콜 대당 비용 0.4.1에서 15 → 12만원(결함이 남은 차의 부담 완화)
   factory: { // 9.3 공장. capacity·lines·upkeep·costMult는 1등급 값(화면 호환용), sim은 levels를 쓴다
-    capacity: 300, lines: 1, upkeep: 5000, costMult: 1,
+    capacity: 300, lines: 1, upkeep: 4000, costMult: 1, // 0.4.1: 1등급 유지비 5,000 → 4,000
     levels: [ // 월 생산, 생산 라인(동시 차종), 건설비, 월 유지비, 원가 배수
       // 3단계 봇 측정으로 조정(설계서 9.3 표: 건설비 8억/50억/250억/1,200억, 유지비 0.5/1.5/4/10/25억, 원가 배수 1/.95/.9/.85/.8).
       // 후속 보정: 건설비 17억/260억/2,200억/7,000억, 유지비 0.5/1.9/5.2/18.6/52.5억(성장이 30년 이상에 걸치도록)
       // 대당 이익이 판매가의 약 10%라 원가 배수 0.8이면 이익이 3배가 되어 돈이 폭발했다 → 배수를 완만하게, 건설비·유지비를 올림
-      { capacity: 300, lines: 1, cost: 0, upkeep: 5000, costMult: 1 },
-      { capacity: 1000, lines: 2, cost: 170000, upkeep: 19000, costMult: 0.99 },
+      // 0.4.1 난이도 완화: 1·2등급 유지비 0.5/1.9억 → 0.4/1.6억(초반 부담), 3등급 건설비 260 → 320억·유지비 15.6 → 22억(초반 완화로 신중 봇의 공장이 너무 빨리 커지지 않게)
+      { capacity: 300, lines: 1, cost: 0, upkeep: 4000, costMult: 1 },
+      { capacity: 1000, lines: 2, cost: 170000, upkeep: 16000, costMult: 0.99 },
       // 4단계 보정: 3~5등급 유지비 5.2/18.6/52.5억 → 15.6/84/240억(연구로 차체·동력이 좋아져 1980년대 이익이 커진 만큼, 큰 공장을 굴리는 비용을 올림)
-      { capacity: 3000, lines: 3, cost: 2600000, upkeep: 156000, costMult: 0.98 },
+      { capacity: 3000, lines: 3, cost: 3200000, upkeep: 220000, costMult: 0.98 },
       { capacity: 8000, lines: 5, cost: 22000000, upkeep: 840000, costMult: 0.97 },
       { capacity: 20000, lines: 8, cost: 70000000, upkeep: 2400000, costMult: 0.96 },
     ],
@@ -97,11 +98,11 @@ export const config = {
     sales: { awarenessDiv: 400, awarenessMax: 0.15, fleetDiv: 1000, fleetMax: 1.3, fleetSegment: 'fleet' }, // 영업: 인지도 수렴 +합/400(최대 +0.15), 법인 매력 ×(1 + 합/1000, 최대 1.3)
   },
   discontinue: { lastMonthMult: 0.5, recentMonths: 3, wellSelling: 0.7, rep: -2, adviceSales: 10, adviceMonths: 6, adviceDrop: 0.6 }, // 8.6
-  loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
-  bankruptcy: { months: 6, bailoutRep: -20 },
+  loan: { base: 300000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 30억(0.4.1에서 20억 → 30억) + 최근 12개월 매출 × 0.3
+  bankruptcy: { months: 12, bailoutRep: -20 }, // 0.4.1: 파산까지의 유예 6 → 12개월(사용자 피드백: 파산이 너무 잘 뜬다)
   rivals: { // 7.4·8.4: 경쟁 차 A = 기본값 + 강약 ± 0.1. 4~7년 주기로 새 모델, 주기 중간에 페이스리프트(2단계 단순 규칙, 5단계에서 완성)
-    base: 0.42, noise: 0.1, // 1970년 경쟁 차 기본 A. 3단계 조정 1 → 0.42(시장 규모 배수와 함께, 위 market.scale 설명)
-    baseGrowth: 0.05, baseMax: 1.25, // 경쟁사의 성장(설계 결정 b): 해마다 +0.05, 1986년쯤 최대 1.25(새 모델을 낼 때 반영)
+    base: 0.39, noise: 0.1, // 1970년 경쟁 차 기본 A. 3단계 조정 1 → 0.42(시장 규모 배수와 함께, 위 market.scale 설명). 0.4.1 난이도 완화 0.42 → 0.39(초반만 약하게)
+    baseGrowth: 0.052, baseMax: 1.25, // 경쟁사의 성장(설계 결정 b): 해마다 +0.052(0.4.1에서 0.05 → 0.052, 최대에 닿는 1986년쯤은 그대로), 최대 1.25(새 모델을 낼 때 반영)
     cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
@@ -135,6 +136,8 @@ export const config = {
     optionCostShare: 0.04, // 4단계: 옵션은 원가가 기준가의 4% 이하인 것만(규제 옵션은 예외, 가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다)
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
+    clumsy: { priceMult: 1.1, changeMonths: 120 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년
+    novice: { launchDefects: 10, changeMonths: 90, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 7.5년, 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
   },
   research: { // 10장 연구
     pointsDiv: 10, // 프로젝트·교육·휴식에 없는 엔지니어 1명이 매주 능력 / 10 점
@@ -155,6 +158,14 @@ export const config = {
     newsMax: 60, // 뉴스 기록 보관 개수
     trendMin: 0.2, // 유행 계수 하한
     charging: { powertrain: 'ev', start: 0.05, perYear: 0.045 }, // 충전 인프라: 전기차 등장 사건부터 0.05, 해마다 +0.045(최대 1)
+  },
+  // 0.4.1 난이도(설계자 결정): 새 게임에서 고른다(인자를 빼면 easy). 예전 저장은 normal로 본다. 공식은 그대로, 아래 값을 읽는 자리에서 바꾼다.
+  // cash: 시작 현금, loanBase: 대출 기본 한도, bankruptcyMonths: 파산 유예, rivalMult: 경쟁 차 A 배수, upkeepMult: 본사·공장 유지비 배수,
+  // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수
+  difficulty: {
+    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 18, rivalMult: 0.88, upkeepMult: 0.8, prototypeMult: 0.8, recallMult: 0.6, manyDefects: 20, bailouts: 2 },
+    normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1 },
+    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
   },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },

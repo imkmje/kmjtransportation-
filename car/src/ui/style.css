@@ -505,3 +505,69 @@ button.srow[aria-pressed="true"]{border-color:var(--ink);background:var(--soft)}
 /* 화면 안 창이 떠 있으면 알림(나쁜 소식 제외)은 창을 가리지 않게 잠시 숨긴다 */
 #sheet:not([hidden]) ~ #toasts .toast:not(.bad),#sheet:not([hidden]) ~ #toasts .more{display:none}
 .nl.k-choice .chip{background:#ffe7dc;color:var(--accent2)}
+
+/* ---------- 0.4.1: 두 번 톡 확대·페이지 핀치 확대 막기(사무실·3D 무대는 자체 touch-action 유지) ---------- */
+html,body{touch-action:pan-x pan-y}
+button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.report,.ib,.tip{touch-action:pan-x pan-y}
+
+/* ---------- 용어 설명 ⓘ ---------- */
+.ib{position:relative;display:inline-grid;place-items:center;width:17px;height:17px;margin-left:5px;border-radius:50%;border:1.3px solid var(--ink3);color:var(--ink3);
+  font:italic 800 11px/1 Georgia,"Times New Roman",serif;vertical-align:1px;cursor:help;opacity:.75;flex:none;letter-spacing:0;text-transform:none;user-select:none;-webkit-user-select:none}
+.ib::before{content:"";position:absolute;inset:-14px} /* 눌리는 자리 45px */
+.ib::after{content:"i"} /* 글자는 CSS로: 화면 글(innerText)에 섞이지 않게 */
+.ib:hover,.ib:focus-visible{opacity:1;border-color:var(--ink);color:var(--ink)}
+.ib:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.opt{position:relative}
+.opt>.ib{position:absolute;top:8px;right:8px;margin:0}
+.tc .tc-h .ib{margin-left:auto}
+.stat{grid-template-columns:80px minmax(0,1fr) 34px}
+.dir{grid-template-columns:80px 46px minmax(0,1fr) 46px}
+.lblterms{margin-left:8px;font-weight:700;letter-spacing:0;color:var(--ink3)}
+[data-tip]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.tip{position:fixed;z-index:60;max-width:340px;background:#14171c;color:#f4f5f7;border-radius:14px;padding:12px 14px;box-shadow:0 10px 30px #0004;font-size:13px;line-height:1.55}
+.tip b{display:block;font-size:14px;font-weight:800;margin-bottom:4px}
+.tip p{margin:0;color:#dfe3e8}
+.tip .tip-x{margin-top:10px;min-height:44px;width:100%;background:#2a2f37;color:#fff;border-color:#3a404a}
+.tip.hover{pointer-events:none}
+.tip.sheetlike{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));top:auto;width:auto;max-width:none;border-radius:18px}
+
+/* ---------- 차고 출시 연월 ---------- */
+.spec.when{margin-top:2px;font-weight:700;color:var(--ink3)}
+.launch-when{font-weight:700}
+
+/* ---------- 개발비: 출시 대기 ---------- */
+.wait-badge b{font-weight:900}
+.go.pulse{box-shadow:0 0 0 0 #ff5a1f88;animation:car-pulse 1.6s ease-out infinite}
+@keyframes car-pulse{to{box-shadow:0 0 0 14px #ff5a1f00}}
+@media (prefers-reduced-motion:reduce){.go.pulse{animation:none;outline:3px solid var(--accent);outline-offset:2px}}
+
+/* ---------- 회사 로고 ---------- */
+.slot.wl{grid-template-columns:auto minmax(0,1fr) auto}
+.rec-co{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.rec-co b{font-size:16px;font-weight:900}
+.me-by{color:var(--ink);font-weight:800}
+.logo-maker{display:flex;flex-direction:column;gap:6px;margin:6px 0 4px;text-align:left}
+.logo-maker .lbl{margin:8px 0 2px}
+.lg-head{display:flex;gap:14px;align-items:center}
+.lg-prev{width:84px;height:84px;display:grid;place-items:center;background:#fff;border:1px solid var(--line);border-radius:18px;flex:none}
+.lg-side{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.lg-side b{font-size:15px;font-weight:900}
+.lg-bd{display:flex;align-items:center;gap:6px;min-height:44px;font-weight:700;font-size:13px;cursor:pointer}
+.lg-bd input{width:20px;height:20px}
+.lg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.lg-o{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:64px;padding:6px 2px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);cursor:pointer}
+.lg-o small{font-size:10.5px;color:var(--ink2);font-weight:700;white-space:nowrap}
+.lg-o[aria-pressed="true"],.lg-c[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 1.5px var(--ink) inset}
+.lg-sw{display:flex;flex-wrap:wrap;gap:6px}
+.lg-c{width:44px;height:44px;display:grid;place-items:center;border:1.5px solid var(--line);border-radius:12px;background:var(--card);padding:0;cursor:pointer}
+.lg-c i{width:26px;height:26px;border-radius:50%;border:1px solid #0002}
+.lg-text{max-width:120px}
+.seg button{position:relative}
+.seg button>.ib{position:absolute;top:3px;right:3px;margin:0;width:15px;height:15px;font-size:10px}
+.seg button>.ib::before{inset:-8px}
+
+/* ---------- 기획 중 표시(개발 탭 점, 개발 화면 카드) ---------- */
+#tabs button{position:relative}
+#tabs button.has-draft::after{content:"";position:absolute;top:8px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg)}
+.draft-card{border:1.5px solid var(--accent)}
+.draft-line{margin:0;font-size:13.5px;line-height:1.5}

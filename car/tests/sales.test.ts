@@ -11,7 +11,7 @@ import { devReady, launched, ok, toMonthEnd } from './util';
 const car = (over: Partial<SaleCar> = {}): SaleCar => ({ body: 'sedanS', segment: 'worker', stats: { P: 90, E: 90, U: 90, D: 90, Q: 90 }, price: 1200, awareness: 0.4, life: 1, ...over });
 
 describe('판매 공식(7.3)', () => {
-  const s = Game.create({ seed: 1 }).state;
+  const s = Game.create({ difficulty: 'normal', seed: 1 }).state;
   it('가격을 올리면 판매가 준다', () => {
     const d = [800, 1200, 1600, 2000].map((price) => monthlyDemand(s, car({ price }), [], 1970));
     for (let i = 1; i < d.length; i++) expect(d[i]).toBeLessThan(d[i - 1]);
@@ -122,7 +122,7 @@ describe('리콜(6.3)', () => {
       expect(gen.recalls).toBe(0);
     }
   });
-  it('결함이 많으면 리콜: 판매 누계 × 15만원, 평판 −5, 인지도 −20%, 결함은 수리되어 0', () => {
+  it('결함이 많으면 리콜: 판매 누계 × 12만원(0.4.1), 평판 −5, 인지도 −20%, 결함은 수리되어 0', () => {
     let recalled = 0;
     for (const seed of [1, 2, 3, 4, 5]) {
       const { g, gen } = launched(seed);
@@ -134,7 +134,7 @@ describe('리콜(6.3)', () => {
         if (ev.some((e) => e.kind === 'recall')) {
           recalled++;
           const l = g.state.ledger.at(-1)!;
-          expect(l.recall).toBe(gen.totalSold * 15);
+          expect(l.recall).toBe(gen.totalSold * config.recall.costPerCar);
           expect(g.state.reputation).toBe(Math.max(0, rep - 5));
           expect(gen.editions[0].defects).toBe(0);
           expect(gen.awareness).toBeCloseTo(awNoRecall * 0.8, 9);

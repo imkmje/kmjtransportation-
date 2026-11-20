@@ -1,0 +1,65 @@
+// 용어 설명(ⓘ·길게 누르기). 차체·고객층·동력·옵션·기술은 자료(data)의 info 설명을 쓰고, 여기에는 게임 용어만 둔다.
+// 문체: 사전 풀이처럼 담백하게. 무엇인지 → 게임에서 어떤 효과인지.
+import { BODIES, OPTIONS, POWERTRAINS, SEGMENTS, TECHS } from '../data';
+import { config } from '../config';
+
+/** 게임 용어 */
+export const TERMS: Record<string, string> = {
+  인지도: '시장에서 차가 알려진 정도. 0~100%로 나타낸다. 인지도가 낮으면 차가 좋아도 덜 팔린다. 출시 뒤 매달 오르며, 광고·평판·영업 직원·페이스리프트가 오름을 앞당긴다.',
+  평판: '회사 전체에 대한 세간의 평가. 명차를 내면 오르고, 혹평·리콜·잘 팔리는 차의 단종·구제 금융으로 떨어진다. 평판이 높으면 새 차의 인지도가 높게 시작하고, 채용 후보와 본사 승급 조건에도 영향을 준다.',
+  이름값: '차종 자산. 한 차종 이름에 쌓인 신뢰로, 평론과 누적 판매로 쌓인다. 풀체인지한 다음 세대가 처음부터 더 잘 알려진다. 차체를 바꾸거나 오래 쉰 이름을 되살리면 일부만 이어진다.',
+  수명: '차가 시장에서 팔리는 힘. 출시 뒤 시간이 지날수록 줄어들어 판매가 줄어든다. 페이스리프트를 하면 수명 나이가 되돌아가 판매 힘이 회복된다.',
+  결함: '개발 중 생긴 설계·제조상의 문제. 시험 단계에서 매주 줄어든다. 남은 결함이 많으면 평론 점수가 깎이고 리콜 위험이 커진다.',
+  리콜: '결함이 드러난 차를 회사가 거두어 고치는 일. 수리비가 나가고 평판이 떨어진다. 출시 때 남은 결함이 많을수록 일어날 확률이 높다.',
+  '유예 기간': '규제가 시행되기 전에 주어지는 준비 기간. 이 기간이 끝나면 조건을 갖추지 못한 차는 출시할 수 없다.',
+  '충전 인프라': '전기차 충전소가 갖춰진 정도(보급률). 보급률이 낮으면 전기차 수요가 그만큼 줄어든다. 전기차 시대가 열린 뒤 해마다 오른다.',
+  '생산 라인': '공장에서 차 한 종류를 만드는 설비. 판매 중인 차종 수는 생산 라인 수를 넘을 수 없다. 공장을 증설하면 늘어난다. 페이스리프트와 판매 중인 차의 풀체인지는 같은 라인을 이어 쓴다.',
+  궁합: '차체와 고객층이 서로 맞는 정도(◎ 잘 맞음, ○ 무난, △ 덜 맞음, × 안 맞음). 잘 맞는 조합일수록 많이 팔린다. 그 조합으로 차를 한 번 출시해야 알 수 있다.',
+  '세계 최초': '기술이 등장하는 해보다 먼저 연구를 마치고 그 기술을 처음 쓴 차가 받는 평가. 평론가 모두 점수를 1점씩 더 준다. 기술마다 한 번뿐이다.',
+  '동력 등급': '한 차에 고르는 동력의 급(보급형·표준·고급). 연구로 오른 동력 단계 가운데 어느 수준을 쓸지 정한다. 높을수록 성능이 좋고 원가가 비싸다.',
+  '동력 단계': '연구로 오르는 동력 기술의 수준. 회사 전체에 적용되며, 단계가 오르면 같은 등급이라도 더 좋은 동력을 쓴다. 등급은 연구한 가장 높은 단계에서 한두 단계 낮춘 것이다.',
+  페이스리프트: '세대를 바꾸지 않고 얼굴(앞뒤 모습)과 옵션을 고치는 부분 변경. 출시 18개월 뒤부터 세대당 한 번 할 수 있다. 수명과 인지도가 회복되고 디자인 점수가 조금 오른다. 평론가는 다시 평가하지 않는다.',
+  풀체인지: '차종 이름을 이어받아 다음 세대를 새로 만드는 전면 변경. 출시 36개월 뒤부터 할 수 있다. 이름값과 전 세대 고객의 재구매를 이어받고, 같은 차체면 개발비가 줄어든다.',
+  '개발 방향': '설계 기간에 어느 능력치에 힘을 줄지 나눈 점수. 많이 준 능력치가 더 크게 자란다.',
+  '대출 이자': '빌린 돈에 매달 붙는 이자. 대출 한도의 70%를 넘게 빌리면 이율이 오른다.',
+  광고: '매달 광고비를 써서 차를 알리는 일. 단계가 높을수록 인지도가 빨리 오르지만 비용이 커진다.',
+};
+
+/** 능력치 5개 */
+export const STAT_INFO: Record<'P' | 'E' | 'U' | 'D' | 'Q', string> = {
+  P: '성능: 가속·최고 속도·주행 감각. 성능파 평론가와 청년·마니아·부유층이 중시한다. 동력 등급·동력 단계와 개발 방향에 따라 오른다.',
+  E: '연비: 연료를 얼마나 적게 쓰는가. 직장인·청년·가족과 살림꾼 평론가가 중시하며, 유가 파동 같은 사건 때 더 중요해진다.',
+  U: '실용: 실내 공간·짐 공간·편의 장비. 가족·법인 고객과 살림꾼 평론가가 중시한다. 차체와 편의 옵션의 영향이 크다.',
+  D: '디자인: 겉모습과 실내의 멋. 청년·부유층과 디자인파 평론가가 중시한다. 페이스리프트로 조금 올릴 수 있다.',
+  Q: '품질: 마감과 내구성. 남은 결함이 많으면 깎인다. 품질 등급이 높으면 입소문이 나고, 전 세대 고객의 재구매에도 영향을 준다.',
+};
+
+/** 평론가 4명(config.critics.list의 id) */
+export const CRITIC_INFO: Record<string, string> = {
+  performance: '성능파: 성능(60%)과 디자인(40%)을 보는 평론가.',
+  household: '살림꾼: 실용(40%)·연비(40%)·품질(20%)을 보는 평론가.',
+  design: '디자인파: 디자인(70%)과 품질(30%)을 보는 평론가.',
+  value: '가성비파: 전체 능력치 평균을 가격과 견주어 보는 평론가. 같은 차라도 값을 낮추면 점수가 오른다.',
+};
+
+const TIER_INFO = ['보급형: 연구한 가장 높은 단계에서 두 단계 낮춘 동력. 원가가 싸고 연비가 좋다.', '표준: 한 단계 낮춘 동력. 성능과 원가의 균형.', '고급: 연구한 가장 높은 단계의 동력. 힘이 좋지만 원가가 비싸다. 차에 스포일러가 붙는다.'];
+const infoField = (x: unknown): string | undefined => { const v = (x as { info?: unknown } | undefined)?.info; return typeof v === 'string' && v ? v : undefined; };
+const eff = (o: { U?: number; D?: number; Q?: number }) => (['U', 'D', 'Q'] as const).filter((k) => o[k]).map((k) => `${({ U: '실용', D: '디자인', Q: '품질' })[k]} +${o[k]}`).join(', ');
+
+/** 설명 키 → { 제목, 글 }. 키: term:이름 · stat:P · critic:id · body:id · seg:id · pt:id · tier:번호 · opt:id · tech:id */
+export function infoOf(key: string): { title: string; text: string } | null {
+  const i = key.indexOf(':'), kind = key.slice(0, i), id = key.slice(i + 1);
+  const split = (t: string, title: string) => { const m = t.match(/^([^:]{1,24}):\s*/); return { title: m ? m[1] : title, text: m ? t.slice(m[0].length) : t }; };
+  switch (kind) {
+    case 'term': return TERMS[id] ? { title: id === '이름값' ? '이름값(차종 자산)' : id, text: TERMS[id] } : null;
+    case 'stat': return STAT_INFO[id as 'P'] ? split(STAT_INFO[id as 'P'], id) : null;
+    case 'critic': { const c = config.critics.list.find((x) => x.id === id); return c && CRITIC_INFO[id] ? split(CRITIC_INFO[id], c.name) : null; }
+    case 'body': { const b = BODIES.find((x) => x.id === id); return b && infoField(b) ? { title: b.name, text: infoField(b)! } : null; }
+    case 'seg': { const g = SEGMENTS.find((x) => x.id === id); return g && infoField(g) ? { title: g.name, text: infoField(g)! } : null; }
+    case 'pt': { const p = POWERTRAINS.find((x) => x.id === id); return p && infoField(p) ? { title: p.name, text: infoField(p)! } : null; }
+    case 'tier': { const t = TIER_INFO[Number(id) - 1]; return t ? split(t, '') : null; }
+    case 'opt': { const o = OPTIONS.find((x) => x.id === id); if (!o || !infoField(o)) return null; const e = eff(o); return { title: o.name, text: `${infoField(o)}${e ? ` (${e})` : ''}` }; }
+    case 'tech': { const t = TECHS.find((x) => x.id === id); return t ? { title: t.name, text: infoField(t) ?? t.desc } : null; }
+  }
+  return null;
+}

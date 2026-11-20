@@ -6,11 +6,11 @@ export const STATS: Stat[] = ['P', 'E', 'U', 'D', 'Q'];
 export type Stats = Record<Stat, number>;
 
 // ---------- 자료(JSON) ----------
-export interface BodyDef { id: string; name: string; year: number; cost: number; basePrice: number; mult: Stats }
+export interface BodyDef { id: string; name: string; info: string; year: number; cost: number; basePrice: number; mult: Stats }
 /** startLevel: 해금 때의 동력 단계(5.3, 연구로 오른다). minCostAdd: 연구로 줄일 수 있는 원가 가산의 바닥(전기) */
-export interface PowertrainDef { id: string; name: string; year: number; split: { P: number; E: number }; costAdd: number; startLevel: number; minCostAdd?: number; tiers: { name: string; costAdd: number }[] }
-export interface OptionDef { id: string; name: string; year: number; U: number; D: number; Q: number; cost: number }
-export interface SegmentDef { id: string; name: string; w: Stats; eps: number }
+export interface PowertrainDef { id: string; name: string; info: string; year: number; split: { P: number; E: number }; costAdd: number; startLevel: number; minCostAdd?: number; tiers: { name: string; costAdd: number }[] }
+export interface OptionDef { id: string; name: string; info: string; year: number; U: number; D: number; Q: number; cost: number }
+export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
 export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
 
@@ -21,8 +21,9 @@ export type TechEffect =
   | { type: 'body' | 'option' | 'powertrain'; id: string }
   | { type: 'ptLevel'; id: string; amount: number }
   | { type: 'costCut' | 'defectCut' | 'upkeepCut' | 'devSpeed' | 'evCostCut'; value: number };
+/** info: 설명 창(ⓘ)용 사전식 풀이(자료 5종 모두에 있다) */
 export interface TechDef {
-  id: string; name: string; desc: string; field: TechField; year: number; pre: string[]; effects: TechEffect[];
+  id: string; name: string; desc: string; info: string; field: TechField; year: number; pre: string[]; effects: TechEffect[];
   cost: { money: number; points: number }; repeatable?: boolean; // repeatable: 2035년 이후 반복 연구(할 때마다 비용 증가)
 }
 /** 시대 사건 효과(11장). months가 null인 사건은 영구 */
@@ -95,6 +96,8 @@ export interface Project extends ProjectSpec {
   defects: number; // 실제 결함(화면에는 defectEst만)
   defectEst: number; // 화면용 "약 N개"(±15% 오차, 매주 다시 뽑음)
   spent: number; // 지금까지 쓴 개발비
+  waiting?: boolean; // 출시 대기(0.4.1): 시험 중 실제 결함이 0이 되고 최소 시험 주를 채우면 true. 그 뒤로는 주간 개발비 0, 직원은 풀려난다(없으면 false)
+  crew?: number[]; // 출시 대기가 될 때 풀려난 직원 ID(출시 때 경험을 받는다)
 }
 
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */
@@ -159,14 +162,17 @@ export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice'
 export interface NewsItem { week: number; text: string; category?: NewsCategory } // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
+/** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
+export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
   saveVersion: 4;
+  difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
   companyName: string;
   reputation: number;
   cash: number;
-  loan: { balance: number; limitMult: number; bailoutUsed: boolean };
+  loan: { balance: number; limitMult: number; bailoutUsed: boolean; bailouts?: number }; // bailoutUsed: 구제 금융을 더 받을 수 없음(난이도의 횟수를 다 씀, 어려움은 처음부터 true), bailouts: 받은 횟수(없으면 bailoutUsed로 0/1)
   negMonths: number; // 현금 음수로 끝난 연속 달 수
   status: 'playing' | 'gameOver';
   staff: Staff[];

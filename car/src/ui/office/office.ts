@@ -16,6 +16,7 @@ export interface OfficeView {
   carSvg?: string;      // 우리 코드가 만든 옆모습 SVG(silhouetteSvg). 그대로 끼워 넣으므로 외부 입력을 넣지 말 것
   progress?: number;
   defects?: number;
+  logo?: string;        // 내 회사 로고 SVG(art.ts logoSvg가 만든 것). 표지판·로비 벽에 끼워 넣는다
 }
 export type Stat = '성능' | '연비' | '실용' | '디자인' | '품질';
 export type OfficeEvent =
@@ -192,9 +193,9 @@ function wallSvg(it: WallItem, room: Room): string {
       return g(s);
     }
     case 'shutter': { let s = `<rect width="${w}" height="${h}" fill="#b9bec4"/>`; for (let yy = 4; yy < h; yy += 5) s += `<path d="M0,${yy} H${w}" stroke="#a3a9b0" stroke-width="1.2"/>`; return g(s + `<rect y="${h - 4}" width="${w}" height="4" fill="#8e959d"/>`); }
-    case 'logo': return g(`<rect width="${w}" height="${h}" fill="#3b4048"/><path d="M${w * 0.3},${h * 0.62} h${w * 0.28} M${w * 0.36},${h * 0.48} h${w * 0.3} M${w * 0.42},${h * 0.34} h${w * 0.24}" stroke="#d87a4a" stroke-width="3" stroke-linecap="round"/>`);
+    case 'logo': { const z = Math.min(w, h) * 0.8; return g(`<rect width="${w}" height="${h}" fill="#3b4048"/><g class="wall-logo" transform="translate(${f((w - z) / 2)},${f((h - z) / 2)}) scale(${f(z / 32)})"></g>`); }
     case 'clock': { const r = w / 2; return g(`<circle cx="${r}" cy="${r}" r="${r}" fill="#f7f7f5" stroke="#5b6068" stroke-width="1.5"/><path d="M${r},${r} v${-r * 0.65} M${r},${r} h${r * 0.45}" stroke="#3b4048" stroke-width="1.3"/>`); }
-    case 'sign': return g(`<rect width="${w}" height="${h}" rx="3" fill="#3b4048"/><text class="sign-name" x="8" y="${f(h * 0.42)}" font-size="11" font-weight="700" fill="#f2f2f0"></text>
+    case 'sign': return g(`<rect width="${w}" height="${h}" rx="3" fill="#3b4048"/><g class="sign-logo" transform="translate(6,${f(h * 0.42 - 12)}) scale(.5)"></g><text class="sign-name" x="26" y="${f(h * 0.42)}" font-size="11" font-weight="700" fill="#f2f2f0"></text>
       <rect x="8" y="${f(h * 0.62)}" width="${w - 16}" height="4" rx="2" fill="#5b6068"/><rect class="sign-bar" x="8" y="${f(h * 0.62)}" width="0" height="4" rx="2" fill="#d87a4a"/>
       <g class="bugs" transform="translate(${w + 9},${f(h / 2)})" display="none"><g class="bugi"><circle r="8" fill="#b4553f" stroke="#fff" stroke-width="1.5"/><text class="bugn" y="3.6" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">0</text></g></g>`);
     default: void room; return '';
@@ -251,7 +252,12 @@ export function createOffice(host: HTMLElement): Office {
   svg.append(world, fx, fxBub);
   const tagPop = document.createElement('div');
   tagPop.className = 'tagpop'; tagPop.hidden = true;
-  root.append(svg, tagPop);
+  // 끌거나 확대해 옮긴 뒤에만 보이는 "원위치" 버튼(누르면 기본 화면)
+  const homeBtn = document.createElement('button');
+  homeBtn.type = 'button'; homeBtn.className = 'ofc-home'; homeBtn.hidden = true;
+  homeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4.5h4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>원위치';
+  homeBtn.setAttribute('aria-label', '사무실 화면을 원래 위치로');
+  root.append(svg, tagPop, homeBtn);
   host.append(root);
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -442,7 +448,8 @@ export function createOffice(host: HTMLElement): Office {
     for (const a of actors.values()) setPose(a);
     if (signEls) {
       const name = v.projectName ?? (v.phase === 'rest' ? '쉬는 중' : '개발 중');
-      const maxChars = Math.max(2, Math.floor(signEls.barW / 10.5));
+      const maxChars = Math.max(2, Math.floor((signEls.barW - 18) / 10.5));
+      for (const el of root.querySelectorAll('.sign-logo,.wall-logo')) if (el.getAttribute('data-k') !== (v.logo ?? '')) { el.innerHTML = v.logo ?? ''; el.setAttribute('data-k', v.logo ?? ''); }
       signEls.name.textContent = name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name;
       signEls.bar.setAttribute('width', String(f(signEls.barW * Math.max(0, Math.min(1, v.progress ?? 0)))));
       const n = v.defects ?? 0;
@@ -557,6 +564,7 @@ export function createOffice(host: HTMLElement): Office {
     const cy = vh >= vb.h && cam.mode === 'free' ? vb.y + vb.h / 2 : Math.max(vb.y, Math.min(vb.y + vb.h, cam.cy));
     cam.cx = cx; cam.cy = cy;
     svg.setAttribute('viewBox', `${f(cx - vw / 2)} ${f(cy - vh / 2)} ${f(vw)} ${f(vh)}`);
+    homeBtn.hidden = cam.mode !== 'free';
     updateChips();
   }
   /** 기본 화면: 일하는 사람들이 가운데에 크게. 다 넣으면 사람이 작아질 만큼 흩어져 있으면 사람이 많은 곳(같으면 시험실)부터 들어가는 만큼만 */
@@ -619,6 +627,7 @@ export function createOffice(host: HTMLElement): Office {
     };
     go(t0);
   }
+  homeBtn.addEventListener('click', () => { tagPop.hidden = true; setDefault(); });
   chipsEl.addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>('button[data-g]'); if (b) focusGroup(b.dataset.g!); });
   function measure() {
     const r = root.getBoundingClientRect();
@@ -631,7 +640,7 @@ export function createOffice(host: HTMLElement): Office {
   ro.observe(root);
 
   const ptrs = new Map<number, [number, number]>();
-  let dragDist = 0, pinch0 = 0, s0 = 1, w0: [number, number] = [0, 0], lastTap = { t: 0, x: 0, y: 0 };
+  let dragDist = 0, pinch0 = 0, s0 = 1, w0: [number, number] = [0, 0];
   const toWorld = (px: number, py: number): [number, number] => { const r = svg.getBoundingClientRect(); return [cam.cx + (px - r.left - r.width / 2) / cam.s, cam.cy + (py - r.top - r.height / 2) / cam.s]; };
   /** 화면 점 (px,py) 아래에 세계 점 w가 오도록 배율 s로 맞춘다 */
   function pinTo(w: [number, number], px: number, py: number, s: number) {
@@ -664,11 +673,7 @@ export function createOffice(host: HTMLElement): Office {
     if (ptrs.size) return;
     svg.classList.remove('drag');
     if (dragDist > 8 || e.type !== 'pointerup') return;
-    // 조금만 움직였으면 누르기. 0.35초 안에 같은 곳을 두 번 누르면 기본 화면으로
-    const now = performance.now();
-    if (now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) { lastTap.t = 0; tagPop.hidden = true; setDefault(); return; }
-    lastTap = { t: now, x: e.clientX, y: e.clientY };
-    tap(e.clientX, e.clientY);
+    tap(e.clientX, e.clientY); // 조금만 움직였으면 누르기(두 번 톡에는 반응하지 않는다: 확대로 오해됨)
   };
   svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
   svg.addEventListener('wheel', (e) => { e.preventDefault(); stopGlide(); pinTo(toWorld(e.clientX, e.clientY), e.clientX, e.clientY, cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });

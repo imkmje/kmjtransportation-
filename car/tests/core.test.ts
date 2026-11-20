@@ -20,7 +20,7 @@ describe('시간(4장)', () => {
     expect(dateLabel(5)).toBe('1970년 2월 2주'); expect(monthLabel(13)).toBe('1971년 2월');
   });
   it('tick 한 번에 1주 진행', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.tick(); g.tick();
     expect(g.state.week).toBe(2);
   });
@@ -28,12 +28,12 @@ describe('시간(4장)', () => {
 
 describe('새 게임', () => {
   it('회사 이름이 비면 "새 회사"', () => {
-    expect(Game.create({ seed: 1 }).state.companyName).toBe('새 회사');
-    expect(Game.create({ seed: 1, companyName: '   ' }).state.companyName).toBe('새 회사');
-    expect(Game.create({ seed: 1, companyName: ' 한빛자동차 ' }).state.companyName).toBe('한빛자동차');
+    expect(Game.create({ difficulty: 'normal', seed: 1 }).state.companyName).toBe('새 회사');
+    expect(Game.create({ difficulty: 'normal', seed: 1, companyName: '   ' }).state.companyName).toBe('새 회사');
+    expect(Game.create({ difficulty: 'normal', seed: 1, companyName: ' 한빛자동차 ' }).state.companyName).toBe('한빛자동차');
   });
   it('시작 상태: 현금 30억, 평판 10, 직원 4명(디자이너 1·엔지니어 2·테스터 1, 능력 25~35), 경쟁사 3곳', () => {
-    const s = Game.create({ seed: 7 }).state;
+    const s = Game.create({ difficulty: 'normal', seed: 7 }).state;
     expect(s.cash).toBe(300000); expect(s.reputation).toBe(10); expect(s.saveVersion).toBe(4); expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]);
     expect(s.staff.map((x) => x.role)).toEqual(['designer', 'engineer', 'engineer', 'tester']);
     for (const x of s.staff) { expect(x.ability).toBeGreaterThanOrEqual(25); expect(x.ability).toBeLessThanOrEqual(35); expect(x.potential).toBeGreaterThanOrEqual(50); expect(x.potential).toBeLessThanOrEqual(75); }
@@ -44,16 +44,16 @@ describe('새 게임', () => {
 
 describe('결정론과 저장', () => {
   it('같은 시드·같은 명령이면 같은 상태, 다른 시드면 다른 상태', () => {
-    const a = Game.create({ seed: 42 }), b = Game.create({ seed: 42 }), c = Game.create({ seed: 43 });
+    const a = Game.create({ difficulty: 'normal', seed: 42 }), b = Game.create({ difficulty: 'normal', seed: 42 }), c = Game.create({ difficulty: 'normal', seed: 43 });
     run(a, 48 * 4); run(b, 48 * 4); run(c, 48 * 4);
     expect(JSON.stringify(a.toJSON())).toBe(JSON.stringify(b.toJSON()));
     expect(JSON.stringify(a.toJSON())).not.toBe(JSON.stringify(c.toJSON()));
     expect(a.state.history.length).toBeGreaterThan(0); // 성공한 명령이 기록된다
   });
   it('저장 → 불러오기 → 이어서 실행 = 끊지 않은 실행(난수 상태 포함)', () => {
-    const whole = Game.create({ seed: 9 });
+    const whole = Game.create({ difficulty: 'normal', seed: 9 });
     run(whole, 48 * 6);
-    const part = Game.create({ seed: 9 });
+    const part = Game.create({ difficulty: 'normal', seed: 9 });
     run(part, 48 * 2 + 7);
     const loaded = Game.fromJSON(JSON.parse(JSON.stringify(part.toJSON())));
     run(loaded, 48 * 6 - (48 * 2 + 7));
@@ -66,7 +66,7 @@ describe('결정론과 저장', () => {
     expect(() => Game.fromJSON({ saveVersion: 1 })).toThrow('손상');
   });
   it('알 수 없는 명령은 한국어 이유로 거부', () => {
-    const r = Game.create({ seed: 1 }).command({ type: 'nope' } as never);
+    const r = Game.create({ difficulty: 'normal', seed: 1 }).command({ type: 'nope' } as never);
     expect(r).toEqual({ ok: false, reason: '알 수 없는 명령입니다.' });
   });
 });
@@ -83,7 +83,7 @@ describe('등장 연도(자료)와 연구 해금(4단계부터)', () => {
     expect(optionsAt(1980).map((o) => o.id)).toEqual(['radio', 'aircon', 'powerSteering']);
   });
   it('그해가 되어도 연구하지 않으면 쓸 수 없다(연도 자동 해금 없음)', () => {
-    const g = Game.create({ seed: 1 });
+    const g = Game.create({ difficulty: 'normal', seed: 1 });
     expect(g.command({ type: 'startProject', ...SPEC, body: 'hatch' })).toEqual({ ok: false, reason: '아직 쓸 수 없는 차체입니다(연구가 필요합니다).' });
     expect(g.command({ type: 'startProject', ...SPEC, options: ['aircon'] })).toEqual({ ok: false, reason: '아직 쓸 수 없는 옵션입니다(연구가 필요합니다).' });
     g.state.week = 48 * 4 - 1;

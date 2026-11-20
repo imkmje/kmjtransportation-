@@ -5,6 +5,7 @@ import { defectCut, devSpeed, unlockedIds } from './research';
 import { salaryOf, zeroStats } from './cars';
 import { conditionMult, isAway, optionSlots } from './company';
 import type { Rng } from './rng';
+import { diffOf } from './difficulty';
 import { STATS, type Budget, type CarState, type Project, type ProjectSpec, type Staff, type Stats } from './types';
 
 /** 기획 검증: 문제가 있으면 한국어 이유, 없으면 null */
@@ -30,9 +31,9 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
 
 export const staffOn = (state: CarState, p: Project): Staff[] => state.staff.filter((s) => s.projectId === p.id);
 
-/** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 */
-export const devCostPerWeek = (team: Staff[], budget: Budget): number =>
-  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek;
+/** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
+export const devCostPerWeek = (team: Staff[], budget: Budget, protoMult = 1): number =>
+  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
 /** 페이스리프트의 주간 비용: 그 세대 개발비 × 25% ÷ (설계 4주 + 최소 시험 2주). 시험을 더 하면 그만큼 더 든다 */
 export const faceliftWeekCost = (genDevCost: number): number =>
   (genDevCost * config.lifecycle.facelift.costShare) / (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks);
@@ -42,7 +43,7 @@ const genById = (state: CarState, id: number | null) => state.nameplates.flatMap
 const latestGenOf = (state: CarState, nameplateId: number | null) => state.nameplates.find((n) => n.id === nameplateId)?.generations.at(-1);
 export function weeklyDevCost(state: CarState, p: Project): number {
   if (p.kind === 'facelift') return faceliftWeekCost(genById(state, p.targetId)?.devCost ?? 0);
-  const base = devCostPerWeek(staffOn(state, p), p.budget);
+  const base = devCostPerWeek(staffOn(state, p), p.budget, diffOf(state).prototypeMult);
   return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
 }
 
@@ -78,12 +79,13 @@ export const testCut = (team: Staff[], week?: number): number =>
     .reduce((a, s) => a + s.ability / (s.role === 'tester' ? config.dev.testerDiv : s.role === 'engineer' ? config.dev.engineerDiv : Infinity), 0);
 
 /** 한 주 진행 결과: 설계가 끝났는지 + 직원별 점수와 결함 증감(사무실 화면용 주간 기록) */
-export interface WeekLog { designDone: boolean; staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number }
+export interface WeekLog { designDone: boolean; staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number; waitingNow: boolean } // waitingNow: 이번 주에 출시 대기가 됨
 
-/** 한 주 진행(난수 순서: 설계 주는 직원마다 1번, 그다음 결함 추정 1번) */
+/** 한 주 진행(난수 순서: 설계 주는 직원마다 1번, 그다음 결함 추정 1번. 결함이 0이면 추정 난수를 쓰지 않는다). 출시 대기 프로젝트는 아무것도 하지 않는다(비용 0) */
 export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
-  const d = config.dev, team = staffOn(state, p);
-  const log: WeekLog = { designDone: false, staff: team.map((s) => ({ id: s.id, stats: zeroStats() })), defectsAdded: 0, defectsRemoved: 0 };
+  const d = config.dev, team = p.waiting ? [] : staffOn(state, p);
+  const log: WeekLog = { designDone: false, staff: team.map((s) => ({ id: s.id, stats: zeroStats() })), defectsAdded: 0, defectsRemoved: 0, waitingNow: false };
+  if (p.waiting) return log;
   if (p.phase === 'design') {
     const rand = () => rng.range(d.randMin, d.randMax);
     const per = p.kind === 'facelift' ? faceliftWeekByStaff(team, p, rand, state.week) : designWeekByStaff(team, p, rand, state.week);
@@ -103,6 +105,10 @@ export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
   }
   const cost = weeklyDevCost(state, p);
   p.spent += cost; state.pendingDev += cost;
-  p.defectEst = Math.round(p.defects * (1 + rng.range(-d.estError, d.estError)));
+  p.defectEst = p.defects > 0 ? Math.round(p.defects * (1 + rng.range(-d.estError, d.estError))) : 0;
+  if (p.phase === 'test' && p.defects <= 0 && p.testWeeks >= d.minTestWeeks) { // 결함을 다 잡으면 출시 대기: 더 시험해도 얻는 것이 없으므로 직원을 풀고 비용을 멈춘다
+    p.waiting = true; log.waitingNow = true; p.crew = team.map((x) => x.id);
+    for (const x of team) x.projectId = null;
+  }
   return log;
 }
