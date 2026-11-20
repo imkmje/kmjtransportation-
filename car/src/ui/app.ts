@@ -21,7 +21,7 @@ type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'company
 type Tab = 'garage' | 'dev' | 'company' | 'records';
 type PlanTab = 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir' | 'budget';
 /** 기획 초안. nameplateId 0 = 새 차종, 아니면 그 차종의 풀체인지 */
-type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[] };
+type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number }; // year: 초안을 만든(마지막으로 맞춘) 해
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
 type RecTab = 'cars' | 'combo' | 'news';
@@ -45,7 +45,7 @@ const EV = config.events.charging.powertrain;
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.querySelector<T>(s)!;
 /** 용어 설명 단추(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
-const ib = (key: string, label = key.slice(key.indexOf(':') + 1)) => `<span class="ib" role="button" tabindex="0" data-info="${esc(key)}" aria-label="${esc(label)} 설명">i</span>`;
+const ib = (key: string, label = key.slice(key.indexOf(':') + 1)) => `<span class="ib" role="button" tabindex="0" data-info="${esc(key)}" aria-label="${esc(label)} 설명"></span>`;
 /** 개발 진행 상황(sim 0.4.1에서 추가 예정). 아직 없으면 null */
 type ProjStatus = { phase: string; waiting: boolean; weeklyCost: number; costNote: string };
 const projectStatus = (s: unknown, id: number): ProjStatus | null => { const f = (Q as unknown as Record<string, unknown>).projectStatus; return typeof f === 'function' ? (f(s, id) as ProjStatus | null) : null; };
@@ -54,6 +54,9 @@ export function startApp(): void {
   let game: Game | null = null;
   let ui: S.UiExtra = { photos: {}, colors: {}, logo: { ...DEFAULT_LOGO } };
   let logoDraft: LogoSpec = { ...DEFAULT_LOGO }; // 새 게임 화면에서 꾸미는 로고
+  let draftNote = ''; // 낡은 초안을 고친 내용 한 줄(다음 조작까지 보인다)
+  /** 저장용 화면 정보: 기획 초안·출시 준비 값까지(탭을 옮기거나 다시 불러와도 이어서 하도록) */
+  const uiSnap = (): S.UiExtra => ({ ...ui, plan: draft || lift || launch ? JSON.parse(JSON.stringify({ draft, planTab, lift, launch })) as S.PlanSave : undefined });
   let screen: Screen = 'garage';
   let speed = 1, acc = 0, garageIdx = 0, planTab: PlanTab = 'body';
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
@@ -313,7 +316,7 @@ export function startApp(): void {
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
         if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
-        void S.put('auto', S.makeSave(game!, ui)); // 매월 자동 저장
+        void S.put('auto', S.makeSave(game!, uiSnap())); // 매월 자동 저장
         break;
       }
       case 'designDone': toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
@@ -326,7 +329,7 @@ export function startApp(): void {
       case 'choice': if (!quietChoice && sheet.hidden && $('#ask').hidden && title.hidden) showChoice(); break; // 화면 안 창이 떠 있는 동안 시간이 멈춘다
       case 'advice': toast(e.text, 'alert', '조언', 9000); break;
       case 'recall': toast(e.text, 'bad', '리콜'); break;
-      case 'unlock': toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; launch = null; go('company'); } }); break;
+      case 'unlock': toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
       case 'cashWarning': toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
       case 'discontinued': toast(e.text, '', '단종'); break;
       case 'gameOver': break; // render()에서 파산 화면을 띄운다
@@ -383,6 +386,7 @@ export function startApp(): void {
     const pd = $('#pend'); pd.hidden = !pc; pd.textContent = `결정 대기 ${pc}`;
     const tab: Tab = deciding() ? 'dev' : (screen as Tab);
     for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
+    { const dv = document.querySelector<HTMLElement>('#tabs button[data-tab="dev"]')!, on = !!(draft || lift); dv.classList.toggle('has-draft', on); if (on) dv.title = '기획 중인 차가 있습니다'; else dv.removeAttribute('title'); }
   }
   function renderDebug(): void {
     const d = $('#debug');
@@ -462,7 +466,7 @@ export function startApp(): void {
     const devCard = s.projects.map((p) => `<div class="card"><p class="lbl">개발 중</p><h2>${esc(p.name)}</h2><p class="hint">${p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`} · 남은 결함 약 ${p.defectEst}개</p><div class="row" style="margin-top:10px"><button class="btn" data-act="devSel" data-id="${p.id}">개발 화면 보기</button></div></div>`).join('');
     if (!gens.length) {
       const any = allGens(s).length > 0;
-      const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 몇 주에 걸쳐 차를 설계합니다.'}</p>${p ? '<button class="go dark" data-act="tab" data-v="dev">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
+      const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 몇 주에 걸쳐 차를 설계합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
       const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(몇 주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 6개월 넘게 마이너스면 파산합니다.</p>${p ? '' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
       return { ov: ovh, panel: intro + devCard, look: null };
     }
@@ -524,6 +528,58 @@ export function startApp(): void {
     return { ov: ovTop('신차 기획', '어디서 시작할까요?', '새 차종 · 풀체인지 · 페이스리프트'), panel: card1 + card2, look: sel ? genLook(sel) : null };
   }
 
+  // ----- 기획 초안 유지(탭 이동·저장·불러오기) -----
+  /** 개발 탭을 누르면: 기획 중이면 하던 기획 단계로, 아니면 개발 화면 */
+  const devScreen = (): Screen => (draft ? 'plan' : lift ? 'lift' : 'dev');
+  const draftName = (): string => draft ? (draft.nameplateId ? game!.state.nameplates.find((n) => n.id === draft!.nameplateId)?.name ?? '' : draft.name.trim() || defaultName()) : lift ? nameOf(Q.generationById(game!.state, lift.genId)!) : '';
+  /** 새 기획을 시작하기 전에 지금 초안을 버릴지 묻는다 */
+  const dropDraft = async (): Promise<boolean> => {
+    if (!draft && !lift) return true;
+    if (!(await ask(`기획 중인 「${draftName()}」${lift ? ' 페이스리프트' : ''} 초안을 버리고 새로 기획할까요?`, '새로 기획', true))) return false;
+    draft = null; lift = null; draftNote = ''; return true;
+  };
+  /** 저장 데이터의 초안 → 화면 상태(모양만 검사하고, 값이 맞는지는 fixDraft·fixLift가 화면을 그릴 때 본다) */
+  function restorePlan(p: S.PlanSave | undefined): void {
+    if (!p || typeof p !== 'object') return;
+    const obj = (x: unknown) => !!x && typeof x === 'object';
+    if (obj(p.draft) && typeof p.draft!.body === 'string' && obj(p.draft!.direction) && Array.isArray(p.draft!.options) && Array.isArray(p.draft!.team)) {
+      draft = p.draft as unknown as Draft; planTab = (ALL_TABS.some(([k]) => k === p.planTab) ? p.planTab : 'body') as PlanTab;
+    } else if (obj(p.lift) && Number.isInteger(p.lift!.genId) && Array.isArray(p.lift!.options) && Array.isArray(p.lift!.team)) { const L = p.lift as unknown as LiftSet; if (Number.isInteger(L.faceSeed) && Number.isInteger(L.tier)) lift = L; }
+    if (obj(p.launch) && Number.isInteger(p.launch!.pid) && Q.projectById(game!.state, p.launch!.pid)) { const L = p.launch as unknown as LaunchSet; if ([L.price, L.marketing, L.wheels].every(Number.isFinite) && typeof L.color === 'string') launch = L; }
+  }
+  /** 낡은 초안 맞추기: 맞지 않는 값만 기본값으로 바꾸고 무엇을 바꿨는지 한 줄로 남긴다 */
+  function fixDraft(d: Draft): void {
+    const s = game!.state, y = yearOf(s.week), out: string[] = [];
+    // 저장 파일에서 온 값의 모양부터 맞춘다(틀리면 기본값)
+    const base = newDraft(), int = (x: unknown) => Number.isInteger(x) && (x as number) >= 0 && (x as number) <= 0xffffffff;
+    if (typeof d.name !== 'string') d.name = '';
+    if (!SEGMENTS.some((g) => g.id === d.segment)) d.segment = base.segment;
+    if (!(d.budget in BUDGET)) d.budget = base.budget;
+    if (!config.dev.designWeeks.includes(d.designWeeks)) d.designWeeks = base.designWeeks;
+    if (!STATS.every((k) => Number.isInteger(d.direction[k]) && d.direction[k] >= 0 && d.direction[k] <= config.dev.dirMax)) d.direction = { ...base.direction };
+    if (!int(d.chassisSeed)) d.chassisSeed = base.chassisSeed;
+    if (!int(d.faceSeed)) d.faceSeed = base.faceSeed;
+    if (typeof d.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(d.color)) d.color = base.color;
+    if (!Number.isInteger(d.nameplateId) || (d.nameplateId && !s.nameplates.some((n) => n.id === d.nameplateId))) { d.nameplateId = 0; out.push('대상 차종을 찾을 수 없어 새 차종으로'); }
+    d.options = d.options.filter((o) => typeof o === 'string'); d.team = d.team.filter((x) => Number.isInteger(x));
+    const bodies = Q.bodiesAt(s).map((b) => b.id), pts = Q.powertrainsAt(s).map((x) => x.id), opts = new Set(Q.optionsAt(s).map((o) => o.id));
+    if (!bodies.includes(d.body)) { out.push(`차체를 ${bodyById(bodies[0]).name}${josa(bodyById(bodies[0]).name, '으로/로')}`); d.body = bodies[0]; }
+    if (!pts.includes(d.powertrain)) { out.push(`동력을 ${powertrainById(pts[0]).name}${josa(powertrainById(pts[0]).name, '으로/로')}`); d.powertrain = pts[0]; }
+    const nt = powertrainById(d.powertrain).tiers.length; if (!(d.tier >= 1 && d.tier <= nt)) { d.tier = Math.min(2, nt); out.push('동력 등급을 표준으로'); }
+    const lostOpt = d.options.filter((o) => !opts.has(o)); if (lostOpt.length) { d.options = d.options.filter((o) => opts.has(o)).slice(0, Q.optionSlots(s)); out.push(`쓸 수 없는 옵션 ${lostOpt.length}개를 뺌`); }
+    const team = keepIdle(d.team); if (team.length !== d.team.length) { out.push(`다른 일을 맡았거나 회사를 떠난 직원 ${d.team.length - team.length}명을 팀에서 뺌`); d.team = team; }
+    if (d.year !== undefined && d.year !== y) out.push(`해가 바뀌어(${d.year}년 → ${y}년) 예상 등급을 다시 계산함`);
+    d.year = y;
+    if (out.length) draftNote = `초안을 지금 상황에 맞췄습니다: ${out.join(', ')}.`;
+  }
+  function fixLift(L: LiftSet): void {
+    const s = game!.state, opts = new Set(Q.optionsAt(s).map((o) => o.id)), out: string[] = [];
+    const lostOpt = L.options.filter((o) => !opts.has(o)); if (lostOpt.length) { L.options = L.options.filter((o) => opts.has(o)); out.push(`쓸 수 없는 옵션 ${lostOpt.length}개를 뺌`); }
+    const team = keepIdle(L.team); if (team.length !== L.team.length) { out.push(`다른 일을 맡았거나 회사를 떠난 직원 ${L.team.length - team.length}명을 팀에서 뺌`); L.team = team; }
+    if (out.length) draftNote = `초안을 지금 상황에 맞췄습니다: ${out.join(', ')}.`;
+  }
+  const noteBox = () => (draftNote ? `<div class="warnbox draft-note" style="margin-bottom:12px">${esc(draftNote)}</div>` : '');
+
   // ----- 신차 기획(새 차종·풀체인지) -----
   function newDraft(npId = 0): Draft {
     const s = game!.state, n = npId ? s.nameplates.find((x) => x.id === npId) : undefined, prev = n?.generations.at(-1);
@@ -552,7 +608,7 @@ export function startApp(): void {
   function planView(): View {
     const s = game!.state, d = draft!, y = yearOf(s.week), full = d.nameplateId > 0;
     const n = full ? s.nameplates.find((x) => x.id === d.nameplateId) : undefined, prev = n?.generations.at(-1);
-    d.team = keepIdle(d.team);
+    fixDraft(d);
     const fcp = full ? Q.fullChangePreview(s, d.nameplateId, d) : null, name = full ? n!.name : d.name.trim() || defaultName();
     const tp = Q.teamPreview(s, d.team, d), est = { ...tp, cost: tp.cost * (fcp?.costMult ?? 1) }; // 고른 팀 기준(풀체인지는 개발비 할인 반영)
     const compare = fcp ? (est.avg > fcp.prevAvg ? 'better' : est.avg < fcp.prevAvg ? 'worse' : 'same') : 'same';
@@ -605,7 +661,7 @@ export function startApp(): void {
       : `<p class="lbl">차 이름</p><input class="namein" id="pname" type="text" maxlength="12" value="${esc(d.name)}" placeholder="${esc(defaultName())}" aria-label="차 이름">`;
     const card1 = `<div class="card">${nameBox}
       <div class="seg steps" role="tablist" style="margin-top:12px">${tabs.map(([k, l], i) => `<button role="tab" data-act="ptab" data-v="${k}" aria-selected="${planTab === k}">${i + 1}<small>${l}</small></button>`).join('')}</div>
-      ${regBox(d)}<h3>${tabs[ti][1]}</h3>${body}
+      ${noteBox()}${regBox(d)}<h3>${tabs[ti][1]}</h3>${body}
       ${last && left ? `<div class="warnbox" style="margin-top:12px">개발 방향 점수가 ${left}점 남았습니다(${dirNo}번 단계).</div>` : ''}
       ${fcp && !fcp.eligibility.ok ? `<div class="badbox" style="margin-top:12px">${esc(fcp.eligibility.reason ?? '')}</div>` : ''}
       <div class="row" style="margin-top:12px">${ti > 0 ? `<button class="btn" data-act="ptab" data-v="${tabs[ti - 1][0]}">← 이전</button>` : ''}${last ? '<button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button>' : `<button class="btn" data-act="ptab" data-v="${tabs[ti + 1][0]}">다음 →</button>`}</div></div>`;
@@ -647,11 +703,11 @@ export function startApp(): void {
   // ----- 페이스리프트 기획(8.2) -----
   function liftView(): View {
     const s = game!.state, L = lift!, g = Q.generationById(s, L.genId)!, e = currentEdition(g), np = Q.nameplateOf(s, g.id)!;
-    L.team = keepIdle(L.team);
+    fixLift(L);
     const pv = Q.faceliftPreview(s, g.id, { options: L.options, tier: L.tier })!, cur = genLook(g), cands = liftFaces(g);
     const front = -Math.PI / 2, dBefore = Q.grades(e.stats, yearOf(s.week + pv.designWeeks + pv.minTestWeeks)).D, pt = powertrainById(g.powertrain), ok = elig(pv.eligibility);
     const ovh = ovTop('페이스리프트 기획 · 지금 모습', `${esc(np.name)}<small>${editionName(g)}</small>`, specLine(g.body, g.powertrain, e.tier, g.segment)) + ovHint;
-    const card1 = `<div class="card"><p class="lbl">1. 새 얼굴 고르기</p><div class="faces"><div class="face now">${thumb(cur, front, 200, 140)}<b>지금 얼굴</b><small>${esc(describeLook(cur).face)}</small></div>
+    const card1 = `<div class="card">${noteBox()}<p class="lbl">1. 새 얼굴 고르기</p><div class="faces"><div class="face now">${thumb(cur, front, 200, 140)}<b>지금 얼굴</b><small>${esc(describeLook(cur).face)}</small></div>
       ${cands.map((v, i) => { const l = { ...cur, faceSeed: v }; return `<button class="opt face" data-act="liftPick" data-k="faceSeed" data-v="${v}" aria-pressed="${L.faceSeed === v}">${thumb(l, front, 200, 140)}<b>새 얼굴 ${i + 1}</b><small>${esc(describeLook(l).face)}</small></button>`; }).join('')}</div>
       <p class="note">차대(옆모습·차체 크기)는 그대로 두고 앞뒤 모습만 바꿉니다.</p></div>`;
     const card2 = `<div class="card"><p class="lbl">2. 옵션 갱신</p>${optTiles(L.options, 'liftOpt')}
@@ -678,11 +734,18 @@ export function startApp(): void {
   /** 개발 탭에서 보는 프로젝트(고른 것, 없으면 첫 프로젝트) */
   const curProj = (): Project | undefined => { const s = game!.state; return s.projects.find((p) => p.id === devSel) ?? s.projects[0]; };
   const phaseText = (p: Project) => p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`;
+  /** 개발 화면 맨 위: 기획 중인 초안 알림 */
+  const draftCard = (): string => {
+    if (!draft && !lift) return '';
+    const tabs = draft ? planTabs(draft) : [], i = draft ? Math.max(0, tabs.findIndex(([k]) => k === planTab)) : 0;
+    const what = draft ? `${i + 1}/${tabs.length}단계 · ${tabs[i][1]}` : '페이스리프트 기획';
+    return `<div class="card draft-card"><p class="lbl">기획 중</p><p class="draft-line"><b>기획 중인 차가 있습니다: 「${esc(draftName())}」</b> · ${what}</p><div class="row" style="margin-top:8px"><button class="btn ink" data-act="resumePlan">이어서 하기</button><button class="btn" data-act="cancelPlan">그만두기</button></div></div>`;
+  };
   function devView(): View {
     const s = game!.state, p = curProj(), teams = Q.devTeams(s), free = s.projects.length < teams;
     if (!p) {
       return { ov: `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>개발팀 · 쉬는 중</div><b>진행 중인 개발이 없습니다</b><span class="ofc-s">새 차를 기획하면 직원들이 설계를 시작합니다.</span></div>${free ? '<button class="go" data-act="plan">신차 기획</button>' : ''}</div>`,
-        panel: `<div class="card"><p class="lbl">개발</p><h2>개발팀이 쉬고 있습니다</h2><p class="hint" style="margin-top:8px">직원 ${s.staff.length}명 가운데 기획 때 고른 개발 직원이 그 차를 맡습니다. 개발팀은 ${teams}개라 한 번에 ${teams}대까지 개발할 수 있습니다.${s.hqLevel < 5 && teams < 3 ? ' 본사를 키우면 개발팀이 늘어납니다.' : ''}</p>${free ? '<button class="go" data-act="plan">신차 기획 시작</button>' : ''}</div>`, office: officeView() };
+        panel: `<div class="card"><p class="lbl">개발</p><h2>개발팀이 쉬고 있습니다</h2><p class="hint" style="margin-top:8px">직원 ${s.staff.length}명 가운데 기획 때 고른 개발 직원이 그 차를 맡습니다. 개발팀은 ${teams}개라 한 번에 ${teams}대까지 개발할 수 있습니다.${s.hqLevel < 5 && teams < 3 ? ' 본사를 키우면 개발팀이 늘어납니다.' : ''}</p>${free ? '<button class="go" data-act="plan">신차 기획 시작</button>' : ''}</div>${draftCard()}`, office: officeView() };
     }
     // 동시 개발: 위쪽에 프로젝트 전환 칩. 빈 개발팀이 있으면 [신차 기획]
     const chips = s.projects.length >= 2 || free ? `<div class="pchips"><span class="lbl">개발팀 ${s.projects.length}/${teams}</span>${s.projects.length >= 2 ? s.projects.map((x) => `<button class="pchip" data-act="devSel" data-id="${x.id}" aria-pressed="${x.id === p.id}"><b>${esc(x.name)}</b><small>${phaseText(x)}</small></button>`).join('') : ''}${free ? '<button class="btn ink" data-act="plan">+ 신차 기획</button>' : ''}</div>` : '';
@@ -706,7 +769,7 @@ export function startApp(): void {
       <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:8px">개발 취소</button>
       ${p.phase === 'test' && !wait ? '<p class="note">시험을 길게 할수록 결함이 줄어 리콜 위험이 낮아지지만 그동안 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.</p>' : ''}</div>`;
     const card3 = `<div class="card"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 단추로 시간을 진행합니다.</p>'}</div>`;
-    return { ov: ovh, panel: chips + card1 + card2 + card3, office: officeView(p) };
+    return { ov: ovh, panel: draftCard() + chips + card1 + card2 + card3, office: officeView(p) };
   }
 
   /** 결함 안내 한 줄(시험 단계·출시 화면) */
@@ -740,7 +803,7 @@ export function startApp(): void {
     const card4 = `<div class="card launch-go"><p class="lbl">출시 요약</p><p class="hint launch-sum">${sum}</p>
       ${prev && prev.status === 'onSale' ? `<div class="warnbox prev-end" style="margin-top:10px">출시하면 ${prev.number}세대는 이번 달 말에 단종됩니다(재고 처분 1개월).</div>` : ''}
       ${free ? '' : `<div class="badbox" style="margin-top:10px">생산 라인이 모두 차 있습니다(공장 라인 ${Q.linesOf(s)}개). 차고에서 판매 중인 차를 단종하면 그달 말부터 라인이 빕니다. 공장을 증설하면 라인이 늘어납니다.</div><button class="btn" data-act="tab" data-v="garage" style="width:100%;margin-top:8px">차고로 가서 단종하기</button>`}
-      <div class="row" style="margin-top:12px"><button class="btn" data-act="tab" data-v="dev">← 개발 화면으로</button><button class="go" data-act="doLaunch" ${free && !reg ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div></div>`;
+      <div class="row" style="margin-top:12px"><button class="btn" data-act="devHome">← 개발 화면으로</button><button class="go" data-act="doLaunch" ${free && !reg ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div></div>`;
     return { ov: ovh, panel: card0 + card1 + card2 + card3 + card4, look };
   }
 
@@ -1080,7 +1143,8 @@ export function startApp(): void {
     renderTop();
   }
   function adopt(g: Game, extra: S.UiExtra): void {
-    game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; garageIdx = 0; gameOverShown = false; officeEvents.length = 0; thumbs.clear();
+    game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
+    restorePlan(extra.plan); garageIdx = 0; gameOverShown = false; officeEvents.length = 0; thumbs.clear();
     coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = '';
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = '';
     title.hidden = true; sheet.hidden = true; makeStage(); speed = 1; acc = 0;
@@ -1131,21 +1195,27 @@ export function startApp(): void {
   async function act(a: string, el: HTMLElement): Promise<void> {
     const v = el.dataset.v ?? '', s = game?.state;
     switch (a) {
-      case 'tab': screen = v as Screen; if (v === 'dev' && launch) launch = null; lift = null; go(screen); return;
-      case 'plan': // 8.7: 차종이 있으면 먼저 어디서 시작할지 고른다
-        if (!s) return; { const b = busyReason(); if (b) return err(b); }
+      case 'tab': go(v === 'dev' ? devScreen() : v as Screen); return; // 기획 초안·출시 준비 값은 탭을 옮겨도 남긴다
+      case 'plan': // 8.7: 차종이 있으면 먼저 어디서 시작할지 고른다. 기획 중인 초안이 있으면 그것을 이어서
+        if (!s) return;
+        if (draft || lift) { go(draft ? 'plan' : 'lift'); return; }
+        { const b = busyReason(); if (b) return err(b); }
         if (Q.planEntries(s).nameplates.length) { startSel = null; go('start'); return; }
         draft = newDraft(); planTab = 'body'; go('plan'); return;
-      case 'pickNew': draft = newDraft(); planTab = 'body'; go('plan'); return;
+      case 'pickNew': if (!(await dropDraft())) return; draft = newDraft(); planTab = 'body'; go('plan'); return;
       case 'startSel': startSel = v as 'full' | 'lift'; render(); document.getElementById('np-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
       case 'goFull': {
         if (!s) return; const id = Number(el.dataset.id), e = elig(Q.fullChangeEligibility(s, id));
         if (!e.ok) return err(e.reason ?? '');
+        if (draft?.nameplateId === id) { go('plan'); return; }
+        if (!(await dropDraft())) return;
         draft = newDraft(id); planTab = 'prev'; go('plan'); return;
       }
       case 'goLift': {
         if (!s) return; const id = Number(el.dataset.id), e = elig(Q.faceliftEligibility(s, id)), g = Q.generationById(s, id);
         if (!e.ok || !g) return err(e.reason ?? '');
+        if (lift?.genId === id) { go('lift'); return; }
+        if (!(await dropDraft())) return;
         const ed = currentEdition(g), opts = new Set(Q.optionsAt(s).map((o) => o.id));
         lift = { genId: id, faceSeed: liftFaces(g)[0], options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: idleDev().map((x) => x.id) };
         go('lift'); return;
@@ -1160,7 +1230,7 @@ export function startApp(): void {
         ui.colors[p.id] = currentEdition(g).color; devPrev.set(p.id, 0); lift = null; devSel = p.id;
         toast(`「${p.name}」 페이스리프트를 시작했습니다. 디자이너가 새 얼굴을 그립니다.`); go('dev'); return;
       }
-      case 'ptab': planTab = v as PlanTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      case 'ptab': draftNote = ''; planTab = v as PlanTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'pick': {
         if (!draft) return; const k = el.dataset.k as keyof Draft;
         (draft as unknown as Record<string, unknown>)[k] = k === 'tier' || k === 'designWeeks' || k === 'chassisSeed' || k === 'faceSeed' ? Number(v) : v;
@@ -1169,12 +1239,12 @@ export function startApp(): void {
       }
       case 'opt': if (!draft || !s) return; draft.options = draft.options.includes(v) ? draft.options.filter((x) => x !== v) : [...draft.options, v].slice(0, Q.optionSlots(s)); render(); return;
       case 'dir': { if (!draft) return; const k = el.dataset.k as Stat, n = draft.direction[k] + Number(v); if (n < 0 || n > config.dev.dirMax || (Number(v) > 0 && dirLeft(draft) <= 0)) return; draft.direction[k] = n; render(); return; }
-      case 'cancelPlan': draft = null; lift = null; go('garage'); return;
+      case 'cancelPlan': draft = null; lift = null; draftNote = ''; go('garage'); return;
       case 'startDev': {
         if (!game || !draft) return;
         // 점수가 남았으면 문제 단계(개발 방향)로 데려가서 이유를 보여 준다
         if (dirLeft(draft) > 0) { planTab = 'dir'; lastPanel = ''; render(); panel.scrollTop = 0; return err(`개발 방향 점수가 ${dirLeft(draft)}점 남았습니다. ${config.dev.dirTotal}점을 모두 나눠야 합니다.`); }
-        const { color, nameplateId, team, ...spec } = draft;
+        const { color, nameplateId, team, year: _y, ...spec } = draft; void _y;
         const r = nameplateId ? game.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team })
           : game.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName(), team });
         if (!run(r)) return;
@@ -1185,12 +1255,13 @@ export function startApp(): void {
       case 'cancelDev': {
         const p = s && curProj(); if (!p || !game) return;
         if (!(await ask(`「${p.name}」 개발을 취소할까요?\n지금까지 쓴 개발비 ${money(p.spent)}${josa(money(p.spent), '은/는')} 돌아오지 않습니다.`, '개발 취소', true))) return;
-        if (run(game.command({ type: 'cancelProject', projectId: p.id }))) { delete ui.colors[p.id]; toast('개발을 취소했습니다'); go('dev'); }
+        if (run(game.command({ type: 'cancelProject', projectId: p.id }))) { delete ui.colors[p.id]; if (launch?.pid === p.id) launch = null; toast('개발을 취소했습니다'); go('dev'); }
         return;
       }
       case 'toLaunch': {
         const p = s && curProj(); if (!p) return;
         const g = p.kind === 'facelift' ? Q.generationById(s!, p.targetId ?? -1) : undefined, e = g && currentEdition(g); // 페이스리프트: 지금 가격·색·휠·광고에서 시작
+        if (launch?.pid === p.id) { go('launch'); return; } // 고르던 값(가격·광고·색·휠) 그대로
         launch = e ? { pid: p.id, price: e.price, marketing: g!.marketing, color: e.color, wheels: e.wheels } : { pid: p.id, price: bodyById(p.body).basePrice, marketing: 1, color: ui.colors[p.id] ?? PAINT[0][1], wheels: 1 };
         go('launch'); return;
       }
@@ -1254,7 +1325,9 @@ export function startApp(): void {
       }
       case 'cotab': coTab = v as CoTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'goCo': coTab = v as CoTab; go('company'); return;
-      case 'devSel': devSel = Number(el.dataset.id); launch = null; go('dev'); return;
+      case 'devSel': devSel = Number(el.dataset.id); go('dev'); return;
+      case 'devHome': go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로
+      case 'resumePlan': go(draft ? 'plan' : lift ? 'lift' : 'dev'); return;
       case 'staffSel': { const id = Number(el.dataset.id); staffSel = staffSel === id ? null : id; render(); if (staffSel !== null) document.getElementById('staff-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
       case 'hireRole': hireRole = v as Role; render(); return;
       case 'postJob': if (game && run(game.command({ type: 'postJob', role: hireRole, tier: Number(v) as 1 | 2 | 3 }))) { toast(`${ROLE_NAME[hireRole]} 공고를 냈습니다. 후보 3명 가운데 고를 수 있습니다.`); render(); } return;
@@ -1324,10 +1397,10 @@ export function startApp(): void {
         if (!game) return;
         const has = (await S.list()).some((x) => x.key === v);
         if (has && !(await ask(`저장 칸 ${v.slice(-1)}${josa(v.slice(-1), '을/를')} 덮어쓸까요?`, '덮어쓰기'))) return;
-        if (await S.put(v as S.SlotKey, S.makeSave(game, ui))) toast(`저장 칸 ${v.slice(-1)}에 저장했습니다`); else err('저장하지 못했습니다(브라우저 저장 공간 부족)');
+        if (await S.put(v as S.SlotKey, S.makeSave(game, uiSnap()))) toast(`저장 칸 ${v.slice(-1)}에 저장했습니다`); else err('저장하지 못했습니다(브라우저 저장 공간 부족)');
         void showMenu(); return;
       }
-      case 'export': if (game) { download(`car-company-${game.state.week}w.json`, JSON.stringify(S.makeSave(game, ui))); toast('파일로 내보냈습니다'); } return;
+      case 'export': if (game) { download(`car-company-${game.state.week}w.json`, JSON.stringify(S.makeSave(game, uiSnap()))); toast('파일로 내보냈습니다'); } return;
       case 'import': importFile(); return;
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
       case 'closeSheet': sheet.hidden = true; render(); return;
@@ -1378,7 +1451,7 @@ export function startApp(): void {
     }
   });
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
-  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; if ((screen === 'plan' && b.dataset.tab !== 'dev') || screen === 'company') draft = null; launch = null; lift = null; go(b.dataset.tab as Screen); });
+  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); });
   $('#menubtn').addEventListener('click', () => void showMenu());
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
@@ -1394,6 +1467,7 @@ export function startApp(): void {
     get game() { return game; }, get screen() { return screen; }, get ui() { return ui; }, get speed() { return speed; }, get stage() { return stage; },
     tick(n = 1, popups = false) { quietChoice = !popups; try { for (let i = 0; i < n && game && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = false; } render(); },
     get look() { return lookKey; },
+    get draft() { return draft; }, get lift() { return lift; }, get launch() { return launch; }, get planTab() { return planTab; },
     genLook: (id: number) => { const g = game && Q.generationById(game.state, id); return g ? genLook(g) : null; },
     get tip() { return tip.hidden ? null : { key: tip.dataset.key, hover: tipHover, text: tip.innerText }; },
     setSpeed, render, held: isHeld, toast,

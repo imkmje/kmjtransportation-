@@ -531,7 +531,7 @@ export class Game {
     }
     // 9.1 경험: 프로젝트를 마친(출시) 참여 직원 능력 +1~2(잠재력 상한), 직원 ID 순
     const ex = config.staff.exp;
-    for (const x of s.staff.filter((y) => y.projectId === p.id).sort((a, b) => a.id - b.id))
+    for (const x of s.staff.filter((y) => y.projectId === p.id || p.crew?.includes(y.id)).sort((a, b) => a.id - b.id)) // 출시 대기로 풀려난 직원 포함
       x.ability = Math.max(x.ability, Math.min(x.potential, x.ability + this.rng.intIn(ex.min, ex.max)));
     this.closeProject(p);
     return events.length ? { ok: true, events } : OK;

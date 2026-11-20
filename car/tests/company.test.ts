@@ -328,10 +328,10 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
   it('월 유지비 = 공장 + 본사(등급별)', () => {
     const g = Game.create({ seed: 1 });
     g.state.cash = 1e9;
-    expect(upkeepOf(g.state)).toBe(5000 + 500);
+    expect(upkeepOf(g.state)).toBe(config.factory.levels[0].upkeep + config.hq.levels[0].upkeep);
     ok(g.command({ type: 'upgradeHQ' }));
     toMonthEnd(g);
-    expect(g.state.ledger.at(-1)!.upkeep).toBe(5000 + config.hq.levels[1].upkeep);
+    expect(g.state.ledger.at(-1)!.upkeep).toBe(config.factory.levels[0].upkeep + config.hq.levels[1].upkeep);
   });
   it('hqInfo: 지금·다음 등급, 승급 가능 여부와 이유', () => {
     const g = Game.create({ seed: 1 });

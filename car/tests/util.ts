@@ -18,7 +18,7 @@ export function devReady(seed = 1, testWeeks = 2, spec: Partial<ProjectSpec> = {
   const g = Game.create({ seed });
   ok(g.command({ type: 'startProject', ...SPEC, ...spec }));
   const pid = g.state.projects[0].id;
-  while (g.state.projects[0].phase === 'design' || g.state.projects[0].testWeeks < testWeeks) g.tick();
+  while (!g.state.projects[0].waiting && (g.state.projects[0].phase === 'design' || g.state.projects[0].testWeeks < testWeeks)) g.tick(); // 결함을 다 잡으면 출시 대기(시험 주가 더 늘지 않는다)
   return { g, pid };
 }
 

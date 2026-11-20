@@ -122,7 +122,7 @@ describe('리콜(6.3)', () => {
       expect(gen.recalls).toBe(0);
     }
   });
-  it('결함이 많으면 리콜: 판매 누계 × 15만원, 평판 −5, 인지도 −20%, 결함은 수리되어 0', () => {
+  it('결함이 많으면 리콜: 판매 누계 × 12만원(0.4.1), 평판 −5, 인지도 −20%, 결함은 수리되어 0', () => {
     let recalled = 0;
     for (const seed of [1, 2, 3, 4, 5]) {
       const { g, gen } = launched(seed);
@@ -134,7 +134,7 @@ describe('리콜(6.3)', () => {
         if (ev.some((e) => e.kind === 'recall')) {
           recalled++;
           const l = g.state.ledger.at(-1)!;
-          expect(l.recall).toBe(gen.totalSold * 15);
+          expect(l.recall).toBe(gen.totalSold * config.recall.costPerCar);
           expect(g.state.reputation).toBe(Math.max(0, rep - 5));
           expect(gen.editions[0].defects).toBe(0);
           expect(gen.awareness).toBeCloseTo(awNoRecall * 0.8, 9);

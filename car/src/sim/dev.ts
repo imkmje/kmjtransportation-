@@ -106,7 +106,7 @@ export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
   p.spent += cost; state.pendingDev += cost;
   p.defectEst = p.defects > 0 ? Math.round(p.defects * (1 + rng.range(-d.estError, d.estError))) : 0;
   if (p.phase === 'test' && p.defects <= 0 && p.testWeeks >= d.minTestWeeks) { // 결함을 다 잡으면 출시 대기: 더 시험해도 얻는 것이 없으므로 직원을 풀고 비용을 멈춘다
-    p.waiting = true; log.waitingNow = true;
+    p.waiting = true; log.waitingNow = true; p.crew = team.map((x) => x.id);
     for (const x of team) x.projectId = null;
   }
   return log;

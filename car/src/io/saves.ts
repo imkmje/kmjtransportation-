@@ -6,7 +6,9 @@ import { DEFAULT_LOGO, cleanLogo, type LogoSpec } from '../ui/art';
 /** 저장 데이터 형식 번호(게임 버전·sim 저장 형식과 따로) */
 export const SAVE_FILE_V = 1;
 // photos: 세대 id → 출시 때 찍은 사진(작은 JPEG data URL), colors: 개발 중 프로젝트 id → 기획 때 고른 색, logo: 회사 로고(0.4.1~, 없던 옛 파일은 기본 로고)
-export interface UiExtra { photos: Record<string, string>; colors: Record<string, string>; logo: LogoSpec }
+// plan: 기획 초안·출시 준비 값(0.4.1~, 화면이 쓰는 모양 그대로. 불러올 때 화면이 검사·보정한다)
+export interface PlanSave { draft?: ({ body: string; direction: object; options: string[]; team: number[] } & Record<string, unknown>) | null; planTab?: string; lift?: ({ genId: number; options: string[]; team: number[] } & Record<string, unknown>) | null; launch?: ({ pid: number } & Record<string, unknown>) | null }
+export interface UiExtra { photos: Record<string, string>; colors: Record<string, string>; logo: LogoSpec; plan?: PlanSave }
 export interface SaveData { v: number; when: string; game: CarState; ui: UiExtra }
 export type SlotKey = 'auto' | 'slot1' | 'slot2' | 'slot3';
 export const SLOT_KEYS: SlotKey[] = ['slot1', 'slot2', 'slot3'];
@@ -30,7 +32,7 @@ function req<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest):
   }));
 }
 
-export function makeSave(game: Game, ui: UiExtra): SaveData { return { v: SAVE_FILE_V, when: new Date().toISOString(), game: game.toJSON(), ui: { photos: { ...ui.photos }, colors: { ...ui.colors }, logo: { ...ui.logo } } }; }
+export function makeSave(game: Game, ui: UiExtra): SaveData { return { v: SAVE_FILE_V, when: new Date().toISOString(), game: game.toJSON(), ui: { photos: { ...ui.photos }, colors: { ...ui.colors }, logo: { ...ui.logo }, ...(ui.plan ? { plan: ui.plan } : {}) } }; }
 
 export async function put(key: SlotKey, data: SaveData): Promise<boolean> {
   try { await req('readwrite', (s) => s.put(data, key)); return true; } catch { /* localStorage로 */ }
@@ -67,7 +69,7 @@ export function parse(v: unknown): { ok: true; game: Game; ui: UiExtra } | { ok:
     const p = o.ui?.photos, c = o.ui?.colors;
     if (p && typeof p === 'object') for (const [k, x] of Object.entries(p)) if (typeof x === 'string' && x.startsWith('data:image/')) photos[k] = x;
     if (c && typeof c === 'object') for (const [k, x] of Object.entries(c)) if (typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x)) colors[k] = x;
-    return { ok: true, game, ui: { photos, colors, logo: o.ui?.logo ? cleanLogo(o.ui.logo) : { ...DEFAULT_LOGO } } };
+    return { ok: true, game, ui: { photos, colors, logo: o.ui?.logo ? cleanLogo(o.ui.logo) : { ...DEFAULT_LOGO }, plan: o.ui?.plan && typeof o.ui.plan === 'object' ? o.ui.plan : undefined } };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : '불러오지 못했습니다' }; }
 }
 export function parseText(text: string): ReturnType<typeof parse> {
