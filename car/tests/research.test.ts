@@ -131,15 +131,24 @@ describe('연구 진행(10장)', () => {
     g.state.cash = 1e9;
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_hatch' }))).toBe('이미 연구한 기술입니다.');
   });
-  it('연구 칸은 본사 등급마다 3/4/5/6/6개(0.4.2), 점수는 시작 순으로 채운다', () => {
+  it('연구 칸은 본사 등급마다 3/4/5/6/6개(0.4.2). 진행 중 연구는 모두 매주 점수를 고르게 받고, 우선 연구가 절반을 받는다(0.5.1)', () => {
     expect(config.research.slots).toEqual([3, 4, 5, 6, 6]);
     const g = gameAt(1982); g.state.hqLevel = 5;
     ok(g.command({ type: 'startResearch', techId: 'bd_hatch' })); ok(g.command({ type: 'startResearch', techId: 'bd_sedanM' }));
     for (const t of TECHS.filter((x) => !researchError(g.state, x.id)).slice(0, 4)) ok(g.command({ type: 'startResearch', techId: t.id }));
     expect(reason(g.command({ type: 'startResearch', techId: TECHS.find((x) => researchError(g.state, x.id) === '연구 칸이 찼습니다.')!.id }))).toBe('연구 칸이 찼습니다.');
+    const ppw = weeklyResearchPoints(g.state), n = g.state.research.active.length;
     g.tick();
-    const [a, b] = g.state.research.active, ppw = weeklyResearchPoints(g.state);
-    expect(a.points).toBeCloseTo(Math.min(ppw, a.need), 9); expect(b.points).toBeCloseTo(Math.max(0, ppw - a.need), 9);
+    for (const a of g.state.research.active) expect(a.points).toBeCloseTo(ppw / n, 9); // 고르게
+    const last = g.state.research.active[n - 1].techId, before = g.state.research.active.map((a) => a.points);
+    ok(g.command({ type: 'prioritizeResearch', techId: last }));
+    expect(g.state.research.active[0].techId).toBe(last); expect(researchInfo(g.state).active[0]).toMatchObject({ techId: last, priority: true });
+    expect(researchInfo(g.state).active[0].pointsPerWeek).toBeCloseTo(ppw * config.research.priorityShare, 9);
+    g.tick();
+    const after = g.state.research.active;
+    expect(after[0].points - before[n - 1]).toBeCloseTo(ppw * config.research.priorityShare, 9);
+    for (let i = 1; i < n; i++) expect(after[i].points - before[i - 1]).toBeCloseTo((ppw * (1 - config.research.priorityShare)) / (n - 1), 9);
+    expect(reason(g.command({ type: 'prioritizeResearch', techId: 'nope' }))).toBe('진행 중인 연구가 아닙니다.');
   });
   it('먼저 하면 × (1 + 0.25 × 앞당긴 햇수)(최대 4년), 등장 + 8년 뒤면 × 0.5', () => {
     const t = techById('bd_sedanM'); // 1978

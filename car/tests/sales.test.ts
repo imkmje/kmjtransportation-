@@ -85,14 +85,14 @@ describe('출시와 평론(7.1~7.2)', () => {
     for (let i = 0; i < 4; i++) expect(dirty[i]).toBeCloseTo(clean[i] - 1, 9);
     expect(criticScores(st, 1970, 1200, 900, 0, () => 0)[3]).toBeGreaterThan(clean[3]);
   });
-  it('명차(평균 8 이상)는 평판 +4, 평균 4 이하는 평판 −3, 여기에 (평론 평균 − 5) × 1.5(0.4.2)', () => {
+  it('명차(평균 8 이상)는 평판 +4와 (평균 − 5) × 1, 혹평(평균 3.5 이하)은 −3 × 난이도 감점 배수, 5 미만은 감점하지 않는다(0.5.1)', () => {
     const a = devReady(1); a.g.state.projects[0].points = { P: 400, E: 400, U: 400, D: 400, Q: 400 };
     ok(a.g.command({ type: 'launch', projectId: a.pid, price: 1200, marketing: 0, color: 'red', wheels: 0 }));
     const R = config.reputation, ga = allGens(a.g.state)[0];
     expect(ga.masterpiece).toBe(true); expect(a.g.state.reputation).toBeCloseTo(Math.min(100, 14 + (ga.reviewAvg - R.launchBase) * R.launchPer), 9);
     const b = devReady(1); b.g.state.projects[0].points = { P: 0, E: 0, U: 0, D: 0, Q: 0 };
     ok(b.g.command({ type: 'launch', projectId: b.pid, price: 1200, marketing: 0, color: 'red', wheels: 0 }));
-    expect(b.g.state.reputation).toBeCloseTo(Math.max(0, 7 + (allGens(b.g.state)[0].reviewAvg - R.launchBase) * R.launchPer), 9);
+    expect(allGens(b.g.state)[0].reviewAvg).toBeLessThanOrEqual(config.critics.flop); expect(b.g.state.reputation).toBeCloseTo(10 + config.critics.flopRep, 9); // 보통: 배수 1
   });
   it('출시 검증: 시험 2주 미만·가격 범위·마케팅·바퀴', () => {
     const { g, pid } = devReady(1, 1);
@@ -124,7 +124,7 @@ describe('리콜(6.3)', () => {
       expect(gen.recalls).toBe(0);
     }
   });
-  it('결함이 많으면 리콜: 판매 누계 × 12만원(0.4.1), 평판 −5, 인지도 −20%, 결함은 수리되어 0', () => {
+  it('결함이 많으면 리콜: 판매 누계 × 12만원(0.4.1), 평판 −(누적/5,000, 0.5~3)(0.5.1, 이유가 담긴 평판 이벤트), 인지도 −20%, 결함은 수리되어 0', () => {
     let recalled = 0;
     for (const seed of [1, 2, 3, 4, 5]) {
       const { g, gen } = launched(seed);
@@ -137,7 +137,9 @@ describe('리콜(6.3)', () => {
           recalled++;
           const l = g.state.ledger.at(-1)!;
           expect(l.recall).toBe(gen.totalSold * config.recall.costPerCar);
-          expect(g.state.reputation).toBeGreaterThanOrEqual(Math.max(0, rep - 5)); expect(g.state.reputation).toBeLessThanOrEqual(Math.max(0, rep - 5) + config.reputation.yearMax); // 12월이면 연간 판매 평판(0.4.2)이 더해진다
+          const R = config.reputation, want = -Math.min(-config.recall.rep, Math.max(R.recallMin, gen.totalSold / R.recallPer)); // 0.5.1 규모 비례(보통 배수 1)
+          const re = ev.find((e) => e.kind === 'reputation' && e.reason.includes('리콜'));
+          if (rep + want >= 0) expect(re && re.kind === 'reputation' && re.delta).toBeCloseTo(want, 9); void rep;
           expect(gen.editions[0].defects).toBe(0);
           expect(gen.awareness).toBeCloseTo(awNoRecall * 0.8, 9);
         }
