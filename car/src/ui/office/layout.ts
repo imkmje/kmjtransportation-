@@ -1,85 +1,245 @@
-// 사무실 배치 계산(순수 함수, DOM 없음). 단위는 바닥 칸(1칸 = 쿼터뷰 타일 하나).
-// 좌표: x는 화면 오른쪽 아래로, y는 왼쪽 아래로 늘어난다. (0,0)이 뒤쪽 구석, x=0 면이 왼쪽 벽, y=0 면이 오른쪽 벽.
+// 사무실 배치 계산(순수 함수, DOM 없음). 단위는 m. 바닥 좌표: x는 화면 오른쪽 아래, y는 왼쪽 아래로 늘어난다.
+// (0,0)이 뒤쪽 구석, x=0 면이 왼쪽 벽, y=0 면이 오른쪽 벽. 앞쪽 두 벽은 잘라 내고 그린다.
+// 등급 → 방 크기·구역·가구·자리·서서 일하는 곳(spot), 그리고 걷기용 격자와 길찾기.
 
 export type Level = 1 | 2 | 3 | 4 | 5;
-export type PropKind =
-  | 'boxes' | 'shelf' | 'bulb' | 'plant' | 'whiteboard' | 'window' | 'clock'
-  | 'cooler' | 'meeting' | 'equipment' | 'sofa' | 'plinth' | 'sign';
+export type Face = '+x' | '-x' | '+y' | '-y';
+export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
+export type ZoneKind = 'office' | 'studio' | 'test' | 'garage' | 'pantry' | 'meeting' | 'lab' | 'lobby' | 'lounge';
+export type FurnKind =
+  | 'desk' | 'divider' | 'glass' | 'cabinet' | 'rack' | 'counter' | 'fridge' | 'sofa' | 'plant' | 'table' | 'mchair'
+  | 'drafting' | 'clay' | 'car' | 'post' | 'cart' | 'diag' | 'workbench' | 'boxes' | 'dyno' | 'tunnel' | 'reception'
+  | 'printer' | 'cooler' | 'stool';
+export type WallKind = 'window' | 'whiteboard' | 'swatch' | 'sketch' | 'toolwall' | 'shutter' | 'logo' | 'sign' | 'clock';
+export type SpotKind = 'test' | 'studio' | 'lab' | 'coffee' | 'meeting';
 
-/** 바닥 소품은 x,y,w,d(바닥 칸), 벽 소품은 wall('L'=x=0 벽, 'R'=y=0 벽)과 벽을 따라간 위치 at·폭 w·높이 z,h */
-export interface Prop { kind: PropKind; x: number; y: number; w: number; d: number; wall?: 'L' | 'R'; z?: number; h?: number }
-export interface Room { level: Level; name: string; cols: number; rows: number; W: number; D: number; H: number; floor: 'concrete' | 'tile' | 'wood'; props: Prop[] }
-export interface Seat { x: number; y: number; col: number; row: number; used: boolean }
-
-export const CAPACITY: Record<Level, number> = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20 };
-const GRID: Record<Level, [number, number]> = { 1: [2, 2], 2: [4, 2], 3: [4, 3], 4: [4, 4], 5: [5, 4] };
-const NAME: Record<Level, string> = { 1: '창고 공장', 2: '소형 사옥', 3: '본사 빌딩', 4: '연구 단지', 5: '글로벌 본사' };
-
-// 책상 한 자리: 책상 2.2×1.1칸, 사람과 의자는 책상 뒤(작은 y). 간격 SX·SY는 사람이 서로 겹치지 않게 고른 값.
-export const DESK = { w: 2.2, d: 1.1 };
-export const SX = 3.0, SY = 2.7;
-const X0 = 1.7;   // 왼쪽 벽 쪽 띠(받침대·상자) 폭
-const Y0 = 2.5;   // 오른쪽 벽 쪽 띠(선반·정수기) + 의자 자리
-const LOUNGE = 2.8; // 등급 3 이상: 오른쪽 끝 휴게 칸(회의 탁자·연구 장비)
-
-const clampLevel = (l: number): Level => Math.max(1, Math.min(5, Math.round(l) || 1)) as Level;
-
-export function roomFor(level: number): Room {
-  const lv = clampLevel(level), [cols, rows] = GRID[lv];
-  const lounge = lv >= 3 ? LOUNGE : 0;
-  const deskEnd = X0 + (cols - 1) * SX + DESK.w;
-  const W = deskEnd + 0.7 + lounge;
-  const D = Y0 + (rows - 1) * SY + DESK.d + 1.0;
-  const H = lv === 1 ? 2.8 : 3.2;
-  const p: Prop[] = [];
-  const wallR = (kind: PropKind, at: number, w: number, z: number, h: number) => p.push({ kind, x: at, y: 0, w, d: 0, wall: 'R', z, h });
-  const wallL = (kind: PropKind, at: number, w: number, z: number, h: number) => p.push({ kind, x: 0, y: at, w, d: 0, wall: 'L', z, h });
-  const floor = (kind: PropKind, x: number, y: number, w: number, d: number) => p.push({ kind, x, y, w, d });
-
-  // 공통: 왼쪽 앞 구석의 차 받침대, 오른쪽 벽의 개발 표지판
-  floor('plinth', 0.25, D - 2.5, 1.2, 2.1);
-  wallR('sign', 0.5, Math.min(4.4, W * 0.5), 1.7, 1.2);
-  if (lv === 1) {
-    floor('boxes', 0.25, 0.3, 1.1, 1.1);
-    floor('boxes', 0.3, 1.6, 0.9, 0.9);
-    floor('shelf', W - 1.6, 0.2, 1.3, 0.7);
-    wallR('window', W - 2.4, 1.4, 2.1, 0.6);
-    p.push({ kind: 'bulb', x: W - 2.2, y: 1.2, w: 0, d: 0, z: H });
-  } else {
-    wallL('whiteboard', 0.6, Math.min(3.2, D * 0.35), 1.2, 1.4);
-    wallL('clock', D * 0.35 + 1.4, 0.7, 2.1, 0.7);
-    floor('plant', W - 0.9, 0.25, 0.6, 0.6);
-    floor('boxes', 0.3, 0.4, 0.9, 0.9);
-    const nWin = lv >= 5 ? 3 : lv >= 3 ? 2 : 1;
-    const start = Math.min(4.4, W * 0.5) + 1.0, span = W - start - 1.2;
-    for (let i = 0; i < nWin; i++) wallR('window', start + (span / nWin) * i + 0.2, span / nWin - 0.4, 1.2, 1.5);
-  }
-  if (lv >= 2) floor('shelf', 2.0, 0.2, 1.3, 0.7);
-  if (lv >= 3) {
-    const lx = deskEnd + 0.7;
-    floor('cooler', 3.7, 0.25, 0.6, 0.6);
-    floor('meeting', lx + 0.2, Y0 - 1.0, 2.2, 1.6);
-    floor('plant', 0.35, D * 0.45, 0.6, 0.6);
-  }
-  if (lv >= 4) {
-    const lx = deskEnd + 0.7;
-    floor('equipment', lx + 0.3, D - 2.4, 2.0, 1.4);
-    wallL('whiteboard', D * 0.35 + 2.4, Math.min(2.6, D * 0.3), 1.2, 1.4);
-  }
-  if (lv >= 5) {
-    const lx = deskEnd + 0.7;
-    floor('sofa', lx + 0.3, Y0 + 1.6, 2.0, 1.0);
-    floor('plant', W - 0.9, D - 0.9, 0.6, 0.6);
-  }
-  return { level: lv, name: NAME[lv], cols, rows, W, D, H, floor: lv === 1 ? 'concrete' : lv >= 4 ? 'wood' : 'tile', props: p };
+export interface Zone { kind: ZoneKind; x: number; y: number; w: number; d: number }
+/** 바닥 가구: 발자국(x,y,w,d)과 높이 h. seat는 책상이 속한 자리 번호 */
+export interface Furn { kind: FurnKind; x: number; y: number; w: number; d: number; h: number; seat?: number; face?: Face }
+/** 벽 그림: 'R'=y=0 벽(at=x), 'L'=x=0 벽(at=y). z=아래쪽 높이 */
+export interface WallItem { kind: WallKind; wall: 'L' | 'R'; at: number; w: number; z: number; h: number }
+export interface Seat { x: number; y: number; face: Face; col: number; row: number; used: boolean; access: [number, number] }
+export interface Spot { kind: SpotKind; x: number; y: number; face: Face }
+export interface Grid { cols: number; rows: number; free: Uint8Array }
+export interface Room {
+  level: Level; name: string; W: number; D: number; H: number;
+  zones: Zone[]; furn: Furn[]; walls: WallItem[]; seats: Seat[]; spots: Spot[];
+  anchors: Record<Role, [number, number]>; grid: Grid;
 }
 
-/** 등급의 책상 자리(정원만큼). 뒤 줄부터 앞으로, 줄 안에서는 왼쪽부터 채운다(빈 책상은 앞쪽에 남아 아무도 가리지 않는다).
- *  staffCount가 정원을 넘으면 넘친 사람은 자리가 없다(used는 정원까지만). */
+export const CELL = 0.5;                 // 걷기 격자 칸(m)
+const CLEAR = 0.12;                      // 가구에서 띄울 거리(m)
+export const CAPACITY: Record<Level, number> = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20 };
+const NAME: Record<Level, string> = { 1: '창고 공장', 2: '소형 사옥', 3: '본사 빌딩', 4: '연구 단지', 5: '글로벌 본사' };
+// 4인 책상 묶음: 책상 1.4×0.75 두 개씩 마주 보고, 가운데 낮은 칸막이
+const POD_W = 2.8, POD_D = 2.75;
+export const DESK_H = 0.75;
+
+const clampLevel = (l: number): Level => Math.max(1, Math.min(5, Math.round(l) || 1)) as Level;
+const cache = new Map<Level, Room>();
+
+export function roomFor(level: number): Room {
+  const lv = clampLevel(level);
+  const hit = cache.get(lv);
+  if (hit) return hit;
+  const nPods = CAPACITY[lv] / 4;
+  const pc = lv <= 2 ? nPods : lv === 5 ? 3 : 2, pr = Math.ceil(nPods / pc);
+  const AX = lv >= 4 ? 2.0 : 1.6, AY = 1.4;           // 묶음 사이 통로(책상 깊이보다 넓게)
+  const BACK = 3.4;                                    // 오른쪽 벽 쪽 띠(탕비·회의실·수납장)
+  const studio = lv >= 2, glass = lv >= 3, lab = lv >= 4, lobby = lv === 5;
+  const ox = lv === 1 ? 2.6 : 6.2;                     // 사무 구역 시작 x(왼쪽에 디자인 스튜디오)
+  const oy = BACK + 1.6;                               // 사무 구역 시작 y(첫 줄 의자 뒤 통로 포함)
+  const oaW = pc * POD_W + (pc - 1) * AX, oaD = pr * POD_D + (pr - 1) * AY;
+  const rx = ox + oaW + 1.8;                           // 오른쪽 열(시험실·연구실) 시작
+  const colW = lv >= 4 ? 7.6 : 6.8;
+  const W = rx + colW;
+  const D = Math.max(oy + oaD + 1.6 + (lobby ? 3.4 : 0), studio ? oy + 6.4 : 0, lab ? 13.4 : 0, lv === 1 ? 7.6 : 0);
+  const H = 3.0;
+
+  const zones: Zone[] = [], furn: Furn[] = [], walls: WallItem[] = [], seats: Seat[] = [], spots: Spot[] = [];
+  const F = (kind: FurnKind, x: number, y: number, w: number, d: number, h: number, extra: Partial<Furn> = {}) => furn.push({ kind, x, y, w, d, h, ...extra });
+  const Wl = (kind: WallKind, wall: 'L' | 'R', at: number, w: number, z: number, h: number) => walls.push({ kind, wall, at, w, z, h });
+  const S = (kind: SpotKind, x: number, y: number, face: Face) => spots.push({ kind, x, y, face });
+
+  // ---- 사무 구역: 4인 묶음 ----
+  zones.push({ kind: 'office', x: ox - 0.6, y: oy - 0.5, w: oaW + 1.2, d: oaD + 1.0 });
+  let podNo = 0;
+  for (let r = 0; r < pr; r++) for (let c = 0; c < pc; c++) {
+    const px = ox + c * (POD_W + AX), py = oy + r * (POD_D + AY) + 0.6;
+    if (podNo++ >= nPods) {                             // 빈 칸: 공용 탁자와 화분
+      F('table', px + 0.6, py + 0.2, 1.6, 1.0, 0.74); F('plant', px + 2.3, py + 1.6, 0.5, 0.5, 1.2);
+      continue;
+    }
+    for (const [i, [dx, back]] of ([[0, true], [1.4, true], [0, false], [1.4, false]] as [number, boolean][]).entries()) {
+      const si = seats.length;
+      F('desk', px + dx, back ? py : py + 0.8, 1.4, 0.75, DESK_H, { seat: si, face: back ? '+y' : '-y' });
+      seats.push({ x: px + dx + 0.7, y: back ? py - 0.35 : py + 1.9, face: back ? '+y' : '-y', col: c * 2 + (i % 2), row: r * 2 + (back ? 0 : 1), used: false, access: [0, 0] });
+    }
+    F('divider', px, py + 0.75, POD_W, 0.05, 1.05);
+  }
+
+  // ---- 뒤쪽 띠: 탕비 공간, 회의실, 수납장 ----
+  zones.push({ kind: 'pantry', x: 0, y: 0, w: 4.8, d: BACK });
+  F('counter', 0.5, 0.05, 2.4, 0.6, 0.9); F('fridge', 3.0, 0.05, 0.7, 0.7, 1.8);
+  S('coffee', 1.2, 1.25, '-y'); S('coffee', 2.2, 1.25, '-y');
+  if (lv >= 2) { F('sofa', 0.6, 2.3, 2.0, 0.8, 0.8, { face: '-y' }); S('coffee', 3.3, 2.2, '-x'); }
+  else { F('rack', 3.9, 0.05, 1.6, 0.5, 2.0); F('boxes', 0.3, 1.9, 0.9, 0.9, 0.9); }
+  let cabX = lv >= 2 ? 5.2 : 6.0;
+  if (glass) {
+    const mx = 5.2, mw = 5.2;
+    zones.push({ kind: 'meeting', x: mx, y: 0, w: mw, d: BACK });
+    F('glass', mx, 0, 0.05, BACK, 2.4); F('glass', mx + mw - 0.05, 0, 0.05, BACK, 2.4);
+    F('glass', mx, BACK - 0.05, mw - 1.3, 0.05, 2.4);   // 앞 유리(오른쪽 끝 1.3m가 문)
+    F('table', mx + 1.2, 1.0, 2.6, 1.0, 0.74);
+    for (const dx of [1.45, 2.25, 3.05]) F('mchair', mx + dx, 0.4, 0.45, 0.45, 0.85, { face: '+y' });
+    for (const dx of [1.6, 2.5, 3.4]) S('meeting', mx + dx, 2.5, '-y');
+    Wl('whiteboard', 'R', mx + 1.0, 2.8, 1.0, 1.2);
+    cabX = mx + mw + 0.6;
+  } else if (lv === 2) { F('table', 6.0, 1.0, 1.2, 1.2, 0.74); F('stool', 6.3, 2.4, 0.4, 0.4, 0.5); cabX = 8.0; }
+  for (let x = cabX; x + 1.2 <= rx - 0.6; x += 1.25) F('cabinet', x, 0.05, 1.2, 0.5, 1.0);
+  if (lv === 1) Wl('sign', 'R', 2.4, 3.0, 2.05, 0.8); else Wl('sign', 'R', Math.max(cabX, ox), 3.2, 1.6, 0.9);
+
+  // ---- 디자인 스튜디오(왼쪽 열) ----
+  if (studio) {
+    const sy = oy;
+    zones.push({ kind: 'studio', x: 0, y: sy - 0.4, w: 5.0, d: 6.0 });
+    F('clay', 0.9, sy + 0.4, 3.0, 1.4, 0.3);
+    S('studio', 2.4, sy + 2.3, '-y'); S('studio', 4.4, sy + 1.1, '-x');
+    const nd = lv >= 3 ? 2 : 1;
+    for (let i = 0; i < nd; i++) { F('drafting', 0.8 + i * 2.0, sy + 3.4, 1.2, 0.9, 1.0); S('studio', 1.4 + i * 2.0, sy + 4.75, '-y'); }
+    Wl('swatch', 'L', sy + 0.2, 1.6, 1.0, 1.0); Wl('sketch', 'L', sy + 2.2, 2.0, 0.9, 1.3);
+  } else {
+    // 등급 1: 왼쪽 벽 작업대와 공구 벽
+    F('workbench', 0.05, 5.0, 0.75, 3.0, 0.9);
+    Wl('toolwall', 'L', 5.0, 3.0, 1.1, 1.3);
+  }
+
+  // ---- 오른쪽 열: 시험실(등급 1은 차고) ----
+  const cx = rx + colW / 2;
+  zones.push({ kind: glass ? 'test' : 'garage', x: rx, y: 0, w: colW, d: 5.6 });
+  F('car', cx - 2.1, 1.9, 4.2, 1.8, 1.4);
+  if (lv >= 2) { F('post', cx - 0.2, 1.35, 0.4, 0.3, 2.0); F('post', cx - 0.2, 4.0, 0.4, 0.3, 2.0); }
+  F('cart', W - 1.0, 4.6, 0.7, 0.45, 0.9); F('diag', W - 0.9, 0.25, 0.5, 0.5, 1.4);
+  S('test', cx - 2.9, 2.8, '+x'); S('test', cx + 2.9, 2.8, '-x'); S('test', cx + 1.1, 1.0, '+y'); S('test', cx - 1.1, 4.7, '-y');
+  if (glass) { F('glass', rx, 0, 0.05, 4.0, 2.4); F('glass', rx, 5.55, colW, 0.05, 2.4); }
+  else Wl('shutter', 'R', rx + 0.7, colW - 1.6, 0, 2.5);
+  if (lab) {
+    zones.push({ kind: 'lab', x: rx, y: 7.0, w: colW, d: 5.4 });
+    F('glass', rx, 7.0, colW, 0.05, 2.4); F('glass', rx, 8.6, 0.05, 3.8, 2.4);
+    F('dyno', rx + 0.9, 8.5, 1.8, 1.2, 1.0); F('tunnel', rx + 3.5, 7.6, 3.6, 1.4, 1.6);
+    S('lab', rx + 1.8, 10.3, '-y'); S('lab', rx + 5.3, 9.6, '-y');
+  } else if (lv >= 2) {
+    zones.push({ kind: 'lounge', x: rx, y: 7.0, w: colW, d: 3.0 });
+    F('printer', rx + 0.8, 7.4, 1.0, 0.7, 1.0); F('cooler', rx + 2.4, 7.4, 0.5, 0.5, 1.2); F('plant', rx + 3.4, 7.4, 0.6, 0.6, 1.3);
+  }
+
+  // ---- 로비(등급 5) ----
+  if (lobby) {
+    zones.push({ kind: 'lobby', x: 0, y: D - 3.4, w: rx - 0.6, d: 3.4 });
+    F('reception', 2.0, D - 2.5, 2.8, 0.7, 1.05); F('sofa', 6.6, D - 1.4, 2.0, 0.8, 0.8, { face: '-y' });
+    F('plant', 0.4, D - 1.0, 0.6, 0.6, 1.4); F('plant', 9.2, D - 1.2, 0.6, 0.6, 1.4);
+    Wl('logo', 'L', D - 3.0, 2.2, 1.2, 1.1);
+  }
+
+  // ---- 창문·시계·화분 ----
+  const winStart = Math.max(cabX, ox) + 3.6, winEnd = glass ? rx - 0.4 : W - 0.6;
+  for (let x = winStart; x + 1.6 <= winEnd; x += 2.4) if (!(glass && x > rx - 1)) Wl('window', 'R', x, 1.8, 1.0, 1.5);
+  if (lv === 1) Wl('window', 'R', 0.8, 1.4, 1.6, 0.9);
+  Wl('clock', 'L', 1.2, 0.6, 2.1, 0.6);
+  if (studio) for (let y = oy + 6.6; y + 1.6 <= D - (lobby ? 3.4 : 0.6); y += 2.4) Wl('window', 'L', y, 1.6, 1.0, 1.5);
+  if (lv >= 2) F('plant', ox + oaW + 0.6, oy - 0.9, 0.5, 0.5, 1.2);
+  if (lv === 1) { F('boxes', 0.3, D - 1.3, 1.0, 1.0, 0.8); F('boxes', W - 1.6, D - 1.6, 1.2, 1.2, 1.0); F('cart', rx + 0.8, D - 1.2, 0.7, 0.45, 0.9); }
+
+  // 자리 출입 칸·서는 곳을 걷기 격자의 빈 칸에 맞춘다
+  const grid = buildGrid(W, D, furn, seats);
+  for (const s of seats) {
+    const b = s.face === '+y' ? -0.6 : s.face === '-y' ? 0.6 : 0, a = s.face === '+x' ? -0.6 : s.face === '-x' ? 0.6 : 0;
+    s.access = nearestFree(grid, s.x + a, s.y + b);
+  }
+  for (const sp of spots) [sp.x, sp.y] = nearestFree(grid, sp.x, sp.y);
+  const zc = (k: ZoneKind): [number, number] | null => { const z = zones.find((q) => q.kind === k); return z ? [z.x + z.w / 2, z.y + z.d / 2] : null; };
+  const anchors: Record<Role, [number, number]> = {
+    designer: zc('studio') ?? [0, oy],
+    engineer: zc('lab') ?? [W, oy + oaD / 2],
+    tester: zc('test') ?? zc('garage')!,
+    sales: zc('lobby') ?? [0, D],
+  };
+  const room: Room = { level: lv, name: NAME[lv], W, D, H, zones, furn, walls, seats, spots, anchors, grid };
+  cache.set(lv, room);
+  return room;
+}
+
+/** 등급의 책상 자리(정원만큼). used는 앞에서부터 staffCount개. 실제 배정은 assignSeats가 직무별로 한다 */
 export function seatsFor(level: number, staffCount: number): Seat[] {
-  const lv = clampLevel(level), [cols, rows] = GRID[lv], n = Math.max(0, Math.floor(staffCount));
-  const out: Seat[] = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
-    out.push({ x: X0 + c * SX, y: Y0 + r * SY, col: c, row: r, used: out.length < n });
+  return roomFor(level).seats.map((s, i) => ({ ...s, used: i < staffCount }));
+}
+
+/** 직무 구역 쪽 자리부터 채운다(디자이너는 스튜디오 가까이, 엔지니어·테스터는 시험실·연구실 가까이, 영업은 앞쪽).
+ *  넘친 사람은 자리가 없다(결과에 없음). */
+export function assignSeats(level: number, staff: { id: string; role: Role }[]): Map<string, number> {
+  const rm = roomFor(level), out = new Map<string, number>(), taken = new Set<number>();
+  const order: Role[] = ['designer', 'tester', 'engineer', 'sales'];
+  const list = [...staff].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const s of list) {
+    const [ax, ay] = rm.anchors[s.role];
+    let best = -1, bd = Infinity;
+    rm.seats.forEach((st, i) => { if (taken.has(i)) return; const d = Math.hypot(st.x - ax, st.y - ay); if (d < bd) { bd = d; best = i; } });
+    if (best < 0) break;
+    taken.add(best); out.set(s.id, best);
+  }
   return out;
+}
+
+// ---------- 걷기 격자 ----------
+function buildGrid(W: number, D: number, furn: Furn[], seats: Seat[]): Grid {
+  const cols = Math.floor(W / CELL), rows = Math.floor(D / CELL), free = new Uint8Array(cols * rows).fill(1);
+  const block = (x: number, y: number, w: number, d: number) => {
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const cx = (i + 0.5) * CELL, cy = (j + 0.5) * CELL;
+      if (cx > x - CLEAR && cx < x + w + CLEAR && cy > y - CLEAR && cy < y + d + CLEAR) free[j * cols + i] = 0;
+    }
+  };
+  for (const f of furn) block(f.x, f.y, f.w, f.d);
+  for (const s of seats) block(s.x - 0.25, s.y - 0.25, 0.5, 0.5);
+  return { cols, rows, free };
+}
+const cellOf = (g: Grid, x: number, y: number): [number, number] => [Math.max(0, Math.min(g.cols - 1, Math.floor(x / CELL))), Math.max(0, Math.min(g.rows - 1, Math.floor(y / CELL)))];
+const centerOf = (i: number, j: number): [number, number] => [(i + 0.5) * CELL, (j + 0.5) * CELL];
+
+/** (x,y)에서 가장 가까운 빈 칸의 가운데 */
+export function nearestFree(g: Grid, x: number, y: number): [number, number] {
+  let best: [number, number] = [x, y], bd = Infinity;
+  for (let j = 0; j < g.rows; j++) for (let i = 0; i < g.cols; i++) {
+    if (!g.free[j * g.cols + i]) continue;
+    const [cx, cy] = centerOf(i, j), d = (cx - x) ** 2 + (cy - y) ** 2;
+    if (d < bd) { bd = d; best = [cx, cy]; }
+  }
+  return best;
+}
+
+/** 빈 칸만 지나는 가장 짧은 길(상하좌우 이동). 꺾이는 점만 돌려준다. 못 찾으면 null */
+export function findPath(g: Grid, from: [number, number], to: [number, number]): [number, number][] | null {
+  const [si, sj] = cellOf(g, ...from), [ti, tj] = cellOf(g, ...to);
+  const s = sj * g.cols + si, t = tj * g.cols + ti;
+  if (!g.free[s] || !g.free[t]) return null;
+  const prev = new Int32Array(g.cols * g.rows).fill(-1);
+  prev[s] = s;
+  const q = [s];
+  for (let h = 0; h < q.length && prev[t] < 0; h++) {
+    const c = q[h], ci = c % g.cols, cj = (c - ci) / g.cols;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = ci + di, nj = cj + dj;
+      if (ni < 0 || nj < 0 || ni >= g.cols || nj >= g.rows) continue;
+      const n = nj * g.cols + ni;
+      if (g.free[n] && prev[n] < 0) { prev[n] = c; q.push(n); }
+    }
+  }
+  if (prev[t] < 0) return null;
+  const cells: number[] = [];
+  for (let c = t; ; c = prev[c]) { cells.push(c); if (c === s) break; }
+  cells.reverse();
+  const pts = cells.map((c) => centerOf(c % g.cols, Math.floor(c / g.cols)));
+  // 같은 방향으로 이어지는 점은 뺀다
+  return pts.filter((p, i) => i === 0 || i === pts.length - 1 ||
+    !((pts[i - 1][0] === p[0] && p[0] === pts[i + 1][0]) || (pts[i - 1][1] === p[1] && p[1] === pts[i + 1][1])));
 }

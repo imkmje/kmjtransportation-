@@ -1,92 +1,89 @@
-/* 쿼터뷰 사무실 장면(시안 B + 시안 D의 큰 머리). 반복 동작은 transform 애니메이션만 쓴다(SVG 필터 없음). */
-.office{position:relative;width:100%;height:100%;overflow:hidden}
-.office>svg{position:absolute;inset:0;width:100%;height:100%;display:block;font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+/* 쿼터뷰 사무실(실제 사무실 비율). 반복 동작은 작고 느린 transform 애니메이션만 쓴다(SVG 필터 없음). */
+.office{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+.office>svg{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;
+  font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif}
+.office>svg.drag{cursor:grabbing}
 .office text{font-family:inherit}
-.office .arm,.office .head,.office .hd,.office .bob,.office .pose,.office .clockh,.office .sweat,.office .gloom,.office .steam,.office .code{transform-box:view-box;transform-origin:0 0}
-.office .arm,.office .head,.office .bob,.office .clockh,.office .sweat,.office .gloom,.office .steam,.office .code{
-  animation-duration:calc(var(--d,1s) / var(--sp,1));animation-iteration-count:infinite;animation-timing-function:ease-in-out}
-.office .pose,.office .hd{transition:transform .6s ease}
-.office .prop,.office .ec,.office .mt,.office .gloom,.office .sweat,.office .code{display:none}
-.office .scr{fill:#55606d;transition:fill .4s}
-.office .a-design .scr,.office .a-test .scr{fill:#a8e4ff}
-.office .a-design .code,.office .a-test .code{display:inline;animation-name:blink;--d:.8s}
-.office .clockh{animation-name:spin;--d:12s;animation-timing-function:linear}
-.office .seat{cursor:pointer}
-/* 몸 흔들림 */
-.office .bob{animation-name:breathe;--d:3.2s}
-.office .a-design .bob,.office .a-test .bob{animation-name:bounce;--d:.9s}
-/* 설계 */
-.office .a-design.r-engineer .arm,.office .a-design.r-tester .armR,.office .a-test.r-engineer .arm{animation-name:type;--d:.34s}
-.office .a-design.r-engineer .armR,.office .a-test.r-engineer .armR{animation-delay:-.17s}
-.office .a-design.r-designer .armR,.office .a-test.r-designer .armR{animation-name:sketch;--d:1.1s}
-.office .a-design.r-designer .pen,.office .a-test.r-designer .pen{display:inline}
-.office .a-design.r-designer .head{animation-name:nod;--d:2.2s}
-.office .a-design.r-tester .clip,.office .a-test.r-tester .clip{display:inline}
-.office .a-design.r-sales .armR,.office .a-test.r-sales .armR{animation-name:call;--d:1.4s}
-.office .a-design.r-sales .armL,.office .a-test.r-sales .armL{animation-name:type;--d:1.2s}
-.office .a-design.r-sales .phone,.office .a-test.r-sales .phone{display:inline}
-.office .a-design.r-sales .head,.office .a-test.r-sales .head{animation-name:nod;--d:1.4s}
-/* 시험 */
-.office .a-test.r-tester .mag{display:inline}
-.office .a-test.r-tester .armR{animation-name:scan;--d:1.6s}
-.office .a-test.r-tester .head{animation-name:look;--d:1.6s}
-.office .a-test.r-designer .armR{--d:1.6s}
-/* 쉬는 중(변형 v0~v3은 직원 id로 고정) */
-.office .a-rest.v0 .arm{animation-name:stretch;--d:4.6s}
-.office .a-rest.v1 .armR,.office .a-rest.v3 .armR{animation-name:sip;--d:4s}
-.office .a-rest.v3 .armR{animation-delay:-2s}
-.office .a-rest.v1 .cup,.office .a-rest.v3 .cup{display:inline}
-.office .a-rest.v2 .head,.office .a-rest.v3 .head{animation-name:look;--d:3.4s}
-.office .a-rest .steam{display:inline;animation-name:steam;--d:1.8s}
-/* 과감: 땀 */
-.office .sw .sweat{display:inline;animation-name:drip;--d:1.2s}
-/* 지침 */
-.office .tired .pose{transform:translateY(6px) rotate(3deg)}
-.office .tired .hd{transform:rotate(14deg) translateY(3px)}
-.office .tired .eo,.office .tired .mo{display:none}
-.office .tired .ec,.office .tired .mt{display:inline}
-.office .tired .gloom{display:inline;animation-name:gloom;--d:2s}
 
-/* 이름표: 크게 보일 때만 늘 표시, 아니면 누른 사람만 */
-.office .tag{pointer-events:none}
-.office .tags-tap .tag{display:none}
-.office .tags-tap .tag.on{display:inline}
-.office .tag{font-size:var(--tfs,15px);font-weight:800}
-/* 결함 배지 */
+/* 사람: 원점은 엉덩이. vf=앞모습, vb=뒷모습, sit/stand */
+.office .pp .arm,.office .pp .torso,.office .pp .hd,.office .pp .leg{transform-box:view-box;transform-origin:0 0}
+.office .pp .torso{transform:rotate(var(--lean,0deg));transition:transform 1.2s ease}
+.office .pp .arm{transform:rotate(var(--a,0deg));transition:transform .8s ease}
+.office .pp.vf .hb,.office .pp.vb .hf,.office .pp.vb .lsit{display:none}
+.office .pp.sit .lstand,.office .pp.stand .lsit{display:none}
+.office .pp .cup,.office .pp .clip{display:none}
+.office .pp .arm,.office .pp .hd,.office .pp .leg{animation-duration:calc(var(--d,1s) / var(--sp,1));animation-iteration-count:infinite;animation-timing-function:ease-in-out}
+/* 앉은 자세 */
+.office .pp.p-work{--lean:5deg}
+.office .pp.p-work .armN,.office .pp.p-work .armF{--a:-58deg;animation-name:type;--d:.7s}
+.office .pp.p-work .armF{animation-delay:-.35s}
+.office .pp.p-focus{--lean:11deg}
+.office .pp.p-focus .armN,.office .pp.p-focus .armF{--a:-62deg;animation-name:type;--d:.5s}
+.office .pp.p-focus .armF{animation-delay:-.25s}
+.office .pp.p-rest{--lean:-9deg}
+.office .pp.p-rest .armN{--a:-25deg}
+.office .pp.p-rest .hd{animation-name:look;--d:9s}
+.office .pp.p-slump{--lean:38deg}
+.office .pp.p-slump .armN,.office .pp.p-slump .armF{--a:-80deg}
+.office .pp.p-chin{--lean:-5deg}
+.office .pp.p-chin .hd{transform:rotate(18deg)}
+.office .pp.p-chin .armN,.office .pp.p-chin .armF{--a:-12deg}
+/* 서서 하는 일 */
+.office .pp.p-test .armN{--a:-70deg}
+.office .pp.p-test .clip{display:inline}
+.office .pp.p-test .hd{animation-name:look;--d:5s}
+.office .pp.p-test .armF{--a:-30deg;animation-name:type;--d:2.4s}
+.office .pp.p-studio,.office .pp.p-lab{--lean:8deg}
+.office .pp.p-studio .armN,.office .pp.p-studio .armF{--a:-55deg;animation-name:sculpt;--d:2.2s}
+.office .pp.p-studio .armF{animation-delay:-1.1s}
+.office .pp.p-lab .armN{--a:-50deg;animation-name:type;--d:1.6s}
+.office .pp.p-coffee .armN{--a:-115deg}
+.office .pp.p-coffee .cup{display:inline}
+.office .pp.p-coffee .hd,.office .pp.p-meeting .hd{animation-name:look;--d:6s}
+/* 걷기 */
+.office .pp.walk .lgA{animation-name:stepA;--d:.9s}
+.office .pp.walk .lgB{animation-name:stepB;--d:.9s}
+.office .pp.walk .armN{animation-name:stepB;--d:.9s}
+.office .pp.walk .armF{animation-name:stepA;--d:.9s}
+
+/* 꺼진 모니터와 켜진 모니터 */
+.office .scr{fill:#3d4450;transition:fill .6s}
+.office .on .scr{fill:#bcd7e6}
+
+/* 이름표(누른 사람만) */
+.office .tagpop{position:absolute;pointer-events:none;background:#ffffffee;border:1px solid #c9d0d9;border-radius:8px;padding:5px 8px;font-size:12px;line-height:1.35;color:#2b313a;
+  box-shadow:0 2px 8px #1c26331f;transform:translate(-50%,calc(-100% - 8px));white-space:nowrap}
+.office .tagpop b{font-weight:700;font-size:13px}
+.office .tagpop i{display:block;height:4px;border-radius:2px;background:#e3e7ec;margin-top:3px;overflow:hidden}
+.office .tagpop i s{display:block;height:100%;background:#7fa88a}
+/* 확대 버튼 */
+.office .zoom{position:absolute;left:10px;bottom:10px;display:flex;gap:4px;background:#ffffffd9;border:1px solid #d8dde4;border-radius:12px;padding:3px}
+.office .zoom button{border:0;background:transparent;border-radius:9px;min-height:40px;min-width:44px;padding:0 10px;font:inherit;font-size:12px;font-weight:700;color:#5b6470;cursor:pointer}
+.office .zoom button[aria-pressed="true"]{background:#14171c;color:#fff}
+.office .zoom button:focus-visible{outline:3px solid #ff5a1f;outline-offset:1px}
+
+/* 점수와 말풍선: 작고 조용하게 */
+.office .pop{transform-box:view-box;animation:office-rise 2.6s ease-out forwards;pointer-events:none}
+.office .pop text{font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round}
+.office .bub{animation:office-fade .4s ease-out both;pointer-events:none}
+.office .bub.out{animation:office-fadeout .4s ease-in forwards}
+.office .bub text{font-weight:500;fill:#2b313a}
+.office .bub path{fill:#ffffffef;stroke:#aab3be}
 .office .bugi{transform-box:fill-box;transform-origin:center}
-.office .bugi.ping{animation:ping .5s ease-out}
+.office .bugi.ping{animation:ping .6s ease-out}
 
-/* 점수와 말풍선 */
-.office .pop{transform-box:view-box;animation:office-rise 1.8s ease-out forwards;pointer-events:none}
-.office .pop text{font-weight:900;paint-order:stroke;stroke:#fff;stroke-linejoin:round}
-.office .bub{transform-box:view-box;animation:popin .35s ease-out both;pointer-events:none}
-.office .bub.out{animation:popout .3s ease-in forwards}
-.office .bub text{font-weight:800;fill:#14171c}
-.office .bub path{fill:#fff;stroke:#14171c}
-
-/* 숨김·정지 */
 .office.paused *{animation-play-state:paused!important}
 
-@keyframes breathe{50%{transform:translateY(-2px)}}
-@keyframes bounce{50%{transform:translateY(-2.5px)}}
-@keyframes type{0%,100%{transform:rotate(0)}50%{transform:rotate(calc(var(--up) * -10deg))}}
-@keyframes sketch{0%,100%{transform:rotate(0)}25%{transform:rotate(calc(var(--up) * -14deg))}50%{transform:rotate(calc(var(--up) * -4deg))}75%{transform:rotate(calc(var(--up) * -18deg))}}
-@keyframes stretch{0%,22%,100%{transform:rotate(0)}42%,80%{transform:rotate(var(--str))}}
-@keyframes sip{0%,40%,100%{transform:rotate(0)}55%,82%{transform:rotate(var(--sip))}}
-@keyframes call{0%,100%{transform:rotate(var(--call))}50%{transform:rotate(calc(var(--call) - 10deg))}}
-@keyframes scan{0%,100%{transform:rotate(var(--sc1))}50%{transform:rotate(var(--sc2))}}
-@keyframes look{0%,100%{transform:translateX(0) rotate(0)}30%{transform:translateX(-3px) rotate(-7deg)}70%{transform:translateX(3px) rotate(7deg)}}
-@keyframes nod{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes drip{0%{transform:translateY(-4px);opacity:0}25%{opacity:1}100%{transform:translateY(14px);opacity:0}}
-@keyframes gloom{50%{transform:translateY(-4px)}}
-@keyframes steam{0%{opacity:0;transform:translateY(0)}50%{opacity:1}100%{opacity:0;transform:translateY(-7px)}}
-@keyframes blink{50%{opacity:.25}}
-@keyframes ping{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
-@keyframes office-rise{0%{transform:translateY(8px) scale(.6);opacity:0}14%{transform:translateY(0) scale(1.12);opacity:1}24%{transform:translateY(-3px) scale(1)}80%{opacity:1}100%{transform:translateY(-34px) scale(1);opacity:0}}
-@keyframes popin{0%{transform:scale(.3);opacity:0}65%{transform:scale(1.07);opacity:1}100%{transform:scale(1)}}
-@keyframes popout{to{transform:scale(.6);opacity:0}}
+@keyframes type{0%,100%{transform:rotate(var(--a))}50%{transform:rotate(calc(var(--a) + 5deg))}}
+@keyframes sculpt{0%,100%{transform:rotate(var(--a))}50%{transform:rotate(calc(var(--a) - 14deg))}}
+@keyframes look{0%,40%,100%{transform:rotate(0)}55%,70%{transform:rotate(-6deg)}}
+@keyframes stepA{0%,100%{transform:rotate(16deg)}50%{transform:rotate(-16deg)}}
+@keyframes stepB{0%,100%{transform:rotate(-16deg)}50%{transform:rotate(16deg)}}
+@keyframes ping{0%{transform:scale(1)}40%{transform:scale(1.3)}100%{transform:scale(1)}}
+@keyframes office-rise{0%{transform:translateY(4px);opacity:0}12%{transform:translateY(0);opacity:1}75%{opacity:1}100%{transform:translateY(calc(var(--rise,12px) * -1));opacity:0}}
+@keyframes office-fade{from{opacity:0}to{opacity:1}}
+@keyframes office-fadeout{to{opacity:0}}
 
 @media (prefers-reduced-motion:reduce){
-  .office *,.office .pop,.office .bub{animation:none!important;transition:none!important}
+  .office *{animation:none!important;transition:none!important}
 }

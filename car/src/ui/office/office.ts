@@ -1,7 +1,8 @@
-// 쿼터뷰 미니어처 사무실(design.md 13.1). 2D SVG, 보여 주기 전용: sim을 import하지 않고 뷰 자료만 받는다.
-// 그림 방식은 시안 B(쿼터뷰), 사람 머리는 시안 D처럼 크게. 난수는 연출에만 쓴다(직원 외모는 id 해시로 고정).
+// 쿼터뷰 사무실(design.md 13.1). 2D SVG, 보여 주기 전용: sim을 import하지 않고 뷰 자료만 받는다.
+// 실제 사무실 비율(1m = U 사용자 단위, 사람 키 1.7m). 상태는 표정 대신 자세로, 사람은 통로를 따라 걸어 다닌다.
+// 난수는 연출에만 쓴다(직원 외모는 id 해시로 고정).
 import './office.css';
-import { roomFor, seatsFor, DESK, CAPACITY, type Prop, type Room, type Seat } from './layout';
+import { roomFor, assignSeats, findPath, nearestFree, CAPACITY, DESK_H, type Face, type Furn, type Room, type Spot, type WallItem, type Zone } from './layout';
 import { pickLine, type Mood } from './lines';
 
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
@@ -30,152 +31,213 @@ export interface Office {
   dispose(): void;
 }
 
-// ---------- 그림 상수 ----------
-const U = 34;                       // 바닥 한 칸의 화면 폭 절반(사용자 단위)
-const INK = '#14171c';
-const ROLE: Record<Role, { col: string; dk: string; rug: string; order: number; job: string }> = {
-  designer: { col: '#ff6f9f', dk: '#de4f81', rug: '#ffe0ea', order: 0, job: '디자이너' },
-  engineer: { col: '#4a86ff', dk: '#2f66d6', rug: '#dfe9ff', order: 1, job: '엔지니어' },
-  tester: { col: '#25a86b', dk: '#17844f', rug: '#d9f2e5', order: 2, job: '테스터' },
-  sales: { col: '#ff9a2e', dk: '#d9761a', rug: '#ffead2', order: 3, job: '영업' },
+// ---------- 그림 상수(차분한 색) ----------
+const U = 34;
+const ROLE: Record<Role, { shirt: string; job: string; order: number }> = {
+  designer: { shirt: '#c48f98', job: '디자이너', order: 0 },
+  engineer: { shirt: '#6f8db8', job: '엔지니어', order: 1 },
+  tester: { shirt: '#7fa38a', job: '테스터', order: 2 },
+  sales: { shirt: '#c6a46e', job: '영업', order: 3 },
 };
-const STAT_COL: Record<Stat, string> = { 성능: '#e2541f', 연비: '#12915a', 실용: '#1f8fa8', 디자인: '#d23f78', 품질: '#6a4fd0' };
-const HAIR = ['#23262e', '#3b2a20', '#6b3b2a', '#8a5a2b', '#5a4632', '#c98a4b'];
-const SKIN: [string, string][] = [['#ffd9bd', '#efb48f'], ['#f6cba5', '#e2a77f'], ['#e8b48c', '#cf9068']];
-const STYLES = ['short', 'bob', 'bun', 'curly'] as const;
-const PERSON = { tw: 13, tb: 15, th: 34, hr: 19, neck: 0, al: 22, aw: 8, sx: 11, sy: 7, base: 18, po: 0.62 };
-const K = 1.35;                     // 사람 크기 배율
-const HEAD_TOP = -(PERSON.th + PERSON.neck + 2.1 * PERSON.hr) * K;
+const STAT_COL: Record<Stat, string> = { 성능: '#a8593a', 연비: '#4f8a64', 실용: '#4a8191', 디자인: '#a5566f', 품질: '#6a5f9c' };
+const HAIR = ['#2b2826', '#3d3029', '#5a4334', '#6e5a48', '#2f3236', '#8a7560'];
+const SKIN = ['#e9c7ab', '#ddb393', '#c99b78'];
+const PANTS = ['#3f4652', '#4b4f57', '#5b5446', '#33405a'];
 
 const f = (n: number) => Math.round(n * 10) / 10;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const P = (x: number, y: number, z = 0): [number, number] => [f((x - y) * U), f(((x + y) * U) / 2 - z * U)];
-const poly = (pts: [number, number][], fill: string, extra = '') => `<polygon points="${pts.map((p) => p.join(',')).join(' ')}" fill="${fill}" ${extra}/>`;
-/** 바닥에 놓인 상자: 앞 두 면 + 윗면 */
-const box = (x: number, y: number, z: number, w: number, d: number, h: number, ct: string, cl: string, cr: string) =>
-  poly([P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)], cl) +
-  poly([P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)], cr) +
-  poly([P(x, y, z + h), P(x + w, y, z + h), P(x + w, y + d, z + h), P(x, y + d, z + h)], ct);
-/** 벽에 붙인 평면 그림: 오른쪽 벽(y=0)은 x를 따라, 왼쪽 벽(x=0)은 화면 오른쪽 = y가 줄어드는 쪽 */
-const onWall = (pr: Prop, inner: string) => {
-  const z = (pr.z ?? 0) + (pr.h ?? 0);
-  const [X, Y] = pr.wall === 'R' ? P(pr.x, 0, z) : P(0, pr.y + pr.w, z);
-  return `<g transform="matrix(1 ${pr.wall === 'R' ? 0.5 : -0.5} 0 1 ${X} ${Y})">${inner}</g>`;
-};
+const pts = (a: [number, number][]) => a.map((p) => p.join(',')).join(' ');
+const poly = (a: [number, number][], fill: string, extra = '') => `<polygon points="${pts(a)}" fill="${fill}" ${extra}/>`;
+function shade(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.max(0, Math.min(255, Math.round(v * (1 - k)))));
+  return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+/** 상자: 보이는 세 면(윗면, +y면, +x면). 색 하나로 명암을 낸다 */
+const box = (x: number, y: number, z: number, w: number, d: number, h: number, col: string, extra = '') =>
+  poly([P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)], shade(col, 0.1), extra) +
+  poly([P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)], shade(col, 0.2), extra) +
+  poly([P(x, y, z + h), P(x + w, y, z + h), P(x + w, y + d, z + h), P(x, y + d, z + h)], col, extra);
+const top = (x: number, y: number, z: number, w: number, d: number, col: string, extra = '') => poly([P(x, y, z), P(x + w, y, z), P(x + w, y + d, z), P(x, y + d, z)], col, extra);
 
-/** 문자열 해시(FNV-1a) → 같은 직원은 늘 같은 모습 */
+const mix = (a: string, b: string, t: number) => { const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
 function hash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
-interface Look { hair: string; style: typeof STYLES[number]; glasses: boolean; skin: [string, string]; v: number }
-function lookOf(id: string): Look {
+interface Look { hair: string; skin: string; pants: string; style: number; glasses: boolean; v: number }
+const lookOf = (id: string): Look => {
   const h = hash(id);
-  return { hair: HAIR[h % HAIR.length], style: STYLES[(h >>> 4) % STYLES.length], glasses: (h >>> 7) % 4 === 0, skin: SKIN[(h >>> 10) % SKIN.length], v: (h >>> 13) % 4 };
-}
-
-// ---------- 사람(시안 personFront/headFront, 큰 머리) ----------
-function head(lk: Look, r: number): string {
-  const ex = 0.36 * r, ey = 0.12 * r, [sk] = lk.skin, hc = lk.hair;
-  let s = `<g transform="translate(0,${-r})">`;
-  if (lk.style === 'bob') s += `<path d="M${f(-1.1 * r)},${f(0.15 * r)} A${f(1.1 * r)} ${f(1.08 * r)} 0 1 1 ${f(1.1 * r)},${f(0.15 * r)} L${f(1.02 * r)},${f(0.85 * r)} Q${f(0.8 * r)},${f(0.98 * r)} ${f(0.6 * r)},${f(0.8 * r)} L${f(-0.6 * r)},${f(0.8 * r)} Q${f(-0.8 * r)},${f(0.98 * r)} ${f(-1.02 * r)},${f(0.85 * r)} Z" fill="${hc}"/>`;
-  if (lk.style === 'bun') s += `<circle cy="${f(-1.02 * r)}" r="${f(0.4 * r)}" fill="${hc}"/>`;
-  if (lk.style === 'curly') s += [-0.8, -0.4, 0, 0.4, 0.8].map((d) => `<circle cx="${f(d * r)}" cy="${f(-0.75 * r + Math.abs(d) * 0.35 * r)}" r="${f(0.38 * r)}" fill="${hc}"/>`).join('');
-  s += `<circle r="${r}" fill="${sk}"/>`;
-  s += `<path d="M${f(-1.02 * r)},${f(0.08 * r)} A${r} ${r} 0 0 1 ${f(1.02 * r)},${f(0.08 * r)} Q${f(0.7 * r)},${f(-0.55 * r)} ${f(0.1 * r)},${f(-0.42 * r)} Q${f(-0.55 * r)},${f(-0.3 * r)} ${f(-1.02 * r)},${f(0.08 * r)} Z" fill="${hc}"/>`;
-  s += `<g class="eo">${[-1, 1].map((d) => `<ellipse cx="${f(d * ex)}" cy="${f(ey)}" rx="${f(0.13 * r)}" ry="${f(0.18 * r)}" fill="${INK}"/><circle cx="${f(d * ex + 0.04 * r)}" cy="${f(ey - 0.06 * r)}" r="${f(0.05 * r)}" fill="#fff"/>`).join('')}</g>`;
-  s += `<g class="ec">${[-1, 1].map((d) => `<path d="M${f(d * ex - 0.13 * r)},${f(ey)} Q${f(d * ex)},${f(ey + 0.09 * r)} ${f(d * ex + 0.13 * r)},${f(ey)}" stroke="${INK}" stroke-width="2" fill="none" stroke-linecap="round"/>`).join('')}</g>`;
-  if (lk.glasses) s += `<g fill="none" stroke="${INK}" stroke-width="1.6">${[-1, 1].map((d) => `<circle cx="${f(d * ex)}" cy="${f(ey)}" r="${f(0.23 * r)}"/>`).join('')}<path d="M${f(-ex + 0.23 * r)},${f(ey)} H${f(ex - 0.23 * r)}"/></g>`;
-  s += [-1, 1].map((d) => `<ellipse cx="${f(d * 0.6 * r)}" cy="${f(0.4 * r)}" rx="${f(0.14 * r)}" ry="${f(0.08 * r)}" fill="#ff8fa3" opacity=".55"/>`).join('');
-  s += `<path class="mo" d="M${f(-0.13 * r)},${f(0.42 * r)} Q0,${f(0.56 * r)} ${f(0.13 * r)},${f(0.42 * r)}" stroke="${INK}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
-  s += `<path class="mt" d="M${f(-0.1 * r)},${f(0.5 * r)} Q0,${f(0.44 * r)} ${f(0.1 * r)},${f(0.5 * r)}" stroke="${INK}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
-  // 지침(파란 물결)과 땀방울
-  s += `<g transform="translate(0,${f(-1.3 * r)}) scale(.6)"><g class="gloom"><path d="M-14,0 q4,-5 0,-10 q-4,-5 0,-10 M0,-4 q4,-5 0,-10 q-4,-5 0,-10 M14,0 q4,-5 0,-10 q-4,-5 0,-10" fill="none" stroke="#6a7bd8" stroke-width="3" stroke-linecap="round"/></g></g>`;
-  s += `<g transform="translate(${f(0.98 * r)},${f(-0.45 * r)}) scale(.7)"><path class="sweat" d="M0,-9 Q7,2 0,7 Q-7,2 0,-9Z" fill="#8fd0ff" stroke="#3b8fd6" stroke-width="1.5"/></g>`;
-  return s + '</g>';
-}
-const ARM = {
-  L: '--up:1;--str:175deg;--sip:0deg;--sc1:0deg;--sc2:0deg;--call:0deg',
-  R: '--up:-1;--str:-175deg;--sip:140deg;--sc1:-95deg;--sc2:-135deg;--call:183deg',
+  return { hair: HAIR[h % HAIR.length], skin: SKIN[(h >>> 4) % SKIN.length], pants: PANTS[(h >>> 7) % PANTS.length], style: (h >>> 10) % 3, glasses: (h >>> 13) % 4 === 0, v: (h >>> 16) % 2 };
 };
-function hand(role: Role, side: 'L' | 'R'): string {
-  if (side === 'L') return role === 'tester' ? `<g class="prop clip"><rect x="-12" y="-6" width="26" height="32" rx="3" fill="#f6d28b" stroke="${INK}" stroke-width="2"/><rect x="-8" y="0" width="18" height="21" fill="#fff"/><path d="M-5,6h12M-5,11h12M-5,16h8" stroke="#8b94a1" stroke-width="2"/></g>` : '';
-  return `<g class="prop cup"><rect x="-6" y="-18" width="16" height="18" rx="3" fill="#fff" stroke="${INK}" stroke-width="2"/><path d="M10,-14 q6,0 6,5 q0,5 -6,5" fill="none" stroke="${INK}" stroke-width="2"/><path class="steam" d="M-1,-23 q-3,-5 0,-9 M5,-23 q3,-5 0,-9" stroke="#9aa3ae" stroke-width="2" fill="none" stroke-linecap="round"/></g>
-   <g class="prop mag"><line x1="0" y1="0" x2="9" y2="-10" stroke="#7a4b2a" stroke-width="5" stroke-linecap="round"/><circle cx="17" cy="-19" r="11" fill="#d9f0ff" fill-opacity=".75" stroke="${INK}" stroke-width="4"/></g>
-   <g class="prop pen"><line x1="-3" y1="3" x2="9" y2="-14" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><line x1="-3" y1="3" x2="-1" y2="0" stroke="#ff6f9f" stroke-width="4" stroke-linecap="round"/></g>
-   <g class="prop phone"><rect x="-5" y="-16" width="10" height="20" rx="2.5" fill="${INK}"/><rect x="-3" y="-13" width="6" height="12" rx="1" fill="#a8e4ff"/></g>`;
-}
-function person(role: Role, lk: Look): string {
-  const c = PERSON, rc = ROLE[role];
-  const arm = (side: 'L' | 'R') => {
-    const sg = side === 'L' ? -1 : 1;
-    return `<g transform="translate(${sg * c.sx},${-c.th + c.sy}) rotate(${sg * c.base})"><g class="arm arm${side}" style="${ARM[side]}">
-      <rect x="${-c.aw / 2}" y="${-c.aw / 2}" width="${c.aw}" height="${c.al + c.aw / 2}" rx="${c.aw / 2}" fill="${rc.dk}"/>
-      <g transform="translate(0,${c.al})"><g transform="scale(${c.po})">${hand(role, side)}</g><circle r="${f(c.aw * 0.58)}" fill="${lk.skin[0]}"/></g></g></g>`;
-  };
-  return `<g class="pose"><g class="bob">
-   <path d="M${-c.tb},0 L${-c.tw},${-c.th + 12} Q${-c.tw},${-c.th} ${-c.tw + 12},${-c.th} L${c.tw - 12},${-c.th} Q${c.tw},${-c.th} ${c.tw},${-c.th + 12} L${c.tb},0 Z" fill="${rc.col}"/>
-   <path d="M${f(-c.tw * 0.35)},${-c.th} L0,${f(-c.th + c.tw * 0.4)} L${f(c.tw * 0.35)},${-c.th}" fill="#fff"/>
-   <g transform="translate(0,${-c.th - c.neck})"><g class="hd"><g class="head">${head(lk, c.hr)}</g></g></g>
-   ${arm('L')}${arm('R')}</g></g>`;
+
+// ---------- 사람(오른쪽을 보는 기본형, 원점=엉덩이, 키 1.7m) ----------
+function personSvg(role: Role, lk: Look): string {
+  const sh = ROLE[role].shirt, dk = shade(sh, 0.18), pn = lk.pants;
+  const arm = (cls: string, x: number, col: string) => `<g transform="translate(${x},-15.5)"><g class="arm ${cls}">
+    <path d="M0,0 L0,14.5" stroke="${col}" stroke-width="2.8" stroke-linecap="round"/><circle cy="15.4" r="1.25" fill="${lk.skin}"/>
+    ${cls === 'armN' ? `<rect class="cup" x="-1.4" y="14.2" width="2.8" height="3.2" rx=".6" fill="#f4f1ec" stroke="#9aa3ae" stroke-width=".4"/><rect class="clip" x="-3" y="11.5" width="6" height="7.5" rx=".8" fill="#e8dcc2" stroke="#9a8f78" stroke-width=".5"/>` : ''}</g></g>`;
+  const legStand = (cls: string, x: number) => `<g transform="translate(${x},0)"><g class="leg ${cls}"><path d="M0,0 L0,29.5" stroke="${pn}" stroke-width="3.2" stroke-linecap="round"/><path d="M-.6,30.4 h3" stroke="#2a2a2a" stroke-width="1.8" stroke-linecap="round"/></g></g>`;
+  const hairBack = lk.style === 1 ? `<path d="M-4.6,-23 Q-4.8,-16.5 -1.5,-16.8 L-1.5,-22 Z" fill="${lk.hair}"/>` : lk.style === 2 ? `<circle cx="-3.4" cy="-26.4" r="1.8" fill="${lk.hair}"/>` : '';
+  const headF = `<g class="hf">${hairBack}<circle cx="0" cy="-22.6" r="4.2" fill="${lk.hair}"/><circle cx=".7" cy="-22.1" r="3.8" fill="${lk.skin}"/>
+    <path d="M-4.1,-22.4 Q-3.6,-27.4 1,-26.8 Q4.6,-26.2 4.4,-23.4 Q2,-25 -1.4,-23.6 Z" fill="${lk.hair}"/>
+    <circle cx="1.9" cy="-22" r=".42" fill="#3a3530"/><circle cx="3.7" cy="-22" r=".42" fill="#3a3530"/>
+    ${lk.glasses ? `<path d="M1,-22 h1.8 M2.9,-22 h1.6" stroke="#3a3530" stroke-width=".45"/>` : ''}</g>`;
+  const headB = `<g class="hb">${hairBack}<circle cx="0" cy="-22.6" r="4.2" fill="${lk.hair}"/><ellipse cx="3.6" cy="-22" rx=".9" ry="1.2" fill="${lk.skin}"/></g>`;
+  return `<g class="lstand">${legStand('lgA', -1.6)}${legStand('lgB', 1.8)}</g>
+   <g class="lsit"><path d="M-1,-.5 L10,5 L10,18" stroke="${pn}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M2,0 L12.5,5.2 L12.5,18.5" stroke="${shade(pn, -0.12)}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>
+   <g class="torso">${arm('armF', -2.6, dk)}
+    <path d="M-4.4,0 L-4.9,-14.6 Q-4.9,-17 -2.6,-17 L2.8,-17 Q5,-17 5,-14.6 L4.6,0 Z" fill="${sh}"/>
+    <rect x="-4.5" y="-1.6" width="9.1" height="2.6" rx="1" fill="${pn}"/>
+    <rect x="-.6" y="-19" width="2.4" height="2.6" fill="${lk.skin}"/>
+    <g transform="translate(.6,-18.6)"><g class="hd"><g transform="translate(-.6,18.6)">${headF}${headB}</g></g></g>
+    ${arm('armN', 2.9, sh)}</g>`;
 }
 
-// ---------- 방 ----------
-function shell(rm: Room): string {
-  const { W, D, H } = rm;
-  const wallL = rm.level === 1 ? '#d9d4ca' : '#dfe4ea', wallR = rm.level === 1 ? '#cbc5ba' : '#cfd6df';
-  let s = poly([P(0, 0), P(0, D), P(0, D, H), P(0, 0, H)], wallL) + poly([P(0, 0), P(W, 0), P(W, 0, H), P(0, 0, H)], wallR);
-  s += poly([P(0, 0, H), P(0, D, H), P(-0.25, D, H), P(-0.25, -0.25, H), P(W, -0.25, H), P(W, 0, H)], '#b9c1cc');
-  // 바닥: 등급 1은 시멘트, 2~3은 바둑판 타일, 4~5는 나무
-  const tile: Record<Room['floor'], [string, string]> = { concrete: ['#e6e2da', '#dedad1'], tile: ['#f6f7f9', '#e9edf2'], wood: ['#f1e2cc', '#ead6bb'] };
-  const [t1, t2] = tile[rm.floor];
-  s += poly([P(0, 0), P(W, 0), P(W, D), P(0, D)], t1);
-  if (rm.floor === 'wood') for (let j = 0; j < Math.ceil(D); j += 1) s += poly([P(0, j), P(W, j), P(W, Math.min(D, j + 0.5)), P(0, Math.min(D, j + 0.5))], t2);
-  else for (let i = 0; i < Math.ceil(W); i++) for (let j = 0; j < Math.ceil(D); j++) if ((i + j) % 2)
-    s += poly([P(i, j), P(Math.min(W, i + 1), j), P(Math.min(W, i + 1), Math.min(D, j + 1)), P(i, Math.min(D, j + 1))], t2);
-  // 걸레받이
-  s += poly([P(0, 0), P(0, D), P(0, D, 0.12), P(0, 0, 0.12)], '#c3cad4') + poly([P(0, 0), P(W, 0), P(W, 0, 0.12), P(0, 0, 0.12)], '#b6bec9');
+// ---------- 가구 ----------
+const DESK_TOP = '#d9c4a3', LEG = '#8d939b', CHAIR = '#4a505a', GLASS = '#bcd6e2';
+function faceVec(face: Face): [number, number] { return face === '+x' ? [1, 0] : face === '-x' ? [-1, 0] : face === '+y' ? [0, 1] : [0, -1]; }
+
+function carBox(x: number, y: number, z: number, w: number, d: number, col: string, wheels = true): string {
+  let s = '';
+  const wz = wheels ? 0.33 : 0;
+  if (wheels) for (const [wx, wy] of [[x + 0.8, y + d], [x + w - 0.8, y + d]] as [number, number][]) { const [cx, cy] = P(wx, wy, z + 0.33); s += `<ellipse cx="${cx}" cy="${cy}" rx="10" ry="10.5" fill="#2a2d31"/><ellipse cx="${cx}" cy="${cy}" rx="4" ry="4.3" fill="#9aa1a8"/>`; }
+  s = box(x, y, z + wz, w, d, 0.62, col) + s;
+  s += box(x + w * 0.28, y + 0.12, z + wz + 0.62, w * 0.42, d - 0.24, 0.48, shade(col, -0.05));
+  s += poly([P(x + w * 0.28, y + d - 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 1.06), P(x + w * 0.28, y + d - 0.12, z + wz + 1.06)], '#8fa7b6', 'opacity=".9"');
+  s += poly([P(x + w * 0.7, y + 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 1.06), P(x + w * 0.7, y + 0.12, z + wz + 1.06)], '#a4bac7', 'opacity=".9"');
   return s;
 }
-function wallProp(pr: Prop): string {
-  const w = pr.w * U, h = (pr.h ?? 1) * U;
-  switch (pr.kind) {
-    case 'window': return onWall(pr, `<rect width="${w}" height="${h}" fill="#bfe6ff" stroke="#fff" stroke-width="5"/><path d="M${w / 2},0 V${h}" stroke="#fff" stroke-width="4"/><path d="M${w * 0.15},${h * 0.75} l${w * 0.15},${-h * 0.4} M${w * 0.6},${h * 0.7} l${w * 0.12},${-h * 0.3}" stroke="#e6f6ff" stroke-width="6" stroke-linecap="round"/>`);
-    case 'whiteboard': return onWall(pr, `<rect width="${w}" height="${h}" rx="4" fill="#fff" stroke="#9aa3ae" stroke-width="3"/><path d="M${w * 0.12},${h * 0.35} q${w * 0.15},${-h * 0.25} ${w * 0.3},0 t${w * 0.3},0" fill="none" stroke="#4a86ff" stroke-width="4" stroke-linecap="round"/><path d="M${w * 0.12},${h * 0.65} h${w * 0.45} M${w * 0.12},${h * 0.82} h${w * 0.3}" stroke="#c9d0d9" stroke-width="5" stroke-linecap="round"/><rect x="${w * 0.7}" y="${h * 0.55}" width="${w * 0.18}" height="${h * 0.3}" fill="#ffe27a"/>`);
-    case 'clock': { const r = Math.min(w, h) / 2; return onWall(pr, `<circle cx="${r}" cy="${r}" r="${r}" fill="#fff" stroke="${INK}" stroke-width="4"/><rect x="${r - 2}" y="${r * 0.35}" width="4" height="${r * 0.68}" rx="2" fill="${INK}"/><g transform="translate(${r},${r})"><g class="clockh"><rect x="-1.5" y="${-r * 0.8}" width="3" height="${r * 0.85}" rx="1.5" fill="#ff5a1f"/></g></g>`); }
-    default: return '';
+
+function deskSvg(fu: Furn, role: Role | undefined): string {
+  const { x, y, w, d } = fu, h = DESK_H;
+  let s = '';
+  for (const [lx, ly] of [[x + 0.05, y + d - 0.08], [x + w - 0.1, y + d - 0.08], [x + w - 0.1, y + 0.03]] as [number, number][]) s += box(lx, ly, 0, 0.05, 0.05, h - 0.03, LEG);
+  s += box(x, y, h - 0.03, w, d, 0.03, DESK_TOP);
+  // 모니터는 칸막이 쪽, 화면은 앉은 사람 쪽
+  const my = fu.face === '+y' ? y + d - 0.12 : y + 0.06, n = role === 'engineer' ? 2 : 1, mw = 0.52;
+  const showScreen = fu.face === '-y';
+  for (let i = 0; i < n; i++) {
+    const mx = x + (n === 2 ? 0.14 + i * 0.58 : 0.44);
+    s += box(mx + mw / 2 - 0.03, my + 0.01, h, 0.06, 0.04, 0.1, '#5b6068');
+    s += box(mx, my, h + 0.1, mw, 0.05, 0.33, '#3b4048');
+    if (showScreen) s += poly([P(mx + 0.03, my + 0.05, h + 0.13), P(mx + mw - 0.03, my + 0.05, h + 0.13), P(mx + mw - 0.03, my + 0.05, h + 0.4), P(mx + 0.03, my + 0.05, h + 0.4)], '', 'class="scr"');
   }
+  const ky = fu.face === '+y' ? y + 0.2 : y + d - 0.35;
+  if (role === 'designer') s += top(x + 0.95, ky - 0.05, h + 0.005, 0.38, 0.26, '#4b5059');
+  if (role === 'tester') s += top(x + 0.98, ky - 0.08, h + 0.005, 0.28, 0.34, '#f2efe8') + top(x + 1.0, ky - 0.06, h + 0.02, 0.28, 0.34, '#faf8f3');
+  if (role === 'sales') s += top(x + 1.05, ky, h + 0.005, 0.12, 0.2, '#30343a');
+  if (role) s += top(x + 0.45, ky, h + 0.005, 0.45, 0.15, '#c3c7cc');
+  if (role) { const cup = P(x + 0.25, ky + 0.05, h); s += `<rect x="${cup[0] - 1.6}" y="${cup[1] - 4}" width="3.2" height="4" rx=".7" fill="#f2efe8"/>`; }
+  return s;
 }
-function floorProp(pr: Prop): string {
-  const { x, y, w, d } = pr;
-  switch (pr.kind) {
-    case 'boxes': return box(x, y, 0, w, d, 0.6, '#e0b27e', '#c9945c', '#b5814a') + box(x + 0.1, y + 0.15, 0.6, w * 0.7, d * 0.7, 0.45, '#e8be8c', '#d19f68', '#bb8a52') + poly([P(x + w * 0.45, y, 0.6), P(x + w * 0.45, y + d, 0.6)], 'none', 'stroke="#b07a42" stroke-width="3"');
-    case 'shelf': return box(x, y, 0, w, d, 1.6, '#9aa3ae', '#8b94a1', '#77808c') + [0.45, 0.95].map((z, i) => box(x + 0.1, y + d - 0.05, z, w - 0.2, 0.02, 0.38, i ? '#ffb3cc' : '#ffe27a', i ? '#ff8fb0' : '#f6d050', '#ccc')).join('');
-    case 'plant': { const [cx, cy] = P(x + w / 2, y + d / 2, 0.9); return box(x, y, 0, w, d, 0.5, '#c98a5b', '#b07043', '#9a5f37') + `<circle cx="${cx}" cy="${cy}" r="20" fill="#5fbf7f"/><circle cx="${cx - 10}" cy="${cy + 5}" r="12" fill="#48a96a"/><circle cx="${cx + 9}" cy="${cy - 9}" r="10" fill="#6fd08f"/>`; }
-    case 'cooler': { const [cx, cy] = P(x + w / 2, y + d / 2, 1.35); return box(x, y, 0, w, d, 1.05, '#ffffff', '#e5e9ee', '#cfd6df') + `<ellipse cx="${cx}" cy="${cy + 6}" rx="11" ry="6" fill="#8fcfff"/><rect x="${cx - 11}" y="${cy - 14}" width="22" height="20" rx="8" fill="#8fcfff" opacity=".9"/>`; }
-    case 'meeting': {
-      let s = '';
-      const chairs: [number, number][] = [[x + 0.5, y - 0.45], [x + 1.4, y - 0.45]];
-      chairs.forEach(([cx, cy]) => { s += box(cx, cy, 0, 0.5, 0.4, 0.45, '#ff9b73', '#e57b52', '#cc6a44'); });
-      s += box(x, y, 0, w, d, 0.7, '#f5efe6', '#ddd2c3', '#c8bba9');
-      const [px, py] = P(x + w * 0.35, y + d * 0.4, 0.7); s += `<rect x="${px - 10}" y="${py - 5}" width="20" height="12" rx="2" fill="#fff" stroke="#c9d0d9" stroke-width="2"/>`;
-      return s;
+
+function chairParts(x: number, y: number, face: Face): { pre: string; post: string } {
+  // 앉는 판과 다리는 뒤, 등받이는 사람 뒤쪽(앞모습이면 먼저, 뒷모습이면 나중에 그린다)
+  const seat = box(x - 0.04, y - 0.04, 0, 0.08, 0.08, 0.4, '#3a3f47') + box(x - 0.24, y - 0.24, 0.4, 0.48, 0.48, 0.07, CHAIR);
+  const [fx, fy] = faceVec(face);
+  const bx = fx ? x - fx * 0.26 - 0.03 : x - 0.22, by = fy ? y - fy * 0.26 - 0.03 : y - 0.22;
+  const back = box(bx, by, 0.47, fx ? 0.06 : 0.44, fy ? 0.06 : 0.44, 0.48, shade(CHAIR, -0.08));
+  return fx > 0 || fy > 0 ? { pre: seat + back, post: '' } : { pre: seat, post: back };
+}
+
+function furnSvg(fu: Furn, room: Room, carCol: string | null): string {
+  const { x, y, w, d, h } = fu;
+  switch (fu.kind) {
+    case 'divider': return box(x, y, 0, w, d, h, '#aab4be');
+    case 'glass': return box(x, y, 0, w, d, h, GLASS, 'opacity=".38"') + box(x, y, h, w, d, 0.04, '#8c98a4');
+    case 'cabinet': return box(x, y, 0, w, d, h, '#e3e0da') + `<path d="M${P(x + w / 2, y + d, 0.05)} L${P(x + w / 2, y + d, h - 0.05)}" stroke="#c4c0b8" stroke-width="1"/>`;
+    case 'rack': { let s = ''; for (const z of [0.1, 0.8, 1.5]) { s += box(x, y, z, w, d, 0.04, '#8e959d'); s += box(x + 0.1, y + 0.05, z + 0.04, 0.5, 0.4, 0.35, '#c9a77d') + box(x + 0.75, y + 0.08, z + 0.04, 0.6, 0.35, 0.28, '#b89670'); } return box(x, y + d - 0.04, 0, 0.04, 0.04, h, '#6f767e') + s + box(x + w - 0.04, y + d - 0.04, 0, 0.04, 0.04, h, '#6f767e'); }
+    case 'counter': { const m = P(x + 0.5, y + 0.3, h); return box(x, y, 0, w, d, h, '#d9d5ce') + top(x, y, h, w, d, '#bfb8ad') + box(x + 0.3, y + 0.12, h, 0.35, 0.35, 0.42, '#3d4148') + `<rect x="${m[0] - 1}" y="${m[1] - 6}" width="2" height="3" fill="#cc8b4f"/>` + box(x + 1.4, y + 0.15, h, 0.5, 0.3, 0.06, '#f2efe8'); }
+    case 'fridge': return box(x, y, 0, w, d, h, '#eceae6');
+    case 'sofa': return box(x, y, 0, w, d, 0.4, '#8b97a6') + box(x, fu.face === '-y' ? y + d - 0.22 : y, 0.4, w, 0.22, 0.42, '#7c8898') + box(x, y, 0.4, 0.2, d, 0.2, '#7c8898') + box(x + w - 0.2, y, 0.4, 0.2, d, 0.2, '#7c8898');
+    case 'plant': { const [cx, cy] = P(x + w / 2, y + d / 2, 0.45 + h * 0.4); return box(x + 0.05, y + 0.05, 0, w - 0.1, d - 0.1, 0.45, '#b9a48a') + `<ellipse cx="${cx}" cy="${cy}" rx="${f(w * 22)}" ry="${f(h * 15)}" fill="#7c9b78"/><ellipse cx="${cx - 4}" cy="${cy + 3}" rx="${f(w * 14)}" ry="${f(h * 9)}" fill="#6b8a68"/>`; }
+    case 'table': { let s = ''; for (const [lx, ly] of [[x + 0.1, y + d - 0.15], [x + w - 0.15, y + d - 0.15], [x + w - 0.15, y + 0.1]] as [number, number][]) s += box(lx, ly, 0, 0.05, 0.05, h, LEG); return s + box(x, y, h - 0.04, w, d, 0.04, '#e4ddd2'); }
+    case 'mchair': return box(x + 0.02, y + 0.02, 0.42, w - 0.04, d - 0.04, 0.06, CHAIR) + box(x, y, 0.48, w, 0.06, 0.42, shade(CHAIR, -0.08)) + box(x + w / 2 - 0.03, y + d / 2, 0, 0.06, 0.06, 0.42, '#3a3f47');
+    case 'stool': return box(x, y, 0, w, d, h, '#7c8590');
+    case 'drafting': {
+      const s = box(x + 0.1, y + 0.1, 0, 0.06, 0.06, 0.75, LEG) + box(x + w - 0.16, y + d - 0.16, 0, 0.06, 0.06, 0.75, LEG) + box(x + w - 0.16, y + 0.1, 0, 0.06, 0.06, 0.95, LEG);
+      return s + poly([P(x, y + d, 0.78), P(x + w, y + d, 0.78), P(x + w, y, 1.1), P(x, y, 1.1)], '#f4f2ee', 'stroke="#c9c3b8" stroke-width="1"') +
+        `<path d="M${P(x + 0.2, y + 0.5, 0.95)} Q${P(x + 0.6, y + 0.2, 1.05)} ${P(x + 1.0, y + 0.45, 0.96)}" stroke="#8b94a1" stroke-width="1" fill="none"/>`;
     }
-    case 'equipment': {
-      const [sx, sy] = P(x + 0.3, y + 0.2, 1.75);
-      return box(x, y, 0, w, d, 0.9, '#5b6470', '#4a525d', '#3c434d') + box(x + 0.3, y + 0.25, 0.9, 1.0, 0.8, 0.5, '#9aa3ae', '#7d8794', '#6c7581') +
-        box(x + 1.4, y + 0.3, 0.9, 0.45, 0.45, 0.9, '#ff7a45', '#e04a12', '#c93f0c') + `<rect x="${sx - 12}" y="${sy - 6}" width="30" height="16" rx="3" fill="#a8e4ff" class="code"/>`;
-    }
-    case 'sofa': return box(x, y + d * 0.7, 0, w, d * 0.3, 0.75, '#7c8ce0', '#6577cf', '#5465bb') + box(x, y, 0, w, d * 0.7, 0.4, '#8d9cec', '#6f80d6', '#5d6dc2');
-    case 'plinth': return box(x, y, 0, w, d, 0.35, '#ffffff', '#dfe4ea', '#c9d0d9');
+    case 'clay': return box(x, y, 0, w, d, h, '#d6d2cb') + carBox(x + 0.3, y + 0.25, h, w - 0.6, d - 0.5, '#b8916a', false);
+    case 'car': return (room.level >= 2 ? box(x - 0.1, y + 0.2, 0, w + 0.2, d - 0.4, 0.08, '#6f767e') : '') + carBox(x, y, room.level >= 2 ? 0.35 : 0, w, d, carCol ?? '#9aa1a8');
+    case 'post': return box(x, y, 0, w, d, h, '#c7a23c') + box(x - 0.05, y - 0.05, 0, w + 0.1, d + 0.1, 0.06, '#6f767e');
+    case 'cart': return box(x, y, 0.08, w, d, h - 0.08, '#8e5a50') + [0.35, 0.6].map((z) => `<path d="M${P(x + 0.05, y + d, z)} L${P(x + w - 0.05, y + d, z)}" stroke="#6e443c" stroke-width="1"/>`).join('');
+    case 'diag': { const m = P(x + w / 2, y + d, 1.15); return box(x + 0.2, y + 0.2, 0, 0.1, 0.1, 1.0, '#6f767e') + box(x, y, 1.0, w, d, 0.4, '#3b4048') + `<rect x="${m[0] - 6}" y="${m[1] - 4}" width="9" height="6" fill="#9fc3b0"/>`; }
+    case 'workbench': return box(x, y, 0, w, d, h - 0.06, '#7d838b') + box(x, y, h - 0.06, w, d, 0.06, '#a98a62') + box(x + w - 0.08, y + d - 0.08, 0, 0.06, 0.06, h - 0.06, '#5b6068') + box(x + 0.1, y + 0.4, h, 0.4, 0.3, 0.2, '#b44c3c');
+    case 'boxes': return box(x, y, 0, w, d, h * 0.6, '#c9a77d') + box(x + 0.1, y + 0.1, h * 0.6, w * 0.6, d * 0.6, h * 0.4, '#d4b48b');
+    case 'dyno': return box(x, y, 0, w, d, 0.4, '#5b6068') + box(x + 0.3, y + 0.2, 0.4, 0.9, 0.8, 0.55, '#8c939b') + box(x + 1.25, y + 0.35, 0.4, 0.4, 0.5, 0.35, '#b44c3c');
+    case 'tunnel': { const [cx, cy] = P(x + w, y + d / 2, h / 2); return box(x, y, 0, w, d, h, '#c9ced4') + `<ellipse cx="${cx}" cy="${cy}" rx="11" ry="15" fill="#5b6068"/><ellipse cx="${cx}" cy="${cy}" rx="4" ry="5" fill="#9aa1a8"/>`; }
+    case 'reception': return box(x, y, 0, w, d, h, '#cdbfa8') + box(x - 0.05, y - 0.05, h, w + 0.1, d + 0.1, 0.04, '#e4ddd2');
+    case 'printer': return box(x, y, 0, w, d, 0.7, '#d4d6d9') + box(x + 0.05, y + 0.05, 0.7, w - 0.1, d - 0.1, 0.3, '#e4e6e9');
+    case 'cooler': return box(x, y, 0, w, d, 0.9, '#eceae6') + box(x + 0.1, y + 0.1, 0.9, w - 0.2, d - 0.2, 0.35, '#b5d3e2', 'opacity=".85"');
     default: return '';
   }
 }
 
-// ---------- 화면 배치 ----------
-interface Placed { staff: OfficeStaff; seat: Seat; look: Look; anchor: [number, number] }
-const sortStaff = (a: OfficeStaff, b: OfficeStaff) => ROLE[a.role].order - ROLE[b.role].order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+function wallSvg(it: WallItem, room: Room): string {
+  const w = it.w * U, h = it.h * U, zt = it.z + it.h;
+  const [X, Y] = it.wall === 'R' ? P(it.at, 0, zt) : P(0, it.at + it.w, zt);
+  const g = (inner: string) => `<g transform="matrix(1 ${it.wall === 'R' ? 0.5 : -0.5} 0 1 ${X} ${Y})">${inner}</g>`;
+  switch (it.kind) {
+    case 'window': return g(`<rect width="${w}" height="${h}" fill="#cfe0ea" stroke="#f4f4f2" stroke-width="3"/><path d="M${w / 2},0 V${h}" stroke="#f4f4f2" stroke-width="2.5"/><rect y="${h}" width="${w}" height="2.5" fill="#d5d1ca"/>`);
+    case 'whiteboard': return g(`<rect width="${w}" height="${h}" fill="#f7f7f5" stroke="#a8aeb5" stroke-width="1.5"/><path d="M${w * 0.1},${h * 0.35} h${w * 0.4} M${w * 0.1},${h * 0.55} h${w * 0.3} M${w * 0.6},${h * 0.3} l${w * 0.12},${h * 0.3} l${w * 0.14},${-h * 0.2}" stroke="#8b94a1" stroke-width="1.2" fill="none"/>`);
+    case 'swatch': return g(`<rect width="${w}" height="${h}" fill="#efede8" stroke="#bdb6aa" stroke-width="1"/>` + ['#a8593a', '#c6a46e', '#6f8db8', '#4f8a64', '#d9d5ce', '#3d4148', '#a5566f', '#e1c49a'].map((c, i) => `<rect x="${4 + (i % 4) * (w - 8) / 4}" y="${4 + Math.floor(i / 4) * (h - 8) / 2}" width="${(w - 8) / 4 - 3}" height="${(h - 8) / 2 - 3}" fill="${c}"/>`).join(''));
+    case 'sketch': return g(`<rect width="${w}" height="${h}" fill="#f6f4ef" stroke="#bdb6aa" stroke-width="1"/><g class="sketchcar"></g><path d="M${w * 0.1},${h * 0.85} h${w * 0.8}" stroke="#c9c3b8" stroke-width="1"/>`);
+    case 'toolwall': {
+      let s = `<rect width="${w}" height="${h}" fill="#c9b08a"/>`;
+      for (let i = 0; i < 7; i++) s += `<path d="M${10 + i * (w - 20) / 6},${h * 0.25} v${h * (0.25 + (i % 3) * 0.12)}" stroke="#5b6068" stroke-width="${i % 2 ? 2 : 3}" stroke-linecap="round"/>`;
+      return g(s);
+    }
+    case 'shutter': { let s = `<rect width="${w}" height="${h}" fill="#b9bec4"/>`; for (let yy = 4; yy < h; yy += 5) s += `<path d="M0,${yy} H${w}" stroke="#a3a9b0" stroke-width="1.2"/>`; return g(s + `<rect y="${h - 4}" width="${w}" height="4" fill="#8e959d"/>`); }
+    case 'logo': return g(`<rect width="${w}" height="${h}" fill="#3b4048"/><path d="M${w * 0.3},${h * 0.62} h${w * 0.28} M${w * 0.36},${h * 0.48} h${w * 0.3} M${w * 0.42},${h * 0.34} h${w * 0.24}" stroke="#d87a4a" stroke-width="3" stroke-linecap="round"/>`);
+    case 'clock': { const r = w / 2; return g(`<circle cx="${r}" cy="${r}" r="${r}" fill="#f7f7f5" stroke="#5b6068" stroke-width="1.5"/><path d="M${r},${r} v${-r * 0.65} M${r},${r} h${r * 0.45}" stroke="#3b4048" stroke-width="1.3"/>`); }
+    case 'sign': return g(`<rect width="${w}" height="${h}" rx="3" fill="#3b4048"/><text class="sign-name" x="8" y="${f(h * 0.42)}" font-size="11" font-weight="700" fill="#f2f2f0"></text>
+      <rect x="8" y="${f(h * 0.62)}" width="${w - 16}" height="4" rx="2" fill="#5b6068"/><rect class="sign-bar" x="8" y="${f(h * 0.62)}" width="0" height="4" rx="2" fill="#d87a4a"/>
+      <g class="bugs" transform="translate(${w + 9},${f(h / 2)})" display="none"><g class="bugi"><circle r="8" fill="#b4553f" stroke="#fff" stroke-width="1.5"/><text class="bugn" y="3.6" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">0</text></g></g>`);
+    default: void room; return '';
+  }
+}
+
+const FLOOR: Record<Zone['kind'], string> = {
+  office: '#c9ccd0', studio: '#dccbb0', test: '#bfc3c7', garage: '#c4c2bd', pantry: '#e2ddd3', meeting: '#c3c8cf', lab: '#c8cdd2', lobby: '#e6e2da', lounge: '#d9d6cf',
+};
+
+// ---------- 그리는 순서(쿼터뷰 가림) ----------
+type FP = [number, number, number, number];             // x1,y1,x2,y2
+const before = (a: FP, b: FP) => a[2] <= b[0] + 1e-6 || a[3] <= b[1] + 1e-6;
+const overlapX = (a: FP, b: FP) => a[0] - a[3] < b[2] - b[1] && b[0] - b[3] < a[2] - a[1];
+function topoSort<T extends { fp: FP }>(items: T[]): T[] {
+  const n = items.length, indeg = new Array(n).fill(0), out: number[][] = items.map(() => []);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (i === j || !overlapX(items[i].fp, items[j].fp)) continue;
+    if (before(items[i].fp, items[j].fp) && !before(items[j].fp, items[i].fp)) { out[i].push(j); indeg[j]++; }
+  }
+  const key = (t: T) => t.fp[0] + t.fp[1] + t.fp[2] + t.fp[3];
+  const ready = items.map((_, i) => i).filter((i) => !indeg[i]);
+  const res: T[] = [], done = new Uint8Array(n);
+  while (res.length < n) {
+    if (!ready.length) { const rest = items.map((_, i) => i).filter((i) => !done[i]).sort((a, b) => key(items[a]) - key(items[b])); ready.push(rest[0]); } // 순환 대비
+    ready.sort((a, b) => key(items[a]) - key(items[b]));
+    const i = ready.shift()!;
+    if (done[i]) continue;
+    done[i] = 1; res.push(items[i]);
+    for (const j of out[i]) if (--indeg[j] === 0 && !done[j]) ready.push(j);
+  }
+  return res;
+}
+
+// ---------- 직원(배우) ----------
+type PoseName = 'work' | 'focus' | 'rest' | 'slump' | 'chin' | 'test' | 'studio' | 'lab' | 'coffee' | 'meeting' | 'idle';
+interface Place { kind: 'seat' | 'spot'; x: number; y: number; face: Face; spot?: Spot; seat?: number; cell: [number, number] }
+interface Actor {
+  staff: OfficeStaff; look: Look; node: SVGGElement; seat: number; home: Place;
+  x: number; y: number; face: Face; seated: boolean;
+  state: 'home' | 'walk' | 'stay'; path: [number, number][]; target: Place | null; stayUntil: number; pose: PoseName;
+}
+interface Item { fp: FP; svg: string; seat?: number }
 
 export function createOffice(host: HTMLElement): Office {
   const NS = 'http://www.w3.org/2000/svg';
@@ -185,285 +247,475 @@ export function createOffice(host: HTMLElement): Office {
   svg.setAttribute('role', 'img');
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   const world = document.createElementNS(NS, 'g');
-  const fx = document.createElementNS(NS, 'g');
-  const fxBub = document.createElementNS(NS, 'g'); // 말풍선은 점수 위에 그려 가려지지 않게
+  const fx = document.createElementNS(NS, 'g'), fxBub = document.createElementNS(NS, 'g');
   svg.append(world, fx, fxBub);
-  root.append(svg);
+  const zoomBar = document.createElement('div');
+  zoomBar.className = 'zoom';
+  zoomBar.innerHTML = '<button type="button" data-z="fit" aria-pressed="true">전체 보기</button><button type="button" data-z="near" aria-pressed="false">가까이 보기</button>';
+  const tagPop = document.createElement('div');
+  tagPop.className = 'tagpop'; tagPop.hidden = true;
+  root.append(svg, zoomBar, tagPop);
   host.append(root);
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let view: OfficeView | null = null;
-  let structKey = '';
-  let placed = new Map<string, Placed>();
-  let vb = { ox: 0, oy: 0, w: 1, h: 1 };
-  let scale = 1;                     // 화면 px / 사용자 단위
-  let active = true, disposed = false;
-  let timer = 0, nextAuto = 0;
-  const bubbles: { id: string; g: SVGGElement; t: number }[] = [];
+  let view: OfficeView | null = null, room: Room | null = null, structKey = '';
+  const actors = new Map<string, Actor>();
+  let items: (Item & { node: SVGGElement })[] = [];
+  let itemsG: SVGGElement | null = null;
+  const slots = new Map<number, SVGGElement>();
+  const spotTaken = new Map<Spot, string>();
+  let vb = { x: 0, y: 0, w: 1, h: 1 };
+  let cam = { cx: 0, cy: 0, s: 1, mode: 'fit' as 'fit' | 'near' | 'free' };
+  let hostW = 1, hostH = 1, fitS = 1;
+  let active = true, disposed = false, raf = 0, idle = 0, last = 0, nextErrand = 0, nextTalk = 0;
+  const bubbles: { id: string; g: SVGGElement }[] = [];
   const timeouts = new Set<number>();
   const later = (fn: () => void, ms: number) => { const t = window.setTimeout(() => { timeouts.delete(t); fn(); }, ms); timeouts.add(t); };
-  let signEls: { name: SVGTextElement; bar: SVGRectElement; barW: number; bugs: SVGGElement; bugn: SVGTextElement; bugi: SVGGElement; bugk: SVGGElement } | null = null;
+  let signEls: { name: SVGTextElement; bar: SVGRectElement; barW: number; bugs: SVGGElement; bugn: SVGTextElement; bugi: SVGGElement } | null = null;
 
-  const minFs = (u: number, px: number) => Math.max(u, px / scale);   // 사용자 단위 글자 크기의 화면 최소값 보장
-
+  // ---------- 장면 짓기 ----------
   function build(v: OfficeView) {
     const rm = roomFor(v.level);
-    const staff = [...v.staff].sort(sortStaff).slice(0, CAPACITY[rm.level]);
-    const seats = seatsFor(rm.level, staff.length);
-    // 뷰박스: 방의 투영 범위(벽 위 + 말풍선 여유)
-    const minX = -rm.D * U - 14, maxX = rm.W * U + 14, minY = -(rm.H + 0.25) * U - 1.0 * U, maxY = ((rm.W + rm.D) * U) / 2 + 14;
-    vb = { ox: -minX, oy: -minY, w: maxX - minX, h: maxY - minY };
-    svg.setAttribute('viewBox', `0 0 ${f(vb.w)} ${f(vb.h)}`);
-    svg.setAttribute('aria-label', `${rm.name} 사무실, 직원 ${staff.length}명`);
+    room = rm;
+    const staff = [...v.staff].sort((a, b) => ROLE[a.role].order - ROLE[b.role].order || (a.id < b.id ? -1 : 1)).slice(0, CAPACITY[rm.level]);
+    const seatOf = assignSeats(rm.level, staff);
+    const occupant = new Map<number, OfficeStaff>();
+    for (const s of staff) { const i = seatOf.get(s.id); if (i !== undefined) occupant.set(i, s); }
+    const c0 = v.carSvg?.match(/fill="(#[0-9a-fA-F]{6})"/)?.[1];
+    const carCol = c0 ? mix(c0, '#9aa1a8', 0.3) : null;   // 장면 색에 맞게 채도를 조금 낮춘다
+    const { W, D, H } = rm;
+    const x0 = -D * U - 10, x1 = W * U + 10, y0 = -(H + 0.15) * U - 10, y1 = ((W + D) * U) / 2 + 0.25 * U + 10;
+    vb = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 
-    placed = new Map();
-    let s = `<g transform="translate(${f(vb.ox)},${f(vb.oy)})">` + shell(rm);
-    // 벽 소품
-    for (const pr of rm.props) if (pr.wall && pr.kind !== 'sign') s += wallProp(pr);
-    const sign = rm.props.find((p) => p.kind === 'sign')!;
-    s += signSvg(sign);
-    // 직무 구역 깔개(앉은 자리 아래 연한 직무 색)
-    seats.forEach((st, i) => {
-      if (!st.used) return;
-      s += poly([P(st.x - 0.35, st.y - 1.45), P(st.x + 2.65, st.y - 1.45), P(st.x + 2.65, st.y + 1.25), P(st.x - 0.35, st.y + 1.25)], ROLE[staff[i].role].rug, 'opacity=".85"');
-    });
-    // 천장 전구(등급 1): 뒤쪽 구석 위에 매달아 사람을 가리지 않게 먼저 그린다
-    const bulb = rm.props.find((p) => p.kind === 'bulb');
-    if (bulb) { const [bx, by] = P(bulb.x, bulb.y, rm.H - 0.5), [, ty] = P(bulb.x, bulb.y, rm.H + 0.6); s += `<path d="M${bx},${ty} V${by}" stroke="#5b6470" stroke-width="2"/><circle cx="${bx}" cy="${by + 8}" r="9" fill="#ffe27a" stroke="#d9b440" stroke-width="2"/>`; }
-    // 바닥 물건: 앞뒤 순서(x+y가 작은 것부터) 정렬해 그린다
-    const items: { k: number; svg: string }[] = [];
-    for (const pr of rm.props) if (!pr.wall && pr.kind !== 'bulb') items.push({ k: pr.x + pr.w / 2 + pr.y + pr.d / 2, svg: floorProp(pr) + (pr.kind === 'plinth' ? carOn(pr, v.carSvg) : '') });
-    let tags = '';
-    seats.forEach((st, i) => {
-      const sf = staff[i];
-      const dx = st.x, dy = st.y, px = dx + 1.1, py = dy - 0.55;
-      let g = box(px - 0.35, py - 0.7, 0, 0.7, 0.45, 0.95, '#7d8794', '#6c7581', '#5b6470') + box(px - 0.4, py - 0.35, 0, 0.8, 0.6, 0.45, '#8b94a1', '#77808c', '#67707c');
-      const hp = P(px, py, 0.48);
-      if (sf) {
-        const lk = lookOf(sf.id);
-        g += `<g transform="translate(${hp[0]},${hp[1]}) scale(${K})">${person(sf.role, lk)}</g>`;
-        placed.set(sf.id, { staff: sf, seat: st, look: lk, anchor: [hp[0] + vb.ox, hp[1] + HEAD_TOP + vb.oy] });
-        // 이름표: 책상 앞면 가운데에서 조금 오른쪽(앞줄 사람 몸통을 피한다)
-        const tp = P(dx + DESK.w / 2, dy + DESK.d, 0.38);
-        tags += `<g class="tag" data-id="${esc(sf.id)}" transform="translate(${f(tp[0] + 0.5 * U)},${tp[1]})">${tagSvg(sf)}</g>`;
-      }
-      g += box(dx, dy, 0, DESK.w, DESK.d, 0.75, '#ffffff', '#dfe4ea', '#c9d0d9');
-      const role = sf?.role;
-      if (role === 'designer') g += poly([P(dx + 0.6, dy + 0.25, 0.76), P(dx + 1.6, dy + 0.25, 0.76), P(dx + 1.6, dy + 0.85, 0.76), P(dx + 0.6, dy + 0.85, 0.76)], '#3a404a') + `<path class="code" d="M${P(dx + 0.8, dy + 0.5, 0.77)} L${P(dx + 1.3, dy + 0.4, 0.77)}" stroke="#a8e4ff" stroke-width="3"/>`;
-      else {
-        g += poly([P(dx + 0.65, dy + 0.3, 0.76), P(dx + 1.55, dy + 0.3, 0.76), P(dx + 1.55, dy + 0.8, 0.76), P(dx + 0.65, dy + 0.8, 0.76)], '#b9c1cc');
-        g += poly([P(dx + 0.65, dy + 0.3, 0.76), P(dx + 1.55, dy + 0.3, 0.76), P(dx + 1.55, dy + 0.3, 1.32), P(dx + 0.65, dy + 0.3, 1.32)], '#8b94a1');
-        g += poly([P(dx + 0.72, dy + 0.3, 0.83), P(dx + 1.48, dy + 0.3, 0.83), P(dx + 1.48, dy + 0.3, 1.25), P(dx + 0.72, dy + 0.3, 1.25)], '', 'class="scr"');
-      }
-      const mp = P(dx + 1.9, dy + 0.5, 0.75);
-      g += `<rect x="${mp[0] - 5}" y="${mp[1] - 12}" width="10" height="12" rx="2" fill="${sf ? ROLE[sf.role].col : '#c9d0d9'}"/>`;
-      items.push({ k: dx + DESK.w / 2 + dy + DESK.d / 2, svg: sf ? `<g class="seat" data-id="${esc(sf.id)}">${g}</g>` : `<g opacity=".8">${g}</g>` });
-    });
-    items.sort((a, b) => a.k - b.k);
-    s += items.map((it) => it.svg).join('');
-    s += `<g class="tags">${tags}</g></g>`;
-    world.innerHTML = s;
-    world.querySelectorAll<SVGGElement>('.seat').forEach((g) => (g.onclick = () => showTag(g.dataset.id!)));
-    const q = <T extends Element>(sel: string) => world.querySelector(sel) as T;
-    signEls = { name: q('.sign-name'), bar: q('.sign-bar'), barW: sign.w * U - 24, bugs: q('.bugs'), bugn: q('.bugn'), bugi: q('.bugi'), bugk: q('.bugk') };
-    fx.replaceChildren(); fxBub.replaceChildren(); bubbles.length = 0;
-  }
+    // 벽·바닥
+    let s = poly([P(0, 0), P(0, D), P(0, D, H), P(0, 0, H)], '#e4e1db') + poly([P(0, 0), P(W, 0), P(W, 0, H), P(0, 0, H)], '#d6d2cb');
+    s += poly([P(0, 0, H), P(0, D, H), P(-0.2, D, H), P(-0.2, -0.2, H), P(W, -0.2, H), P(W, 0, H)], '#b7b2aa');
+    s += poly([P(W, 0), P(W, D), P(W, D, -0.25), P(W, 0, -0.25)], '#9c968d') + poly([P(0, D), P(W, D), P(W, D, -0.25), P(0, D, -0.25)], '#aaa49b');
+    s += top(0, 0, 0, W, D, rm.level === 1 ? '#c9c6c0' : '#d3d0c9');
+    for (const z of rm.zones) s += top(z.x, z.y, 0.001, z.w, z.d, FLOOR[z.kind]) + (z.kind === 'garage' || z.kind === 'test' ? top(z.x + 0.3, z.y + 0.3, 0.002, z.w - 0.6, z.d - 0.6, 'none', 'stroke="#c9a94a" stroke-width="2" stroke-dasharray="8 6"') : '');
+    if (rm.level === 1) for (let x = 3; x < W; x += 3) s += `<path d="M${P(x, 0, 0.003)} L${P(x, D, 0.003)}" stroke="#bdb9b2" stroke-width="1"/>`;
+    s += poly([P(0, 0), P(0, D), P(0, D, 0.1), P(0, 0, 0.1)], '#c3bfb8') + poly([P(0, 0), P(W, 0), P(W, 0, 0.1), P(0, 0, 0.1)], '#bcb7b0');
+    for (const wi of rm.walls) s += wallSvg(wi, rm);
+    // 가구 그림자(옅게)
+    for (const fu of rm.furn) if (fu.kind !== 'glass' && fu.kind !== 'divider') s += top(fu.x + 0.06, fu.y + 0.06, 0.004, fu.w + 0.04, fu.d + 0.04, '#000', 'opacity=".06"');
+    for (const st of rm.seats) s += `<ellipse cx="${P(st.x, st.y)[0]}" cy="${P(st.x, st.y)[1]}" rx="9" ry="4.5" fill="#000" opacity=".06"/>`;
 
-  function signSvg(pr: Prop): string {
-    const w = pr.w * U, h = (pr.h ?? 1) * U;
-    return onWall(pr, `<rect width="${w}" height="${h}" rx="10" fill="${INK}"/>
-      <text class="sign-name" x="12" y="${f(h * 0.45)}" font-weight="800" fill="#fff"></text>
-      <rect x="12" y="${f(h * 0.66)}" width="${w - 24}" height="${f(h * 0.14)}" rx="${f(h * 0.07)}" fill="#3a404a"/>
-      <rect class="sign-bar" x="12" y="${f(h * 0.66)}" width="0" height="${f(h * 0.14)}" rx="${f(h * 0.07)}" fill="#ff5a1f"/>
-      <g class="bugs" transform="translate(${w + 6},${f(h * 0.2)})" display="none"><g class="bugk"><g class="bugi"><circle r="16" fill="#d43c3c" stroke="#fff" stroke-width="3"/><text class="bugn" y="6" text-anchor="middle" font-size="18" font-weight="900" fill="#fff">0</text></g></g></g>`);
-  }
-  function carOn(pr: Prop, car?: string): string {
-    if (!car) return '';
-    const [cx, cy] = P(pr.x + pr.w / 2, pr.y + pr.d / 2, 0.35);
-    const w = 2.6 * U, h = w * 0.42;
-    return car.replace(/<svg\b/, `<svg x="${f(cx - w / 2)}" y="${f(cy - h + 6)}" width="${f(w)}" height="${f(h)}" preserveAspectRatio="xMidYMax meet"`);
-  }
-  function tagSvg(sf: OfficeStaff): string {
-    const rc = ROLE[sf.role];
-    return `<rect x="${-(sf.name.length + 2) / 2}em" y="-0.75em" height="1.5em" width="${sf.name.length + 2}em" rx=".75em" fill="#fff" stroke="${INK}" stroke-width="1.5"/>
-      <circle cx="${-(sf.name.length + 2) / 2 + 0.75}em" cy="0" r=".3em" fill="${rc.col}"/><text x=".3em" y=".36em" text-anchor="middle" fill="${INK}">${esc(sf.name)}</text>`;
-  }
-  function showTag(id: string) {
-    const t = world.querySelector(`.tag[data-id="${CSS.escape(id)}"]`);
-    if (!t) return;
-    t.classList.add('on');
-    later(() => t.classList.remove('on'), 3000);
-  }
-
-  // 단계·예산·컨디션 → 직원별 동작 클래스
-  function applyState(v: OfficeView) {
-    const sp = v.phase === 'rest' ? 1 : { low: 0.7, normal: 1, high: 1.7 }[v.budget];
-    for (const p of placed.values()) {
-      const sf = v.staff.find((x) => x.id === p.staff.id) ?? p.staff;
-      p.staff = sf;
-      const g = world.querySelector<SVGGElement>(`.seat[data-id="${CSS.escape(sf.id)}"]`);
-      if (!g) continue;
-      const tired = sf.condition < 0.4;
-      const act = v.phase !== 'rest' && sf.working ? v.phase : 'rest';
-      g.setAttribute('class', `seat r-${sf.role} v${p.look.v} a-${act}${tired ? ' tired' : ''}${v.budget === 'high' && act !== 'rest' && !tired ? ' sw' : ''}`);
-      g.style.setProperty('--sp', String(sp * (tired ? 0.5 : 1)));
+    // 가구와 의자 → 가림 순서로 정렬
+    const list: Item[] = [];
+    for (const fu of rm.furn) {
+      const occ = fu.seat !== undefined ? occupant.get(fu.seat) : undefined;
+      const svg0 = fu.kind === 'desk' ? deskSvg(fu, occ?.role) : furnSvg(fu, rm, carCol);
+      list.push({ fp: [fu.x, fu.y, fu.x + fu.w, fu.y + fu.d], svg: fu.kind === 'desk' ? `<g class="desk" data-seat="${fu.seat}">${svg0}</g>` : svg0 });
     }
+    rm.seats.forEach((st, i) => {
+      const { pre, post } = chairParts(st.x, st.y, st.face);
+      list.push({ fp: [st.x - 0.25, st.y - 0.25, st.x + 0.25, st.y + 0.25], svg: `${pre}<g class="slot"></g>${post}`, seat: i });
+    });
+    const sorted = topoSort(list);
+    world.innerHTML = s + `<g class="items">${sorted.map((it) => `<g>${it.svg}</g>`).join('')}</g>`;
+    itemsG = world.querySelector('.items');
+    items = sorted.map((it, i) => ({ ...it, node: itemsG!.children[i] as SVGGElement }));
+    slots.clear();
+    for (const it of items) if (it.seat !== undefined) slots.set(it.seat, it.node.querySelector('.slot')!);
+    // 그림판 위 개발 중인 차(옆모습)
+    const sk = world.querySelector('.sketchcar');
+    if (sk && v.carSvg) { const sw = rm.walls.find((q) => q.kind === 'sketch')!; sk.innerHTML = v.carSvg.replace(/<svg\b/, `<svg x="${f(sw.w * U * 0.1)}" y="${f(sw.h * U * 0.15)}" width="${f(sw.w * U * 0.8)}" height="${f(sw.h * U * 0.6)}"`); }
+
+    // 직원
+    actors.clear(); spotTaken.clear();
+    for (const sf of staff) {
+      const si = seatOf.get(sf.id);
+      if (si === undefined) continue;
+      const st = rm.seats[si], lk = lookOf(sf.id);
+      const node = document.createElementNS(NS, 'g');
+      node.setAttribute('class', 'pp vf sit');
+      node.innerHTML = personSvg(sf.role, lk);
+      const home: Place = { kind: 'seat', x: st.x, y: st.y, face: st.face, seat: si, cell: st.access };
+      const a: Actor = { staff: sf, look: lk, node, seat: si, home, x: st.x, y: st.y, face: st.face, seated: true, state: 'home', path: [], target: null, stayUntil: 0, pose: 'work' };
+      actors.set(sf.id, a);
+      sitDown(a, home);
+    }
+    const q = <T extends Element>(sel: string) => world.querySelector(sel) as T;
+    const sign = rm.walls.find((w) => w.kind === 'sign')!;
+    signEls = { name: q('.sign-name'), bar: q('.sign-bar'), barW: sign.w * U - 16, bugs: q('.bugs'), bugn: q('.bugn'), bugi: q('.bugi') };
+    fx.replaceChildren(); fxBub.replaceChildren(); bubbles.length = 0; tagPop.hidden = true;
+    svg.setAttribute('aria-label', `${rm.name} 사무실, 직원 ${actors.size}명`);
+  }
+
+  // ---------- 배우 위치·자세 ----------
+  function place(a: Actor) {
+    const [hx, hy] = P(a.x, a.y, a.seated ? 0.47 : 0.9);
+    const front = a.face === '+x' || a.face === '+y', mirror = a.face === '+y' || a.face === '-x';
+    a.node.setAttribute('transform', `translate(${hx},${hy})${mirror ? ' scale(-1,1)' : ''}`);
+    a.node.classList.toggle('vf', front); a.node.classList.toggle('vb', !front);
+    a.node.classList.toggle('sit', a.seated); a.node.classList.toggle('stand', !a.seated);
+    if (!a.seated) insertByDepth(a);
+  }
+  function insertByDepth(a: Actor) {
+    if (!itemsG) return;
+    const fp: FP = [a.x - 0.15, a.y - 0.15, a.x + 0.15, a.y + 0.15];
+    let lo = -1;
+    for (let i = 0; i < items.length; i++) if (overlapX(items[i].fp, fp) && before(items[i].fp, fp)) lo = i;
+    const ref = items[lo + 1]?.node ?? null;
+    if (a.node.parentNode !== itemsG || a.node.nextSibling !== ref) itemsG.insertBefore(a.node, ref);
+  }
+  function sitDown(a: Actor, p: Place) {
+    a.x = p.x; a.y = p.y; a.face = p.face; a.seated = true; a.state = 'home'; a.target = null;
+    slots.get(a.seat)?.append(a.node);
+    place(a); setPose(a);
+  }
+  function setPose(a: Actor) {
+    const v = view;
+    let pose: PoseName = 'idle';
+    const tired = a.staff.condition < 0.4;
+    if (a.state === 'walk') pose = 'idle';
+    else if (a.state === 'stay' && a.target?.spot) pose = a.target.spot.kind === 'coffee' ? 'coffee' : a.target.spot.kind === 'meeting' ? 'meeting' : 'idle';
+    else if (a.home.kind === 'spot' && a.state === 'home') pose = a.home.spot!.kind as PoseName;
+    else if (v) {
+      const busy = v.phase !== 'rest' && a.staff.working;
+      pose = !busy ? 'rest' : tired ? (a.look.v ? 'chin' : 'slump') : v.budget === 'high' ? 'focus' : 'work';
+    }
+    a.pose = pose;
+    const cls = a.node.getAttribute('class')!.replace(/\bp-\w+|\bwalk\b/g, '').trim();
+    a.node.setAttribute('class', `${cls} p-${pose}${a.state === 'walk' ? ' walk' : ''}`.replace(/\s+/g, ' '));
+    const sp = !v ? 1 : (v.phase === 'rest' ? 0.8 : { low: 0.8, normal: 1, high: 1.3 }[v.budget]) * (tired ? 0.6 : 1);
+    a.node.style.setProperty('--sp', String(sp));
+    world.querySelector(`.desk[data-seat="${a.seat}"]`)?.classList.toggle('on', a.seated && (pose === 'work' || pose === 'focus' || pose === 'chin'));
+  }
+
+  const spotPlace = (sp: Spot): Place => ({ kind: 'spot', x: sp.x, y: sp.y, face: sp.face, spot: sp, cell: [sp.x, sp.y] });
+
+  /** p로 걸어가기. 움직임 줄이기 설정이면 바로 옮긴다 */
+  function walkTo(a: Actor, p: Place) {
+    const rm = room!;
+    const startCell = a.seated ? rm.seats[a.seat].access : nearestFree(rm.grid, a.x, a.y);
+    const path = findPath(rm.grid, startCell, p.cell);
+    a.target = p;
+    if (!path || reduced.matches) { arrive(a, p); return; }
+    a.path = [startCell, ...path.slice(1)];
+    if (p.kind === 'seat') a.path.push([p.x, p.y]);
+    if (a.seated) { a.seated = false; }
+    a.state = 'walk';
+    setPose(a); place(a);
+    kick();
+  }
+  function arrive(a: Actor, p: Place) {
+    if (p.kind === 'seat') { sitDown(a, p); return; }
+    a.x = p.x; a.y = p.y; a.face = p.face; a.seated = false; a.path = [];
+    a.state = p === a.home ? 'home' : 'stay';
+    if (a.state === 'stay') {
+      const tired = a.staff.condition < 0.4, k = view?.budget === 'high' ? 0.7 : 1;
+      const base = p.spot?.kind === 'meeting' ? 12000 : p.spot?.kind === 'coffee' ? (tired ? 22000 : 8000) : 6000;
+      a.stayUntil = performance.now() + (base + Math.random() * 5000) * k;
+    }
+    place(a); setPose(a);
+  }
+  function releaseSpot(a: Actor) { for (const [sp, id] of spotTaken) if (id === a.staff.id && a.home.spot !== sp) spotTaken.delete(sp); }
+
+  // 단계·예산에 따라 서서 일할 사람(시험실·스튜디오·연구실)을 정한다
+  function assignHomes(v: OfficeView) {
+    const rm = room!;
+    const want = new Map<string, Spot>();
+    const free = (k: Spot['kind']) => rm.spots.filter((sp) => sp.kind === k);
+    const pickFor = (role: Role, kind: Spot['kind'], frac: number) => {
+      const list = [...actors.values()].filter((a) => a.staff.role === role && a.staff.working && a.staff.condition >= 0.4);
+      const n = Math.min(free(kind).length, Math.ceil(list.length * frac));
+      list.slice(0, n).forEach((a, i) => want.set(a.staff.id, free(kind)[i]));
+    };
+    if (v.phase === 'test') { pickFor('tester', 'test', 1); }
+    if (v.phase === 'design') { pickFor('designer', 'studio', 0.5); pickFor('engineer', 'lab', 0.25); }
+    for (const a of actors.values()) {
+      const sp = want.get(a.staff.id);
+      const old = a.home;
+      const same = sp ? old.spot === sp : old.kind === 'seat';
+      if (!same) a.home = sp ? spotPlace(sp) : { kind: 'seat', x: rm.seats[a.seat].x, y: rm.seats[a.seat].y, face: rm.seats[a.seat].face, seat: a.seat, cell: rm.seats[a.seat].access };
+      if (sp) spotTaken.set(sp, a.staff.id); else for (const [k, id] of spotTaken) if (id === a.staff.id && k.kind !== 'coffee' && k.kind !== 'meeting') spotTaken.delete(k);
+      const changed = !same;
+      if (changed && a.state === 'home') walkTo(a, a.home);
+      else if (changed && a.state === 'walk' && a.target === old) walkTo(a, a.home);
+    }
+  }
+
+  function applyState(v: OfficeView) {
+    for (const a of actors.values()) {
+      const sf = v.staff.find((x) => x.id === a.staff.id);
+      if (sf) a.staff = sf;
+    }
+    assignHomes(v);
+    for (const a of actors.values()) setPose(a);
     if (signEls) {
       const name = v.projectName ?? (v.phase === 'rest' ? '쉬는 중' : '개발 중');
-      const fs = minFs(0.42 * U, 9);
-      const maxChars = Math.max(2, Math.floor(signEls.barW / (fs * 0.95)));
+      const maxChars = Math.max(2, Math.floor(signEls.barW / 10.5));
       signEls.name.textContent = name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name;
-      signEls.name.setAttribute('font-size', f(fs) + '');
-      signEls.bar.setAttribute('width', f(signEls.barW * Math.max(0, Math.min(1, v.progress ?? 0))) + '');
+      signEls.bar.setAttribute('width', String(f(signEls.barW * Math.max(0, Math.min(1, v.progress ?? 0)))));
       const n = v.defects ?? 0;
       signEls.bugs.setAttribute('display', v.phase === 'test' && n > 0 ? 'inline' : 'none');
       signEls.bugn.textContent = String(n);
-      const k = Math.max(1, 13 / (16 * scale));
-      signEls.bugk.setAttribute('transform', `scale(${f(k)})`);
     }
   }
 
+  // ---------- 움직임 ----------
+  function step(now: number) {
+    raf = 0;
+    if (!running()) return;
+    const dt = Math.min(0.1, (now - (last || now)) / 1000);
+    last = now;
+    const v = view!;
+    const speed = 1.0 * (v.budget === 'high' && v.phase !== 'rest' ? 1.25 : v.budget === 'low' ? 0.9 : 1);
+    let walking = 0;
+    for (const a of actors.values()) {
+      if (a.state === 'walk') {
+        walking++;
+        let left = (a.staff.condition < 0.4 ? 0.75 : 1) * speed * dt;
+        while (left > 0 && a.path.length) {
+          const [tx, ty] = a.path[0], dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
+          if (dist > 1e-4) a.face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y');
+          if (dist <= left) { a.x = tx; a.y = ty; a.path.shift(); left -= dist; }
+          else { a.x += (dx / dist) * left; a.y += (dy / dist) * left; left = 0; }
+        }
+        if (!a.path.length) arrive(a, a.target!); else place(a);
+      } else if (a.state === 'stay' && now > a.stayUntil) { releaseSpot(a); walkTo(a, a.home); }
+    }
+    if (now > nextErrand) { nextErrand = now + errandGap(v); if (!reduced.matches) startErrand(v, walking); }
+    if (now > nextTalk) { nextTalk = now + 10000 + Math.random() * 5000; autoTalk(); }
+    // 걷는 사람이 없으면 0.3초마다만 깨어난다
+    if ([...actors.values()].some((x) => x.state === 'walk')) raf = requestAnimationFrame(step);
+    else { idle = window.setTimeout(() => { idle = 0; step(performance.now()); }, 300); }
+  }
+  const errandGap = (v: OfficeView) => (v.phase === 'rest' ? 4500 : v.budget === 'high' ? 11000 : v.budget === 'low' ? 6500 : 8000) * (0.7 + Math.random() * 0.6);
+  function startErrand(v: OfficeView, walking: number) {
+    const rm = room!;
+    const max = actors.size <= 4 ? 1 : actors.size <= 12 ? 2 : 3;
+    const busy = [...actors.values()].filter((a) => a.state !== 'home').length;
+    if (walking >= max || busy >= max + 1) return;
+    const cand = [...actors.values()].filter((a) => a.state === 'home' && a.home.kind === 'seat');
+    if (!cand.length) return;
+    // 지친 사람·쉬는 사람이 더 자주 일어난다
+    const w = cand.map((a) => (a.staff.condition < 0.4 ? 3 : 1) * (v.phase === 'rest' || !a.staff.working ? 2 : 1));
+    let r = Math.random() * w.reduce((s, x) => s + x, 0), a = cand[0];
+    for (let i = 0; i < cand.length; i++) { r -= w[i]; if (r <= 0) { a = cand[i]; break; } }
+    const kinds: Spot['kind'][] = ['coffee', 'coffee'];
+    if (rm.spots.some((s) => s.kind === 'meeting') && v.phase !== 'rest') kinds.push('meeting');
+    if (v.phase === 'test' && a.staff.role === 'engineer') kinds.push('test', 'test');
+    const pick = Math.random() < 0.35 ? 'chat' : kinds[Math.floor(Math.random() * kinds.length)];
+    if (pick === 'chat') {
+      const others = [...actors.values()].filter((o) => o !== a && o.state === 'home' && o.home.kind === 'seat');
+      const o = others[Math.floor(Math.random() * others.length)];
+      if (!o) return;
+      const st = rm.seats[o.seat], [ax, ay] = st.access;
+      const face: Face = Math.abs(st.x - ax) > Math.abs(st.y - ay) ? (st.x > ax ? '+x' : '-x') : (st.y > ay ? '+y' : '-y');
+      walkTo(a, { kind: 'spot', x: ax, y: ay, face, cell: [ax, ay] });
+      return;
+    }
+    const sp = rm.spots.filter((s) => s.kind === pick && !spotTaken.has(s));
+    const s = sp[Math.floor(Math.random() * sp.length)];
+    if (!s) return;
+    spotTaken.set(s, a.staff.id);
+    walkTo(a, spotPlace(s));
+  }
+
+  // ---------- 카메라(전체 보기·가까이 보기·끌기·확대) ----------
+  const maxS = () => Math.max(fitS * 4, 2.4);
+  function applyCam() {
+    const vw = hostW / cam.s, vh = hostH / cam.s;
+    const cx = vw >= vb.w ? vb.x + vb.w / 2 : Math.max(vb.x + vw / 2, Math.min(vb.x + vb.w - vw / 2, cam.cx));
+    const cy = vh >= vb.h ? vb.y + vb.h / 2 : Math.max(vb.y + vh / 2, Math.min(vb.y + vb.h - vh / 2, cam.cy));
+    cam.cx = cx; cam.cy = cy;
+    svg.setAttribute('viewBox', `${f(cx - vw / 2)} ${f(cy - vh / 2)} ${f(vw)} ${f(vh)}`);
+    zoomBar.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.z === cam.mode)));
+  }
+  function setMode(mode: 'fit' | 'near') {
+    cam.mode = mode;
+    if (mode === 'fit') { cam.s = fitS; cam.cx = vb.x + vb.w / 2; cam.cy = vb.y + vb.h / 2; }
+    else {
+      cam.s = Math.min(maxS(), Math.max(fitS * 1.8, 1.25));
+      // 일하는 사람들 쪽으로
+      const all = [...actors.values()], st = all.filter((a) => a.home.kind === 'spot');
+      const busy = all.filter((a) => view && view.phase !== 'rest' && a.staff.working);
+      const list = st.length ? st : busy.length ? busy : all;   // 시험실·스튜디오에 서서 일하는 사람이 있으면 그쪽
+      if (list.length) { const ps = list.map((a) => a.home.kind === 'spot' ? P(a.home.x, a.home.y, 0.9) : P(a.x, a.y, 0.9)); cam.cx = ps.reduce((s, p) => s + p[0], 0) / ps.length; cam.cy = ps.reduce((s, p) => s + p[1], 0) / ps.length; }
+      else { const z = room?.zones.find((q) => q.kind === 'office'); if (z) [cam.cx, cam.cy] = P(z.x + z.w / 2, z.y + z.d / 2); }
+    }
+    applyCam();
+  }
   function measure() {
-    const r = svg.getBoundingClientRect();
+    const r = root.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    scale = Math.min(r.width / vb.w, r.height / vb.h);
-    // 이름표: 화면에서 10px 이상으로 읽힐 때만 늘 표시(등급 1~2), 아니면 누른 사람만
-    const tfs = 0.42 * U;
-    const always = (view?.level ?? 1) <= 2 && tfs * scale >= 10;
-    world.classList.toggle('tags-tap', !always);
-    svg.style.setProperty('--tfs', f(always ? tfs : minFs(tfs, 12)) + 'px');
-    if (view) applyState(view);
+    hostW = r.width; hostH = r.height;
+    const compact = hostW < 480;
+    zoomBar.querySelectorAll('button').forEach((b) => (b.textContent = b.dataset.z === 'fit' ? (compact ? '전체' : '전체 보기') : (compact ? '가까이' : '가까이 보기')));
+    fitS = Math.min(hostW / vb.w, hostH / vb.h);
+    if (cam.mode === 'free') { cam.s = Math.max(fitS, Math.min(maxS(), cam.s)); applyCam(); } else setMode(cam.mode);
   }
   const ro = new ResizeObserver(measure);
   ro.observe(root);
+  zoomBar.addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest('button'); if (b) setMode(b.dataset.z as 'fit' | 'near'); });
+  zoomBar.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-  // ---------- 연출 ----------
-  function pop(id: string | null, label: string, col: string, delay = 0) {
-    const p = id ? placed.get(id) : null;
-    const a = p ? p.anchor : signAnchor();
+  const ptrs = new Map<number, [number, number]>();
+  let dragDist = 0, pinch0 = 0, s0 = 1;
+  const toWorld = (px: number, py: number): [number, number] => { const r = svg.getBoundingClientRect(); return [cam.cx + (px - r.left - r.width / 2) / cam.s, cam.cy + (py - r.top - r.height / 2) / cam.s]; };
+  function zoomAt(px: number, py: number, s: number) {
+    const [wx, wy] = toWorld(px, py);
+    const ns = Math.max(fitS, Math.min(maxS(), s));
+    cam.cx = wx - (wx - cam.cx) * (cam.s / ns); cam.cy = wy - (wy - cam.cy) * (cam.s / ns); cam.s = ns; cam.mode = 'free';
+    applyCam();
+  }
+  svg.addEventListener('pointerdown', (e) => {
+    svg.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 1) dragDist = 0;
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); s0 = cam.s; }
+    svg.classList.add('drag');
+  });
+  svg.addEventListener('pointermove', (e) => {
+    const p = ptrs.get(e.pointerId);
+    if (!p) return;
+    const dx = e.clientX - p[0], dy = e.clientY - p[1];
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 1) { dragDist += Math.abs(dx) + Math.abs(dy); if (dragDist > 6) { cam.cx -= dx / cam.s; cam.cy -= dy / cam.s; cam.mode = 'free'; applyCam(); } }
+    else if (ptrs.size === 2 && pinch0) { dragDist = 99; const [a, b] = [...ptrs.values()]; zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, s0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0); }
+  });
+  const up = (e: PointerEvent) => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (!ptrs.size) { svg.classList.remove('drag'); if (dragDist <= 6 && e.type === 'pointerup') tap(e.clientX, e.clientY); }
+  };
+  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  svg.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+
+  // 사람 누르기 → 이름표(이름·직무·컨디션)
+  function tap(px: number, py: number) {
+    const [wx, wy] = toWorld(px, py);
+    let best: Actor | null = null, bd = (26 / cam.s) ** 2;
+    for (const a of actors.values()) { const [ax, ay] = P(a.x, a.y, a.seated ? 0.47 : 0.9); const d = (ax - wx) ** 2 + (ay - 12 - wy) ** 2; if (d < bd) { bd = d; best = a; } }
+    if (!best) { tagPop.hidden = true; return; }
+    const sf = best.staff, c = Math.round(Math.max(0, Math.min(1, sf.condition)) * 100);
+    tagPop.innerHTML = `<b>${esc(sf.name)}</b> · ${ROLE[sf.role].job}<br>컨디션 ${c}%<i><s style="width:${c}%;background:${c < 40 ? '#b4553f' : '#7fa88a'}"></s></i>`;
+    const r = root.getBoundingClientRect(), [ax, ay] = anchorOf(best);
+    tagPop.style.left = `${(ax - cam.cx) * cam.s + r.width / 2}px`; tagPop.style.top = `${(ay - cam.cy) * cam.s + r.height / 2}px`;
+    tagPop.hidden = false;
+    const shown = tagPop.innerHTML;
+    later(() => { if (tagPop.innerHTML === shown) tagPop.hidden = true; }, 4000);
+  }
+
+  // ---------- 점수·결함·말풍선 ----------
+  const anchorOf = (a: Actor): [number, number] => { const [x, y] = P(a.x, a.y, a.seated ? 0.47 : 0.9); return [x, y - 30]; };
+  const recentPops: { x: number; y: number; w: number; t: number }[] = [];
+  function pop(at: [number, number], label: string, col: string, delay: number) {
     later(() => {
       if (disposed) return;
-      const fs = minFs(0.62 * U, 13);
-      const w = label.length * fs * 0.9;
-      const x = Math.max(w / 2 + 4, Math.min(vb.w - w / 2 - 4, a[0])), y = Math.max(fs + 4, a[1] - 4);
+      const fs = 11 / cam.s, now = performance.now(), w = label.length * fs * 0.9;
+      // 최근 점수 글자와 겹치면 위로 한 줄씩 올린다
+      at = [at[0], at[1]];
+      for (let moved = true, n = 0; moved && n < 6; n++) {
+        moved = false;
+        for (const r of recentPops) if (now - r.t < 2600 && Math.abs(r.x - at[0]) < (r.w + w) / 2 && Math.abs(r.y - at[1]) < fs * 1.5) { at[1] = r.y - fs * 1.5; moved = true; }
+      }
+      recentPops.push({ x: at[0], y: at[1], w, t: now });
+      while (recentPops.length > 30) recentPops.shift();
       const g = document.createElementNS(NS, 'g');
       g.setAttribute('class', 'pop');
-      g.style.transformOrigin = `${x}px ${y}px`;
-      g.innerHTML = `<text x="${f(x)}" y="${f(y)}" text-anchor="middle" fill="${col}" font-size="${f(fs)}" stroke-width="${f(fs / 4)}">${esc(label)}</text>`;
+      g.style.setProperty('--rise', `${f(14 / cam.s)}px`);
+      g.innerHTML = `<text x="${f(at[0])}" y="${f(at[1])}" text-anchor="middle" fill="${col}" font-size="${f(fs)}" stroke-width="${f(fs / 4)}">${esc(label)}</text>`;
       fx.append(g);
-      later(() => g.remove(), 1850);
+      later(() => g.remove(), 2700);
     }, delay);
   }
-  function signAnchor(): [number, number] {
-    const rm = roomFor(view?.level ?? 1), sign = rm.props.find((p) => p.kind === 'sign')!;
-    const [x, y] = P(sign.x + sign.w / 2, 0, (sign.z ?? 0) + (sign.h ?? 0));
-    return [x + vb.ox, y + vb.oy];
-  }
-  function bubble(id: string, text: string) {
-    const p = placed.get(id);
-    if (!p) return;
-    const old = bubbles.findIndex((b) => b.id === id);
+  const signAnchor = (): [number, number] => { const w = room!.walls.find((q) => q.kind === 'sign')!; return P(w.at + w.w / 2, 0, w.z + w.h + 0.2); };
+  function bubble(a: Actor, text: string) {
+    const old = bubbles.findIndex((b) => b.id === a.staff.id);
     if (old >= 0) dropBubble(old);
     if (bubbles.length >= 2) dropBubble(0);
-    const fs = minFs(0.6 * U, 12), h = fs * 2, a = p.anchor;
+    const fs = 11 / cam.s, h = fs * 1.9, [ax, ay] = anchorOf(a);
     const g = document.createElementNS(NS, 'g');
     g.setAttribute('class', 'bub');
     g.innerHTML = `<text font-size="${f(fs)}">${esc(text)}</text>`;
     fxBub.append(g);
-    const w = Math.round(((g.firstChild as SVGTextElement).getComputedTextLength() || text.length * fs) + fs * 1.4);
-    const x = Math.max(4, Math.min(vb.w - 4 - w, a[0] - w / 2)), y = Math.max(4, a[1] - h - fs * 0.6);
-    const tx = Math.max(x + h / 2, Math.min(x + w - h / 2, a[0])), rr = h / 2, tl = fs * 0.4;
-    g.style.transformOrigin = `${tx}px ${y + h + tl}px`;
-    g.innerHTML = `<path stroke-width="${f(Math.max(1.5, 1.6 / scale))}" d="M${f(x + rr)},${f(y)} h${f(w - 2 * rr)} a${f(rr)} ${f(rr)} 0 0 1 0 ${f(h)} H${f(tx + tl)} l${f(-tl)},${f(tl)} l${f(-tl)},${f(-tl)} H${f(x + rr)} a${f(rr)} ${f(rr)} 0 0 1 0 ${f(-h)} z"/><text x="${f(x + w / 2)}" y="${f(y + h / 2 + fs * 0.36)}" text-anchor="middle" font-size="${f(fs)}">${esc(text)}</text>`;
-    const b = { id, g, t: 0 };
+    const w = ((g.firstChild as SVGTextElement).getComputedTextLength() || text.length * fs) + fs * 1.2;
+    const x = ax - w / 2, y = ay - h - fs * 0.5, tl = fs * 0.35, r = fs * 0.35;
+    g.innerHTML = `<path stroke-width="${f(1 / cam.s)}" d="M${f(x + r)},${f(y)} h${f(w - 2 * r)} q${f(r)},0 ${f(r)},${f(r)} v${f(h - 2 * r)} q0,${f(r)} ${f(-r)},${f(r)} H${f(ax + tl)} l${f(-tl)},${f(tl * 1.3)} l${f(-tl)},${f(-tl * 1.3)} H${f(x + r)} q${f(-r)},0 ${f(-r)},${f(-r)} v${f(2 * r - h)} q0,${f(-r)} ${f(r)},${f(-r)} z"/><text x="${f(ax)}" y="${f(y + h / 2 + fs * 0.36)}" text-anchor="middle" font-size="${f(fs)}">${esc(text)}</text>`;
+    const b = { id: a.staff.id, g };
     bubbles.push(b);
-    later(() => { const i = bubbles.indexOf(b); if (i >= 0) dropBubble(i); }, 3000);
+    later(() => { const i = bubbles.indexOf(b); if (i >= 0) dropBubble(i); }, 3500);
   }
-  function dropBubble(i: number) {
-    const [b] = bubbles.splice(i, 1);
-    b.g.classList.add('out');
-    later(() => b.g.remove(), 300);
-  }
-  function moodOf(sf: OfficeStaff): Mood {
+  function dropBubble(i: number) { const [b] = bubbles.splice(i, 1); b.g.classList.add('out'); later(() => b.g.remove(), 400); }
+  function moodOf(a: Actor): Mood {
     const v = view!;
-    if (sf.condition < 0.4 && Math.random() < 0.6) return 'tired';
-    if (v.phase === 'rest' || !sf.working) return 'rest';
+    if (a.staff.condition < 0.4 && Math.random() < 0.6) return 'tired';
+    if (v.phase === 'rest' || !a.staff.working) return 'rest';
     if (v.budget !== 'normal' && Math.random() < 0.3) return v.budget;
     return v.phase;
   }
-  const rnd = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
-  function staffOf(id: string | undefined, prefer?: Role): Placed | undefined {
-    if (id) return placed.get(id);
-    const all = [...placed.values()];
-    return rnd(all.filter((p) => p.staff.role === prefer)) ?? rnd(all);
+  const rnd = <T>(arr: T[]): T | undefined => arr[Math.floor(Math.random() * arr.length)];
+  function autoTalk() {
+    if (!view || bubbles.length >= 2) return;
+    const a = rnd([...actors.values()].filter((x) => !bubbles.some((b) => b.id === x.staff.id)));
+    if (a) bubble(a, pickLine(moodOf(a), a.staff.role));
   }
+  function pingBugs() { const g = signEls?.bugi; if (!g || reduced.matches) return; g.classList.remove('ping'); void g.getBoundingClientRect(); g.classList.add('ping'); }
 
-  function tick() {
-    if (!view || !active || document.hidden || disposed) return;
-    const now = performance.now();
-    if (now < nextAuto) return;
-    nextAuto = now + 6000 + Math.random() * 4000;
-    const free = [...placed.values()].filter((p) => !bubbles.some((b) => b.id === p.staff.id));
-    if (bubbles.length >= 2 || !free.length) return;
-    const p = rnd(free);
-    bubble(p.staff.id, pickLine(moodOf(p.staff), p.staff.role));
-  }
+  // ---------- 실행·정지 ----------
+  const running = () => active && !document.hidden && !disposed && !!view;
+  function kick() { if (running() && !raf) { if (idle) { clearTimeout(idle); idle = 0; } last = 0; raf = requestAnimationFrame(step); } }
   function run() {
-    const on = active && !document.hidden && !disposed;
-    root.classList.toggle('paused', !on);
-    if (on && !timer) { timer = window.setInterval(tick, 500); if (!nextAuto) nextAuto = performance.now() + 2500; }
-    if (!on && timer) { clearInterval(timer); timer = 0; }
+    root.classList.toggle('paused', !running());
+    if (running()) { if (!nextTalk) nextTalk = performance.now() + 5000; kick(); }
+    else { if (raf) cancelAnimationFrame(raf); if (idle) clearTimeout(idle); raf = 0; idle = 0; }
   }
   const onVis = () => run();
   document.addEventListener('visibilitychange', onVis);
-  run();
 
   return {
     update(v) {
       if (disposed) return;
       const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name]).sort(), v.carSvg ?? '']);
+      const lvChanged = !view || view.level !== v.level;
       view = v;
-      if (key !== structKey) { structKey = key; build(v); measure(); }
+      if (key !== structKey) { structKey = key; build(v); if (lvChanged) cam.mode = 'fit'; measure(); }
       applyState(v);
+      run();
     },
     emit(events) {
       if (disposed || !view) return;
-      const scores = new Map<string, { stat: Stat; amount: number }[]>();
+      const per = new Map<string, Map<Stat, number>>();
       for (const e of events) {
-        if (e.kind === 'score') { if (placed.has(e.staffId)) { const a = scores.get(e.staffId) ?? []; a.push({ stat: e.stat, amount: e.amount }); scores.set(e.staffId, a); } }
-        else if (e.kind === 'defectFound') { const p = staffOf(e.staffId, 'tester'); pop(p?.staff.id ?? null, '결함 발견!', '#d43c3c'); pingBugs(); }
-        else if (e.kind === 'defectFixed') { const p = staffOf(e.staffId, 'engineer'); pop(p?.staff.id ?? null, '결함 제거!', '#6a4fd0', 400); pingBugs(); }
-        else { const p = staffOf(e.staffId); if (p) bubble(p.staff.id, e.text ?? pickLine(e.mood ?? moodOf(p.staff), p.staff.role)); }
-      }
-      // 점수: 사람이 많으면(9명 이상) 직원당 하나(가장 큰 항목)로 합친다. 시작 시각을 흩어 겹쳐 읽히지 않게 한다.
-      const many = placed.size > 8, ids = [...scores.keys()].sort(() => Math.random() - 0.5);
-      const gap = Math.min(350, 3000 / Math.max(1, ids.length));
-      ids.forEach((id, i) => {
-        let list = scores.get(id)!;
-        if (many) {
-          const sum = new Map<Stat, number>();
-          for (const s of list) sum.set(s.stat, (sum.get(s.stat) ?? 0) + s.amount);
-          const top = [...sum].sort((a, b) => b[1] - a[1])[0];
-          list = [{ stat: top[0], amount: top[1] }];
+        if (e.kind === 'score') {
+          if (!actors.has(e.staffId)) continue;
+          const m = per.get(e.staffId) ?? new Map<Stat, number>();
+          m.set(e.stat, (m.get(e.stat) ?? 0) + e.amount); per.set(e.staffId, m);
+        } else if (e.kind === 'defectFound' || e.kind === 'defectFixed') {
+          const pref: Role = e.kind === 'defectFound' ? 'tester' : 'engineer';
+          const a = (e.staffId && actors.get(e.staffId)) || rnd([...actors.values()].filter((x) => x.staff.role === pref));
+          pop(a ? anchorOf(a) : signAnchor(), e.kind === 'defectFound' ? '결함 발견' : '결함 수정', e.kind === 'defectFound' ? '#a84e3a' : '#5d5592', e.kind === 'defectFound' ? 0 : 500);
+          pingBugs();
+        } else {
+          const a = (e.staffId && actors.get(e.staffId)) || rnd([...actors.values()]);
+          if (a) bubble(a, e.text ?? pickLine(e.mood ?? moodOf(a), a.staff.role));
         }
-        const busy = bubbles.some((b) => b.id === id) ? 3200 : 0;
-        list.forEach((s, j) => pop(id, `${s.stat} ${s.amount >= 0 ? '+' : ''}${s.amount}`, STAT_COL[s.stat], busy + i * gap + j * 900));
-      });
+      }
+      // 점수: 큰 순서로 5명까지 각자 위에, 나머지는 직무 구역별 합계로 한 번씩
+      const rows = [...per].map(([id, m]) => { const top1 = [...m].sort((x, y) => y[1] - x[1])[0]; return { a: actors.get(id)!, stat: top1[0], amount: [...m.values()].reduce((s, x) => s + x, 0) }; })
+        .sort((x, y) => y.amount - x.amount);
+      const solo = rows.length <= 6 ? rows : rows.slice(0, 5), rest = rows.length <= 6 ? [] : rows.slice(5);
+      const groups = new Map<Role, typeof rows>();
+      for (const r of rest) groups.set(r.a.staff.role, [...(groups.get(r.a.staff.role) ?? []), r]);
+      const shows: { at: [number, number]; label: string; col: string }[] = solo.map((r) => ({ at: anchorOf(r.a), label: `${r.stat} +${r.amount}`, col: STAT_COL[r.stat] }));
+      for (const [role, g] of groups) {
+        const ps = g.map((r) => anchorOf(r.a)), sum = new Map<Stat, number>();
+        for (const r of g) sum.set(r.stat, (sum.get(r.stat) ?? 0) + r.amount);
+        const [st, n] = [...sum].sort((x, y) => y[1] - x[1])[0];
+        shows.push({ at: [ps.reduce((s, p) => s + p[0], 0) / ps.length, Math.min(...ps.map((p) => p[1]))], label: `${ROLE[role].job} ${g.length}명 ${st} +${n}`, col: STAT_COL[st] });
+      }
+      shows.sort(() => Math.random() - 0.5).forEach((s, i) => pop(s.at, s.label, s.col, i * 420));
     },
     setActive(on) { active = on; run(); },
     dispose() {
       disposed = true; run();
       for (const t of timeouts) clearTimeout(t);
-      timeouts.clear();
-      ro.disconnect();
+      timeouts.clear(); ro.disconnect();
       document.removeEventListener('visibilitychange', onVis);
       root.remove();
     },
   };
-
-  function pingBugs() {
-    const g = signEls?.bugi;
-    if (!g || reduced.matches) return;
-    g.classList.remove('ping'); void g.getBoundingClientRect(); g.classList.add('ping');
-  }
 }
