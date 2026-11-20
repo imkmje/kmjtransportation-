@@ -608,7 +608,7 @@ export function startApp(): void {
     const card2 = ending ? '' : `<div class="card price-card"><p class="lbl">판매 가격</p>${priceBlock('gprice', { price, body: g.body, up, sales: `약 ${num(gn)}<span>대</span>`, profit: money(gpr, true), pcls: gpr >= 0 ? 'pos' : 'neg', gen: g.id })}
       <p class="hint px-note">이번 달 어림입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>
       <div class="row" id="gprice-apply" data-live style="margin-top:8px"><button class="btn ink" data-act="setPrice" data-id="${g.id}" ${price === e.price ? 'disabled' : ''}>가격 바꾸기</button><span class="hint">지금 가격 ${num(e.price)}만원 · 다음 결산부터 반영</span></div>
-      <hr><p class="lbl">광고${ib('term:광고')}(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="setMk" data-id="${g.id}" data-v="${i}" aria-pressed="${g.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div></div>`;
+      <hr><p class="lbl">광고${ib('term:광고')} · 매달 광고비가 듭니다</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="setMk" data-id="${g.id}" data-v="${i}" aria-pressed="${g.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div></div>`;
     const np = Q.nameplateOf(s, g.id)!, fl = elig(Q.faceliftEligibility(s, g.id)), fc = elig(Q.fullChangeEligibility(s, np.id)), rf = Q.retrofitInfo(s, g.id);
     const blk = Q.planEntries(s).blockedBy, why = (k: string, e: { ok: boolean; reason: string | null }) => e.ok || e.reason === blk ? '' : `<p class="note why" data-for="${k === '페이스리프트' ? 'lift' : 'full'}">${k}: ${esc(e.reason ?? '')}</p>`; // 규제로 막힌 이유는 아래 한 번만
     const rfNames = rf.options.map((o) => esc(optionById(o).name)).join('·');
@@ -943,15 +943,15 @@ export function startApp(): void {
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
     const card1 = `<div class="card price-card"><p class="lbl">판매 가격${fl ? '(다시 정하기)' : ''}</p>${priceBlock('lprice', { price: L.price, body: p.body, up,
       sales: fc ? `${fc.min === fc.max ? num(fc.min) : `${num(fc.min)}~${num(fc.max)}`}<span>대</span>` : fln !== null ? `약 ${num(fln)}<span>대</span>` : '—', profit: pr ? [...new Set(pr.map((x) => `<span class="nw">${money(x, true).replace(/(만원|억)$/, '<span>$1</span>')}</span>`))].join('~<wbr>') : '—', pcls: !pr ? '' : pr.every((x) => x >= 0) ? 'pos' : pr.every((x) => x < 0) ? 'neg' : '' })}
-      ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b> 팔릴 것으로 보입니다(공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
-      ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고(매달 광고비가 듭니다)</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
+      ${fc ? `<p class="hint sales-fc px-note" id="lprice-fc" data-live>출시 ${config.forecast.months}개월째 기준 어림: 한 달에 약 <b>${num(fc.min)}~${num(fc.max)}대</b>(±${Math.round(config.forecast.spread * 100)}%, 공장 한도 ${num(Q.capacityOf(s))}대). 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>` : `<p class="hint px-note">가격을 낮추면 판매량은 늘지만 대당 이익이 줄어듭니다. 월 이익은 광고비를 빼고 직원 월급·유지비는 넣지 않은 값입니다.</p>`}
+      ${fl ? '' : `<p class="lbl" style="margin-top:10px">광고${ib('term:광고')} · 매달 광고비가 듭니다</p><div class="seg">${MARKETING.map((m, i) => `<button data-act="lset" data-k="marketing" data-v="${i}" aria-pressed="${L.marketing === i}">${m}<small>${i ? money(config.awareness.marketingCost[i]) : '0원'}</small></button>`).join('')}</div>`}</div>`;
     const card2 = `<div class="card"><p class="lbl">색상${fl ? '(그대로 두거나 바꾸기)' : ''}</p>${paints('lset', L.color)}
       <p class="lbl" style="margin-top:14px">휠</p><div class="opts">${WHEELS.map((w, i) => `<button class="opt" data-act="lset" data-k="wheels" data-v="${i}" aria-pressed="${L.wheels === i}" style="min-height:0"><svg viewBox="0 0 80 42" aria-hidden="true"><circle cx="40" cy="21" r="${13 + i * 3}" fill="none" stroke="currentColor" stroke-width="${5 - i}"/><circle cx="40" cy="21" r="2.5" fill="currentColor"/></svg><b>${w.name}</b><small>${w.sub} · 겉모습만</small></button>`).join('')}</div></div>`;
     const critics = config.critics.list;
     const card3 = ex ? `<div class="card"><p class="lbl">예상 평론</p>
       ${critics.map((c, i) => `<div class="stat"><span>${c.name}${ib(`critic:${c.id}`, c.name)}</span><div class="track"><u style="width:${ex.scores[i] * 10}%"></u></div><b>${score(ex.scores[i])}</b></div>`).join('')}
       <div class="kpis" style="margin-top:10px">${kpi('예상 평점', score(ex.avg))}</div>
-      <p class="note">예상 월 판매의 적은 쪽은 인지도가 낮은 출시 직후, 많은 쪽은 몇 달 뒤 인지도가 오른 뒤의 예상입니다. 실제 평론 점수는 예상과 0.7점 안팎 차이가 날 수 있습니다.${prev ? ' 풀체인지는 전작과 비교해 평론이 조금 오르내립니다.' : ''}</p></div>` : '';
+      <p class="note">예상 월 판매는 인지도가 어느 정도 오른 출시 ${config.forecast.months}개월째를 기준으로 한 어림이며 ±${Math.round(config.forecast.spread * 100)}% 범위로 보입니다. 출시 직후는 이보다 적게 팔립니다. 실제 평론 점수는 예상과 0.7점 안팎 차이가 날 수 있습니다.${prev ? ' 풀체인지는 전작과 비교해 평론이 조금 오르내립니다.' : ''}</p></div>` : '';
     const sum = fl ? `새 얼굴로 바꿔 내놓습니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 결함 약 ${num(p.defectEst)}개. 평론가는 다시 평가하지 않고 신문에 기사가 납니다.`
       : `이 조건으로 출시합니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 광고 ${MARKETING[L.marketing]} · 예상 평점 ${ex ? score(ex.avg) : '—'} · 월 ${fc ? `${num(fc.min)}~${num(fc.max)}대` : '—'} · 결함 약 ${num(p.defectEst)}개`;
     const card4 = `<div class="card launch-go"><p class="lbl">출시 요약</p><p class="hint launch-sum">${sum}</p>
@@ -1379,7 +1379,7 @@ export function startApp(): void {
 
   // ---------- 조작 ----------
   /** 명령이 성공했을 때의 소리(누른 버튼의 data-act 기준). 실패는 err()가 error 소리 */
-  const ACT_SFX: Record<string, Sfx> = { startDev: 'devStart', startLift: 'devStart', doLaunch: 'launch', hire: 'hire', fire: 'fire', train: 'train', upgradeHQ: 'hqUpgrade', expandFactory: 'cashOut', borrow: 'cashOut', retrofit: 'cashOut' };
+  const ACT_SFX: Record<string, Sfx> = { startDev: 'devStart', startLift: 'devStart', doLaunch: 'launch', hire: 'hire', fire: 'fire', train: 'train', upgradeHQ: 'hqUpgrade', expandFactory: 'cashOut', borrow: 'cashIn', repay: 'cashOut', retrofit: 'cashOut' };
   let curAct = '';
   function run(r: { ok: true } | { ok: false; reason: string }): boolean { if (!r.ok) err(r.reason); else if (ACT_SFX[curAct]) sfx(ACT_SFX[curAct]); return r.ok; }
   async function act(a: string, el: HTMLElement): Promise<void> {

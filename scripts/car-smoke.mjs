@@ -137,6 +137,7 @@ check('설계 중에는 출시 준비 버튼이 막힘', await page.locator('[da
 await untilReady();
 check('시험 2주 뒤 출시 준비 버튼이 열림', !(await page.locator('[data-act="toLaunch"]').isDisabled()));
 check('시험 단계: 결함이 많으면 "아직 많습니다" 경고', (await page.locator('#panel .defect-adv[data-level="many"]').count()) === 1 && (await page.locator('#panel .defect-adv').innerText()).includes('아직 많습니다'), `결함 약 ${await G(() => window.__car.game.state.projects[0].defectEst)}개`);
+check('시험 단계: 남은 기간 어림(결함 5개 이하까지·0개까지 주 수, 출시 기준 ⓘ)', /결함 5개 이하까지 약 \d+주 · 0개까지 약 \d+주/.test(await page.locator('#panel .eta').innerText()) && (await page.locator('#panel .eta [data-info="term:출시 기준 결함"]').count()) === 1, await page.locator('#panel .eta').innerText());
 await page.waitForTimeout(400);
 await shot('dev-test');
 
@@ -145,7 +146,7 @@ await act('toLaunch');
 check('출시 화면: 결정 중 멈춤, 예상 평점·예상 월 판매', (await G(() => window.__car.held())) && (await page.locator('#panel').innerText()).includes('예상 월 판매'));
 const ltop = await page.locator('#panel .card').first().innerText();
 check('출시 화면 맨 위: 남은 결함·경고·예상 리콜 위험', ltop.includes('남은 결함') && ltop.includes('아직 많습니다') && /연 \d+\s*%/.test(ltop.replace(/\n/g, ' ')), ltop.replace(/\n/g, ' ').slice(0, 80));
-check('예상 월 판매를 쉬운 말로', /한 달에 약 \d+~\d+대 팔릴 것으로 보입니다\(공장 한도 300대\)/.test(await page.locator('#panel .sales-fc').innerText()));
+check('예상 월 판매: 출시 3개월째 기준 어림임을 표시', /출시 3개월째 기준 어림: 한 달에 약 \d+~\d+대\(±30%, 공장 한도 300대\)/.test(await page.locator('#panel .sales-fc').innerText()));
 check('출시 화면: 화면에 붙어 있는(sticky·fixed) 버튼 줄 없음', await G(() => [...document.querySelectorAll('#panel *')].every((el) => !['sticky', 'fixed'].includes(getComputedStyle(el).position))));
 check('출시 화면: [출시하기]가 패널 내용 마지막 버튼 줄에 있음(바로 위 요약)', await G(() => { const rows = document.querySelectorAll('#panel .row'), last = rows[rows.length - 1], card = document.querySelector('#panel > .card:last-child'); return !!last && card?.contains(last) && last.lastElementChild?.dataset.act === 'doLaunch' && last.firstElementChild?.dataset.act === 'devHome' && card.querySelector('.launch-sum')?.textContent.includes('이 조건으로 출시합니다'); }));
 await page.locator('#panel [data-act="devHome"]').click();
@@ -159,12 +160,14 @@ await shot('launch-ask');
 await page.click('#ask-no');
 check('확인 창 "시험 더 하기": 출시하지 않고 개발 화면으로', (await G(() => window.__car.screen)) === 'dev' && (await G(() => window.__car.game.state.nameplates.length)) === 0);
 await act('toLaunch');
+const basePx = await G(() => window.__car.launch.price); // 출시 화면 기본값 = 시장 기준가(10만원 단위)
 await page.$eval('#lprice', (el) => { el.value = '1300'; el.dispatchEvent(new Event('input', { bubbles: true })); });
 check('가격 슬라이더가 가격 표시를 바꿈', (await page.locator('#lprice-out').innerText()).includes('1,300'));
 await act('lset', '[data-k="color"][data-v="#1f4fd1"]');
 await act('lset', '[data-k="wheels"][data-v="2"]');
 await page.click('#tabs button[data-tab="garage"]'); await page.click('#tabs button[data-tab="company"]'); await page.click('#tabs button[data-tab="dev"]'); await act('toLaunch');
 check('출시 준비 값(가격·색·휠)이 다른 탭에 다녀와도 유지', (await page.locator('#lprice-out').innerText()).includes('1,300') && (await G(() => { const l = window.__car.launch; return l?.color === '#1f4fd1' && l.wheels === 2; })));
+await page.$eval('#lprice', (el, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, basePx); // 판매 점검은 기준가로 낸다
 check('색·휠 선택이 무대 글자에 반영', (await page.locator('#ov .spec').innerText()).includes('코발트') && (await page.locator('#ov .spec').innerText()).includes('큰 휠'));
 await page.waitForTimeout(900);
 await shot('launch');
@@ -174,7 +177,7 @@ await page.waitForSelector('#sheet:not([hidden])');
 await page.waitForTimeout(4200);
 const rv = await page.locator('#sheet').innerText();
 check('리뷰: 평론가 4명·평균·신문', (await page.locator('#sheet .critic').count()) === 4 && (await page.locator('#sheet .critic.wait').count()) === 0 && rv.includes('모터 데일리') && rv.includes('평균'));
-check('출시: 판매 중 차 1대, 가격 1300·코발트·큰 휠', await G(() => { const g = window.__car.game.state.nameplates[0]?.generations[0]; const e = g?.editions[0]; return g?.status === 'onSale' && e.price === 1300 && e.color === '#1f4fd1' && e.wheels === 2; }));
+check('출시: 판매 중 차 1대, 가격 기준가·코발트·큰 휠', await G((bp) => { const g = window.__car.game.state.nameplates[0]?.generations[0]; const e = g?.editions[0]; return g?.status === 'onSale' && e.price === bp && e.color === '#1f4fd1' && e.wheels === 2; }, basePx), `기준가 ${basePx}만원`);
 await shot('review');
 await act('closeReview');
 await page.waitForTimeout(300);
@@ -182,11 +185,10 @@ check('차고: 이름 아래 줄과 카드에 출시 연월', /^\d{4}년 \d+월 
 check('출시 순간 3D 사진이 저장 데이터에 들어감', await G(() => Object.values(window.__car.ui.photos).some((x) => x.startsWith('data:image/jpeg'))));
 
 // ---- 판매 ----
-await tick(16);
-// 0.4.2 시간 척도에서 첫 차는 인지도가 낮아 첫 몇 달 판매가 0~몇 대일 수 있다(시드는 무작위). 4달 안에 없으면 4달 더 본다
-if (!(await G(() => window.__car.game.state.nameplates[0].generations[0].totalSold))) await tick(16);
+await tick(12);
 const gen = await G(() => window.__car.game.state.nameplates[0].generations[0]);
-check('몇 달 진행: 판매 발생(8개월 안)', gen.totalSold > 0 && gen.sales.length >= 3, `누적 ${gen.totalSold}대, 달별 ${gen.sales.join(',')}`);
+check('기준가로 출시: 석 달 안에 판매 발생', gen.totalSold > 0 && gen.sales.length >= 2, `누적 ${gen.totalSold}대, 달별 ${gen.sales.join(',')}`);
+await tick(4);
 const gtext = await page.locator('#panel').innerText();
 check('차고 카드: 판매·누적·대당 이익·평론·수명·조언·단종 버튼', ['지난달 판매', '누적 판매', '대당 이익', '평론 평균', '수명'].every((t) => gtext.includes(t)) && (await page.locator('#panel .advice').count()) === 1 && (await page.locator('[data-act="discontinue"]').count()) === 1);
 check('차고: 출시 직후 [페이스리프트][풀체인지]는 흐리게 + 이유·남은 개월', (await page.locator('[data-act="goLift"]').isDisabled()) && (await page.locator('[data-act="goFull"]').isDisabled()) && /페이스리프트: 출시 후 18개월이 지나야 합니다\. 앞으로 \d+개월/.test(gtext) && /풀체인지: 출시 후 36개월이 지나야 합니다\. 앞으로 \d+개월/.test(gtext));
@@ -509,10 +511,9 @@ await page.click('#tabs button[data-tab="company"]');
 check('회사 탭: 안쪽 탭 5개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 5);
 await act('cotab', '[data-v="staff"]');
 const st0 = await page.locator('#panel').innerText();
-check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·하는 일), 정원 4/4', (await page.locator('#panel .srow:not(.head)').count()) === 4 && st0.includes('4/4') && ['디자이너', '엔지니어', '테스터', '컨디션', '쉬는 중'].every((t) => st0.includes(t)));
-check('정원이 찼으면 공고 대신 이유 + 본사 탭으로 가는 버튼', (await page.locator('.hire-full').innerText()).includes('정원(4명)이 찼습니다') && (await page.locator('.hire-card [data-act="cotab"][data-v="hq"]').count()) === 1 && (await page.locator('[data-act="postJob"]').count()) === 0);
-check('정원이 찼으면 공고 명령도 거부 이유', await S3(() => { const r = window.__car.game.command({ type: 'postJob', role: 'designer', tier: 1 }); return !r.ok && r.reason.includes('정원'); }));
-await page.locator('.hire-card [data-act="cotab"][data-v="hq"]').click();
+check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·하는 일), 정원 4/6(0.5.0 본사 1등급 정원 6)', (await page.locator('#panel .srow:not(.head)').count()) === 4 && st0.includes('4/6') && ['디자이너', '엔지니어', '테스터', '컨디션', '쉬는 중'].every((t) => st0.includes(t)));
+check('정원이 남았으면 채용 공고 3단계', (await page.locator('.hire-card [data-act="postJob"]').count()) === 3 && (await page.locator('.hire-full').count()) === 0);
+await act('cotab', '[data-v="hq"]');
 const hq0 = await page.locator('#panel').innerText();
 check('본사 탭: 5등급 단계·지금 등급(정원·개발 차 수·옵션 칸·유지비)·다음 등급 비교', (await page.locator('.lv5 li').count()) === 5 && (await page.locator('.lv5 li.on').innerText()).includes('창고 공장') && ['정원', '동시에 개발할 수 있는 차', '옵션 칸', '월 유지비', '승급 비용', '소형 사옥'].every((t) => hq0.includes(t)));
 await G(() => { const s = window.__car.game.state; s.cash = 5000000; s.reputation = 40; window.__car.render(); }); // 점검용: 현금 500억·평판 40
@@ -541,6 +542,7 @@ await act('hireRole', '[data-v="engineer"]'); await act('postJob', '[data-v="1"]
 for (let i = 0; i < 2; i++) await page.locator('.cand [data-act="hire"]').first().click();
 await page.locator('.cand [data-act="hire"]').first().click();
 check('정원 12명이 차면 채용 거부 이유(정원)', (await staffN()) === 12 && (await page.locator('#toasts').innerText()).includes('정원(12명)이 찼습니다') && (await page.locator('.hire-full').count()) === 1);
+check('정원이 찼으면 본사 탭으로 가는 버튼, 공고 명령도 거부 이유', (await page.locator('.hire-card [data-act="cotab"][data-v="hq"]').count()) === 1 && await S3(() => { const r = window.__car.game.command({ type: 'postJob', role: 'designer', tier: 1 }); return !r.ok && r.reason.includes('정원'); }));
 const last = await S3(() => window.__car.game.state.staff.at(-1).id);
 await page.locator(`.srow[data-id="${last}"]`).click();
 await act('fire');
@@ -927,10 +929,10 @@ await act('snd', '[data-v="weekTick"]'); await page.locator('#sheet [data-act="s
 const snd = await G(() => JSON.parse(localStorage.getItem('car-company-sound') ?? 'null'));
 check('소리 설정: 배경 음악 20%·주 넘김 소리 켬이 기기 저장소에 저장', snd?.music === 0.2 && snd?.weekTick === true && (await G(() => window.__car.sound.weekTick)) === true, JSON.stringify(snd));
 await act('snd', '[data-v="weekTick"]'); await act('closeSheet');
-const mb = await page.locator('#mutebtn').boundingBox();
-await page.click('#mutebtn');
+const mb = await page.locator('#mutebtn').boundingBox(); // 상단바가 시간 진행으로 다시 그려져 Playwright의 '안정' 대기가 드물게 끝나지 않아 직접 클릭
+await G(() => document.getElementById('mutebtn').click());
 check('상단바 음소거 버튼: 44px 이상, 누르면 음소거·저장, 다시 누르면 해제', mb.width >= 44 && mb.height >= 44 && (await page.locator('#mutebtn').getAttribute('aria-pressed')) === 'true' && (await G(() => JSON.parse(localStorage.getItem('car-company-sound')).muted)) === true
-  && await (async () => { await page.click('#mutebtn'); return (await G(() => window.__car.sound.muted)) === false; })());
+  && await (async () => { await G(() => document.getElementById('mutebtn').click()); return (await G(() => window.__car.sound.muted)) === false; })());
 await G(() => { const t = window.__car.toast; t('중요한 경고', 'bad', '현금 경고', 12000); for (let i = 0; i < 4; i++) t(`보통 알림 ${i}`); });
 await page.waitForTimeout(500);
 const tv = await G(() => [...document.querySelectorAll('#toasts .toast')].filter((x) => getComputedStyle(x).display !== 'none' && !x.classList.contains('out')).map((x) => x.innerText));
