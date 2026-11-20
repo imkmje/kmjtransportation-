@@ -266,6 +266,7 @@ export class Game {
         const H = config.staff.hire, cost = H.postCost[cmd.tier - 1];
         if (!(config.staff.roles as readonly string[]).includes(cmd.role)) return fail('없는 직무입니다.');
         if (cost === undefined || !Number.isInteger(cmd.tier)) return fail('공고 등급은 1~3 중에서 고르세요.');
+        if (cmd.tier === 3 && s.reputation < H.tier3Rep) return fail(`3등급 공고는 평판 ${H.tier3Rep} 이상이어야 합니다.`);
         if (s.staff.length >= staffCap(s)) return fail(`정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.`);
         if (s.candidates.length) return fail('이미 공고한 후보가 있습니다. 먼저 채용하거나 돌려보내세요.');
         if (s.cash < cost) return fail('현금이 모자랍니다.');

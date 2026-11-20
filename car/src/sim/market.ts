@@ -89,7 +89,7 @@ export function initRivals(rng: Rng, seed: number): RivalState[] {
   return [...RIVALS].sort((a, b) => (a.id < b.id ? -1 : 1)).map((r, ri) => {
     const cells: Record<string, number> = {}, models: Record<string, RivalModel> = {};
     for (const body of Object.keys(r.cells).sort()) {
-      const base = config.rivals.base + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
+      const base = rivalBase(0) + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
       models[body] = firstRivalModel(seed, ri, body, base);
     }
     const st = { id: r.id, name: r.name, cells, models };
@@ -97,6 +97,11 @@ export function initRivals(rng: Rng, seed: number): RivalState[] {
     return st;
   });
 }
+/** 경쟁사의 성장(3단계 설계 결정 b): 경쟁 차 기본 A = 1970년 base에서 해마다 growth씩 올라 max에서 멈춘다. 새 모델을 낼 때의 달로 정한다 */
+export const rivalBase = (month: number): number => {
+  const r = config.rivals;
+  return Math.min(r.baseMax, r.base + (r.baseGrowth * month) / config.time.monthsPerYear);
+};
 const bodyKey = (body: string): number => [...body].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0), 7) >>> 0;
 const rivalCycle = (seed: number, ri: number, body: string, n: number): number =>
   config.rivals.cycleMin + Math.floor(hash01(seed, 1, ri, bodyKey(body), n) * (config.rivals.cycleMax - config.rivals.cycleMin + 1));
@@ -120,7 +125,7 @@ export function updateRivals(rivals: RivalState[], seed: number, month: number):
       const md = st.models[body];
       if (month - md.start >= md.cycle) {
         const n = md.n + 1;
-        st.models[body] = { n, start: month, cycle: rivalCycle(seed, ri, body, n), base: r.base + (def?.cells[body] ?? 0) + (hash01(seed, 3, ri, bodyKey(body), n) * 2 - 1) * r.noise };
+        st.models[body] = { n, start: month, cycle: rivalCycle(seed, ri, body, n), base: rivalBase(month) + (def?.cells[body] ?? 0) + (hash01(seed, 3, ri, bodyKey(body), n) * 2 - 1) * r.noise };
       }
       st.cells[body] = rivalA(st.models[body], month);
     }

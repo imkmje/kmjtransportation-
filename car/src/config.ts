@@ -17,6 +17,7 @@ export const config = {
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
+    teamBase: 4, teamExp: 0.4, // 팀 규모 체감: 산출 × (n / 4)^(−0.4), 4명 이하는 1(3단계 설계 결정 a, k 허용 0~0.6)
     maxOptions: 2, teams: 1, // 본사 1등급 값(화면 호환용). 실제 옵션 슬롯·개발팀 수는 hq.levels를 쓴다
   },
   critics: { // 7.2
@@ -78,11 +79,12 @@ export const config = {
       postCost: [500, 2000, 10000], // 공고 1~3등급 비용
       abilityMin: [15, 30, 50], abilityMax: [35, 55, 80], // 등급별 후보 능력 범위
       repBonusDiv: 20, repBonusMax: 5, // 평판 보너스: 능력 + 평판/20(최대 +5)
-      potentialMin: 10, potentialMax: 35, // 잠재력 = 능력 + 10~35(최대 100)
+      potentialMin: 5, potentialMax: 20, // 잠재력 = 능력 + 5~20(최대 100, 설계 결정 c)
+      tier3Rep: 40, // 3등급 공고는 평판 40 이상
       candidates: 3, expireWeeks: 4,
     },
     severanceMonths: 2, // 퇴직금 = 월급 2개월분
-    train: { perAbility: 20, min: 300, gainMin: 3, gainMax: 6, weeks: 4, perYear: 2 }, // 교육비 = 능력 × 20만원(최소 300만), 능력 +3~6, 4주, 연 2회
+    train: { perAbility: 40, min: 500, gainMin: 1, gainMax: 3, weeks: 4, perYear: 1 }, // 교육비 = 능력 × 40만원(최소 500만), 능력 +1~3, 4주, 연 1회(설계 결정 c)
     exp: { min: 1, max: 2 }, // 프로젝트를 마치면(출시) 참여 직원 능력 +1~2(잠재력 상한)
     condition: { // 컨디션 0~1
       perWeek: { low: 0.005, normal: 0.01, high: 0.025 }, // 프로젝트에서 일한 주마다 감소(예산 등급별)
@@ -96,7 +98,8 @@ export const config = {
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },
   rivals: { // 7.4·8.4: 경쟁 차 A = 기본값 + 강약 ± 0.1. 4~7년 주기로 새 모델, 주기 중간에 페이스리프트(2단계 단순 규칙, 5단계에서 완성)
-    base: 0.45, noise: 0.1, // 3단계 조정 1 → 0.45(시장 규모 배수와 함께, 위 market.scale 설명)
+    base: 0.45, noise: 0.1, // 1970년 경쟁 차 기본 A. 3단계 조정 1 → 0.45(시장 규모 배수와 함께, 위 market.scale 설명)
+    baseGrowth: 0.03, baseMax: 0.9, // 경쟁사의 성장(설계 결정 b): 해마다 +0.03, 최대 0.9(새 모델을 낼 때 반영)
     cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로

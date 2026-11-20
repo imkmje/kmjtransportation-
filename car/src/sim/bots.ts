@@ -77,7 +77,7 @@ function monthly(g: Game, o: SteadyOptions): void {
   }
   // 채용 공고: 정원이 남으면 모자란 직무로(후보는 다음 주에 hireBest가 고른다)
   if (!s.candidates.length && s.staff.length < staffCap(s)) {
-    const tier = s.cash >= B.tier3Cash ? 3 : s.cash >= B.tier2Cash ? 2 : 1, cost = config.staff.hire.postCost[tier - 1];
+    const tier = s.cash >= B.tier3Cash && s.reputation >= config.staff.hire.tier3Rep ? 3 : s.cash >= B.tier2Cash ? 2 : 1, cost = config.staff.hire.postCost[tier - 1];
     if (s.cash >= cost + reserve) g.command({ type: 'postJob', role: neededRole(s), tier });
   }
   // 교육: 쉬고 있는 직원부터(ID 순), 여유 현금이 있을 때

@@ -229,7 +229,7 @@ export function hiringInfo(s: CarState) {
   const H = config.staff.hire, full = s.staff.length >= staffCap(s);
   return {
     staffCount: s.staff.length, capacity: staffCap(s), full,
-    tiers: H.postCost.map((cost, i) => ({ tier: (i + 1) as 1 | 2 | 3, cost, abilityMin: H.abilityMin[i], abilityMax: H.abilityMax[i] })),
+    tiers: H.postCost.map((cost, i) => ({ tier: (i + 1) as 1 | 2 | 3, cost, abilityMin: H.abilityMin[i], abilityMax: H.abilityMax[i], minRep: i === 2 ? H.tier3Rep : 0 })), // minRep: 그 등급 공고에 필요한 평판
     canPost: !full && !s.candidates.length, reason: full ? `정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.` : s.candidates.length ? '이미 공고한 후보가 있습니다.' : null,
     candidates: s.candidates.map((c) => ({ ...c, weeksLeft: c.expiresWeek - s.week })),
   };

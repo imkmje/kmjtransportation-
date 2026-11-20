@@ -46,13 +46,15 @@ export function weeklyDevCost(state: CarState, p: Project): number {
   return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
 }
 
+/** 팀 규모 체감(3단계 설계 결정): n명이면 산출에 (n / 4)^(−k)를 곱한다(4명 이하는 1) */
+export const teamSizeMult = (n: number): number => (n <= config.dev.teamBase ? 1 : (n / config.dev.teamBase) ** -config.dev.teamExp);
 /** 설계 한 주의 직원별 능력치 점수(팀 순서). rand(): 직원마다 한 번 부르는 난수(0.85~1.15, 자리를 비운 직원도 불러 순서를 지킨다).
  *  컨디션은 단계 배수(9.1), week를 주면 교육·휴식 중인 직원은 0 */
 export function designWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number, week?: number): Stats[] {
-  const d = config.dev;
+  const d = config.dev, size = teamSizeMult(team.length);
   return team.map((s) => {
     const r = rand(), away = week !== undefined && isAway(s, week);
-    const out = away ? 0 : (s.ability / d.abilityDiv) * d.budgets[spec.budget].out * conditionMult(s.condition) * r * d.scale;
+    const out = away ? 0 : (s.ability / d.abilityDiv) * d.budgets[spec.budget].out * conditionMult(s.condition) * r * d.scale * size;
     const split = d.roleSplit[s.role], w = zeroStats();
     for (const k of STATS) w[k] = out * (split[k] ?? 0) * (d.dirBase + spec.direction[k] / d.dirDiv);
     return w;
