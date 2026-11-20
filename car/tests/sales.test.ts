@@ -52,8 +52,8 @@ describe('판매 공식(7.3)', () => {
     const { g, gen } = launched(2, 1300);
     toMonthEnd(g); toMonthEnd(g);
     const l = g.state.ledger.at(-1)!, n = gen.sales.at(-1)!;
-    expect(l.sold).toBe(n); expect(l.revenue).toBe(n * 1300); expect(l.cogs).toBeCloseTo(n * 770, 6);
-    expect(generationUnitProfit(gen)).toBeCloseTo(530, 9);
+    expect(l.sold).toBe(n); expect(l.revenue).toBe(n * 1300); expect(l.cogs).toBeCloseTo(n * 984 * 1.1, 6);
+    expect(generationUnitProfit(gen)).toBeCloseTo(1300 - 984 * 1.1, 9);
     expect(l.marketing).toBe(config.awareness.marketingCost[1]);
   });
   it('수명 막대는 출시 직후 1, 시간이 지나면 줄어든다', () => {

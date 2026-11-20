@@ -1,7 +1,7 @@
 /** 카 컴퍼니의 모든 튜닝 수치(설계서 docs/car/design.md의 초기 후보값, 봇 측정으로 조정). 금액 단위는 만원 */
 export const config = {
   time: { startYear: 1970, weeksPerMonth: 4, monthsPerYear: 12 }, // 4장: 1 tick = 1주, 4주 = 1개월, 48주 = 1년
-  start: { cash: 150000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35 }, // 9.4: 현금 15억, 평판 10, 직원 4명(능력 25~35)
+  start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
   reputation: { min: 0, max: 100 },
   grade: { base: 100, growth: 0.035, max: 10, mid: 5 }, // 5.1: 기준(연도) = 100 × 1.035^(연도 − 1970), 표시 = 5 × 원점수 / 기준
   powertrain: { base: 40, growth: 1.22 }, // 5.3: 동력 점수 = 40 × 1.22^(단계 − 1)
@@ -13,7 +13,7 @@ export const config = {
     dirTotal: 10, dirMax: 4, dirBase: 0.5, dirDiv: 4, // 방향 배수 = 0.5 + 배분점 / 4
     budgets: { low: { out: 0.8, cost: 0.5 }, normal: { out: 1, cost: 1 }, high: { out: 1.25, cost: 2 } },
     designWeeks: [8, 12, 16], minTestWeeks: 2,
-    prototypePerWeek: 200, // 시제차 비용(주당)
+    prototypePerWeek: 4000, // 시제차 비용(주당). 12주 설계 + 시험이면 개발비 약 8.5억이 되도록(설계자 결정 6~12억)
     defectPerPoint: 1 / 12, testerDiv: 10, engineerDiv: 30, // 6.3: 설계 중 결함 += 점수/12, 시험 중 결함 −= 꼼꼼함/10 + 기술/30
     defectQPer: 0.01, defectQMax: 0.4, // 남은 결함 1개당 품질 −1%(최대 −40%)
     estError: 0.15, // 화면용 결함 수 오차 ±15%
@@ -31,8 +31,9 @@ export const config = {
     masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
   },
   market: { // 7.3
-    scale: 1, // 시장 규모 배수(보정용)
-    shareExp: 3, priceAppealMin: 0.2, priceAppealMax: 2.5,
+    scale: 1.15, // 시장 규모 배수(보정용, 설계서 연 규모 × 1.15)
+    shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
+    priceAppealMin: 0.2, priceAppealMax: 2.5,
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -46,7 +47,7 @@ export const config = {
   life: { start: 0.6, rampMonths: 3, decay: 0.012 }, // 출시 0~3개월 0.6 → 1.0, 이후 매달 −1.2%
   recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 15, rep: -5, awarenessMult: 0.8 }, // 6.3
   factory: { capacity: 300, lines: 1, upkeep: 5000, costMult: 1 }, // 9.3 공장 1등급: 월 300대, 라인 1, 유지비 0.5억
-  hq: { upkeep: 1000 }, // 본사 1등급 월 유지비(설계서에 값이 없어 정함)
+  hq: { upkeep: 500 }, // 본사 1등급 월 유지비(설계서에 값이 없어 정함)
   discontinue: { lastMonthMult: 0.5, recentMonths: 3, wellSelling: 0.7, rep: -2, adviceSales: 10, adviceMonths: 6, adviceDrop: 0.6 }, // 8.6
   loan: { base: 200000, revenueRatio: 0.3, rate: 0.006, highRate: 0.01, highUse: 0.7, bailoutLimitMult: 0.5 }, // 9.4: 한도 20억 + 최근 12개월 매출 × 0.3
   bankruptcy: { months: 6, bailoutRep: -20 },

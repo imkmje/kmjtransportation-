@@ -5,12 +5,12 @@ import { config } from '../src/config';
 import { toMonthEnd } from './util';
 
 describe('재무(9.4)', () => {
-  it('월말 고정비: 월급 + 공장 유지비 0.5억 + 본사 유지비', () => {
+  it('월말 고정비: 월급 + 공장 유지비 + 본사 유지비', () => {
     const g = Game.create({ seed: 1 });
     toMonthEnd(g);
     const l = g.state.ledger[0], salary = g.state.staff.reduce((a, s) => a + 250 + 12 * s.ability, 0);
     expect(l.salaries).toBe(salary); expect(l.upkeep).toBe(5000 + config.hq.upkeep);
-    expect(l.profit).toBe(-(salary + l.upkeep)); expect(g.state.cash).toBe(150000 + l.profit);
+    expect(l.profit).toBe(-(salary + l.upkeep)); expect(g.state.cash).toBe(config.start.cash + l.profit);
   });
   it('장부는 최근 24개월만 남긴다', () => {
     const g = Game.create({ seed: 1 }); g.state.cash = 1e9;
@@ -24,7 +24,7 @@ describe('재무(9.4)', () => {
     expect(g.command({ type: 'borrow', amount: 200001 })).toEqual({ ok: false, reason: '대출 한도를 넘습니다.' });
     expect(g.command({ type: 'borrow', amount: 0 })).toEqual({ ok: false, reason: '빌릴 금액이 올바르지 않습니다.' });
     expect(g.command({ type: 'borrow', amount: 150000 }).ok).toBe(true);
-    expect(g.state.cash).toBe(300000); expect(g.state.loan.balance).toBe(150000);
+    expect(g.state.cash).toBe(config.start.cash + 150000); expect(g.state.loan.balance).toBe(150000);
     expect(g.command({ type: 'borrow', amount: 60000 }).ok).toBe(false);
     g.state.ledger.push({ month: 0, year: 1970, monthOfYear: 1, revenue: 100000, cogs: 0, salaries: 0, upkeep: 0, dev: 0, marketing: 0, interest: 0, recall: 0, profit: 0, cash: 0, sold: 0 });
     expect(loanLimit(g.state)).toBe(230000);
@@ -43,7 +43,7 @@ describe('재무(9.4)', () => {
     g.command({ type: 'borrow', amount: 1000 });
     expect(g.command({ type: 'repay', amount: 2000 })).toEqual({ ok: false, reason: '남은 대출보다 많이 갚을 수 없습니다.' });
     expect(g.command({ type: 'repay', amount: 1000 }).ok).toBe(true);
-    expect(g.state.loan.balance).toBe(0); expect(g.state.cash).toBe(150000);
+    expect(g.state.loan.balance).toBe(0); expect(g.state.cash).toBe(config.start.cash);
     g.command({ type: 'borrow', amount: 1000 }); g.state.cash = 10;
     expect(g.command({ type: 'repay', amount: 1000 })).toEqual({ ok: false, reason: '현금이 모자랍니다.' });
   });

@@ -92,7 +92,7 @@ describe('개발(6장)', () => {
     const l = g.state.ledger[0];
     expect(l.dev).toBeCloseTo((salary / 4 + config.dev.prototypePerWeek) * 4, 6);
     expect(l.salaries).toBe(salary);
-    expect(g.state.cash).toBeCloseTo(150000 - l.dev - salary - config.factory.upkeep - config.hq.upkeep, 6);
+    expect(g.state.cash).toBeCloseTo(config.start.cash - l.dev - salary - config.factory.upkeep - config.hq.upkeep, 6);
   });
   it('기획 검증: 방향 합 10·각 0~4, 옵션 2개까지·중복 금지, 설계 8/12/16주, 개발팀 1개', () => {
     const g = Game.create({ seed: 1 });
@@ -126,8 +126,8 @@ describe('개발(6장)', () => {
   it('동력 단계 1~3: 점수 40 × 1.22^(단계−1)을 P 60 : E 40으로, 원가 가산 0% / +10% / +22%', () => {
     expect(partStats('gasoline', 1, []).P).toBeCloseTo(24, 9);
     expect(partStats('gasoline', 3, []).E).toBeCloseTo(40 * 1.22 ** 2 * 0.4, 9);
-    expect(unitCost('sedanS', 'gasoline', 1, [])).toBe(700);
-    expect(unitCost('sedanS', 'gasoline', 2, [])).toBeCloseTo(770, 9);
-    expect(unitCost('sedanS', 'gasoline', 3, ['radio'])).toBeCloseTo(854 + 15, 9);
+    expect(unitCost('sedanS', 'gasoline', 1, [])).toBe(984);
+    expect(unitCost('sedanS', 'gasoline', 2, [])).toBeCloseTo(984 * 1.1, 9);
+    expect(unitCost('sedanS', 'gasoline', 3, ['radio'])).toBeCloseTo(984 * 1.22 + 15, 9);
   });
 });
