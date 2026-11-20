@@ -912,7 +912,7 @@ export function startApp(): void {
     const left = p.designWeeks - p.weeksDone + minT;
     const eta = wait ? '<b>출시 대기</b> · 언제든 출시할 수 있습니다'
       : !test ? `출시까지 최소 <b>${left}주</b>(설계 ${p.designWeeks - p.weeksDone}주 + 시험 ${minT}주)${mins(left)}${rate > 0 ? ` · 시험에서 결함이 한 주 약 ${(Math.round(rate * 10) / 10).toLocaleString('ko-KR')}개씩 줄어듭니다` : ''}`
-      : `${fix ? '' : `시험 <b>${minT - p.testWeeks}주</b> 뒤 출시할 수 있습니다 · `}${fixLine(p.defectEst)}${rate > 0 ? mins(Math.ceil(p.defectEst / rate)) : ''}`;
+      : `${fix ? '' : `시험 <b>${minT - p.testWeeks}주</b> 뒤 출시할 수 있습니다 · `}${fixLine(p.defectEst)}`;
     const avg = team.length ? team.reduce((a, x) => a + x.condition, 0) / team.length : 0, w = condWord(avg);
     const cond = team.length ? `<div class="team-cond">팀 컨디션 <span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(avg * 100)}%"></u></span><b>${w}</b>${w === '지침' ? '<span>· 회사 탭 직원 화면에서 휴식을 줄 수 있습니다</span>' : ''}</div>` : '';
     return `${steps}<p class="eta"><span>${eta}</span></p>${cond}`;
