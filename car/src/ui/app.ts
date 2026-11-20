@@ -281,18 +281,17 @@ export function startApp(): void {
       body = `<p class="left">남은 점수 <b>${left}</b> / ${config.dev.dirTotal}점</p>${STATS.map((k) => `<div class="dir"><span>${STAT_NAME[k]}</span><button data-act="dir" data-k="${k}" data-v="-1" aria-label="${STAT_NAME[k]} 빼기" ${d.direction[k] <= 0 ? 'disabled' : ''}>−</button><div class="dots" aria-label="${STAT_NAME[k]} ${d.direction[k]}점">${Array.from({ length: config.dev.dirMax }, (_, i) => `<i class="${i < d.direction[k] ? 'on' : ''}"></i>`).join('')}</div><button data-act="dir" data-k="${k}" data-v="1" aria-label="${STAT_NAME[k]} 더하기" ${d.direction[k] >= config.dev.dirMax || left <= 0 ? 'disabled' : ''}>+</button></div>`).join('')}<p class="note">한 능력치에 0~${config.dev.dirMax}점. 2점이 보통이고, 많이 줄수록 그 능력치가 더 자랍니다. 10점을 모두 나눠야 시작할 수 있습니다.</p>`;
     } else body = `<p class="lbl">예산</p><div class="opts">${(Object.keys(BUDGET) as Budget[]).map((b) => `<button class="opt" data-act="pick" data-k="budget" data-v="${b}" aria-pressed="${d.budget === b}"><b>${BUDGET[b].name}</b><small>${BUDGET[b].sub}</small></button>`).join('')}</div>
       <p class="lbl" style="margin-top:14px">설계 기간</p><div class="opts">${config.dev.designWeeks.map((w, i) => `<button class="opt" data-act="pick" data-k="designWeeks" data-v="${w}" aria-pressed="${d.designWeeks === w}"><b>${w}주</b><small>${['빠르지만 점수가 적음', '보통', '오래 걸리지만 점수가 많음'][i] ?? ''}</small></button>`).join('')}</div>`;
-    const ti = PLAN_TABS.findIndex(([k]) => k === planTab);
+    const ti = PLAN_TABS.findIndex(([k]) => k === planTab), last = ti === PLAN_TABS.length - 1, left = dirLeft(d);
     const card1 = `<div class="card"><p class="lbl">차 이름</p><input class="namein" id="pname" type="text" maxlength="12" value="${esc(d.name)}" placeholder="${esc(defaultName())}" aria-label="차 이름">
       <div class="seg" role="tablist" style="margin-top:12px">${PLAN_TABS.map(([k, l], i) => `<button role="tab" data-act="ptab" data-v="${k}" aria-selected="${planTab === k}">${i + 1}<small>${l}</small></button>`).join('')}</div>
       <h3>${PLAN_TABS[ti][1]}</h3>${body}
-      <div class="row" style="margin-top:12px"><button class="btn" data-act="ptab" data-v="${PLAN_TABS[Math.max(0, ti - 1)][0]}" ${ti === 0 ? 'disabled' : ''}>← 이전</button><button class="btn" data-act="ptab" data-v="${PLAN_TABS[Math.min(PLAN_TABS.length - 1, ti + 1)][0]}" ${ti === PLAN_TABS.length - 1 ? 'disabled' : ''}>다음 →</button></div></div>`;
-    const left = dirLeft(d);
+      ${last && left ? `<div class="warnbox" style="margin-top:12px">개발 방향 점수가 ${left}점 남았습니다(5번 탭).</div>` : ''}
+      <div class="row" style="margin-top:12px">${ti > 0 ? `<button class="btn" data-act="ptab" data-v="${PLAN_TABS[ti - 1][0]}">← 이전</button>` : ''}${last ? '<button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button>' : `<button class="btn" data-act="ptab" data-v="${PLAN_TABS[ti + 1][0]}">다음 →</button>`}</div></div>`;
     const card2 = `<div class="card"><p class="lbl">예상(대략)</p>${statBars(est.grades)}
       <div class="kpis" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">${kpi('예상 등급', `${score(est.min)}~${score(est.max)}`)}${kpi('예상 개발비', money(est.cost))}${kpi('대당 원가', money(Q.unitCost(d.body, d.powertrain, d.tier, d.options)))}${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}</div>
       <p class="note">등급은 그해 다른 차와 비교한 점수(0~10, 5가 보통)입니다. 낮은 쪽은 직원 컨디션이 나쁘고 최소 시험만 한 경우, 높은 쪽은 컨디션이 좋고 결함을 다 없앤 경우입니다. 개발비는 설계와 최소 시험 ${config.dev.minTestWeeks}주 기준이며, 시험을 길게 하면 더 듭니다.</p>
       <button class="btn" data-act="cancelPlan" style="width:100%;margin-top:8px">기획 그만두기</button></div>`;
-    const bar = `<div class="actbar">${left ? `<div class="warnbox">개발 방향 점수가 ${left}점 남았습니다(5번 탭).</div>` : ''}<button class="go" data-act="startDev" ${left ? 'disabled' : ''}>개발 시작 <span aria-hidden="true">→</span></button></div>`;
-    return { ov: ovh, panel: card1 + card2 + bar, look };
+    return { ov: ovh, panel: card1 + card2, look };
   }
 
   // ----- 개발 진행 -----
@@ -498,6 +497,8 @@ export function startApp(): void {
       case 'cancelPlan': draft = null; go('garage'); return;
       case 'startDev': {
         if (!game || !draft) return;
+        // 점수가 남았으면 문제 단계(개발 방향)로 데려가서 이유를 보여 준다
+        if (dirLeft(draft) > 0) { planTab = 'dir'; lastPanel = ''; render(); panel.scrollTop = 0; return err(`개발 방향 점수가 ${dirLeft(draft)}점 남았습니다. ${config.dev.dirTotal}점을 모두 나눠 주세요.`); }
         const { color, ...spec } = draft;
         if (!run(game.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName() }))) return;
         const p = game.state.projects[game.state.projects.length - 1] as Project;

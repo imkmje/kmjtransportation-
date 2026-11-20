@@ -25,6 +25,8 @@ const overflow = () => G(() => { const p = document.getElementById('panel'); ret
 /** 시험이 출시 가능해질 때까지 진행 */
 /** 출시하기: 결함이 많다는 확인 창이 뜨면 "그래도 출시" */
 const launchNow = async () => { await act('doLaunch'); if (await page.locator('#ask').isVisible()) await page.click('#ask-yes'); };
+/** 기획 마지막 단계(예산·기간)로 가서 개발 시작 */
+const startDev = async () => { await act('ptab', '[data-v="budget"]'); await act('startDev'); };
 const untilReady = () => G(() => { const c = window.__car; let i = 0; while (i++ < 60) { const p = c.game.state.projects[0]; if (p.phase === 'test' && p.testWeeks >= 2) break; c.tick(1); } c.render(); });
 
 await page.goto(URL0);
@@ -45,6 +47,7 @@ await shot('garage-empty');
 // ---- 기획 ----
 await act('plan', '');
 check('기획 화면: 결정 중 자동 멈춤', (await G(() => window.__car.screen)) === 'plan' && (await G(() => window.__car.held())) && (await page.locator('#held').isVisible()));
+check('기획 첫 단계: [이전] 없음, [다음]만 있고 [개발 시작] 없음', (await page.locator('#panel [data-act="ptab"]:not([role])').allInnerTexts()).join() === '다음 →' && (await page.locator('[data-act="startDev"]').count()) === 0);
 await page.fill('#pname', '미라지');
 check('기획: 이름 입력이 무대 글자에 반영', (await page.locator('#ov .model').innerText()).includes('미라지'));
 await act('ptab', '[data-v="seg"]'); await act('pick', '[data-k="segment"][data-v="family"]');
@@ -53,10 +56,12 @@ await act('ptab', '[data-v="opt"]'); await act('opt', '[data-v="radio"]');
 await act('ptab', '[data-v="dir"]');
 check('개발 방향: 10점을 다 쓰면 + 버튼이 막힘', await page.locator('[data-act="dir"][data-k="P"][data-v="1"]').isDisabled());
 await act('dir', '[data-k="E"][data-v="-1"]');
-check('개발 방향: 점수가 남으면 개발 시작이 막힘', await page.locator('[data-act="startDev"]').isDisabled());
+check('중간 단계: [이전]·[다음]이 있고 [개발 시작]은 안 보임', (await page.locator('#panel [data-act="ptab"]:not([role])').allInnerTexts()).join() === '← 이전,다음 →' && (await page.locator('[data-act="startDev"]').count()) === 0);
+await startDev();
+check('점수가 남은 채 개발 시작: 개발 방향 단계로 이동 + 이유 표시, 개발 안 됨', (await G(() => window.__car.game.state.projects.length)) === 0 && (await page.locator('#panel [role="tab"][data-v="dir"]').getAttribute('aria-selected')) === 'true' && (await page.locator('#toasts').innerText()).includes('점 남았습니다'));
 await act('dir', '[data-k="P"][data-v="1"]');
-check('개발 방향: 합계 10점이면 개발 시작 가능', !(await page.locator('[data-act="startDev"]').isDisabled()));
 await act('ptab', '[data-v="budget"]');
+check('마지막 단계: [이전]·[개발 시작]만 있고 비활성 [다음] 없음', (await page.locator('#panel [data-act="ptab"]:not([role])').allInnerTexts()).join() === '← 이전' && (await page.locator('#panel [data-act="startDev"]').isEnabled()) && (await page.locator('#panel button:disabled').count()) === 0);
 await page.waitForTimeout(500);
 await shot('plan');
 const estText = await page.locator('#panel').innerText();
@@ -166,7 +171,7 @@ await page.click('#ask-yes');
 check('단종 신청: 이번 달 말 단종', (await G(() => window.__car.game.state.nameplates[0].generations[0].status)) === 'ending');
 await act('plan');
 await page.fill('#pname', '솔라');
-await act('startDev');
+await startDev();
 await untilReady();
 await act('toLaunch');
 check('두 번째 차 출시 화면', (await G(() => window.__car.screen)) === 'launch');
@@ -176,7 +181,7 @@ await act('closeReview');
 check('두 번째 차 출시: 차종 2개, 첫 차는 단종', await G(() => { const n = window.__car.game.state.nameplates; return n.length === 2 && n[0].generations[0].status === 'discontinued' && n[1].generations[0].status === 'onSale'; }));
 
 // ---- 생산 라인이 없을 때 출시 막기 ----
-await act('plan'); await act('startDev'); await untilReady(); await act('toLaunch');
+await act('plan'); await startDev(); await untilReady(); await act('toLaunch');
 check('생산 라인이 없으면 출시 버튼이 막히고 이유 표시', (await page.locator('[data-act="doLaunch"]').isDisabled()) && (await page.locator('#panel').innerText()).includes('생산 라인이 모두 차 있습니다'));
 await page.click('#tabs button[data-tab="dev"]');
 await act('cancelDev'); await page.click('#ask-yes');
@@ -228,7 +233,7 @@ await page.click('#speeds button[data-speed="0"]'); // 실제 시간은 멈추�
 await act('plan');
 await page.locator('[data-act="pick"][data-k="color"][data-v="#1f5c4a"]').click();
 check('기획 차체 단계에 색상 8가지, 고른 색 표시', (await page.locator('#panel [data-act="pick"][data-k="color"]').count()) === 8 && (await G(() => document.querySelector('[data-k="color"][aria-pressed="true"]')?.dataset.v)) === '#1f5c4a');
-await act('startDev');
+await startDev();
 await G(() => { const c = window.__car; let i = 0; while (i++ < 80) { const p = c.game.state.projects[0]; if (p.phase === 'test' && p.testWeeks >= 2 && p.defectEst <= 5) break; c.tick(1); } c.render(); });
 check('결함 5개 이하: "출시해도 좋습니다"', (await page.locator('#panel .defect-adv[data-level="ok"]').innerText()).includes('출시해도 좋습니다'), `결함 약 ${await G(() => window.__car.game.state.projects[0].defectEst)}개, 시험 ${await G(() => window.__car.game.state.projects[0].testWeeks)}주`);
 // 저장 → 불러오기 뒤에도 기획 색 유지
