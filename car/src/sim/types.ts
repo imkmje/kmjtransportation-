@@ -6,11 +6,11 @@ export const STATS: Stat[] = ['P', 'E', 'U', 'D', 'Q'];
 export type Stats = Record<Stat, number>;
 
 // ---------- 자료(JSON) ----------
-export interface BodyDef { id: string; name: string; year: number; cost: number; basePrice: number; mult: Stats }
+export interface BodyDef { id: string; name: string; info: string; year: number; cost: number; basePrice: number; mult: Stats }
 /** startLevel: 해금 때의 동력 단계(5.3, 연구로 오른다). minCostAdd: 연구로 줄일 수 있는 원가 가산의 바닥(전기) */
-export interface PowertrainDef { id: string; name: string; year: number; split: { P: number; E: number }; costAdd: number; startLevel: number; minCostAdd?: number; tiers: { name: string; costAdd: number }[] }
-export interface OptionDef { id: string; name: string; year: number; U: number; D: number; Q: number; cost: number }
-export interface SegmentDef { id: string; name: string; w: Stats; eps: number }
+export interface PowertrainDef { id: string; name: string; info: string; year: number; split: { P: number; E: number }; costAdd: number; startLevel: number; minCostAdd?: number; tiers: { name: string; costAdd: number }[] }
+export interface OptionDef { id: string; name: string; info: string; year: number; U: number; D: number; Q: number; cost: number }
+export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
 export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
 
@@ -21,8 +21,9 @@ export type TechEffect =
   | { type: 'body' | 'option' | 'powertrain'; id: string }
   | { type: 'ptLevel'; id: string; amount: number }
   | { type: 'costCut' | 'defectCut' | 'upkeepCut' | 'devSpeed' | 'evCostCut'; value: number };
+/** info: 설명 창(ⓘ)용 사전식 풀이(자료 5종 모두에 있다) */
 export interface TechDef {
-  id: string; name: string; desc: string; field: TechField; year: number; pre: string[]; effects: TechEffect[];
+  id: string; name: string; desc: string; info: string; field: TechField; year: number; pre: string[]; effects: TechEffect[];
   cost: { money: number; points: number }; repeatable?: boolean; // repeatable: 2035년 이후 반복 연구(할 때마다 비용 증가)
 }
 /** 시대 사건 효과(11장). months가 null인 사건은 영구 */
