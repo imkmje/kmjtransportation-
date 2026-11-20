@@ -1223,6 +1223,7 @@ export function startApp(): void {
     restorePlan(extra.plan); garageIdx = 0; gameOverShown = false; officeEvents.length = 0; thumbs.clear();
     coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = '';
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = '';
+    candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
     title.hidden = true; sheet.hidden = true; makeStage(); speed = 1; acc = 0;
     $('#toasts').innerHTML = ''; $('#toasts').classList.remove('open'); keyed.clear(); // 전 게임의 알림을 남기지 않는다
     render();
@@ -1257,6 +1258,8 @@ export function startApp(): void {
       <p class="note">브라우저 저장소는 지워질 수 있으니 파일로 내보내 두는 것이 안전합니다.</p>
       <p class="note help-line">이 게임의 역사 사건과 시장 수치는 게임에 맞게 어림한 것이라 실제와 다를 수 있습니다.</p>
       <button class="btn" data-act="logoSheet" style="width:100%;margin-top:10px">회사 로고 바꾸기</button>
+      <p class="lbl" style="margin-top:14px">자동 멈춤</p><div class="pause-set">${PAUSE_ITEMS.map(([k, n]) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="autoPause" data-v="${k}" aria-pressed="${pauseOn[k]}">${pauseOn[k] ? '켜짐' : '꺼짐'}</button></div>`).join('')}</div>
+      <p class="note">켜 둔 항목이 생기면 시간을 멈추고 알림을 띄웁니다. 끄면 알림만 띄우고 시간은 계속 흐릅니다. 이 기기에 저장됩니다.</p>
       <div class="toggle" style="margin-top:10px"><span>디버그 표시(화면 속도·주 번호·시드)</span><button class="btn" data-act="debug" aria-pressed="${debugOn}">${debugOn ? '켜짐' : '꺼짐'}</button></div>
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
     sheet.hidden = false; renderTop();
@@ -1400,7 +1403,7 @@ export function startApp(): void {
       case 'resumePlan': go(draft ? 'plan' : lift ? 'lift' : 'dev'); return;
       case 'staffSel': { const id = Number(el.dataset.id); staffSel = staffSel === id ? null : id; render(); if (staffSel !== null) document.getElementById('staff-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
       case 'hireRole': hireRole = v as Role; render(); return;
-      case 'postJob': if (game && run(game.command({ type: 'postJob', role: hireRole, tier: Number(v) as 1 | 2 | 3 }))) { toast(`${ROLE_NAME[hireRole]} 공고를 냈습니다. 후보 3명 가운데 고를 수 있습니다.`); render(); } return;
+      case 'postJob': if (game && run(game.command({ type: 'postJob', role: hireRole, tier: Number(v) as 1 | 2 | 3 }))) { if (!game.state.candidates.length) toast(`${ROLE_NAME[hireRole]} 공고를 냈습니다.`); render(); } return; // 후보가 오면 watchCands가 알린다
       case 'hire': {
         if (!game) return; const c = game.state.candidates.find((x) => x.id === Number(el.dataset.id));
         if (c && run(game.command({ type: 'hire', candidateId: c.id }))) { toast(`${c.name}${josa(c.name, '을/를')} ${ROLE_NAME[c.role]}${josa(ROLE_NAME[c.role], '으로/로')} 채용했습니다.`); render(); }
@@ -1473,6 +1476,7 @@ export function startApp(): void {
       case 'export': if (game) { download(`car-company-${game.state.week}w.json`, JSON.stringify(S.makeSave(game, uiSnap()))); toast('파일로 내보냈습니다'); } return;
       case 'import': importFile(); return;
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
+      case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
       case 'closeSheet': sheet.hidden = true; render(); return;
       case 'logoSheet': showLogoSheet(); return;
       case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); return;
@@ -1518,7 +1522,7 @@ export function startApp(): void {
   document.addEventListener('pointermove', (e) => { if (pxMove && pxHold) setPx(pxHold, pxAt(pxHold, e.clientX)); });
   const pxEnd = () => { if (!pxHold) return; const r = pxHold; pxHold = null; pxMove = false; clearTimeout(pxRep); r.dispatchEvent(new Event('change', { bubbles: true })); };
   document.addEventListener('pointerup', pxEnd); document.addEventListener('pointercancel', pxEnd);
-  document.addEventListener('click', (e) => { const b = (e.target as Element).closest<HTMLElement>('.px-step'); if (b && e.detail === 0) { const r = b.parentElement?.querySelector<HTMLInputElement>('.px-r'); if (r) { setPx(r, Number(r.value) + Number(b.dataset.step) * (Number(r.step) || 1)); render(); } } }); // 키보드(Enter·Space)로 누른 −/+
+  document.addEventListener('click', (e) => { const b = (e.target as Element).closest<HTMLElement>('.px-step'); if (b && e.detail === 0) { const r = b.parentElement?.querySelector<HTMLInputElement>('.px-r'); if (r) setPx(r, Number(r.value) + Number(b.dataset.step) * (Number(r.step) || 1)); } }); // 키보드(Enter·Space)로 누른 −/+
   // 두 번 톡·핀치로 게임 화면 전체가 확대되지 않게(CSS touch-action·viewport와 함께. 사무실은 자체 핀치를 쓴다)
   for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => { if (!(e.target as Element).closest?.('#office')) e.preventDefault(); }, { passive: false });
   document.addEventListener('dblclick', (e) => e.preventDefault());
@@ -1528,7 +1532,7 @@ export function startApp(): void {
   document.addEventListener('pointercancel', () => { dragging = false; });
   document.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
-    if (t.id === 'lprice') render();
+    if (t.classList.contains('px-r')) render(); // 놓으면 패널 전체를 다시 그린다(예상 평론 등)
     else if (t.classList.contains('alloc-r') && game) { // 직접 배분: 놓을 때 적용. 합이 100%를 넘으면 sim의 이유를 그대로 보여 준다
       const r = game.command({ type: 'setAllocation', generationId: Number(t.dataset.gen), share: Number(t.value) / 100 });
       allocWhy = r.ok ? '' : r.reason; if (!r.ok) err(r.reason); dragging = false; lastPanel = ''; render();
