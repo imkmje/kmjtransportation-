@@ -191,7 +191,12 @@ function monthly(g: Game, o: SteadyOptions): void {
   if (o.expand) {
     const nf = config.factory.levels[s.factory.level];
     const top = s.factory.level + 1 >= B.fillFrom; // 0.11.0: 5등급부터(전에는 마지막 등급만). 0.4.2: 마지막 등급(월 유지비 240억)은 그 한도의 75%를 채울 주문이 있을 때만(봇이 증설 뒤 유지비에 무너졌다)
-    if (backlogged && nf && (!top || demand >= nf.capacity * B.expandFill) && !factoryExpandError(s) && s.cash >= nf.cost + reserve) g.command({ type: 'expandFactory' });
+    const want = backlogged && nf && (!top || demand >= nf.capacity * B.expandFill) && !factoryExpandError(s);
+    // 1.0.0: 모자라는 건설비는 대출 한도의 expandLoan까지 빌린다(주문이 밀린 채 몇 년씩 현금을 모으지 않게). 남는 현금으로 갚는다
+    const room = Math.max(0, loanLimit(s) * B.expandLoan - s.loan.balance);
+    if (want && s.cash < nf.cost + reserve && s.cash + room >= nf.cost + reserve) g.command({ type: 'borrow', amount: Math.ceil(nf.cost + reserve - s.cash) });
+    if (want && s.cash >= nf.cost + reserve) g.command({ type: 'expandFactory' });
+    else if (s.loan.balance > 0 && o.borrowShare === 0 && s.cash > reserve * 2) g.command({ type: 'repay', amount: Math.floor(Math.min(s.loan.balance, s.cash - reserve * 2)) });
     const nh = config.hq.levels[s.hqLevel];
     if (nh && !backlogged && !hqUpgradeError(s) && s.cash >= nh.cost * B.hqCashMult + reserve) g.command({ type: 'upgradeHQ' }); // 0.4.2: 주문이 밀리면 공장 증설이 먼저(평판이 올라 본사 승급이 가능해지자 증설 자금을 본사에 썼다)
   }

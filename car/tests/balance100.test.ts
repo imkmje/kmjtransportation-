@@ -1,6 +1,6 @@
 // 1.0.0 균형 기준: 편의 기능(자동 가격 '최고 이익 매달' + 임원 맡기기·교체 고용)을 다 쓰는 봇(steadyBestExec)
 // 0.10.0까지는 기준가에 파는 신중 봇(steady)이 기준이었지만, 실제 플레이는 편의 기능을 쓰므로 중후반 돈이 훨씬 빨리 쌓였다(40년 자산 보통 +169%).
-// 사용자 지시(너그럽게: "혼자 하는 게임이고 돈 쓸 데를 만들면 된다")로 목표는 보통 현금 중앙값 40년 1.5~4조·60년 3~8조, 쉬움은 그보다 많되 60년에 수십 조는 아니게.
+// 사용자 지시(너그럽게: "혼자 하는 게임이고 돈 쓸 데를 만들면 된다")로 목표는 보통 현금 중앙값 40년 1.5~6조·60년 3~12조(공장 건설비 완화로 8 → 12조 허용), 쉬움은 그보다 많되 60년 20조 미만.
 // 시드 20개 60년 측정은 테스트 밖에서 했다(봇 한 판 약 10초라 CI 시간 안에 시드 3개만 돈다). 기준가 판매 봇 기준 항목은 balance.test.ts에 참고로 남는다
 import { describe, it, expect, vi } from 'vitest';
 import { steadyBestExec, type Bot } from '../src/sim/bots';
@@ -22,13 +22,13 @@ function run(bot: () => Bot, seed: number, years: number, d: Difficulty) {
 }
 
 describe('1.0.0 균형(편의 기능을 다 쓰는 봇, 시드 3개)', () => {
-  it('보통 steadyBestExec: 60년 생존, 현금 중앙값 40년 1.5~4조·60년 3~8조', () => {
+  it('보통 steadyBestExec: 60년 생존, 현금 중앙값 40년 1.5~6조·60년 3~12조', () => {
     const rs = [1, 2, 3].map((seed) => run(() => steadyBestExec(), seed, 60, 'normal'));
     const c40 = median(rs.map((r) => r.cash[39])), c60 = median(rs.map((r) => r.cash[59]));
     console.log(`보통 steadyBestExec 현금 중앙값 20년 ${(median(rs.map((r) => r.cash[19])) / JO).toFixed(2)}조 / 40년 ${(c40 / JO).toFixed(2)}조 / 60년 ${(c60 / JO).toFixed(2)}조`);
     for (const r of rs) expect(r.alive[59]).toBe(true);
-    expect(c40).toBeGreaterThanOrEqual(1.5 * JO); expect(c40).toBeLessThanOrEqual(4 * JO);
-    expect(c60).toBeGreaterThanOrEqual(3 * JO); expect(c60).toBeLessThanOrEqual(8 * JO);
+    expect(c40).toBeGreaterThanOrEqual(1.5 * JO); expect(c40).toBeLessThanOrEqual(6 * JO);
+    expect(c60).toBeGreaterThanOrEqual(3 * JO); expect(c60).toBeLessThanOrEqual(12 * JO);
   });
   it('쉬움 steadyBestExec: 보통보다 많고 60년에 20조를 넘지 않는다(숫자가 무의미해지지 않게)', () => {
     const rs = [1, 2, 3].map((seed) => run(() => steadyBestExec(), seed, 60, 'easy'));

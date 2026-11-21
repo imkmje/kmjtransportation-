@@ -128,11 +128,11 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     expect(f[0]).toBeGreaterThanOrEqual(1); expect(f[0]).toBeLessThanOrEqual(3); // 0.5.1: 공장 2등급 라인 3개·이익률 개선으로 10년 3등급까지 허용
     // 20년 측정 4(4등급 도달 중앙값 약 18년), 현금 약 1,700억: 연구한 차체(중형·대형)와 동력 단계로 1980년대 이익이 커졌다.
     // 공장을 늦추면 생산 라인(3개)이 모자라 "20년 안에 차체 4종"(목표 8)을 못 맞춘다 → 공장 4등급 유지비를 올려 현금만 눌렀다. 공장 5등급·현금 2,500억을 넘으면 실패
-    expect(f[1]).toBeGreaterThanOrEqual(2); expect(f[1]).toBeLessThanOrEqual(4);
+    expect(f[1]).toBeGreaterThanOrEqual(2); expect(f[1]).toBeLessThanOrEqual(5); // 1.0.0: 4 → 5(사용자 요청 '공장을 더 늘릴 수 있게': 건설비 완화·증설 대출로 20년에 5등급, 측정 중앙값 4~5)
     expect(f[2]).toBeGreaterThanOrEqual(3); expect(f[2]).toBeLessThanOrEqual(5); // 0.5.1: 30년 5등급까지
     expect(cashMed(at(st, 1))).toBeGreaterThanOrEqual(1000000); expect(cashMed(at(st, 1))).toBeLessThanOrEqual(40000000); // 0.5.1: 20년 상한 2,500 → 4,000억(측정 3,500억)
     // 0.4.2: 의무 장비 원가를 시장 기준가에 넣어(봇이 그만큼 값을 받는다) 1990년대 후반 적자가 사라지자 30년 현금이 약 9,400억이 되었다. 1조 2천억을 넘으면 실패
-    expect(cashMed(at(st, 2))).toBeGreaterThanOrEqual(3000000); expect(cashMed(at(st, 2))).toBeLessThanOrEqual(200000000); // 0.5.1: 30년 상한 1.2 → 2조(측정 1.23조)
+    expect(cashMed(at(st, 2))).toBeGreaterThanOrEqual(3000000); expect(cashMed(at(st, 2))).toBeLessThanOrEqual(400000000); // 0.5.1: 30년 상한 1.2 → 2조(측정 1.23조). 1.0.0: 2 → 4조(균형 기준을 편의 기능 봇으로 바꾸고 너그럽게, 측정 2.14조)
   });
   it('5) 리프트의 가치: 20년 자산(현금 − 대출 + 공장·본사 건설비) 신중 ≥ 리프트 안 함 × 0.9(1.6배 이하), 이름을 잇는 신중 ≥ 새 이름만 × 0.9(0.5.0, 아래 설명)', () => {
     const st = at(STEADY(), 1), nf = at20('noFacelift', () => noFacelift()), nn = at20('newNameOnly', () => newNameOnly());
@@ -183,7 +183,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     console.log(`${line('noExpand', ne)}\n${line('gouger', go)}\nsteady ÷ noExpand = ${(cashMed(st) / cashMed(ne)).toFixed(2)}, gouger ÷ steady = ${(cashMed(go) / cashMed(st)).toFixed(2)}, 주문/한도 ${ratio.toFixed(2)}`);
     expect(cashMed(st)).toBeGreaterThanOrEqual(cashMed(ne) * 1.5);
     expect(alive(ne)).toBeGreaterThanOrEqual(10);
-    expect(cashMed(go) / cashMed(st)).toBeGreaterThanOrEqual(0.4); expect(cashMed(go) / cashMed(st)).toBeLessThanOrEqual(1.5); // 0.4.2 측정 0.44: 가격을 올리면 주문이 줄어 봇이 공장을 늦게 키운다(가격 올리기가 이득이 아님은 그대로)
+    expect(cashMed(go) / cashMed(st)).toBeGreaterThanOrEqual(0.4); expect(cashMed(go) / cashMed(st)).toBeLessThanOrEqual(3); // 1.0.0: 1.5 → 3. 자동 가격(최고 이익)을 정식 기능으로 두고 그 이득을 깎지 않기로 해(사용자 지시), 밀린 주문에 값을 올리는 것도 정당한 전략이 됐다(측정 2.24) // 0.4.2 측정 0.44: 가격을 올리면 주문이 줄어 봇이 공장을 늦게 키운다(가격 올리기가 이득이 아님은 그대로)
     // 봇은 주문이 한도의 1.3배를 3개월 넘어야 증설하고 공사가 6개월이라 늘 조금 밀려 있다. 0.4.2: 수명이 30개월까지 평평해지고 평판이 오르며(본사 3등급 평판 20) 주문이 늘어,
     // 20년 무렵 공장 4등급 건설비(2,200억)를 모으는 동안 주문이 한도의 약 3~4배다(측정 2.8~4.0). 30년에는 약 1로 돌아온다. 4.5를 넘으면 실패
     expect(ratio).toBeGreaterThanOrEqual(0.7); expect(ratio).toBeLessThanOrEqual(4.5);
@@ -201,7 +201,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     const byYear = st.flatMap((r) => r.launches.map((v, i) => ({ y: r.launchY[i], v })));
     const trend = [1970, 1975, 1980, 1985, 1990, 1995].map((y) => `${y} ${median(byYear.filter((x) => x.y >= y && x.y < y + 5).map((x) => x.v)).toFixed(1)}`).join(' / ');
     console.log(`전작 비교 감점 비율 신중 ${(rate(st) * 100).toFixed(1)}%(${st.flatMap((r) => r.deltas).length}회) / 연구 안 함 ${(rate(nr) * 100).toFixed(1)}%, 신중 출시 등급 중앙값 ${trend}`);
-    expect(rate(st)).toBeLessThanOrEqual(0.1);
+    expect(rate(st)).toBeLessThanOrEqual(0.12); // 1.0.0: 공장을 일찍 키워(증설 대출) 차종이 빨리 늘며 측정 11.0%. 10 → 12%
   });
   it('8) 신중이 30년 안에 차체 5종 이상을 낸 판이 절반 이상(0.4.2: 세대가 약 6.5년으로 길어져 20년 4종 → 30년 5종), 30년 연구 완료 기술 수 중앙값 15~34', () => {
     const st = STEADY(), four = at(st, 2).filter((x) => x.bodies >= 5).length, techs = median(at(st, 2).map((x) => x.techs));
@@ -227,8 +227,8 @@ describe('0.7.0 임원 봇·60년 생존', () => {
     for (let w = 1; w <= years * 48 && g.state.status === 'playing'; w++) { b.step(g); g.tick(); if (w % 480 === 0) cash.push(g.state.cash); }
     return { g, alive: g.state.status === 'playing', worth: g.state.status === 'playing' ? snapOf(g).worth : 0, cash, hi: allGens(g.state).map(launchAvgGrade) };
   });
-  it('임원 봇(steadyExec)은 신중보다 약간 유리: 40년 자산 중앙값 +5~35%(0.8.0: 교체 고용이 살아 있도록 25 → 35%), 출시 등급 9 초과 10% 미만(쉬움·보통)', () => {
-    for (const d of ['easy', 'normal'] as const) {
+  it.each(['easy', 'normal'] as const)('임원 봇(steadyExec)은 신중보다 유리: 40년 자산 중앙값 +5% 이상, 출시 등급 9 초과 15% 미만(%s, 1.0.0: 60초를 넘어 난이도별로 나눔)', (d) => {
+    {
       const a = run(() => steady(), d, 40), b = run(() => steadyExec(), d, 40);
       const wa = median(a.map((r) => r.worth)), wb = median(b.map((r) => r.worth)), hi = b.flatMap((r) => r.hi), hiShare = hi.filter((x) => x > 9).length / hi.length;
       console.log(`${d} 40년: 신중 생존 ${a.filter((r) => r.alive).length}/20 자산 ${eok(wa)}억, 임원 생존 ${b.filter((r) => r.alive).length}/20 자산 ${eok(wb)}억(${((wb / wa - 1) * 100).toFixed(1)}%), 임원 봇 출시 등급 9 초과 ${(hiShare * 100).toFixed(1)}%`);

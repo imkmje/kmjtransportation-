@@ -81,13 +81,13 @@ export const config = {
       { capacity: 1000, lines: 3, cost: 170000, upkeep: 16000, costMult: 0.99 },
       // 4단계 보정: 3~5등급 유지비 5.2/18.6/52.5억 → 15.6/84/240억(연구로 차체·동력이 좋아져 1980년대 이익이 커진 만큼, 큰 공장을 굴리는 비용을 올림)
       { capacity: 3000, lines: 3, cost: 3200000, upkeep: 150000, costMult: 0.98 },
-      { capacity: 8000, lines: 5, cost: 50000000, upkeep: 400000, costMult: 0.97 },
-      { capacity: 20000, lines: 8, cost: 180000000, upkeep: 1050000, costMult: 0.96 },
+      { capacity: 8000, lines: 5, cost: 25000000, upkeep: 340000, costMult: 0.97 },
+      { capacity: 20000, lines: 8, cost: 90000000, upkeep: 850000, costMult: 0.96 },
       // 0.11.0 사용자 지적 "공장 유지비가 너무 비쌈": 3~5등급 유지비 22/110/260억 → 15/40/105억(한도의 70%를 채우면 매출의 약 3%). 중후반 돈은 개발비의 시대 상승(dev.devEra)으로 조인다.
       // 0.11.0 6·7등급(사용자 요청 "2만 대 넘게 팔린다"): 한도 1.6배씩, 월 유지비는 한도 1대당 약 52만원으로 5등급과 같게(규모가 커져도 대당 고정비가 낮아지지 않게), 원가 배수 그대로, 공사가 길다.
       // 국내 시장 전체가 월 약 5만 대라 7등급(5만 대)에서 멈춘다
-      { capacity: 32000, lines: 11, cost: 320000000, upkeep: 1700000, costMult: 0.96, buildMonths: 9 },
-      { capacity: 50000, lines: 14, cost: 520000000, upkeep: 2660000, costMult: 0.96, buildMonths: 12 },
+      { capacity: 32000, lines: 11, cost: 200000000, upkeep: 1360000, costMult: 0.96, buildMonths: 9 },
+      { capacity: 50000, lines: 14, cost: 320000000, upkeep: 2130000, costMult: 0.96, buildMonths: 12 },
     ],
     buildMonths: 6, // 증설 공사 6개월
     bigLevel: 4, // 0.11.0: 이 등급부터 난이도의 bigUpkeepMult로 유지비를 곱한다
@@ -158,7 +158,8 @@ export const config = {
   },
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
     reserveMonths: 6, // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
-    expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, expandFill: 0.75, fillFrom: 5, // fillFrom(0.11.0): 이 등급부터 expandFill 조건(전에는 마지막 등급만). expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
+    expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, expandFill: 0.75, fillFrom: 5, expandLoan: 0.7, // expandLoan(1.0.0): 증설비가 모자라면 대출 한도의 70%까지 빌린다
+    // fillFrom(0.11.0): 이 등급부터 expandFill 조건(전에는 마지막 등급만). expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
     hqCashMult: 6, // 본사 승급: 현금이 승급비 × 6 + 여유분 이상일 때
     tier2Cash: 500000, tier3Cash: 5000000, // 채용 공고 등급: 현금 50억 이상 2등급, 500억 이상 3등급
     salesShare: 0.2, // 정원 중 영업 직원 비율
