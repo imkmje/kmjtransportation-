@@ -619,12 +619,12 @@ await page.waitForTimeout(300);
 await shot('co-factory-build');
 await G(() => { const c = window.__car; let i = 0; while (i++ < 40 && c.game.state.factory.level < 2) c.tick(1); c.render(); });
 const fac = await S3(() => window.__car.game.state.factory);
-check('6개월 뒤 공장 2등급: 월 생산 1,000·생산 라인 2', fac.level === 2 && !fac.build && (await page.locator('.fac-cur').innerText()).includes('1,000') && /1\/2/.test(await page.locator('.fac-cur').innerText()), JSON.stringify(fac));
+check('6개월 뒤 공장 2등급: 월 생산 1,000·생산 라인 3(0.5.1)', fac.level === 2 && !fac.build && (await page.locator('.fac-cur').innerText()).includes('1,000') && /1\/3/.test(await page.locator('.fac-cur').innerText()), JSON.stringify(fac));
 check('증설 완료 알림(회사)', (await page.locator('#toasts').innerText()).includes('증설을 마쳤습니다'));
 await page.click('#tabs button[data-tab="dev"]');
 await page.locator('.pchip').last().click().catch(() => {});
 await act('toLaunch'); await launchNow(); await page.waitForSelector('#sheet:not([hidden])'); await act('closeReview');
-check('두 번째 차 동시 판매(생산 라인 2/2)', (await S3(() => window.__car.game.state.nameplates.filter((n) => n.generations.some((g) => g.status === 'onSale')).length)) === 2 && (await page.locator('#ov .lines').innerText()) === '2/2');
+check('두 번째 차 동시 판매(생산 라인 2/3)', (await S3(() => window.__car.game.state.nameplates.filter((n) => n.generations.some((g) => g.status === 'onSale')).length)) === 2 && (await page.locator('#ov .lines').innerText()) === '2/3');
 await tick(5);
 await page.click('#tabs button[data-tab="company"]'); await act('cotab', '[data-v="factory"]');
 const gids = await S3(() => window.__car.game.state.nameplates.map((n) => n.generations[0].id));
@@ -772,7 +772,7 @@ await page.waitForTimeout(300);
 check('선택 사건: 자동 멈춤 + 화면 안 창(제목·설명·선택지·남은 주)', (await page.locator('#sheet .choice-sheet').isVisible()) && (await page.locator('.evc').count()) >= 2 && /\d+주 안에 고르지 않으면 「.+」(으)?로 정해집니다/.test(await page.locator('.choice-sheet').innerText()) && (await S4(() => window.__car.held())));
 await page.waitForTimeout(600); await shot('choice');
 await act('later');
-check('[나중에]: 창이 닫히고 상단바에 "결정 대기 1"', (await page.locator('#sheet').isHidden()) && (await page.locator('#pend').innerText()) === '결정 대기 1');
+check('[나중에]: 창이 닫히고 상단바에 "결정 대기 1"', (await page.locator('#sheet').isHidden()) && (await page.locator('#pend').getAttribute('aria-label')).startsWith('결정 대기 1건') && (await page.locator('#pend b').innerText()) === '1');
 await shot('pending');
 await page.click('#pend');
 const pick0 = await page.locator('.evc b').first().innerText();
@@ -781,7 +781,7 @@ check('선택: 대기 0, 결과 알림, 뉴스에 결과', (await S4(() => windo
 // 진행 중 사건 칩(1차 오일쇼크)
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 600 && !document.getElementById('evchip').textContent.includes('오일쇼크')) c.tick(1); c.render(); });
 if (await page.locator('#sheet').isVisible()) await page.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click();
-check('상단바 사건 칩: "1차 오일쇼크 · 앞으로 N개월"', /1차 오일쇼크 · 앞으로 \d+개월/.test(await page.locator('#evchip').innerText()), await page.locator('#evchip').innerText());
+check('상단바 사건 칩: 사건 이름(남은 기간·전체 문구는 title)', (await page.locator('#evchip').innerText()).startsWith('1차 오일쇼크') && (await page.locator('#evchip').getAttribute('title')).startsWith('1차 오일쇼크 · '), `${await page.locator('#evchip').innerText()} / ${await page.locator('#evchip').getAttribute('title')}`);
 await page.click('#evchip');
 check('사건 창: 효과(쉬운 말)·충전소 보급률·필수 옵션', (await page.locator('.events-sheet').innerText()).includes('연비') && (await page.locator('.events-sheet').innerText()).includes('충전 인프라') && (await page.locator('.events-sheet').innerText()).includes('꼭 필요한 옵션'));
 await page.waitForTimeout(600); await shot('events');
@@ -950,7 +950,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
 { const raw = await G(() => { const o = window.__car.game.toJSON(); delete o.difficulty; return JSON.stringify(o); }); await openMenu();
   const [fch] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#sheet [data-act="import"]').click()]);
   await fch.setFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(raw) });
-  await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes'); await page.waitForTimeout(400);
+  await page.waitForTimeout(400); if (await page.locator('#ask').isVisible()) { await page.click('#ask-yes'); await page.waitForTimeout(400); } // 마지막 저장 뒤 변경이 있을 때만 확인 창
   check('예전 저장(로고 정보 없음)을 불러오면 기본 로고', await G(() => { const l = window.__car.ui.logo; return l.shape === 'round' && l.mark === 'stripes' && l.bg === '#14171c' && l.fg === '#ff5a1f'; }) && (await page.locator('#mylogo').innerHTML()).includes('#ff5a1f'));
   await openMenu(); check('예전 저장(난이도 없음)은 메뉴에 "보통"', (await page.locator('.menu-diff').innerText()).includes('보통')); await act('closeSheet'); }
 // ---- 난이도별 시작 현금 ----
@@ -997,6 +997,11 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await tp.locator('#sheet [data-act="devCheat"][data-v="cash"]').tap();
     const c1 = await TG(() => window.__car.game.state.cash);
     check('개발자 메뉴 현금 +500억 → 현금 증가', c1 - c0 >= 4_900_000, `${c0} → ${c1}`);
+    await tp.locator('#sheet [data-act="devCheat"][data-v="cash"]').tap(); await tp.waitForTimeout(150);
+    check('큰 금액 표기: 1,000억 넘으면 천 단위 쉼표(예: 1,050억)', /^\d{1,3}(,\d{3})+(\.\d)?억$|^\d+조/.test(await tp.locator('#cash').innerText()), await tp.locator('#cash').innerText());
+    await tp.locator('#sheet [data-act="devCheat"][data-v="reputation"]').tap(); await tp.waitForTimeout(200);
+    check('평판이 바뀌면 이유와 함께 알림(개발자 메뉴: 평판 +10)', /개발자 메뉴: 평판 \+10(?!\.)/.test(await tp.locator('#toasts').textContent()), await tp.locator('#toasts').textContent());
+    check('상단바(1024×768): 넘치지 않음·누를 수 있는 칩은 44px', await TG(() => { const t = document.getElementById('top'); return t.scrollWidth <= t.clientWidth + 1 && [...t.querySelectorAll('button')].filter((b) => b.offsetParent).every((b) => b.getBoundingClientRect().height >= 44); }));
     await tp.locator('#sheet [data-act="closeSheet"]').tap(); }
   // ---- 출시 대기 자동 멈춤, 가격 화면(1024×768 터치·1366×1024) ----
   await tp.tap('#tabs button[data-tab="garage"]'); await tp.tap('#ov [data-act="plan"]'); await tp.tap('[data-act="ptab"][data-v="budget"]');
@@ -1007,6 +1012,8 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await tp.locator('#toasts .toast .open').filter({ hasText: '출시 준비' }).first().tap(); await tp.waitForTimeout(300);
   const inView = () => TG(() => { const pr = document.getElementById('panel').getBoundingClientRect(); return ['.px-r', '.vsbase', '.px-base', '.px-sales', '.px-profit', '.px-step'].every((q) => { const r = document.querySelector('#panel ' + q)?.getBoundingClientRect(); return !!r && r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1; }) && document.getElementById('panel').scrollTop === 0; });
   check('가격 화면(1024×768): 스크롤 없이 슬라이더·기준가 대비·예상 월 판매·예상 월 이익이 한 화면', (await TG(() => window.__car.screen)) === 'launch' && await inView());
+  const noClip = () => TG(() => [...document.querySelectorAll('#panel .px-kpis .kpi b')].map((b) => [b.textContent, b.scrollWidth - b.clientWidth]));
+  { const c = await noClip(); check('가격 카드(출시, 1024×768): 대당 이익·예상 월 판매·예상 월 이익 값이 말줄임되지 않음', c.length === 3 && c.every(([, d]) => d <= 0), JSON.stringify(c)); }
   check('가격 슬라이더: 손잡이 터치 영역 44px 이상·touch-action none·−/+ 버튼 44px 이상', await TG(() => { const t = document.querySelector('.px-track'), b = document.querySelector('.px-step').getBoundingClientRect(); return t.getBoundingClientRect().height >= 44 && getComputedStyle(t).touchAction === 'none' && b.width >= 44 && b.height >= 44; }));
   const tb = await tp.locator('.px-track').boundingBox(), ty = tb.y + tb.height / 2, p0 = await TG(() => window.__car.launch.price);
   await TG(() => { window.__pxEl = document.getElementById('lprice'); });
@@ -1032,6 +1039,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await tp.waitForSelector('#sheet:not([hidden])'); await TG(() => document.querySelector('#sheet [data-act="closeReview"]').click());
   await TG(() => window.__car.tick(8)); await tp.tap('#tabs button[data-tab="garage"]'); await tp.waitForTimeout(300);
   check('차고 가격 카드(1024×768): 패널 맨 위, 스크롤 없이 슬라이더·기준가 대비·예상 월 판매·예상 월 이익', (await TG(() => document.querySelector('#panel > .card')?.classList.contains('price-card') && !!document.getElementById('gprice'))) && await inView());
+  { const c = await noClip(); check('가격 카드(차고, 1024×768): 값이 말줄임되지 않음', c.length === 3 && c.every(([, d]) => d <= 0), JSON.stringify(c)); }
   if (process.argv[2]) await tp.screenshot({ path: process.argv[2].replace('.png', '-garage-price-1024x768.png') });
   await tctx.close(); }
 

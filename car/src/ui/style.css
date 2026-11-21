@@ -625,13 +625,13 @@ button,input,select,label,a,.card,.opt,.tc,#panel,#top,#tabs,.sheet,.cover,.repo
 @media (min-width:641px){.srow{grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr) 70px 78px minmax(0,1.3fr)}}
 .s-cond{white-space:nowrap}.s-cond .cbar{width:30px}.s-do{word-break:keep-all}
 /* 개발 진행: 단계 표시·팀 컨디션·기다리는 동안 할 일 */
-.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:10px 0 6px;padding:0;list-style:none}
-.steps li{position:relative;padding-top:12px;font-size:12px;font-weight:700;color:var(--ink3);line-height:1.35}
-.steps li::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;border-radius:3px;background:var(--soft)}
-.steps li.done::before{background:var(--ink)}
-.steps li.on{color:var(--ink)}
-.steps li.on::before{background:linear-gradient(90deg,var(--accent) var(--p,0%),var(--soft) var(--p,0%))}
-.steps li b{display:block;font-size:13px}
+.dsteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:10px 0 6px;padding:0;list-style:none}
+.dsteps li{position:relative;padding-top:12px;font-size:12px;font-weight:700;color:var(--ink3);line-height:1.35}
+.dsteps li::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;border-radius:3px;background:var(--soft)}
+.dsteps li.done::before{background:var(--ink)}
+.dsteps li.on{color:var(--ink)}
+.dsteps li.on::before{background:linear-gradient(90deg,var(--accent) var(--p,0%),var(--soft) var(--p,0%))}
+.dsteps li b{display:block;font-size:13px}
 .eta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;font-weight:700;color:var(--ink2);margin-top:4px}
 .eta b{color:var(--ink)}
 .team-cond{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ink2);margin-top:8px}
@@ -689,3 +689,6 @@ button.pill{min-height:44px;align-items:center} /* 상단바의 누르는 알약
 .go:disabled{background:transparent;color:var(--ink2);border:1.5px dashed var(--line);font-size:14px;font-weight:700;min-height:48px;transform:none}
 body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자 중간("있습니/다", "6,091/대")에서 꺾이지 않게 */
 .fc-hints ul{margin:4px 0 0;padding-left:18px}
+.seg.steps button small{white-space:normal;overflow:visible;line-height:1.2} /* "개발 방향"·"예산·기간"이 말줄임되지 않게 두 줄 허용 */
+.seg.steps button{min-height:48px;padding:2px}
+.px-kpis .px-sales b{white-space:normal;overflow:visible}
