@@ -1326,6 +1326,45 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('임원 화면(1024×768): 가로 넘침 없음, 버튼 44px 이상', await CG(() => { const p = document.getElementById('panel'); return p.scrollWidth <= p.clientWidth + 1 && [...document.querySelectorAll('#panel .exec .btn, #panel .exec .opt')].every((b) => b.getBoundingClientRect().height >= 44); }));
   await cctx.close(); }
 
+// 0.10.0 정보와 수습 수단: 이 차의 손익·판매 요인 카드, 긴급 개선·가격 인하 판매(확인 창), 직원 경력, 차종 손익 줄, 10년 회고(자동 창·다시 보기)
+{ const ictx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const ip = await ictx.newPage(); ip.on('pageerror', (e) => errors.push(String(e))); ip.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const IG = (fn, a) => ip.evaluate(fn, a), I2 = process.argv[3];
+  const ishot = (n) => (I2 ? ip.screenshot({ path: `${I2}/${n}.png` }) : Promise.resolve());
+  const iclose = async () => { if (await ip.locator('#sheet').isVisible()) await ip.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click(); };
+  await ip.goto(URL0); await ip.waitForSelector('#title:not([hidden])');
+  await ip.click('[data-act="titleNew"]'); await ip.fill('#t-co', '수습 시험'); await ip.click('[data-act="startNew"]'); await IG(() => window.__car.setSpeed(0));
+  await IG(() => { const g = window.__car.game; g.state.cash = 1e7;
+    g.command({ type: 'startProject', name: '수습카', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    window.__car.tick(36); const p = g.state.projects[0]; g.command({ type: 'launch', projectId: p.id, price: 1300, marketing: 1, color: '#c8102e', wheels: 0 });
+    window.__car.tick(24); });
+  await iclose(); await ip.click('#tabs button[data-tab="garage"]');
+  check('0.10.0 차고: 이 차의 손익 카드(누적 매출·개발비·월별 이익)', (await ip.locator('#panel .pnl-card').count()) === 1 && (await ip.locator('#panel .pnl-card').innerText()).includes('개발비 합') && (await ip.locator('#panel .pnl-card svg').count()) === 1);
+  const facN = await ip.locator('#panel .factors-card .fac-row').count();
+  check('0.10.0 차고: 판매 요인 카드(막대, 가격 요인 포함)', facN >= 1 && (await ip.locator('#panel .factors-card .fac-row[data-key="price"]').count()) === 1, `${facN}줄`);
+  await ip.locator('#panel .factors-card').scrollIntoViewIfNeeded(); await ishot('insight-garage-1366x1024');
+  await IG(() => { const g = window.__car.game.state.nameplates[0].generations[0]; g.reviewAvg = 3.2; g.editions[0].defects = 18; window.__car.render(); });
+  check('0.10.0 혹평 차: 다음 단계에 [긴급 개선] 켜짐', await ip.locator('[data-act="quickFix"]').isEnabled());
+  await ip.click('[data-act="quickFix"]');
+  check('0.10.0 긴급 개선 확인 창: 예상 효과(리콜 위험·품질 등급·비용)', (await ip.locator('#ask').isVisible()) && /리콜 위험.*품질 등급/.test(await ip.locator('#ask').innerText()));
+  await ip.click('#ask-yes');
+  check('0.10.0 긴급 개선 시작: 개발 프로젝트(fix), 가격 인하 판매는 막힘과 이유', (await IG(() => window.__car.game.state.projects[0]?.kind)) === 'fix' && !(await ip.locator('[data-act="clearance"]').isEnabled()) && (await ip.locator('.rescue .why').count()) >= 1);
+  await IG(() => window.__car.tick(8)); await iclose(); await ip.click('#tabs button[data-tab="garage"]');
+  check('0.10.0 긴급 개선 8주 뒤 개선판 반영(결함 감소)', await IG(() => { const g = window.__car.game.state.nameplates[0].generations[0]; return !!g.fixed && g.editions.at(-1).defects < 18; }));
+  await ip.click('[data-act="clearance"]'); await ip.click('#ask-yes');
+  check('0.10.0 가격 인하 판매: 기준가의 88%로 고정', await IG(() => { const s = window.__car.game.state, g = s.nameplates[0].generations[0]; return !!g.clearance && g.editions.at(-1).price === g.clearance.price; }));
+  await ip.click('#tabs button[data-tab="company"]'); await ip.click('#panel [data-act="cotab"][data-v="staff"]');
+  await ip.locator('.srow:not(.head):not(.s-exec)').first().click();
+  check('0.10.0 직원 상세: 경력(입사·능력 꺾은선·참여한 차)', (await ip.locator('#staff-card .career').innerText()).includes('입사') && (await ip.locator('#staff-card .career-cars').innerText()).includes('수습카'));
+  await ip.click('#tabs button[data-tab="records"]'); await ip.click('[data-act="rectab"][data-v="cars"]');
+  check('0.10.0 기록 탭 차종 계보: 차종 손익 한 줄', (await ip.locator('#panel .np-pnl').count()) === 1);
+  await IG(() => { window.__car.game.state.week = 9 * 48 + 11 * 4; window.__car.tick(4, true); }); // 1979년 12월 결산
+  check('0.10.0 1979년 12월 결산 뒤 10년 회고 신문 창(자동 멈춤 연 보고서·10년 회고)', (await ip.locator('#sheet .decade-paper').isVisible()) && (await ip.locator('#sheet .decade-paper h3').innerText()).includes('1970년대'));
+  await ip.waitForTimeout(500); await ishot('insight-decade-1366x1024');
+  await iclose(); await ip.click('#tabs button[data-tab="records"]'); await ip.click('[data-act="rectab"][data-v="years"]'); await ip.click('[data-act="decadeOpen"][data-v="1970"]');
+  check('0.10.0 기록 탭에서 10년 회고 다시 보기', await ip.locator('#sheet .decade-paper').isVisible());
+  await ictx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);
 await done(fails.length ? 1 : 0);

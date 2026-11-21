@@ -146,7 +146,7 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
   const bad = out.filter((f) => f.impact <= -F.minShow).slice(0, 2);
   return {
     generationId: g.id, demand: actual, sold: last, capacity: cap, base: dem(all), factors: out,
-    summary: slump && bad.length ? `판매가 부진합니다(지난달 ${last}대${prev !== null && prev > 0 && last! < prev ? `, 전달 ${prev}대` : ''}). 큰 원인: ${bad.map((f) => `${f.name} ${Math.round(f.impact * 100)}%`).join(', ')}.` : null,
+    summary: slump && bad.length ? `판매가 부진합니다(지난달 ${last}대${prev !== null && prev > 0 && last! < prev ? `, 전달 ${prev}대` : ''}). 큰 원인: ${bad.map((f) => `${f.name} −${Math.round(-f.impact * 100)}%`).join(', ')}.` : null,
   };
 }
 

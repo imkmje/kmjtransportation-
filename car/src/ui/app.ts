@@ -19,6 +19,7 @@ import { DEFAULT_LOGO, LOGO_BG, LOGO_FG, LOGO_MARKS, LOGO_SHAPES, PAINT, WHEELS,
 import { infoOf } from './glossary';
 import { createSound, type Sfx } from './sound';
 import { testCut } from '../sim/dev';
+import * as I from './insight';
 
 type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'company' | 'records';
 type Tab = 'garage' | 'dev' | 'company' | 'records';
@@ -34,7 +35,7 @@ interface LaunchSet { pid: number; price: number; marketing: number; color: stri
 
 const WEEK_MS = 3000; // 보통(1배): 1주 = 3초. 0.4.2 사용자 불만(너무 빠름)으로 1.5초 → 3초. 빠름 2배 1.5초, 아주 빠름 4배 0.75초
 const PAUSE_KEY = 'car-company-autopause'; // 자동 멈춤 설정(기기 저장소, 디버그 표시와 같은 방식)
-const PAUSE_ITEMS = [['cands', '채용 후보가 왔을 때'], ['ready', '개발한 차가 출시 대기가 됐을 때'], ['choice', '결정할 사건이 생겼을 때(선택 창을 띄움)'], ['yearReport', '12월 결산 뒤 연 보고서(창을 띄움)']] as const;
+const PAUSE_ITEMS = [['cands', '채용 후보가 왔을 때'], ['ready', '개발한 차가 출시 대기가 됐을 때'], ['choice', '결정할 사건이 생겼을 때(선택 창을 띄움)'], ['yearReport', '12월 결산 뒤 연 보고서·10년 회고(창을 띄움)']] as const;
 // 0.8.0 자동 저장 설정(기기 저장소): 간격, 큰 결정 뒤 저장
 const SAVE_SET_KEY = 'car-company-autosave';
 const SAVE_EVERY = [['week', '매주'], ['month', '매달'], ['quarter', '석 달마다'], ['off', '끔']] as const;
@@ -422,11 +423,24 @@ export function startApp(): void {
   // ----- 0.8.0 연 보고서 -----
   function yearReportDue(y: number): void {
     if (skipping) return; // 개발자 메뉴 1년 건너뛰기 중에는 띄우지 않는다
-    if (pauseOn.yearReport && !quietChoice && sheet.hidden && $('#ask').hidden && title.hidden) { if (skip) endSkip(''); showYearReport(y); return; }
+    const dec = (y + 1) % 10 === 0 ? y - 9 : null; // 0.10.0 10년 회고: 1979·1989·… 12월 결산 뒤(신문을 먼저, 연 보고서는 알림으로)
+    if (pauseOn.yearReport && !quietChoice && sheet.hidden && $('#ask').hidden && title.hidden) {
+      if (skip) endSkip('');
+      if (dec !== null) { showDecade(dec); toast(`${y}년 연 보고서도 나왔습니다.`, 'alert', '연 보고서', 9000, 'year', { label: '보기', fn: () => showYearReport(y) }); } else showYearReport(y);
+      return;
+    }
+    if (dec !== null) toast(`${dec}년대 10년 회고 신문이 나왔습니다. 기록 탭에서도 볼 수 있습니다.`, 'alert', '10년 회고', 9000, 'decade', { label: '보기', fn: () => showDecade(dec) });
     toast(`${y}년 연 보고서가 나왔습니다. 기록 탭에서도 볼 수 있습니다.`, 'alert', '연 보고서', 9000, 'year', { label: '보기', fn: () => showYearReport(y) });
   }
   const pctDiff = (a: number, b: number | null | undefined) => (b === null || b === undefined || !b ? '' : ` <small class="${a >= b ? 'pos' : 'neg'}">전년 대비 ${a >= b ? '+' : '−'}${Math.abs(Math.round(((a - b) / Math.abs(b)) * 100))}%</small>`);
   const amtDiff = (a: number, b: number | null | undefined) => (b === null || b === undefined ? '' : ` <small class="${a >= b ? 'pos' : 'neg'}">전년 대비 ${money(a - b, true)}</small>`);
+  /** 0.10.0 10년 회고 신문 창 */
+  function showDecade(d: number): void {
+    if (!game) return;
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    sheetBody.innerHTML = `<div class="yr">${I.decadePaper(game.state, d, myLogo(22))}</div>`;
+    sheet.hidden = false; renderTop();
+  }
   function showYearReport(y: number): void {
     if (!game) return;
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
@@ -829,9 +843,10 @@ export function startApp(): void {
     const card3 = `<div class="card next-step"><p class="lbl">이 차의 다음 단계 <span class="lblterms">페이스리프트${ib('term:페이스리프트')} 풀체인지${ib('term:풀체인지')}</span></p><div class="row"><button class="btn" data-act="goLift" data-id="${g.id}" ${fl.ok ? '' : 'disabled'}>페이스리프트</button><button class="btn" data-act="goFull" data-id="${np.id}" ${fc.ok ? '' : 'disabled'}>풀체인지</button></div>
       ${why('페이스리프트', fl)}${why('풀체인지', fc)}${blk ? `<div class="warnbox reg-block" style="margin-top:10px">${esc(blk)}<button class="btn" data-act="goCo" data-v="research" style="width:100%;margin-top:8px">연구 화면</button></div>` : ''}
       ${rf.needed ? `<hr><div class="retrofit"><p class="lbl">의무 장비${ib('term:유예 기간')}</p><p class="hint">규제로 의무가 된 <b>${rfNames}</b>${josa(rfNames, '을/를')} 판매 중인 이 차에 넣습니다. 한 번에 ${money(rf.cost)}, 대당 원가 +${num(rf.unitCostAdd)}만원.</p><button class="btn ink" data-act="retrofit" data-id="${g.id}" ${rf.ok ? '' : 'disabled'} style="width:100%;margin-top:8px">의무 장비 넣기</button>${rf.ok || rf.reason === blk ? '' : `<p class="note why">${esc(rf.reason ?? '')}</p>`}</div>` : ''}
+      ${I.rescueBlock(s, g.id)}
       <hr><button class="btn danger" data-act="discontinue" data-id="${g.id}" ${ending ? 'disabled' : ''} style="width:100%">${ending ? '이번 달 말에 단종됩니다' : '단종하기'}</button></div>`;
     const planCard = s.projects.length < Q.devTeams(s) ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
-    return { ov: ovh, panel: card2 + card1 + card3 + devCard + planCard, look: genLook(g) }; // 가격 카드가 맨 위(태블릿 가로에서 스크롤 없이)
+    return { ov: ovh, panel: card2 + card1 + I.factorsCard(s, g.id) + I.pnlCard(s, g.id) + card3 + devCard + planCard, look: genLook(g) }; // 가격 카드가 맨 위(태블릿 가로에서 스크롤 없이)
   }
 
   // ----- 신차 기획 첫 화면(8.7) -----
@@ -1154,10 +1169,10 @@ export function startApp(): void {
   }
 
   // ----- 개발 진행(사무실) -----
-  const kindLabel = (p: Project) => p.kind === 'facelift' ? '페이스리프트 중' : p.kind === 'fullchange' ? `풀체인지 중 · ${(prevOf(p)?.number ?? 0) + 1}세대` : '개발 중';
+  const kindLabel = (p: Project) => p.kind === 'fix' ? '긴급 개선 중' : p.kind === 'facelift' ? '페이스리프트 중' : p.kind === 'fullchange' ? `풀체인지 중 · ${(prevOf(p)?.number ?? 0) + 1}세대` : '개발 중';
   /** 개발 중 표시 등급. shortcut: 페이스리프트는 sim의 projectPreview가 디자인 점수만 보고 계산해 등급이 0에 가깝게 나오므로, 지금 판매 중인 판의 등급을 보여 준다(sim에 페이스리프트용 미리보기가 생기면 바꿀 것) */
   function devGrades(p: Project): { grades: Stats; avg: number } | null {
-    const s = game!.state, g = p.kind === 'facelift' ? Q.generationById(s, p.targetId ?? -1) : undefined;
+    const s = game!.state, g = p.kind === 'facelift' || p.kind === 'fix' ? Q.generationById(s, p.targetId ?? -1) : undefined;
     return g ? { grades: Q.generationGrades(s, g), avg: Q.avgGrade(currentEdition(g).stats, yearOf(s.week)) } : Q.projectPreview(s, p.id);
   }
   /** 개발 탭에서 보는 프로젝트(고른 것, 없으면 첫 프로젝트) */
@@ -1178,7 +1193,7 @@ export function startApp(): void {
     }
     // 동시 개발: 위쪽에 프로젝트 전환 칩. 빈 개발팀이 있으면 [신차 기획]
     const chips = s.projects.length >= 2 || free ? `<div class="pchips"><span class="lbl">개발팀 ${s.projects.length}/${teams}</span>${s.projects.length >= 2 ? s.projects.map((x) => `<button class="pchip" data-act="devSel" data-id="${x.id}" aria-pressed="${x.id === p.id}"><b>${esc(x.name)}</b><small>${phaseText(x)}</small></button>`).join('') : ''}${free ? '<button class="btn ink" data-act="plan">+ 신차 기획</button>' : ''}</div>` : '';
-    const pv = devGrades(p)!, minT = config.dev.minTestWeeks, ready = p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p, s);
+    const pv = devGrades(p)!, minT = config.dev.minTestWeeks, ready = p.kind !== 'fix' && p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p, s);
     const phase = phaseText(p);
     const ovh = `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>${kindLabel(p)} · ${phase}</div><b>${esc(p.name)}</b><span class="ofc-s">${STATS.map((k) => `${STAT_NAME[k]} ${score(pv.grades[k])}`).join(' · ')} · 결함 약 ${num(p.defectEst)}개</span></div><div class="ofc-g"><small>지금 등급${ib('term:지금 등급')}</small><b>${score(pv.avg)}</b></div></div>`;
     const pct = p.phase === 'design' ? (p.weeksDone / p.designWeeks) * 100 : 100;
@@ -1436,6 +1451,7 @@ export function startApp(): void {
         <p class="lbl" style="margin-top:14px">휴식</p><div class="row">${[2, 4].map((w) => `<button class="btn" data-act="rest" data-id="${x.id}" data-v="${w}" ${x.status === 'training' ? 'disabled' : ''}>${w}주 쉬기</button>`).join('')}</div><p class="note">쉬는 동안 일하지 않고 컨디션이 회복됩니다. 개발에서 빠지지는 않습니다.</p>
         <p class="lbl" style="margin-top:14px">개발 배치</p>${assign}${x.role !== 'engineer' ? '' : lab.has(x.id) ? `<p class="hint" style="margin-top:8px">전담 연구원입니다. 개발에 넣지 않고 연구 점수를 1.5배로 냅니다.</p><button class="btn" data-act="assign" data-id="${x.id}" data-v="" style="width:100%;margin-top:6px">연구소에서 빼기</button>`
           : s.hqLevel >= config.research.labHq ? `<button class="btn lab-btn" data-act="assign" data-id="${x.id}" data-v="lab" style="width:100%;margin-top:8px">전담 연구원으로 <small>(연구 점수 1.5배, 개발에는 못 넣음)</small></button>` : `<p class="note">본사 ${config.research.labHq}등급부터 전담 연구원으로 둘 수 있습니다. 엔지니어는 그냥 두어도 연구합니다(개발 중이면 ${Math.round(config.research.projectShare * 100)}% 속도).</p>`}
+        ${I.careerBlock(s, x.id)}
         <hr><button class="btn danger" data-act="fire" data-id="${x.id}" style="width:100%">해고 · 퇴직금 ${money(x.severance)}</button>
         <button class="btn" data-act="staffSel" data-id="${x.id}" style="width:100%;margin-top:8px">닫기</button></div>`;
     }
@@ -1584,7 +1600,7 @@ export function startApp(): void {
   /** 지난 연 보고서 목록(0.8.0): 누르면 그해 보고서 창 */
   function yearsTab(): string {
     const ys = Q.reportYears(game!.state);
-    return `<div class="card years-card"><h3>연 보고서 <small class="hint">${ys.length}건</small></h3>${ys.length ? `<div class="yr-years">${ys.map((y) => { const m = Q.yearReport(game!.state, y).money; return `<button class="btn" data-act="yearOpen" data-v="${y}"><b>${y}년</b><small>${m ? `판매 ${num(m.sold)}대 · 이익 ${money(m.profit, true)}` : ''}</small></button>`; }).join('')}</div>` : '<p class="hint" style="margin-top:8px">첫 해가 끝나면(12월 결산 뒤) 연 보고서가 여기 쌓입니다.</p>'}</div>`;
+    return `<div class="card years-card"><h3>연 보고서 <small class="hint">${ys.length}건</small></h3>${ys.length ? `<div class="yr-years">${ys.map((y) => { const m = Q.yearReport(game!.state, y).money; return `<button class="btn" data-act="yearOpen" data-v="${y}"><b>${y}년</b><small>${m ? `판매 ${num(m.sold)}대 · 이익 ${money(m.profit, true)}` : ''}</small></button>`; }).join('')}</div>` : '<p class="hint" style="margin-top:8px">첫 해가 끝나면(12월 결산 뒤) 연 보고서가 여기 쌓입니다.</p>'}</div>${I.decadeButtons(game!.state)}`;
   }
   /** 조합 노트(5.5): 차체(세로) × 고객층(가로). 출시해 본 칸만 궁합·차 이름·평론, 나머지는 "?" */
   function comboTab(): string {
@@ -1616,7 +1632,7 @@ export function startApp(): void {
     };
     return `<div class="card"><div class="rec-co">${myLogo(36)}<b>${esc(s.companyName)}</b></div><h3>지금까지 낸 차 ${gens.length}대</h3><div class="kpis">${kpi('누적 판매', `${qty(total)}<span>대</span>`)}${kpi('차종', `${nps.length}<span>개</span>`)}${kpi('명차', `${gens.filter((g) => g.masterpiece).length}<span>대</span>`)}${kpi('평판', String(Math.round(s.reputation)))}</div></div>
       ${nps.map((n) => `<div class="card lineage-card" data-np="${n.id}"><p class="lbl">차종 계보</p><h3>${esc(n.name)} <small class="hint">${n.generations.length}세대 · 누적 ${num(n.generations.reduce((a, g) => a + g.totalSold, 0))}대 · 이름값 ${EQ_WORD(Q.nameplateEquity(s, n.id))}</small></h3>
-        <div class="lineage">${Q.lineage(s, n.id).map(genCard).join('<span class="arrow" aria-hidden="true">→</span>')}</div></div>`).join('')}`;
+        ${I.nameplatePnlLine(s, n.id)}<div class="lineage">${Q.lineage(s, n.id).map(genCard).join('<span class="arrow" aria-hidden="true">→</span>')}</div></div>`).join('')}`;
   }
 
   // ----- 파산 -----
@@ -1916,6 +1932,14 @@ export function startApp(): void {
         if (pol && !(await ask(`가격을 직접 바꾸면 자동 가격(${policyName(pol)})이 꺼지고 수동으로 돌아갑니다.\n가격을 ${num(price)}만원으로 바꿀까요?`, '가격 바꾸기'))) return;
         if (run(game.command({ type: 'setPrice', generationId: id, price }))) { garagePrice.delete(id); toast(`가격을 ${num(price)}만원으로 바꿨습니다. 다음 결산부터 반영됩니다.`); render(); } return; }
       case 'setMk': if (game && run(game.command({ type: 'setMarketing', generationId: Number(el.dataset.id), marketing: Number(v) }))) render(); return;
+      case 'quickFix': case 'clearance': { // 0.10.0 실패한 차의 수습(확인 창에 예상 효과)
+        const id = Number(el.dataset.id), kind = a as 'quickFix' | 'clearance';
+        if (!game) return;
+        void ask(I.rescueConfirm(game.state, id, kind), kind === 'quickFix' ? '긴급 개선 시작' : '가격 인하 판매 시작').then((yes) => {
+          if (yes && game && run(game.command({ type: kind, generationId: id }))) { toast(kind === 'quickFix' ? `긴급 개선을 시작했습니다. ${config.rescue.fixWeeks}주 뒤 개선판이 나옵니다.` : `가격 인하 판매를 시작했습니다. ${config.rescue.clearMonths}개월 뒤 단종합니다.`); render(); }
+        });
+        return;
+      }
       case 'retrofit': if (game && run(game.command({ type: 'retrofit', generationId: Number(el.dataset.id) }))) { toast('의무 장비를 넣었습니다. 대당 원가가 그만큼 오릅니다.'); render(); } return;
       case 'discontinue': {
         if (!game) return; const g = Q.generationById(game.state, Number(el.dataset.id)); if (!g) return;
@@ -2071,6 +2095,7 @@ export function startApp(): void {
       case 'saveBig': saveSet.big = !saveSet.big; keep(SAVE_SET_KEY, saveSet); void showMenu(); return;
       case 'undo': doUndo(); return;
       case 'yearOpen': showYearReport(Number(v)); return;
+      case 'decadeOpen': showDecade(Number(v)); return;
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
       case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
       case 'closeSheet': sheet.hidden = true; todoTab = 'todo'; render(); return;
