@@ -173,7 +173,7 @@ export class Stage {
     this.R.setSize(w, h, false); cam.aspect = w / h;
     // 0.9.0 무대가 좁고 길어져(화면의 약 40%) 원판 전체 대신 차 길이(약 5m)에 맞춰 당긴다: 차가 폭의 약 85%를 채워 작아 보이지 않게(원판 가장자리는 잘려도 된다)
     const d = Math.max(7.8, 11.6 / cam.aspect);
-    const ty = .5 + Math.max(0, 1 - cam.aspect) * d * .15; // 세로로 긴 무대: 위쪽 차 이름 글자를 피해 차를 아래쪽 빈자리로 내린다
+    const ty = .5 + Math.max(0, 1 - cam.aspect) * d * .33; // 세로로 긴 무대: 위쪽 차 이름 글자를 피해 차를 아래쪽 빈자리로 내린다(0.13.0: 1180×820 차 상세의 아래 여백을 줄이려고 .15 → .33)
     cam.position.set(0, d * .22 + .5 + (ty - .5), d); cam.lookAt(0, ty, 0); cam.updateProjectionMatrix();
   }
 

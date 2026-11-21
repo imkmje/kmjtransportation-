@@ -185,19 +185,21 @@ await page.$eval('#lprice', (el, v) => { el.value = String(v); el.dispatchEvent(
 check('색·휠 선택이 무대 글자에 반영', (await page.locator('#ov .spec').innerText()).includes('코발트') && (await page.locator('#ov .spec').innerText()).includes('큰 휠'));
 await page.waitForTimeout(900);
 await shot('launch');
-await G(() => localStorage.setItem('car-company-reveal', '1'));
+await G(() => { localStorage.setItem('car-company-reveal', '1'); window.__revealHold = true; }); // 장면을 글자 단계에서 멈춰 세운다(실제 시간에 기대지 않음)
 await act('doLaunch');
 await page.click('#ask-yes');
 await page.waitForSelector('#sheet:not([hidden])');
 // ---- 0.13.0 출시 공개 장면: 어두운 무대·실루엣 → 스포트라이트 → 이름 글자, 시간 멈춤, 건너뛰기로 평론 창 ----
 { const wk0 = await G(() => window.__car.game.state.week);
   check('출시 공개 장면이 뜸(무대 캔버스가 장면 안으로 옮겨짐)', (await page.locator('#sheet .rvl').isVisible()) && (await page.locator('#sheet .rvl canvas').count()) === 1);
-  const lit = await page.waitForSelector('#sheet .rvl.lit.txt', { timeout: 4500 }).then(() => true, () => false); // 장면 시간표는 실제 시간이라 느린 소프트웨어 렌더에서도 2.1초쯤 켜진다
-  check('공개 장면: 불이 켜지고 이름·세대 글자, 시간은 멈춤', lit && (await page.locator('#sheet .rvl-txt').innerText().catch(() => '')).includes('1세대') && (await G(() => window.__car.game.state.week)) === wk0);
-  const skipped = await page.locator('#sheet .rvl-skip').click({ timeout: 1500 }).then(() => true, () => false);
+  await page.waitForSelector('#sheet .rvl[data-phase="title"]', { timeout: 20000 });
+  await shot('reveal');
+  check('공개 장면: 불이 켜지고 이름·세대 글자, 시간은 멈춤', (await page.locator('#sheet .rvl.lit.txt').count()) === 1 && (await page.locator('#sheet .rvl-txt').innerText()).includes('1세대') && (await G(() => window.__car.game.state.week)) === wk0);
+  await page.click('#sheet .rvl-skip');
   await page.waitForSelector('#sheet .critic');
   const st = await G(() => ({ ...window.__reveal }));
-  check('건너뛰기(또는 끝까지 봄) → 평론 창, 무대 캔버스는 제자리', (await page.locator('#sheet .rvl').count()) === 0 && (await page.locator('#stage #cv').count()) === 1, `건너뜀 ${skipped} · ${JSON.stringify(st)}(프레임은 소프트웨어 렌더 참고값)`); }
+  check('건너뛰기 → 평론 창, 무대 캔버스는 제자리', (await page.locator('#sheet .rvl').count()) === 0 && (await page.locator('#stage #cv').count()) === 1 && st.skipped, `${JSON.stringify(st)}(프레임은 소프트웨어 렌더 참고값)`); }
+await G(() => { window.__revealHold = false; });
 await G(() => localStorage.setItem('car-company-reveal', '0'));
 await page.waitForTimeout(4200);
 const rv = await page.locator('#sheet').innerText();
@@ -1575,6 +1577,40 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await gp.setViewportSize({ width: 1024, height: 768 }); await gp.waitForTimeout(300);
   check('0.12.0 개발(1024×768): 카드 수치·제목이 말줄임·넘침 없음', await GG(() => [...document.querySelectorAll('#panel .kpi b, #panel .card h2, #panel .dsteps li')].every((b) => b.scrollWidth <= b.clientWidth + 1)));
   await mshot('dev-1024x768');
+  // 0.12.0 고객층에 맞게 자동 배치: [자동 배치] → Q.bestTeam 결과가 팀에 반영, 요약(매력 전→후·개발비·기간), 엔지니어 1명은 연구에
+  await gp.setViewportSize({ width: 1180, height: 820 }); await gclose();
+  await GG(() => { const s = window.__car.game.state, b = s.staff[0]; s.hqLevel = 5; const roles = ['designer', 'engineer', 'tester', 'designer', 'engineer', 'tester', 'engineer'];
+    roles.forEach((r, i) => s.staff.push({ ...b, id: 8800 + i, name: `자동${i}`, role: r, ability: 35 + i * 7, projectId: null, trainings: [], restUntil: null, lab: false })); window.__car.render(); });
+  await gp.click('#tabs button[data-tab="dev"]'); await gp.locator('[data-act="plan"]').first().click();
+  if ((await GG(() => window.__car.screen)) === 'start') await gp.click('[data-act="pickNew"]');
+  await gp.click('[data-act="ptab"][data-v="budget"]');
+  await gp.click('[data-act="autoTeam"]');
+  const at = await GG(() => { const c = window.__car, d = c.draft, r = c.Q.bestTeam(c.game.state, d, { keepEngineer: true }); return { got: [...d.team].sort((a, b) => a - b).join(), want: r.team.join(), reserved: r.reserved, n: r.team.length, idle: c.game.state.staff.filter((x) => x.projectId === null && x.role !== 'sales' && !x.lab).length }; });
+  const an = await gp.locator('#panel .auto-note').innerText().catch(() => '');
+  check('0.12.0 [고객층에 맞게 자동 배치] → bestTeam 팀이 기획에 반영, 요약(매력 전→후·개발비·기간), 엔지니어 1명은 연구에 남김', at.got === at.want && at.n > 0 && at.reserved !== null && !at.got.split(',').includes(String(at.reserved)) && /고객층 매력 [\d.]+ → [\d.]+/.test(an) && an.includes('개발비') && an.includes('엔지니어'), JSON.stringify(at));
+  await mshot('auto-team-1180x820');
+  await gp.locator('#panel .pick[aria-pressed="true"]').first().click();
+  check('0.12.0 자동 배치 뒤 손으로 고치면 그대로 반영(요약은 사라짐)', (await GG(() => window.__car.draft.team.length)) === at.n - 1 && (await gp.locator('#panel .auto-note').count()) === 0);
+  await gp.click('[data-act="cancelPlan"]');
+  // 0.12.0 창 바깥 누르기: 할 일·설정·월 결산·비교 창은 닫히고, 결정할 사건 창은 안 닫히고, 확인 창은 취소로
+  const outside = async () => { await gp.mouse.click(6, 816); await gp.waitForTimeout(150); };
+  const open = async (name, fn) => { await fn(); await gp.waitForSelector('#sheet:not([hidden])'); await outside(); return [name, await gp.locator('#sheet').isHidden()]; };
+  const R = [];
+  R.push(await open('할 일', () => gp.click('#todobtn')));
+  R.push(await open('설정', async () => { await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); }));
+  R.push(await open('월 결산', () => GG(() => window.__car.showMonth(window.__car.game.state.ledger.length - 1))));
+  await gp.click('#tabs button[data-tab="garage"]'); await gp.locator('[data-act="cmpClear"]').first().click().catch(() => {});
+  await gp.locator('.gtable [data-act="cmpPick"]').nth(0).click(); await gp.locator('.gtable [data-act="cmpPick"]').nth(1).click();
+  R.push(await open('비교', () => gp.click('[data-act="cmpOpen"]')));
+  check('0.12.0 창 바깥을 누르면 닫힘(할 일·설정·월 결산·비교)', R.every(([, h]) => h), JSON.stringify(R));
+  await GG(() => { const c = window.__car, s = c.game.state; s.events.pending.push({ id: s.nextId++, eventId: 'motorshow', text: '점검용 결정', week: s.week, deadline: s.week + 8, genId: null, fx: null }); c.render(); });
+  await gp.click('#pend'); await gp.waitForSelector('#sheet .choice-sheet'); await outside();
+  check('0.12.0 결정할 사건 창은 바깥을 눌러도 닫히지 않음', await gp.locator('#sheet .choice-sheet').isVisible());
+  await gp.click('#sheet [data-act="later"]');
+  const gid = await GG(() => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.status === 'onSale').id);
+  await gp.locator(`.gtable [data-act="gopen"][data-id="${gid}"]`).click(); await gp.click('[data-act="discontinue"]'); await gp.waitForSelector('#ask:not([hidden])');
+  await gp.mouse.click(6, 816); await gp.waitForTimeout(150);
+  check('0.12.0 확인 창(단종) 바깥 누르기 = 취소(창 닫힘, 단종 안 됨)', (await gp.locator('#ask').isHidden()) && (await GG((id) => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id).status, gid)) === 'onSale');
   await gctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
