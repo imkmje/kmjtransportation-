@@ -1187,15 +1187,45 @@ export function startApp(): void {
   /** 팀으로 고를 수 있는 직원: 프로젝트에 배치되지 않은 개발 직무(교육·휴식 중이면 그동안 일하지 않음) */
   const idleDev = () => { const lab = new Set(game!.state.staff.filter((x) => x.lab).map((x) => x.id)); return Q.staffInfo(game!.state).filter((x) => x.projectId === null && x.role !== 'sales' && !lab.has(x.id)); }; // 전담 연구원은 개발에 넣지 않는다
   /** 팀 고르기(기획 마지막 단계·페이스리프트). 고를 수 없게 된 직원은 빼고 돌려준다 */
-  function teamPicker(team: number[], act: string): string {
-    const list = idleDev(), busy = busyReason();
+  // 0.12.0 고객층에 맞는 자동 배치: 선택(엔지니어 1명 연구에 남기기·다른 개발 중인 직원 포함)과 마지막 결과 요약(팀이 그대로일 때만 보인다)
+  const teamOpt = { keepEng: true, busy: false };
+  let autoNote: { act: string; team: string; html: string } | null = null;
+  /** 고를 수 있는 직원: 쉬는 개발 직원 + (선택) 다른 개발 중인 직원. 전담 연구원은 넣지 않는다 */
+  const pickable = () => { const lab = new Set(game!.state.staff.filter((x) => x.lab).map((x) => x.id)); return Q.staffInfo(game!.state).filter((x) => x.role !== 'sales' && !lab.has(x.id) && (x.projectId === null || teamOpt.busy)); };
+  /** 페이스리프트 팀 고르기용 기획 값(그 세대의 차체·고객층·동력, 방향은 고르게). shortcut: 페이스리프트는 디자인 점수만 쌓이므로 매력 추정은 근사 */
+  const liftSpec = (L: LiftSet): ProjectSpec | null => { const g = Q.generationById(game!.state, L.genId); if (!g) return null; const w = Q.faceliftPreview(game!.state, L.genId, { options: L.options, tier: L.tier })?.designWeeks ?? config.dev.designWeeks[0];
+    const even = Math.floor(config.dev.dirTotal / STATS.length); return { name: nameOf(g), body: g.body, segment: g.segment, powertrain: g.powertrain, tier: L.tier, options: L.options, direction: Object.fromEntries(STATS.map((k) => [k, even])) as Stats, budget: 'normal', designWeeks: w }; };
+  function teamPicker(team: number[], act: string, spec?: ProjectSpec | null): string {
+    const list = pickable(), busy = busyReason(), s = game!.state, pname = (id: number | null) => s.projects.find((p) => p.id === id)?.name ?? '';
+    const sw = (k: 'keepEng' | 'busy', label: string) => `<label class="chk"><input type="checkbox" data-topt="${k}" ${teamOpt[k] ? 'checked' : ''}> ${label}</label>`;
+    const auto = spec ? `<div class="auto-team"><button class="btn ink" data-act="autoTeam" data-v="${act}">고객층에 맞게 자동 배치</button>${sw('keepEng', '연구에 엔지니어 1명 남기기')}${sw('busy', '다른 개발 중인 직원도 포함')}</div>
+      ${autoNote?.act === act && autoNote.team === [...team].sort((a, b) => a - b).join() ? autoNote.html : ''}` : '';
     return `<div class="team-pick"><p class="lbl" style="margin-top:14px">개발팀 구성 <span class="team-n">${team.length}명</span></p>
-      ${busy ? `<div class="badbox">${esc(busy)}</div>` : ''}
-      ${list.length ? `<div class="picks">${list.map((x) => `<button class="pick" data-act="${act}" data-id="${x.id}" aria-pressed="${team.includes(x.id)}"><i aria-hidden="true"></i><span><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} ${x.ability}${x.status === 'training' ? ` · 교육 중(${x.weeksLeft}주 동안 일 못 함)` : x.status === 'resting' ? ` · 휴식 중(${x.weeksLeft}주)` : x.conditionMult < 1 ? ' · 지침' : ''}</small></span></button>`).join('')}</div>`
+      ${busy ? `<div class="badbox">${esc(busy)}</div>` : ''}${auto}
+      ${list.length ? `<div class="picks">${list.map((x) => `<button class="pick" data-act="${act}" data-id="${x.id}" aria-pressed="${team.includes(x.id)}"><i aria-hidden="true"></i><span><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} ${x.ability}${x.projectId !== null ? ` · 「${esc(pname(x.projectId))}」 개발 중(넣으면 그 개발에서 빠짐)` : x.status === 'training' ? ` · 교육 중(${x.weeksLeft}주 동안 일 못 함)` : x.status === 'resting' ? ` · 휴식 중(${x.weeksLeft}주)` : x.conditionMult < 1 ? ' · 지침' : ''}</small></span></button>`).join('')}</div>`
         : '<div class="warnbox">쉬고 있는 개발 직원이 없습니다. 회사 탭에서 채용하거나 다른 개발에서 직원을 빼야 합니다.</div>'}
-      <p class="note">다른 차를 개발 중인 직원은 고를 수 없습니다. 인원을 줄이면 예상 등급이 내려가고 개발비(인건비)는 줄어듭니다.</p></div>`;
+      <p class="note">${teamOpt.busy ? '다른 차를 개발 중인 직원을 넣으면 개발을 시작할 때 그 개발에서 빠집니다.' : '다른 차를 개발 중인 직원은 고를 수 없습니다(위 선택을 켜면 고를 수 있습니다).'} 인원을 줄이면 예상 등급이 내려가고 개발비(인건비)는 줄어듭니다.</p></div>`;
   }
-  const keepIdle = (team: number[]) => { const ok = new Set(idleDev().map((x) => x.id)); return team.filter((id) => ok.has(id)); };
+  /** [고객층에 맞게 자동 배치]: Q.bestTeam 결과로 팀을 바꾸고 요약(고른 사람, 매력 전→후, 개발비·기간)을 남긴다 */
+  function autoTeam(act: string): void {
+    const s = game!.state, o = act === 'liftTeam' ? lift : draft, spec = act === 'liftTeam' ? (lift ? liftSpec(lift) : null) : draft;
+    if (!o || !spec) return;
+    const before = Q.teamPreview(s, o.team, spec), r = Q.bestTeam(s, spec, { keepEngineer: teamOpt.keepEng, includeBusy: teamOpt.busy });
+    if (!r.team.length) return err('배치할 수 있는 직원이 없습니다. 교육·휴식 중이거나 다른 개발에 배치된 직원은 넣지 않습니다.');
+    o.team = r.team;
+    const names = r.team.map((id) => { const x = s.staff.find((y) => y.id === id)!; return `${esc(x.name)}(${ROLE_NAME[x.role]}${x.projectId !== null ? ' · 다른 개발에서 옮김' : ''})`; }).join(', ');
+    autoNote = { act, team: r.team.join(), html: `<div class="okbox auto-note"><b>자동 배치 ${r.team.length}명</b>: ${names}<br>고객층 매력 ${score(before.segmentScore)} → <b>${score(r.segmentScore)}</b> · 예상 개발비 ${money(before.cost)} → <b>${money(r.cost)}</b> · 기간 약 ${r.weeks}주${r.reason.length ? `<ul>${r.reason.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}<small>그대로 쓰거나 아래에서 직접 고칠 수 있습니다(고치면 이 요약은 사라집니다).</small></div>` };
+    render();
+  }
+  /** 개발 시작 직전: 다른 개발에서 옮겨 올 직원을 먼저 빼고, 시작이 실패하면 원래 개발로 돌려놓는다 */
+  function withMoved(team: number[], start: () => boolean): boolean {
+    const g = game!, moved = g.state.staff.filter((x) => team.includes(x.id) && x.projectId !== null).map((x) => [x.id, x.projectId as number] as const);
+    for (const [id] of moved) g.command({ type: 'assign', staffId: id, projectId: null });
+    const ok = start();
+    if (!ok) for (const [id, pid] of moved) g.command({ type: 'assign', staffId: id, projectId: pid });
+    return ok;
+  }
+  const keepIdle = (team: number[]) => { const ok = new Set(pickable().map((x) => x.id)); return team.filter((id) => ok.has(id)); };
   const defaultName = () => { const n = game!.state.nameplates.length, list = ['아리아', '노바', '솔라', '루나', '벨로', '오로라', '테라', '시리우스', '카덴', '에르타']; return list[n % list.length]; };
   const dirLeft = (d: Draft) => config.dev.dirTotal - STATS.reduce((a, k) => a + d.direction[k], 0);
   const COMPARE = { better: '전작보다 좋음', worse: '전작만 못함', same: '전작과 비슷함' } as const;
@@ -1249,7 +1279,7 @@ export function startApp(): void {
       const left = dirLeft(d);
       body = `<p class="left">남은 점수 <b>${left}</b> / ${config.dev.dirTotal}점${ib('term:개발 방향')}</p>${STATS.map((k) => `<div class="dir"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><button data-act="dir" data-k="${k}" data-v="-1" aria-label="${STAT_NAME[k]} 빼기" ${d.direction[k] <= 0 ? 'disabled' : ''}>−</button><div class="dots" aria-label="${STAT_NAME[k]} ${d.direction[k]}점">${Array.from({ length: config.dev.dirMax }, (_, i) => `<i class="${i < d.direction[k] ? 'on' : ''}"></i>`).join('')}</div><button data-act="dir" data-k="${k}" data-v="1" aria-label="${STAT_NAME[k]} 더하기" ${d.direction[k] >= config.dev.dirMax || left <= 0 ? 'disabled' : ''}>+</button></div>`).join('')}<p class="note">한 능력치에 0~${config.dev.dirMax}점을 줄 수 있습니다. 2점이 보통이며, 많이 줄수록 그 능력치가 더 크게 오릅니다. ${config.dev.dirTotal}점을 모두 나눠야 개발을 시작할 수 있습니다.</p>`;
     } else body = `<p class="lbl">예산</p><div class="opts">${(Object.keys(BUDGET) as Budget[]).map((b) => `<button class="opt" data-act="pick" data-k="budget" data-v="${b}" aria-pressed="${d.budget === b}"><b>${BUDGET[b].name}</b><small>${BUDGET[b].sub}</small></button>`).join('')}</div>
-      <p class="lbl" style="margin-top:14px">설계 기간</p><div class="opts">${config.dev.designWeeks.map((w, i) => `<button class="opt" data-act="pick" data-k="designWeeks" data-v="${w}" aria-pressed="${d.designWeeks === w}"><b>${w}주</b><small>${['빠르지만 점수가 적음', '보통', '오래 걸리지만 점수가 많음'][i] ?? ''}</small></button>`).join('')}</div>${bodyWarn}${teamPicker(d.team, 'teamPick')}`;
+      <p class="lbl" style="margin-top:14px">설계 기간</p><div class="opts">${config.dev.designWeeks.map((w, i) => `<button class="opt" data-act="pick" data-k="designWeeks" data-v="${w}" aria-pressed="${d.designWeeks === w}"><b>${w}주</b><small>${['빠르지만 점수가 적음', '보통', '오래 걸리지만 점수가 많음'][i] ?? ''}</small></button>`).join('')}</div>${bodyWarn}${teamPicker(d.team, 'teamPick', d)}`;
     const ti = tabs.findIndex(([k]) => k === planTab), last = ti === tabs.length - 1 && !sumMode, left = dirLeft(d), dirNo = tabs.findIndex(([k]) => k === 'dir') + 1;
     const nameBox = full ? `<p class="lbl">차 이름(이어받음)</p><p class="namefix">${esc(name)} <small>${(prev?.number ?? 0) + 1}세대</small></p>`
       : `<p class="lbl">차 이름</p><input class="namein" id="pname" type="text" maxlength="12" value="${esc(d.name)}" placeholder="${esc(defaultName())}" aria-label="차 이름">`;
@@ -1399,7 +1429,7 @@ export function startApp(): void {
       ${pv.tooEarly ? `<div class="warnbox lift-early" style="margin-top:8px">출시 ${config.lifecycle.facelift.goodFromMonths}개월 전이라 지금은 효과가 작습니다. 수명이 덜 되돌아갑니다.</div>` : ''}
       ${bar('수명', pv.lifeBefore, pv.lifeAfter, '수명')}${bar('인지도', pv.awarenessBefore, pv.awarenessAfter, '인지도')}
       <p class="note">평론가는 다시 평가하지 않고 신문에 기사가 실립니다. 바꾸는 달에는 생산이 30% 줄어듭니다.</p>
-      ${teamPicker(L.team, 'liftTeam')}<p class="note">페이스리프트는 디자이너가 점수를 내고 테스터가 결함을 잡습니다. 처음에는 추천 팀(쉬는 디자이너·테스터, 엔지니어는 연구에 남김)이 골라져 있습니다.</p>
+      ${teamPicker(L.team, 'liftTeam', liftSpec(L))}<p class="note">페이스리프트는 디자이너가 점수를 내고 테스터가 결함을 잡습니다. 처음에는 추천 팀(쉬는 디자이너·테스터, 엔지니어는 연구에 남김)이 골라져 있습니다.</p>
       ${ok.ok ? '' : `<div class="badbox" style="margin-top:10px">${esc(ok.reason ?? '')}</div>`}
       <div class="row" style="margin-top:12px"><button class="btn" data-act="cancelPlan">그만두기</button><button class="go" data-act="startLift" ${ok.ok ? '' : 'disabled'}>페이스리프트 시작 <span aria-hidden="true">→</span></button></div></div>`;
     return { ov: ovh, panel: card1 + card2 + card3, look: cur };
@@ -2077,10 +2107,13 @@ export function startApp(): void {
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
       case 'liftOpt': if (lift) { lift.options = toggleOpt(lift.options, v); render(); } return;
+      case 'autoTeam': autoTeam(v); return;
       case 'teamPick': case 'liftTeam': { const o = a === 'teamPick' ? draft : lift, id = Number(el.dataset.id); if (o) { o.team = o.team.includes(id) ? o.team.filter((x) => x !== id) : [...o.team, id]; render(); } return; }
       case 'startLift': {
         if (!game || !lift) return; const L = lift, g = Q.generationById(game.state, L.genId);
-        if (!g || !run(game.command({ type: 'startFacelift', generationId: L.genId, options: L.options, tier: L.tier, faceSeed: L.faceSeed, team: L.team }))) return;
+        let r: CommandResult = { ok: false, reason: '없는 차입니다.' };
+        if (g) withMoved(L.team, () => (r = game!.command({ type: 'startFacelift', generationId: L.genId, options: L.options, tier: L.tier, faceSeed: L.faceSeed, team: L.team })).ok);
+        if (!g || !run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1];
         ui.colors[p.id] = currentEdition(g).color; devPrev.set(p.id, 0); lift = null; devSel = p.id;
         toast(`「${p.name}」 페이스리프트를 시작했습니다. 디자이너가 새 얼굴을 그립니다.`); go('dev'); return;
@@ -2143,8 +2176,9 @@ export function startApp(): void {
         // 점수가 남았으면 문제 단계(개발 방향)로 데려가서 이유를 보여 준다
         if (dirLeft(draft) > 0) { planTab = 'dir'; lastPanel = ''; render(); panel.scrollTop = 0; return err(`개발 방향 점수가 ${dirLeft(draft)}점 남았습니다. ${config.dev.dirTotal}점을 모두 나눠야 합니다.`); }
         const { color, nameplateId, team, year: _y, ...spec } = draft; void _y;
-        const r = nameplateId ? game.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team })
-          : game.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName(), team });
+        let r: CommandResult = { ok: false, reason: '' };
+        withMoved(team, () => { r = nameplateId ? game!.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team })
+          : game!.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName(), team }); return r.ok; });
         if (!run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1] as Project;
         ui.colors[p.id] = color; devPrev.set(p.id, 0); draft = null; devSel = p.id;
@@ -2461,6 +2495,7 @@ export function startApp(): void {
   document.addEventListener('pointercancel', () => { dragging = false; });
   document.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
+    if (t.dataset.topt === 'keepEng' || t.dataset.topt === 'busy') { teamOpt[t.dataset.topt] = t.checked; lastPanel = ''; render(); return; } // 0.12.0 자동 배치 선택
     if (t.classList.contains('px-r')) render(); // 놓으면 패널 전체를 다시 그린다(예상 평론 등)
     else if (t.classList.contains('alloc-r') && game) { // 직접 배분: 놓을 때 적용. 합이 100%를 넘으면 sim의 이유를 그대로 보여 준다
       const r = game.command({ type: 'setAllocation', generationId: Number(t.dataset.gen), share: Number(t.value) / 100 });
@@ -2481,6 +2516,17 @@ export function startApp(): void {
     if (e.key !== 'Escape') return;
     if (!$('#ask').hidden) $('#ask-no').click();
     else if (!sheet.hidden) { const close = sheetBody.querySelector<HTMLElement>('[data-act="closeReview"],[data-act="closeSheet"],[data-act="later"]'); close?.click(); }
+  });
+  // 0.12.0 창 바깥(어두운 영역)을 누르면 닫기: 누르기 시작과 뗀 곳이 모두 바깥일 때만(창 안에서 시작한 끌기·스크롤은 닫지 않음).
+  // 확인 창은 [아니요](취소)와 같게. 결정할 사건 창·출시 공개 장면·내용이 있는 입력 칸이 있는 창은 닫지 않는다. 닫기는 창의 닫기 버튼을 누른 것과 같은 경로
+  let downOn: EventTarget | null = null;
+  document.addEventListener('pointerdown', (e) => { downOn = e.target; }, true);
+  for (const box of [sheet, $('#ask')]) box.addEventListener('click', (e) => {
+    if (e.target !== box || downOn !== box) return;
+    if (box !== sheet) { $('#ask-no').click(); return; }
+    if (!$('#ask').hidden || sheet.classList.contains('rvl-on') || sheetBody.querySelector('.choice-sheet')) return;
+    if ([...sheetBody.querySelectorAll<HTMLInputElement>('input[type=text]')].some((x) => x.value.trim())) return;
+    sheetBody.querySelector<HTMLElement>('[data-act="closeReview"],[data-act="closeSheet"],[data-act="later"]')?.click();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target as HTMLElement).id === 't-co') $('[data-act="startNew"]').click(); });
 

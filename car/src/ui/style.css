@@ -1026,3 +1026,9 @@ button.co-box:hover{border-color:var(--ink)}
   #main.wide .ofc-s{display:none} /* 좁으면 띠의 능력치 줄은 아래 진행 카드에 */
   .dsteps li{font-size:12px}.dsteps li b{font-size:12.5px}
 }
+/* 0.12.0 고객층에 맞게 자동 배치 */
+.auto-team{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 10px}
+.auto-team .btn{flex:0 0 auto}
+.auto-team .chk{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}
+.auto-team .chk input{width:20px;height:20px}
+.auto-note{margin:0 0 10px;font-weight:600}.auto-note ul{margin:4px 0 2px 18px;padding:0}.auto-note small{display:block;font-size:12px;opacity:.85}

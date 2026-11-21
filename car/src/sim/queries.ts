@@ -382,3 +382,36 @@ export { undoInfo } from './game';
 
 // ---------- 0.10.0 정보와 수습 수단 ----------
 export { modelPnL, nameplatePnL, salesFactors, staffHistory, staffBrief, decadeReview, decadeYears, rescueOptions, fixError, clearError, type ModelPnL, type NameplatePnL, type SalesFactor, type SalesFactors, type FactorKey, type StaffHistory, type DecadeReview, type RescueOptions } from './insight';
+
+// ---------- 0.12.0 고객층에 맞는 개발팀 자동 배치(화면용 순수 조회) ----------
+/** shortcut: 멈춤 기준(매력 증가 최소값)은 화면 추천용 상수라 여기 둔다. 밸런스에서 조정할 일이 생기면 config.dev로 옮길 것 */
+const BEST_TEAM_MIN_GAIN = 0.1;
+export interface BestTeam { team: number[]; segmentScore: number; grade: number; cost: number; weeks: number; reserved: number | null; reason: string[] }
+/** 고른 고객층의 매력(planPreview.segmentScore)이 가장 커지도록 팀을 탐욕적으로 고른다. 한 명을 더해 매력이 BEST_TEAM_MIN_GAIN 미만으로 오르면 멈춘다(팀 규모 체감·개발비).
+ *  후보: 개발 직무, 교육·휴식 중이 아님, 전담 연구원 아님, 쉬는 직원(includeBusy면 다른 개발 중인 직원도). 임원은 직원 목록에 없다.
+ *  keepEngineer: 전담 연구원이 없으면 쉬는 엔지니어 1명(능력 낮은 쪽)을 연구에 남긴다. 순서는 ID로 고정(결정론) */
+export function bestTeam(s: CarState, spec: ProjectSpec, opts: { includeBusy?: boolean; keepEngineer?: boolean } = {}): BestTeam {
+  const keepEng = opts.keepEngineer !== false, reason: string[] = [];
+  let cands = s.staff.filter((x) => isDevRole(x.role) && !x.lab && !isTraining(x, s.week) && !isResting(x, s.week) && (x.projectId === null || opts.includeBusy)).sort((a, b) => a.id - b.id);
+  let reserved: number | null = null;
+  if (keepEng && !s.staff.some((x) => x.lab)) {
+    const eng = cands.filter((x) => x.role === 'engineer' && x.projectId === null).sort((a, b) => a.ability - b.ability || a.id - b.id)[0];
+    if (eng) { reserved = eng.id; cands = cands.filter((x) => x !== eng); reason.push(`연구에 엔지니어 ${eng.name} 1명을 남겼습니다.`); }
+  }
+  const score = (t: Staff[]) => planPreview(s, spec, t).segmentScore;
+  const team: Staff[] = []; let cur = score(team);
+  const seg = SEGMENTS.find((x) => x.id === spec.segment);
+  if (seg) { const top = STATS.filter((k) => seg.w[k] > 0).sort((a, b) => seg.w[b] - seg.w[a]).slice(0, 2); const w = top.map((k) => STAT_KO[k]).join('·'); reason.push(`${seg.name} 고객층은 ${w}${josaQ(w, '을/를')} 중시합니다.`); }
+  while (cands.length) {
+    let best: Staff | null = null, bestV = -Infinity;
+    for (const c of cands) { const v = score([...team, c]); if (v > bestV + 1e-9) { bestV = v; best = c; } }
+    if (!best || (team.length && bestV - cur < BEST_TEAM_MIN_GAIN)) { if (best) reason.push(`한 명을 더 넣어도 매력이 ${BEST_TEAM_MIN_GAIN} 미만으로 올라 ${team.length}명에서 멈췄습니다.`); break; }
+    team.push(best); cands = cands.filter((x) => x !== best); cur = bestV;
+  }
+  // 여러 명을 함께 넣어야 오르는 경우: 남은 후보 전원을 더한 팀이 사람당 기준 이상 높으면 그 팀
+  if (cands.length) { const all = [...team, ...cands], v = score(all); if (v - cur >= BEST_TEAM_MIN_GAIN * cands.length) { team.push(...cands); cur = v; reason.push('남은 후보를 모두 넣는 편이 사람당 충분히 높아 모두 넣었습니다.'); } }
+  const p = planPreview(s, spec, team);
+  return { team: team.map((x) => x.id).sort((a, b) => a - b), segmentScore: p.segmentScore, grade: p.avg, cost: p.cost, weeks: spec.designWeeks + config.dev.minTestWeeks, reserved, reason };
+}
+import { josa as josaQ } from './josa';
+const STAT_KO: Record<string, string> = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' };
