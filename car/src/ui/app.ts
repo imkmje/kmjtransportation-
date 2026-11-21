@@ -820,6 +820,13 @@ export function startApp(): void {
       ${soon.map((o) => lockedOpt('option', o.id, `${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b>${req.has(o.id) ? '<small class="reqtag">규제 의무 장비: 연구해야 개발할 수 있음</small>' : ''}<small>${eff(o)}</small>`)).join('')}</div>
       <p class="note">옵션은 고르지 않아도 됩니다. 흐린 옵션은 연구로 엽니다.${locked.length > soon.length ? ` 그 밖에 ${locked.length - soon.length}개 옵션은 시대가 흐르면 연구할 수 있습니다.` : ''}${(Q.hqInfo(s).next?.optionSlots ?? 0) > max ? ' 본사를 키우면 옵션 칸이 늘어납니다.' : ''}</p>`;
   }
+  /** 옵션 누르기(기획·페이스리프트 공용): 고른 것은 빼고, 빈 칸이 있으면 넣는다. 의무 장비는 칸을 세지 않는다(11.3, optTiles의 표시와 같은 셈). 칸이 차면 이유를 알린다 */
+  function toggleOpt(list: string[], v: string): string[] {
+    if (list.includes(v)) return list.filter((x) => x !== v);
+    const s = game!.state, req = Q.activeEvents(s).requiredOptions, max = Q.optionSlots(s);
+    if (list.filter((x) => !req.includes(x)).length < max) return [...list, v];
+    err(`옵션 칸 ${max}개가 다 찼습니다. 다른 옵션을 빼고 고르세요.`); return list;
+  }
   /** 연구 기술의 상태(연구 화면과 같은 판단: sim researchInfo) */
   const techStatus = () => new Map(Q.researchInfo(game!.state).fields.flatMap((f) => f.techs.map((t) => [t.id, t.status] as const)));
   /** 아직 연구 안 한 차체·옵션·동력 칸: 흐리게 + "연구 필요: ○○", 누르면 그 기술의 연구 화면으로 */
@@ -1457,7 +1464,7 @@ export function startApp(): void {
         go('lift'); return;
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
-      case 'liftOpt': if (lift && s) { lift.options = lift.options.includes(v) ? lift.options.filter((x) => x !== v) : [...lift.options, v].slice(0, Q.optionSlots(s)); render(); } return;
+      case 'liftOpt': if (lift) { lift.options = toggleOpt(lift.options, v); render(); } return;
       case 'teamPick': case 'liftTeam': { const o = a === 'teamPick' ? draft : lift, id = Number(el.dataset.id); if (o) { o.team = o.team.includes(id) ? o.team.filter((x) => x !== id) : [...o.team, id]; render(); } return; }
       case 'startLift': {
         if (!game || !lift) return; const L = lift, g = Q.generationById(game.state, L.genId);
@@ -1473,7 +1480,7 @@ export function startApp(): void {
         if (k === 'powertrain') draft.tier = Math.min(draft.tier, powertrainById(v).tiers.length);
         render(); return;
       }
-      case 'opt': if (!draft || !s) return; draft.options = draft.options.includes(v) ? draft.options.filter((x) => x !== v) : [...draft.options, v].slice(0, Q.optionSlots(s)); render(); return;
+      case 'opt': if (!draft) return; draft.options = toggleOpt(draft.options, v); render(); return;
       case 'dir': { if (!draft) return; const k = el.dataset.k as Stat, n = draft.direction[k] + Number(v); if (n < 0 || n > config.dev.dirMax || (Number(v) > 0 && dirLeft(draft) <= 0)) return; draft.direction[k] = n; render(); return; }
       case 'cancelPlan': draft = null; lift = null; draftNote = ''; go('garage'); return;
       case 'startDev': {

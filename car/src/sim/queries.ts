@@ -153,7 +153,7 @@ export function faceliftPreview(s: CarState, generationId: number, spec: { optio
   const dRaw = faceliftWeekByStaff(team, { budget: 'normal', direction: dir }, () => 1).reduce((a, w) => a + w.D, 0) * fl.designWeeks;
   const dCap = fl.dCap * g.editions[0].stats.D, dGain = Math.min(mult.D * dRaw, dCap);
   const defects = Math.max(0, ed.defects * fl.defectKeep + dRaw * d.defectPerPoint * fl.defectRate - testCut(team) * d.minTestWeeks);
-  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), spec.options, g.points, defects));
+  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), withRequired(s, spec.options), g.points, defects)); // 출시 때처럼 의무 장비 포함
   stats.D += dGain;
   const age = lifeAge(g, m), keep = m - g.launchMonth >= fl.lateMonths ? fl.lateLifeKeep : fl.lifeKeep;
   return {
