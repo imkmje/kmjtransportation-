@@ -12,6 +12,8 @@ import { silhouetteSvg } from '../render/silhouette';
 import { describeLook, distinctFaces } from '../render/variant';
 import type { CarLook } from '../render/look';
 import { createOffice, type Office, type OfficeEvent, type OfficeView } from './office/office';
+import { applyEra } from './era';
+import { REVEAL_KEY, playReveal, revealWanted } from './reveal';
 import { CAR_VERSION } from '../version';
 import * as S from '../io/saves';
 import { BUDGET, MARKETING, ROLE_NAME, ROLE_SKILL, STAT_NAME, TIER_SUB, esc, josa, money, moneyText, num, qty, score } from './fmt';
@@ -20,6 +22,7 @@ import { infoOf } from './glossary';
 import { createSound, type Sfx } from './sound';
 import { testCut } from '../sim/dev';
 import * as I from './insight';
+import * as V from './views';
 
 type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records';
 type Tab = 'garage' | 'dev' | 'research' | 'company' | 'fin' | 'records'; // 0.9.0 큰 메뉴 6개(연구·재무를 회사 안쪽에서 꺼냄)
@@ -29,7 +32,7 @@ type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: nu
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
 type RecTab = 'cars' | 'combo' | 'news' | 'years';
-type CoTab = 'staff' | 'hq' | 'factory' | 'exec';
+type CoTab = 'sum' | 'staff' | 'hq' | 'factory' | 'exec'; // 0.12.0 첫 화면 'sum'(요약 칸)
 type GSort = 'name' | 'launch' | 'price' | 'sold' | 'unit' | 'profit' | 'life' | 'review'; // 0.9.0 차고 요약 표 정렬
 type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView; keys?: string }; // keys: 0.9.0 무대 아래 핵심 수치 띠
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
@@ -50,6 +53,14 @@ type StaffSort = typeof STAFF_SORTS[number];
 const STAFF_FILTERS = [['', '전체'], ['designer', '디자이너'], ['engineer', '엔지니어'], ['tester', '테스터'], ['sales', '영업'], ['idle', '쉬는 중'], ['working', '개발 중'], ['trainable', '교육 가능'], ['tired', '지친 직원'], ['exec', '임원']] as const;
 type StaffFilter = typeof STAFF_FILTERS[number][0];
 type PauseKey = typeof PAUSE_ITEMS[number][0];
+// 0.12.0 알림 종류(기기 저장소): [키, 설정 화면 이름, 'fixed'면 끌 수 없음, 알림·기록함에 쓰는 짧은 이름]
+const NOTE_KEY = 'car-company-notify';
+const NOTE_CATS = [['month', '월 결산(임원 보고 수 포함)', '', '월 결산'], ['rep', '평판 변화', '', '평판 변화'], ['event', '시대 사건·뉴스(규제는 늘 띄움)', '', '사건'],
+  ['research', '연구 완료', '', '연구 완료'], ['dev', '개발 진행(설계 끝 등)', '', '개발'], ['company', '회사 소식(공장 완공·임원 교체·단종·조언)', '', '회사'],
+  ['year', '연 보고서·10년 회고', '', '연 보고서'], ['pause', '자동 멈춤을 꺼 둔 항목의 안내(채용 후보·출시 대기)', '', '자동 멈춤'], ['act', '조작 직후 [되돌리기] 안내', '', '조작'],
+  ['pauseStop', '자동 멈춤(시간을 멈춘 때)', 'fixed', '자동 멈춤'], ['warn', '경고(현금·리콜·규제·저장 실패)', 'fixed', '경고'], ['choice', '결정 대기', 'fixed', '결정 대기']] as const;
+/** 같은 종류가 연달아 오면 한 알림으로 묶는 종류 */
+const GROUPED = new Set<string>(['rep', 'event', 'research', 'dev', 'company']);
 const OFFICE_GAP_MS = 1800; // 사무실 점수 연출 최소 간격(점수 글자가 떠 있는 시간)
 const MAX_TICKS_PER_FRAME = 4;
 const SKIP_SPEED = 8; // [다음 일까지] 진행 중 표시용 빠르기(빠르기 버튼 어느 것과도 같지 않게). 실제로는 프레임마다 tick 상한만큼
@@ -92,7 +103,7 @@ export function startApp(): void {
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
   let execPick: ExecRole | null = null; // 임원 화면: 직원 임명 목록을 펼친 자리
-  let coTab: CoTab = 'staff', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
+  let coTab: CoTab = 'sum', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
   let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
   let devSel: number | null = null; // 개발 탭에서 고른 프로젝트(동시 개발)
@@ -149,38 +160,64 @@ export function startApp(): void {
   const TOAST_MAX = 2; // 한 번에 보이는 알림 수. 넘으면 오래된 보통 알림부터 닫는다(중요한 알림은 "+N"으로 접어 둔다)
   /** 키로 띄운 알림을 닫는다(그 알림이 가리키던 일을 이미 한 경우) */
   const dropToast = (key: string) => { const t = keyed.get(key); if (t?.isConnected) closers.get(t)?.(); };
-  /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 바꿔 끼운다(월 결산처럼 자주 오는 것). 12초 이상 두는 알림(자동 멈춤·현금 경고·결정 대기·리콜·규제)은 중요한 알림 */
-  function toast(text: string, kind: '' | 'alert' | 'bad' = '', head = '', ms = kind ? 9000 : 4000, key = '', open?: { label: string; fn: () => void }): void {
-    const box = $('#toasts'), t = document.createElement('div');
-    box.style.setProperty('--tt', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`); // 폰: 상단바 바로 아래
+  // ----- 0.12.0 알림 종류: 켜고 끄기(경고·결정 대기·시간을 멈춘 자동 멈춤은 늘 띄움), 기록함(최근 100건), 같은 종류 묶기 -----
+  type NoteCat = typeof NOTE_CATS[number][0];
+  const noteSet = ((): Record<string, boolean> => { // 기본 모두 켬. 깨진 값은 켬
+    let o: Record<string, unknown> = {}; try { o = JSON.parse(localStorage.getItem(NOTE_KEY) ?? '{}') ?? {}; } catch { /* 저장 불가 */ }
+    return Object.fromEntries(NOTE_CATS.map(([k]) => [k, o[k] !== false]));
+  })();
+  const noteFixed = (c: NoteCat) => NOTE_CATS.find(([k]) => k === c)![2] === 'fixed';
+  const noteOn = (c: NoteCat) => noteFixed(c) || noteSet[c] !== false;
+  const catName = (c: NoteCat) => NOTE_CATS.find(([k]) => k === c)![3];
+  interface NoteLog { id: number; week: number; cat: NoteCat; head: string; text: string; open?: { label: string; fn: () => void } }
+  let noteLog: NoteLog[] = [], noteId = 0, noteSeen = 0; // noteSeen: 기록함을 마지막으로 연 때의 id
+  const toastTimers = new WeakMap<HTMLElement, number>();
+  /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 그 자리에서 내용만 바꾼다(월 결산처럼 자주 오는 것). 12초 이상 두는 알림(자동 멈춤·현금 경고·결정 대기·리콜·규제)은 중요한 알림.
+   *  cat(0.12.0): 알림 종류. 주면 기록함에 남고, 꺼 둔 종류는 띄우지 않으며, 같은 종류가 떠 있는 동안 또 오면 "평판 변화 3건"으로 묶는다 */
+  function toast(text: string, kind: '' | 'alert' | 'bad' = '', head = '', ms = kind ? 9000 : 4000, key = '', open?: { label: string; fn: () => void }, cat?: NoteCat): void {
+    if (cat && game && cat !== 'act') { noteLog.unshift({ id: ++noteId, week: game.state.week, cat, head: head || catName(cat), text, open }); if (noteLog.length > 100) noteLog.length = 100; }
+    if (cat && !noteOn(cat)) return;
+    const box = $('#toasts');
+    setVar(box, '--tt', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`); // 폰: 상단바 바로 아래
     const undo = !open && undoFresh(); // 0.8.0: 되돌릴 수 있는 조작 직후의 알림에 [되돌리기]
     if (undo) { dropUndoBtns(); open = { label: '되돌리기', fn: doUndo }; ms = Math.max(ms, 8000); undoShown = true; } // 되돌릴 수 있는 것은 하나뿐: 이전 알림의 버튼은 없앤다
-
-    const old = key ? keyed.get(key) : undefined;
-    if (old?.isConnected) old.remove();
-    if (key) keyed.set(key, t);
-    t.className = `toast ${kind}`;
-    t.innerHTML = `<div>${head ? `<b>${esc(head)}</b>` : ''}${esc(text)}${open ? `<button class="open"${undo ? ' data-undo' : ''}>${esc(open.label)}</button>` : ''}</div><button class="x" aria-label="닫기">×</button>`;
-    const close = () => { if (t.classList.contains('out')) return; t.classList.add('out'); foldToasts(); setTimeout(() => { t.remove(); foldToasts(); }, 300); };
-    closers.set(t, close); if (ms >= 12000) t.dataset.imp = '1';
-    if (open) (t.querySelector('.open') as HTMLElement).onclick = () => { close(); open.fn(); };
-    if (open && key === 'month') { t.classList.add('tap'); (t.firstElementChild as HTMLElement).onclick = (e) => { if (!(e.target as Element).closest('button')) { close(); open.fn(); } }; } // 월 결산 알림은 글을 눌러도 펼친다
-    (t.querySelector('.x') as HTMLElement).onclick = close;
-    box.appendChild(t);
-    for (let live = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')], n = live.length; n > TOAST_MAX; n--) { const o = live.find((x) => !x.dataset.imp && !x.classList.contains('out')); if (!o) break; closers.get(o)!(); }
+    const live = (x: HTMLElement | undefined) => !!x?.isConnected && !x.classList.contains('out');
+    let n = 1, t = key ? keyed.get(key) : undefined;
+    if (!live(t) && cat && !undo && GROUPED.has(cat)) { // 같은 종류 묶기: 떠 있는 같은 종류 알림을 그 자리에서 바꾼다
+      t = [...box.querySelectorAll<HTMLElement>('.toast')].find((x) => x.dataset.cat === cat && live(x) && !x.querySelector('[data-undo]'));
+      if (t) { n = Number(t.dataset.n ?? 1) + 1; head = `${catName(cat)} ${n}건`; }
+    }
+    const fresh = !live(t);
+    if (fresh) t = document.createElement('div'); else clearTimeout(toastTimers.get(t!));
+    const el = t!;
+    if (key) keyed.set(key, el);
+    el.className = `toast ${kind}${fresh ? '' : ' seen'}`; // 바꿔 끼운 알림은 등장 움직임을 다시 하지 않는다
+    if (cat) { el.dataset.cat = cat; el.dataset.n = String(n); }
+    el.innerHTML = `<div>${head ? `<b>${esc(head)}</b>` : ''}${esc(text)}${open ? `<button class="open"${undo ? ' data-undo' : ''}>${esc(open.label)}</button>` : ''}</div><button class="x" aria-label="닫기">×</button>`;
+    const close = () => { if (el.classList.contains('out')) return; el.classList.add('out'); foldToasts(); setTimeout(() => { el.remove(); foldToasts(); }, 300); };
+    closers.set(el, close); if (ms >= 12000) el.dataset.imp = '1'; else delete el.dataset.imp;
+    if (open) (el.querySelector('.open') as HTMLElement).onclick = () => { close(); open.fn(); };
+    if (open && key === 'month') { el.classList.add('tap'); (el.firstElementChild as HTMLElement).onclick = (e) => { if (!(e.target as Element).closest('button')) { close(); open.fn(); } }; } // 월 결산 알림은 글을 눌러도 펼친다
+    (el.querySelector('.x') as HTMLElement).onclick = close;
+    if (fresh) { el.addEventListener('animationend', () => el.classList.add('seen'), { once: true }); box.appendChild(el); } // 등장 움직임은 한 번만(접었다 펼 때 다시 하지 않게)
+    for (let lv = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')], c = lv.length; c > TOAST_MAX; c--) { const o = lv.find((x) => !x.dataset.imp && !x.classList.contains('out') && x !== el); if (!o) break; closers.get(o)!(); lv = lv.filter((x) => x !== o); }
     while (box.querySelectorAll('.toast').length > 6) box.querySelector('.toast')!.remove();
     foldToasts();
-    setTimeout(close, ms);
+    toastTimers.set(el, window.setTimeout(close, ms));
   }
+  /** 값이 바뀔 때만 CSS 변수를 쓴다(매 주 다시 쓰지 않게) */
+  function setVar(el: HTMLElement, k: string, v: string): void { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); }
   /** 좁은 자리(폰·사무실 칸·무대 없는 화면 오른쪽 위)에서는 알림을 2개만 보이고 나머지는 "+N" 한 줄로 접는다 */
   function foldToasts(): void {
     const box = $('#toasts'), list = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')];
     const keep = box.classList.contains('open') ? 99 : TOAST_MAX, n = list.length - keep;
-    list.forEach((t, i) => t.classList.toggle('folded', i < n));
+    // 0.12.0 접을 때는 버튼 없는 알림부터(오래된 순). 월 결산처럼 [펼쳐 보기]가 있는 알림이 새 알림 둘에 밀려 "+N" 속에 숨던 일(점검의 '안정 대기 30초 초과' 원인)을 줄인다
+    const fold = new Set([...list.filter((t) => !t.querySelector('.open')), ...list.filter((t) => t.querySelector('.open'))].slice(0, Math.max(0, n)));
+    list.forEach((t) => t.classList.toggle('folded', fold.has(t)));
     let more = box.querySelector<HTMLElement>('.more');
     if (n <= 0) { more?.remove(); if (list.length <= 2) box.classList.remove('open'); return; }
     if (!more) { more = document.createElement('button'); more.className = 'more'; more.onclick = () => { box.classList.add('open'); foldToasts(); }; box.prepend(more); }
-    more.textContent = `+${n} 알림 더 보기`;
+    const mt = `+${n} 알림 더 보기`; if (more.textContent !== mt) more.textContent = mt;
   }
   const err = (reason: string) => { sfx('error'); toast(reason, 'bad', '할 수 없습니다'); };
   // ----- 0.8.0 되돌리기: 조작(act) 중에 되돌릴 수 있는 명령이 성공했으면 그 알림에 버튼, 알림이 없었으면 따로 한 줄 -----
@@ -201,13 +238,13 @@ export function startApp(): void {
   function placeToasts(): void {
     const box = $('#toasts'), wide = $('#main').classList.contains('wide') && innerWidth >= 900, corner = $('#main').classList.contains('full') && innerWidth >= 900;
     box.classList.toggle('inofc', wide); box.classList.toggle('corner', corner); // 무대 없는 화면(회사·기록): 오른쪽 위(상단바 아래)
-    if (corner) box.style.setProperty('--ct', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`);
+    if (corner) setVar(box, '--ct', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`);
     foldToasts();
     const st = $('#stage').getBoundingClientRect();
-    if (!wide) { box.style.setProperty('--tw', `${Math.round(Math.max(260, Math.min(400, st.width - (document.querySelector('#ov .ov.br') ? 200 : 24))))}px`); box.style.setProperty('--tb', `${Math.round(Math.max(16, innerHeight - st.bottom + 12))}px`); return; } // 0.9.0 무대 안 아래쪽(아래 핵심 수치 띠를 가리지 않게)
+    if (!wide) { setVar(box, '--tw', `${Math.round(Math.max(260, Math.min(400, st.width - (document.querySelector('#ov .ov.br') ? 200 : 24))))}px`); setVar(box, '--tb', `${Math.round(Math.max(16, innerHeight - st.bottom + 12))}px`); return; } // 0.9.0 무대 안 아래쪽(아래 핵심 수치 띠를 가리지 않게)
     const band = document.querySelector<HTMLElement>('#ov .ofc')?.getBoundingClientRect();
-    box.style.setProperty('--ot', `${Math.round((band?.bottom ?? st.top) + 8)}px`);
-    box.style.setProperty('--or', `${Math.round(innerWidth - st.right + 12)}px`);
+    setVar(box, '--ot', `${Math.round((band?.bottom ?? st.top) + 8)}px`);
+    setVar(box, '--or', `${Math.round(innerWidth - st.right + 12)}px`);
   }
 
   /** 화면 안 확인 창(alert/confirm 대신) */
@@ -232,6 +269,10 @@ export function startApp(): void {
       const t = Q.researchInfo(game.state).fields.flatMap((f) => f.techs).find((x) => x.id === key.slice(5));
       const base = infoOf(key);
       if (t) return { title: t.name, text: base ? `${base.text} (${t.year}년 기술)` : `${t.desc} 효과: ${t.effects}. ${t.year}년 기술.` };
+    }
+    if (key === 'term:평판' && game) { // 0.12.0 평판 ⓘ: 지금 평판의 효과 목록과 다음 문턱(평판에는 위 상한이 없다)
+      const base = infoOf(key), R = Q.reputationInfo(game.state);
+      return { title: `평판 ${Math.round(R.value)}`, text: `${base ? `${base.text} ` : ''}지금 효과: ${R.effects.map((e) => `${e.label} ${e.text}`).join(' · ')}.${R.soft ? ` 100을 넘어 효과가 완만하게 늘어납니다(효과 ${Math.round(R.effect)}).` : ''}${R.next ? ` 다음 문턱: 평판 ${R.next.rep} — ${R.next.text}.` : ''}` };
     }
     return infoOf(key);
   }
@@ -333,6 +374,7 @@ export function startApp(): void {
       projectName: p ? `${p.name}${p.kind === 'facelift' ? ' 페이스리프트' : ''}` : undefined,
       carSvg: p ? silhouetteSvg(projLook(p, ui.colors[p.id] ?? PAINT[0][1]), { color: ui.colors[p.id] ?? PAINT[0][1] }) : undefined,
       progress: p ? (p.phase === 'design' ? p.weeksDone / p.designWeeks : 1) : undefined, defects: p?.defectEst, logo: myLogo(32),
+      year: yearOf(s.week), execs: Q.execInfo(s).roles.flatMap((r) => r.holder ? [{ id: `x${r.holder.staffId}`, name: r.holder.name, title: r.title }] : []), // M3 시대별 집기, 임원실
     };
   }
   /** 주간 개발 기록 → 사무실 연출: 직원마다 가장 큰 능력치 1개(정수, 0이면 생략), 결함 증감 */
@@ -417,7 +459,7 @@ export function startApp(): void {
     const g = game; if (!g) return;
     const week = g.state.week, ok = await S.put('auto', S.makeSave(g, uiSnap()));
     if (ok) { if (g === game) lastAuto = week; return; }
-    if (!saveFailNoted) { saveFailNoted = true; toast('자동 저장에 실패했습니다. 브라우저 저장 공간이 부족하거나 저장이 막혀 있습니다. 메뉴에서 파일로 내보내 두세요.', 'bad', '자동 저장', 12000, 'savefail'); }
+    if (!saveFailNoted) { saveFailNoted = true; toast('자동 저장에 실패했습니다. 브라우저 저장 공간이 부족하거나 저장이 막혀 있습니다. 메뉴에서 파일로 내보내 두세요.', 'bad', '자동 저장', 12000, 'savefail', undefined, 'warn'); }
   }
   const hideSave = () => { if (game && title.hidden && saveSet.every !== 'off') autoSave(true); }; // 탭을 숨기거나 닫을 때
   document.addEventListener('visibilitychange', () => { if (document.hidden) hideSave(); });
@@ -428,11 +470,11 @@ export function startApp(): void {
     const dec = (y + 1) % 10 === 0 ? y - 9 : null; // 0.10.0 10년 회고: 1979·1989·… 12월 결산 뒤(신문을 먼저, 연 보고서는 알림으로)
     if (pauseOn.yearReport && !quietChoice && sheet.hidden && $('#ask').hidden && title.hidden) {
       if (skip) endSkip('');
-      if (dec !== null) { showDecade(dec); toast(`${y}년 연 보고서도 나왔습니다.`, 'alert', '연 보고서', 9000, 'year', { label: '보기', fn: () => showYearReport(y) }); } else showYearReport(y);
+      if (dec !== null) { showDecade(dec); toast(`${y}년 연 보고서도 나왔습니다.`, 'alert', '연 보고서', 9000, 'year', { label: '보기', fn: () => showYearReport(y) }, 'year'); } else showYearReport(y);
       return;
     }
-    if (dec !== null) toast(`${dec}년대 10년 회고 신문이 나왔습니다. 기록 탭에서도 볼 수 있습니다.`, 'alert', '10년 회고', 9000, 'decade', { label: '보기', fn: () => showDecade(dec) });
-    toast(`${y}년 연 보고서가 나왔습니다. 기록 탭에서도 볼 수 있습니다.`, 'alert', '연 보고서', 9000, 'year', { label: '보기', fn: () => showYearReport(y) });
+    if (dec !== null) toast(`${dec}년대 10년 회고 신문이 나왔습니다. 기록 탭에서도 볼 수 있습니다.`, 'alert', '10년 회고', 9000, 'decade', { label: '보기', fn: () => showDecade(dec) }, 'year');
+    toast(`${y}년 연 보고서가 나왔습니다. 기록 탭에서도 볼 수 있습니다.`, 'alert', '연 보고서', 9000, 'year', { label: '보기', fn: () => showYearReport(y) }, 'year');
   }
   const pctDiff = (a: number, b: number | null | undefined) => (b === null || b === undefined || !b ? '' : ` <small class="${a >= b ? 'pos' : 'neg'}">전년 대비 ${a >= b ? '+' : '−'}${Math.abs(Math.round(((a - b) / Math.abs(b)) * 100))}%</small>`);
   const amtDiff = (a: number, b: number | null | undefined) => (b === null || b === undefined ? '' : ` <small class="${a >= b ? 'pos' : 'neg'}">전년 대비 ${money(a - b, true)}</small>`);
@@ -489,45 +531,45 @@ export function startApp(): void {
     const s = game!.state;
     switch (e.kind) {
       case 'execReport': break; // 보고는 튀어나오지 않는다: 월 결산 알림 한 줄과 '할 일' 배지로만
-      case 'replacement': toast(e.text, '', '임원', 7000); break;
+      case 'replacement': toast(e.text, '', '임원', 7000, '', undefined, 'company'); break;
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
-        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}${weekReports ? ` · 임원 보고 ${weekReports}건` : ''}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 6000, 'month', { label: '펼쳐 보기', fn: () => showMonth(s.ledger.length - 1) }); // 0.9.0 누르면 월 결산 창
+        if (L) { const m = L.month; toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}${weekReports ? ` · 임원 보고 ${weekReports}건` : ''}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 6000, 'month', { label: '펼쳐 보기', fn: () => showMonth(s.ledger.findIndex((x) => x.month === m)) }, 'month'); } // 0.9.0 누르면 월 결산 창(기록함에서 눌러도 그달)
         // 큰 흑자 = 10억 이상이면서 최근 24개월 최고 이익인 달(늘 버는 후반에 매달 울리지 않게)
         sfx(L && L.profit >= 100000 && s.ledger.every((x) => x.profit <= L.profit) ? 'cashIn' : 'monthClose');
         if (L && (saveSet.every === 'month' || (saveSet.every === 'quarter' && L.monthOfYear % 3 === 0))) autoSave(); // 매주는 tickOnce에서
         if (L?.monthOfYear === 12) yearReportDue(L.year);
         break;
       }
-      case 'designDone': sfx('designDone'); toast(e.text, 'alert', '설계 끝'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
+      case 'designDone': sfx('designDone'); toast(e.text, 'alert', '설계 끝', 9000, '', { label: '개발 화면', fn: () => go('dev') }, 'dev'); officeEvents.push({ kind: 'say', text: '설계 끝났어요. 이제 시험입니다', mood: 'test' }); break;
       case 'devWeek': { // 알림으로 띄우지 않고 사무실 연출로. 여러 주가 한 번에 지나면 마지막 주 점수·결함만(글자가 겹치지 않게)
         if (weekFresh) { const keep = officeEvents.filter((x) => x.kind === 'say'); officeEvents.length = 0; officeEvents.push(...keep); weekFresh = false; }
         officeEvents.push(...officeFromWeek(e));
         break;
       }
-      case 'company': if (e.text.startsWith('공장')) sfx('factoryBuilt'); toast(moneyText(e.text), 'alert', '회사', 7000); break;
+      case 'company': if (e.text.startsWith('공장')) sfx('factoryBuilt'); toast(moneyText(e.text), 'alert', '회사', 7000, '', { label: '회사 화면', fn: () => goCo('sum') }, 'company'); break;
       case 'news': { // 규제 예고·시행은 중요한 알림(오래 둔다)
         const k = e.category ?? 'other', reg = k === 'regulation' || (k === 'preview' && e.text.includes('규제'));
         if (reg || k === 'start' || k === 'end' || k === 'preview') sfx(reg ? 'regulation' : 'event');
-        toast(newsLine(e.text), 'alert', NEWS_KIND[k], reg ? 15000 : 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, s.week, k) }); break;
+        { const wk = s.week; toast(newsLine(e.text), 'alert', NEWS_KIND[k], reg ? 15000 : 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, wk, k) }, reg ? 'warn' : 'event'); } break;
       }
       case 'choice': // 화면 안 창이 떠 있는 동안 시간이 멈춘다. 자동 멈춤을 끄면 창 대신 알림만
         if (quietChoice) break;
         sfx('event');
-        if (!pauseOn.choice) toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() });
+        if (!pauseOn.choice) toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() }, 'choice');
         else if (sheet.hidden && $('#ask').hidden && title.hidden) showChoice();
         break;
       case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
         const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
         if (w) { waitSeen.add(w.id); sfx('readyToLaunch'); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
-        else toast(e.text, 'alert', '조언', 9000);
+        else toast(e.text, 'alert', '조언', 9000, '', undefined, 'company');
         break;
       }
-      case 'recall': sfx('recall'); toast(moneyText(e.text), 'bad', '리콜', 12000); break;
-      case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => go('research') }); break;
-      case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 재무 화면에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
-      case 'discontinued': toast(e.text, '', '단종'); break;
-      case 'reputation': toast(`${e.reason}: ${repWord(e.delta)}`, '', '평판', 5000); break; // 이유를 앞에: "「아리아」 리콜: 평판 −1.5"
+      case 'recall': sfx('recall'); toast(moneyText(e.text), 'bad', '리콜', 12000, '', { label: '차고', fn: () => garageAt() }, 'warn'); break;
+      case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => go('research') }, 'research'); break;
+      case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 재무 화면에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000, '', { label: '재무 화면', fn: () => go('fin') }, 'warn'); break;
+      case 'discontinued': toast(e.text, '', '단종', 4000, '', undefined, 'company'); break;
+      case 'reputation': toast(`${e.reason}: ${repWord(e.delta)}`, '', '평판', 5000, '', undefined, 'rep'); break; // 이유를 앞에: "「아리아」 리콜: 평판 −1.5"
       case 'gameOver': sfx('bankrupt'); break; // render()에서 파산 화면을 띄운다
     }
   }
@@ -549,7 +591,7 @@ export function startApp(): void {
   function autoPause(k: PauseKey, text: string, head: string, open?: { label: string; fn: () => void }): void {
     const stop = pauseOn[k] && speed > 0 && !skipPause;
     if (stop) setSpeed(0);
-    toast(`${text}${stop ? ' 시간을 멈췄습니다.' : ''}`, 'alert', head, 20000, `pause-${k}`, open);
+    toast(`${text}${stop ? ' 시간을 멈췄습니다.' : ''}`, 'alert', head, 20000, `pause-${k}`, open, stop ? 'pauseStop' : 'pause');
   }
   /** 새 채용 후보가 오면 알림(+자동 멈춤). 기한 안에 채용하지 않으면 후보가 떠난다 */
   function watchCands(): void {
@@ -597,7 +639,7 @@ export function startApp(): void {
   const hasExec = (s: Game['state']): boolean => Q.execInfo(s).used > 0;
   const EXEC_ROLE = (r: ExecReport['role']) => Q.EXEC_TITLE[r].replace(/ 임원$/, ''); // 필터 칩: "인사", "연구소장"
   const execTitle = (r: ExecReport['role']) => Q.EXEC_TITLE[r];
-  let todoTab: 'todo' | 'reports' = 'todo', repRole: ExecReport['role'] | '' = '', repFresh = new Set<number>(); // repFresh: 이번에 열기 전까지 읽지 않았던 보고(읽음 처리 뒤에도 표시)
+  let todoTab: 'todo' | 'reports' | 'notes' = 'todo', repRole: ExecReport['role'] | '' = '', repFresh = new Set<number>(); // repFresh: 이번에 열기 전까지 읽지 않았던 보고(읽음 처리 뒤에도 표시)
   const REP_STATUS: Record<NonNullable<ExecReport['replacement']>['status'], string> = { proposed: '승인을 기다립니다', approved: '승인함 · 곧 진행합니다', waiting: '예약됨 · 기다리는 중', done: '진행했습니다', cancelled: '취소했습니다', failed: '진행하지 못했습니다' };
   function reportCard(r: ExecReport): string {
     const rp = r.replacement, when = Q.monthLabel(monthOf(r.week));
@@ -623,16 +665,25 @@ export function startApp(): void {
     return chips + (list.length ? `<div class="rep-list">${list.map(reportCard).join('')}</div>` : '<p class="todo-empty">아직 받은 보고가 없습니다. 임원은 월 결산 때 보고합니다.</p>');
   }
   /** 할 일·보고 창. 보고 탭을 열면 읽음 처리(이번에 새로 온 것은 창을 닫을 때까지 '새 보고'로 표시) */
-  function showTodo(t: 'todo' | 'reports' = todoTab): void {
+  /** 0.12.0 지난 알림 기록함(최근 100건): 날짜·종류, 누르면 그 알림의 화면으로 */
+  function notesBody(): string {
+    if (!noteLog.length) return '<p class="todo-empty">아직 지난 알림이 없습니다. 월 결산·평판 변화·사건 같은 알림이 여기 쌓입니다.</p>';
+    const row = (x: NoteLog) => { const go = !!x.open, tag = `<span class="chip n-${x.cat}">${esc(catName(x.cat))}</span>`, body = `<span class="nt-t"><b>${esc(x.head)}</b><small>${esc(x.text)}</small></span>`;
+      return go ? `<button class="note-it${x.id > noteSeen ? ' new' : ''}" data-act="noteGo" data-v="${x.id}"><small class="nd">${esc(Q.dateLabel(x.week))}</small>${tag}${body}<span class="ng">${esc(x.open!.label)} →</span></button>`
+        : `<div class="note-it${x.id > noteSeen ? ' new' : ''}"><small class="nd">${esc(Q.dateLabel(x.week))}</small>${tag}${body}<span class="ng"></span></div>`; };
+    return `<div class="note-list">${noteLog.map(row).join('')}</div><p class="note">최근 ${noteLog.length}건(최대 100건)입니다. 끈 종류의 알림도 여기에는 남습니다. 알림 종류는 메뉴 → 설정 → 알림에서 켜고 끕니다. 게임을 불러오면 비워집니다.</p>`;
+  }
+  function showTodo(t: 'todo' | 'reports' | 'notes' = todoTab): void {
     if (!game) return;
     const s = game.state;
     if (t === 'reports' && todoTab !== 'reports') repFresh = new Set(execReports(s).filter((r) => r.unread).map((r) => r.id));
     todoTab = t;
     if (t === 'reports' && execUnread(s) > 0) game.command({ type: 'markReportsRead' });
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
-    const n = todos().length, un = execUnread(s);
-    sheetBody.innerHTML = `<div class="todo-sheet"><div class="eyebrow"><i></i>${esc(game.dateLabel)}</div><div class="seg todo-tabs" role="tablist" aria-label="할 일과 보고"><button role="tab" data-act="todoTab" data-v="todo" aria-selected="${t === 'todo'}">할 일 ${n}</button><button role="tab" data-act="todoTab" data-v="reports" aria-selected="${t === 'reports'}">보고${un ? ` ${un}` : ''}</button></div>
-      ${t === 'todo' ? todoBody() : reportsBody()}<div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
+    const n = todos().length, un = execUnread(s), nn = noteLog.filter((x) => x.id > noteSeen).length;
+    sheetBody.innerHTML = `<div class="todo-sheet"><div class="eyebrow"><i></i>${esc(game.dateLabel)}</div><div class="seg todo-tabs" role="tablist" aria-label="할 일·보고·알림"><button role="tab" data-act="todoTab" data-v="todo" aria-selected="${t === 'todo'}">할 일 ${n}</button><button role="tab" data-act="todoTab" data-v="reports" aria-selected="${t === 'reports'}">보고${un ? ` ${un}` : ''}</button><button role="tab" data-act="todoTab" data-v="notes" aria-selected="${t === 'notes'}">알림${nn && t !== 'notes' ? ` ${nn}` : ''}</button></div>
+      ${t === 'todo' ? todoBody() : t === 'reports' ? reportsBody() : notesBody()}<div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
+    if (t === 'notes') noteSeen = noteId; // 열었으면 읽음(이번 창에서는 '새' 표시 유지)
     sheet.hidden = false; renderTop();
   }
   /** 할 일·보고의 바로 가기 */
@@ -699,7 +750,7 @@ export function startApp(): void {
     if (!sheet.hidden) requestAnimationFrame(() => markMore(sheetBody)); // 창 내용을 바꾼 뒤 renderTop()을 부른다
     if (!game) return;
     const s = game.state;
-    sound.setEra(yearOf(s.week));
+    sound.setEra(yearOf(s.week)); applyEra(yearOf(s.week), stage); // M3 시대별 화면 분위기
     // 바뀐 값만 고친다(매 주 상단바를 통째로 다시 쓰면 누르는 순간 버튼이 다시 만들어져 터치가 씹힐 수 있다)
     const put = (el: HTMLElement, v: string, html = false) => { if (el.dataset.v !== v) { el.dataset.v = v; if (html) el.innerHTML = v; else el.textContent = v; } };
     put($('#co'), s.companyName); $('#co').title = s.companyName;
@@ -905,7 +956,10 @@ export function startApp(): void {
         <span class="g-num">${qty(g.sales.at(-1) ?? 0)}대</span><span class="g-num g-opt ${up >= 0 ? 'pos' : 'neg'}">${money(up, true)}</span><span class="g-num ${mp >= 0 ? 'pos' : 'neg'}">${money(mp, true)}</span>
         ${lifeMini(Q.lifeBar(s, g))}<span class="g-num g-opt">${score(g.reviewAvg)}${g.masterpiece ? '<small>명차</small>' : ''}</span><span class="g-st">${genBadges(g)}</span></button></div>`;
     };
-    const n = cmpSel.size, bar = `<div class="cmp-bar"><span>내 차 비교 <small>표 왼쪽 네모로 2~4대를 고릅니다</small></span><b>${n}대 고름</b>${n ? '<button class="btn" data-act="cmpClear">고르기 해제</button>' : ''}<button class="btn ink" data-act="cmpOpen" ${n >= 2 ? '' : 'disabled'}>비교 보기</button></div>`;
+    // 0.12.0 같은 네모로 비교(2~4대)와 여러 대 한 번에 바꾸기(자동 가격·광고)
+    const n = cmpSel.size, every = n === L.length, bar = `<div class="cmp-bar"><span>고른 차 <small>표 왼쪽 네모로 고릅니다 · 비교는 2~4대</small></span><b>${n}대 고름</b>
+      <button class="btn" data-act="${every ? 'cmpClear' : 'cmpAll'}">${every ? '고르기 해제' : `모두 고르기(${L.length}대)`}</button>${n && !every ? '<button class="btn" data-act="cmpClear">해제</button>' : ''}
+      <button class="btn" data-act="cmpOpen" ${n >= 2 && n <= 4 ? '' : 'disabled'}>비교 보기</button><button class="btn ink" data-act="bulkOpen" ${n ? '' : 'disabled'}>한 번에 바꾸기</button></div>`;
     const tot = L.reduce((a, g) => a + (g.sales.at(-1) ?? 0), 0), totP = L.reduce((a, g) => a + carMonthProfit(g), 0), lines = Q.linesOf(s);
     const main = `<div class="card gtable"><h3>판매 중인 차 ${L.length}대 <small class="hint">지난달 ${num(tot)}대 · 차종 이익 합 ${money(totP, true)} · 생산 라인 ${L.length}/${lines}</small></h3>${bar}${head}${L.map(row).join('')}
       <p class="note">줄을 누르면 그 차의 무대와 가격·다음 단계 화면으로 갑니다. 머리글을 누르면 정렬, 다시 누르면 반대로 정렬합니다. 월 이익은 지난달 장부의 그 차 몫(매출 − 원가 − 광고 − 리콜)이고 직원 월급·유지비는 넣지 않았습니다.</p></div>`;
@@ -934,6 +988,53 @@ export function startApp(): void {
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
   }
+  /** 0.12.0 고른 차 여러 대에 자동 가격 또는 광고를 한 번에(한 번에 한 종류: 되돌리기가 한 번에 되도록) */
+  let bulk: { kind: 'policy' | 'mk'; v: string } | null = null;
+  const bulkPolicy = (v: string): PricePolicy | null => (v === 'best' ? { kind: 'best' } : v.startsWith('base:') ? { kind: 'base', pct: Number(v.slice(5)) } : null);
+  /** 고른 차마다: 바꿀 수 있는지, 이유, 지금 값 → 바꿀 값 */
+  function bulkPlan(): { g: Generation; name: string; from: string; to: string; why: string | null; same: boolean }[] {
+    const G = garageList().filter((g) => cmpSel.has(g.id));
+    return G.map((g) => {
+      const name = `「${nameOf(g)}」 ${g.number}세대`, pol = g.pricePolicy ?? null;
+      if (!bulk) return { g, name, from: '', to: '', why: null, same: true };
+      if (bulk.kind === 'mk') { const m = Number(bulk.v); return { g, name, from: `광고 ${MARKETING[g.marketing]}`, to: `광고 ${MARKETING[m]}`, why: g.status !== 'onSale' ? '이번 달 말 단종 예정이라 바꿀 수 없습니다' : null, same: g.marketing === m }; }
+      const p = bulkPolicy(bulk.v), pn = (x: PricePolicy | null) => (x ? policyName(x) : '수동 가격');
+      return { g, name, from: pn(pol), to: pn(p), why: g.status !== 'onSale' ? '이번 달 말 단종 예정이라 바꿀 수 없습니다' : g.clearance ? '가격 인하 판매 중이라 가격을 바꿀 수 없습니다' : null, same: JSON.stringify(pol) === JSON.stringify(p) };
+    });
+  }
+  function showBulk(): void {
+    if (!game) return;
+    const G = garageList().filter((g) => cmpSel.has(g.id));
+    if (!G.length) return err('바꿀 차를 표 왼쪽 네모로 고르세요.');
+    const plan = bulkPlan(), ok = plan.filter((x) => !x.why && !x.same), pcts = config.pricePolicy.pctChoices;
+    const b = (k: 'policy' | 'mk', v: string, label: string, sub: string) => `<button data-act="bulkPick" data-k="${k}" data-v="${v}" aria-pressed="${bulk?.kind === k && bulk.v === v}">${label}<small>${sub}</small></button>`;
+    const rows = G.map((g) => { const x = plan.find((y) => y.g === g)!; return `<tr><td>${esc(nameOf(g))} <small class="hint">${g.number}세대</small></td><td>${policyShort(g)}</td><td>${MARKETING[g.marketing]}</td><td class="${x.why ? 'neg' : ''}">${!bulk ? '' : x.why ? `바꿀 수 없음 · ${esc(x.why)}` : x.same ? '이미 같음' : `→ ${esc(x.to)}`}</td></tr>`; }).join('');
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    sheetBody.innerHTML = `<div class="bulk-sheet"><div class="eyebrow"><i></i>차고 · 여러 대 한 번에</div><h2>고른 ${G.length}대 한 번에 바꾸기</h2>
+      <p class="hint">자동 가격과 광고 중 하나를 고르세요. 한 번에 한 가지를 바꾸며, 바꾼 뒤 같은 주 안에는 메뉴나 알림의 [되돌리기]로 한 번에 되돌릴 수 있습니다.</p>
+      <p class="lbl" style="margin-top:12px">자동 가격${ib('term:자동 가격')}</p><div class="seg px-policy">${b('policy', 'manual', '수동', '직접')}${pcts.map((p) => b('policy', `base:${p}`, `기준가 ${p}%`, '유지')).join('')}${b('policy', 'best', '최고 이익', '매달')}</div>
+      <p class="lbl">광고${ib('term:광고')} · 한 대에 매달</p><div class="seg">${MARKETING.map((m, i) => b('mk', String(i), m, i ? money(config.awareness.marketingCost[i]) : '0원')).join('')}</div>
+      <div class="tblwrap"><table class="tbl bulk-t"><tr><th>차종</th><th>지금 가격</th><th>지금 광고</th><th>바뀌는 것</th></tr>${rows}</table></div>
+      ${bulk?.kind === 'policy' && bulk.v === 'manual' ? '<p class="note">수동으로 바꾸면 지금 가격을 그대로 두고, 앞으로는 직접 바꿀 때만 바뀝니다.</p>' : ''}
+      <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button><button class="btn ink" data-act="bulkApply" ${ok.length ? '' : 'disabled'}>${ok.length ? `${ok.length}대에 적용` : '바꿀 차가 없습니다'}</button></div></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  async function applyBulk(): Promise<void> {
+    if (!game || !bulk) return;
+    const plan = bulkPlan(), ok = plan.filter((x) => !x.why && !x.same), no = plan.filter((x) => x.why), same = plan.filter((x) => !x.why && x.same), k = bulk;
+    if (!ok.length) return err('바꿀 수 있는 차가 없습니다.');
+    const what = k.kind === 'mk' ? `광고를 '${MARKETING[Number(k.v)]}'(한 대에 매달 ${Number(k.v) ? money(config.awareness.marketingCost[Number(k.v)]) : '0원'})${josa(MARKETING[Number(k.v)].slice(-1), '으로/로')}` : `자동 가격을 '${ok[0].to}'${josa(ok[0].to.slice(-1), '으로/로')}`;
+    const text = `${ok.length}대의 ${what} 바꿀까요?\n\n대상\n${ok.map((x) => `${x.name}: ${x.from} → ${x.to}`).join('\n')}${no.length ? `\n\n바꿀 수 없는 ${no.length}대(그대로 둠)\n${no.map((x) => `${x.name}: ${x.why}`).join('\n')}` : ''}${same.length ? `\n\n이미 같은 ${same.length}대: ${same.map((x) => x.name).join(', ')}` : ''}`;
+    if (!(await ask(text, `${ok.length}대에 적용`))) return;
+    let n = 0;
+    for (const x of ok) { // 같은 종류 명령을 이어서(chain) 보내 한 번에 되돌린다
+      const r = k.kind === 'mk' ? game.command({ type: 'setMarketing', generationId: x.g.id, marketing: Number(k.v) }, n > 0) : game.command({ type: 'setPricePolicy', generationId: x.g.id, policy: bulkPolicy(k.v) }, n > 0);
+      if (run(r)) { n++; if (k.kind === 'policy') garagePrice.delete(x.g.id); }
+    }
+    sheet.hidden = true; bulk = null;
+    if (n) toast(`${n}대의 ${k.kind === 'mk' ? '광고' : '자동 가격'}를 바꿨습니다.${no.length ? ` 바꿀 수 없는 ${no.length}대는 그대로 뒀습니다.` : ''}`);
+    render();
+  }
   function garageView(): View {
     const s = game!.state, gens = sellingGens(s), p = s.projects[0];
     const devCard = s.projects.map((p) => `<div class="card"><p class="lbl">개발 중</p><h2>${esc(p.name)}</h2><p class="hint">${p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`} · 남은 결함 약 ${p.defectEst}개</p><div class="row" style="margin-top:10px"><button class="btn" data-act="devSel" data-id="${p.id}">개발 화면 보기</button></div></div>`).join('');
@@ -952,7 +1053,7 @@ export function startApp(): void {
       + ovHint
       + (gens.length > 1 ? `<button class="switch l" data-act="gprev" aria-label="이전 차">‹</button><button class="switch r" data-act="gnext" aria-label="다음 차">›</button><div class="ov tr gnav"><button class="btn" data-act="gsum">← 전 차종</button><span>${gi + 1}/${GL.length}</span></div>` : '');
     const sales = g.sales.slice(-12), mx = Math.max(1, ...sales);
-    const chart = sales.length ? `<svg class="mini" viewBox="0 0 300 64" preserveAspectRatio="none" role="img" aria-label="최근 월별 판매">${sales.map((v, i) => { const w = 300 / 12, h = (v / mx) * 56; return `<rect x="${(i * w + 2).toFixed(1)}" y="${(60 - h).toFixed(1)}" width="${(w - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${i === sales.length - 1 ? '#ff5a1f' : '#14171c'}"/>`; }).join('')}</svg>` : '';
+    const chart = sales.length ? `<svg class="mini" viewBox="0 0 300 64" preserveAspectRatio="none" role="img" aria-label="최근 월별 판매">${sales.map((v, i) => { const w = 300 / 12, h = (v / mx) * 56; return `<rect x="${(i * w + 2).toFixed(1)}" y="${(60 - h).toFixed(1)}" width="${(w - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" class="${i === sales.length - 1 ? 'b-now' : 'b-ink'}"/>`; }).join('')}</svg>` : '';
     // 0.9.0 핵심 수치 4개(지난달 판매·대당 이익·수명·평론)는 무대 아래 띠에, 패널의 성적 카드는 누적·월 이익·판매 그래프·조언
     const gup = Q.generationUnitProfit(g, s), gmp = carMonthProfit(g);
     const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
@@ -1331,14 +1432,15 @@ export function startApp(): void {
     const chips = s.projects.length >= 2 || free ? `<div class="pchips"><span class="lbl">개발팀 ${s.projects.length}/${teams}</span>${s.projects.length >= 2 ? s.projects.map((x) => `<button class="pchip" data-act="devSel" data-id="${x.id}" aria-pressed="${x.id === p.id}"><b>${esc(x.name)}</b><small>${phaseText(x)}</small></button>`).join('') : ''}${free ? '<button class="btn ink" data-act="plan">+ 신차 기획</button>' : ''}</div>` : '';
     const pv = devGrades(p)!, minT = config.dev.minTestWeeks, ready = p.kind !== 'fix' && p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p, s);
     const phase = phaseText(p);
-    const ovh = `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>${kindLabel(p)} · ${phase}</div><b>${esc(p.name)}</b><span class="ofc-s">${STATS.map((k) => `${STAT_NAME[k]} ${score(pv.grades[k])}`).join(' · ')} · 결함 약 ${num(p.defectEst)}개</span></div><div class="ofc-g"><small>지금 등급${ib('term:지금 등급')}</small><b>${score(pv.avg)}</b></div></div>`;
+    const pi = s.projects.indexOf(p), nav = s.projects.length >= 2 ? `<div class="ofc-nav" role="group" aria-label="프로젝트 넘기기"><button class="btn" data-act="devStep" data-v="-1" aria-label="이전 프로젝트">‹</button><span>${pi + 1}/${s.projects.length}</span><button class="btn" data-act="devStep" data-v="1" aria-label="다음 프로젝트">›</button></div>` : ''; // 0.12.0 동시 개발: 띠에서도 넘긴다
+    const ovh = `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>${kindLabel(p)} · ${phase}</div><b>${esc(p.name)}</b><span class="ofc-s">${STATS.map((k) => `${STAT_NAME[k]} ${score(pv.grades[k])}`).join(' · ')} · 결함 약 ${num(p.defectEst)}개</span></div>${nav}<div class="ofc-g"><small>지금 등급${ib('term:지금 등급')}</small><b>${score(pv.avg)}</b></div></div>`;
     const pct = p.phase === 'design' ? (p.weeksDone / p.designWeeks) * 100 : 100;
     const log = devLog.get(p.id) ?? [];
     // 넓은 화면에서는 사무실 아래에 [진행·능력치] [결함·개발비·버튼] [주간 기록] 세 칸으로 나란히
     const team = s.staff.filter((x) => x.projectId === p.id);
-    const card1 = `<div class="card"><p class="lbl">${kindLabel(p)} · ${p.phase === 'design' ? '설계 단계' : '시험 단계'}</p><h2>${esc(p.name)}<small>${phase}</small></h2>
-      <p class="hint team-line">${p.waiting && !team.length ? '출시 대기 중이라 팀이 풀려났습니다. 엔지니어는 연구를 합니다.' : `만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}`}</p>
+    const card1 = `<div class="card dev-prog"><p class="lbl">${kindLabel(p)} · ${p.phase === 'design' ? '설계 단계' : '시험 단계'}</p><h2>${esc(p.name)}<small>${phase}</small></h2>
       ${devSteps(p, pct, team)}
+      <p class="hint team-line">${p.waiting && !team.length ? '출시 대기 중이라 팀이 풀려났습니다. 엔지니어는 연구를 합니다.' : `만드는 사람 ${team.length}명: ${team.map((x) => `${esc(x.name)}(${ROLE_NAME[x.role]})`).join(', ') || '없음 — 회사 탭에서 직원을 넣으세요'}`}</p>
       <p class="lbl" style="margin-top:12px">${p.kind === 'facelift' ? '지금 판매 중인 판의 능력치(출시하면 디자인이 오릅니다)' : '지금 능력치(등급)'}</p>${statBars(pv.grades)}</div>`;
     const ps = Q.projectStatus(s, p.id), wait = !!ps?.waiting;
     const costLine = ps && !wait ? `<p class="hint cost-line" style="margin-top:8px">${esc(ps.costNote)}</p>` : '';
@@ -1349,7 +1451,7 @@ export function startApp(): void {
       ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}${costLine}
       <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:10px">개발 취소</button>
       ${p.phase === 'test' && !wait ? '<p class="note">시험을 길게 할수록 결함이 줄어 리콜 위험이 낮아지지만 그동안 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.</p>' : ''}</div>`;
-    const card3 = `<div class="card">${waitTodo(free)}<p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.</p>'}</div>`;
+    const card3 = `<div class="card dev-side"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.</p>'}${waitTodo(free)}</div>`;
     return { ov: ovh, panel: draftCard() + chips + card1 + card2 + card3, office: officeView(p) };
   }
 
@@ -1375,7 +1477,7 @@ export function startApp(): void {
   function waitTodo(free: boolean): string {
     const s = game!.state, h = Q.hiringInfo(s), r = Q.researchInfo(s);
     const b = (act: string, v: string, name: string, sub: string) => `<button class="btn" data-act="${act}" data-v="${v}"><span>${name}<small>${sub}</small></span><span aria-hidden="true">→</span></button>`;
-    return `<p class="lbl">기다리는 동안</p><div class="wait-todo">${b('goCo', 'staff', '직원 채용', h.candidates.length ? `후보 ${h.candidates.length}명이 기다립니다` : h.full ? `정원 ${h.staffCount}/${h.capacity}명이 찼습니다` : `정원 ${h.staffCount}/${h.capacity}명 · 공고를 낼 수 있습니다`)}
+    return `<p class="lbl wait-lbl">기다리는 동안 할 수 있는 일</p><div class="wait-todo">${b('goCo', 'staff', '직원 채용', h.candidates.length ? `후보 ${h.candidates.length}명이 기다립니다` : h.full ? `정원 ${h.staffCount}/${h.capacity}명이 찼습니다` : `정원 ${h.staffCount}/${h.capacity}명 · 공고를 낼 수 있습니다`)}
       ${b('goCo', 'research', '연구', r.pointsPerWeek <= 0 ? '일할 수 있는 엔지니어가 없어 지금은 연구 점수가 0입니다' : r.used < r.slots ? `연구 칸 ${r.slots - r.used}개가 비어 있습니다 · 개발 중에도 연구가 조금씩 됩니다` : `연구 ${r.used}개 진행 중 · 한 주 ${pts1(r.pointsPerWeek)}점`)}
       ${draft || lift ? b('resumePlan', '', '다음 차 기획', '기획 중인 초안을 이어서 합니다') : free ? b('plan', '', '다음 차 기획', '비어 있는 개발팀이 있습니다') : sellingGens(s).length ? b('tab', 'garage', '판매 중인 차 살피기', '가격·광고를 조정합니다') : b('goCo', 'hq', '본사', '본사를 키우면 정원과 개발팀이 늘어납니다')}</div>`;
   }
@@ -1503,7 +1605,7 @@ export function startApp(): void {
   }
 
   // ----- 회사(9장): 안쪽 탭 재무 / 직원 / 본사 / 공장 -----
-  const CO_TABS: [CoTab, string][] = [['staff', '직원'], ['exec', '임원'], ['hq', '본사'], ['factory', '공장']];
+  const CO_TABS: [CoTab, string][] = [['sum', '요약'], ['staff', '직원'], ['exec', '임원'], ['hq', '본사'], ['factory', '공장']];
   const ROLE_ORDER: Role[] = ['designer', 'engineer', 'tester', 'sales'];
   const condWord = (c: number) => (c < config.staff.condition.low ? '지침' : c < config.staff.condition.mid ? '보통' : '좋음');
   const growWord = (gap: number) => (gap >= 25 ? '성장 여지 큼' : gap >= 15 ? '성장 여지 보통' : '성장 여지 작음');
@@ -1512,7 +1614,7 @@ export function startApp(): void {
   const cmpRow = (label: string, a: string, b: string, cost = false) => `<tr><td>${label}</td><td class="r">${a}</td><td class="r"><b class="${a === b ? '' : cost ? 'neg' : 'pos'}">${b}</b></td></tr>`;
   function companyView(): string {
     const tabs = `<div class="seg cotabs" role="tablist" aria-label="회사">${CO_TABS.map(([k, l]) => `<button role="tab" data-act="cotab" data-v="${k}" aria-selected="${coTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (coTab === 'exec' ? execTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : staffTab());
+    return tabs + (coTab === 'sum' ? V.companySummary(game!.state) : coTab === 'exec' ? execTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : staffTab());
   }
 
   /** 경쟁사가 강한 차급: 점유 점수가 높은 순 최대 3개 + "외 n"(초반에 모두 같으면 "모든 차급 고르게") */
@@ -1521,31 +1623,25 @@ export function startApp(): void {
     if (!e.length || top.length === e.length) return '모든 차급 고르게';
     return `${top.slice(0, 3).map(([b]) => bodyById(b).name).join('·')}${top.length > 3 ? ` 외 ${top.length - 3}` : ''} 강함`;
   };
+  let finRange: V.FinRange = '1y'; // 0.12.0 재무 기간(1년=달마다 / 5년 / 전체)
   function finTab(): string {
-    const s = game!.state, L = s.ledger[s.ledger.length - 1], limit = Q.loanLimit(s), rate = Q.loanRate(s);
-    const hqUp = (Q.hqInfo(s).current.upkeep), fUp = (Q.factoryInfo(s).current.upkeep);
-    // 막대는 영업 이익(일회성 지출을 뺀 값). 공장 건설 같은 큰 일회성 지출 한 달에 축이 눌리지 않게 따로 점으로 표시
-    const led = s.ledger, op = (e: typeof led[number]) => e.profit + (e.oneOff || 0), mx = Math.max(1, ...led.map((e) => Math.abs(op(e))));
-    const W = 480, H = 150, X0 = 56, bw = (W - X0) / 24;
-    const chart = led.length ? `<svg viewBox="0 0 ${W} ${H + 18}" width="100%" role="img" aria-label="최근 24개월 이익"><line x1="${X0}" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="#d8dde4"/>${led.map((e, i) => { const v = op(e), h = (Math.abs(v) / mx) * (H / 2 - 4), y = v >= 0 ? H / 2 - h : H / 2, x = X0 + i * bw + 2; return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${v >= 0 ? '#12915a' : '#d43c3c'}"><title>${e.year}년 ${e.monthOfYear}월 영업 이익 ${money(v, true)}</title></rect>${e.oneOff > 0 ? `<circle class="oneoff" cx="${(x + (bw - 4) / 2).toFixed(1)}" cy="${H - 4}" r="4" fill="#ff5a1f"><title>${e.year}년 ${e.monthOfYear}월 일회성 지출 ${money(e.oneOff)}</title></circle>` : ''}`; }).join('')}
-      <text x="${X0 - 6}" y="12" font-size="11" fill="#8b94a1" text-anchor="end">+${money(mx)}</text><text x="${X0 - 6}" y="${H / 2 + 4}" font-size="11" fill="#8b94a1" text-anchor="end">0</text><text x="${X0 - 6}" y="${H - 2}" font-size="11" fill="#8b94a1" text-anchor="end">−${money(mx)}</text><text x="${W - 2}" y="${H + 14}" font-size="11" fill="#8b94a1" text-anchor="end">${led[led.length - 1].year}년 ${led[led.length - 1].monthOfYear}월</text><text x="${X0}" y="${H + 14}" font-size="11" fill="#8b94a1">${led[0].year}년 ${led[0].monthOfYear}월</text></svg>` : '<p class="hint">첫 달 결산이 끝나면 그래프가 나옵니다.</p>';
-    // 0.5.0 이전 장부에는 본사 몫(upkeepHq)이 없어 지금 본사 등급의 유지비로 나눠 보인다
-    const hqPart = L ? L.upkeepHq ?? Math.min(L.upkeep, hqUp) : 0; // 0.5.1부터 장부에 본사 몫이 따로 있다
-    const rows: [string, number][] = L ? [['차 원가', L.cogs], ['직원 월급', L.salaries], ['본사 유지비', hqPart], ['공장 유지비', L.upkeep - hqPart], ['개발비', L.dev], ['광고비', L.marketing], ['대출 이자', L.interest], ['리콜', L.recall], ['일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설)', L.oneOff || 0]] : [];
-    const table = L ? `<table class="tbl"><tr><th>${L.year}년 ${L.monthOfYear}월</th><th class="r">금액</th></tr><tr><td>판매 수입 (${num(L.sold)}대)</td><td class="r pos">${money(L.revenue, true)}</td></tr>${rows.filter(([, v]) => v).map(([n, v]) => `<tr><td>${n}</td><td class="r neg">${money(-v)}</td></tr>`).join('')}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td></tr></table>` : '';
-    const fin = `<div class="card"><h3>재무</h3><div class="kpis">${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}${kpi('대출', money(s.loan.balance))}${kpi('대출 한도', money(limit))}${kpi(`월 이자${ib('term:대출 이자')}`, `${(rate * 100).toFixed(1)}<span>%</span>`)}</div>
-      <p class="hint" style="margin-top:8px">매달 유지비 ${money(hqUp + fUp)}: 본사 ${money(hqUp)} + 공장 ${money(fUp)} · 직원 월급 ${money(s.staff.reduce((a, x) => a + Q.salaryOf(x.ability), 0))}</p>
-      <p class="lbl" style="margin-top:14px">최근 24개월 영업 이익</p>${chart}${led.some((e) => e.oneOff > 0) ? '<p class="note" style="margin-top:2px">막대는 일회성 지출(채용 공고·교육·승급·공장 건설 등)을 뺀 이익입니다. 주황 점은 일회성 지출이 있던 달입니다.</p>' : ''}${table ? `<p class="lbl" style="margin-top:14px">지난달 수입과 지출</p>${table}<button class="btn" data-act="monthOpen" data-v="${led.length - 1}" style="width:100%;margin-top:8px">지난달 결산 펼쳐 보기(차종별·전월 대비)</button>` : ''}
-      <p class="lbl" style="margin-top:14px">대출</p><div class="row">${[10000, 50000, 100000].map((a) => `<button class="btn" data-act="borrow" data-v="${a}" ${s.loan.balance + a > limit ? 'disabled' : ''}>${money(a)} 빌리기</button>`).join('')}</div>
+    const s = game!.state, L = s.ledger.at(-1), limit = Q.loanLimit(s), rate = Q.loanRate(s), led = s.ledger;
+    const hqUp = Q.hqInfo(s).current.upkeep, fUp = Q.factoryInfo(s).current.upkeep, y = yearOf(s.week), ys = led.filter((e) => e.year === y), ytd = ys.reduce((a, e) => a + e.profit, 0);
+    const sum = `<div class="card fin-sum"><h3>재무</h3><div class="kpis">${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}${L ? kpi(`지난달 이익 <small>${L.monthOfYear}월</small>`, money(L.profit, true), L.profit >= 0 ? 'pos' : 'neg') : ''}${ys.length ? kpi(`올해 이익 <small>${ys.length}개월</small>`, money(ytd, true), ytd >= 0 ? 'pos' : 'neg') : ''}</div>
+      <p class="hint" style="margin-top:8px">매달 고정비: 본사 유지비 ${money(hqUp)} · 공장 유지비 ${money(fUp)} · 직원 월급 ${money(s.staff.reduce((a, x) => a + Q.salaryOf(x.ability), 0))}</p>
+      ${L ? `<button class="btn" data-act="monthOpen" data-v="${led.length - 1}" style="width:100%;margin-top:8px">지난달 결산 펼쳐 보기(차종별·지출 내역·전월 대비)</button>` : ''}</div>`;
+    // 대출·구제 금융 조작은 한 카드에
+    const loan = `<div class="card fin-loan"><h3>대출·구제 금융</h3><div class="kpis">${kpi('대출', money(s.loan.balance))}${kpi('대출 한도', money(limit))}${kpi(`월 이자${ib('term:대출 이자')}`, `${(rate * 100).toFixed(1)}<span>%</span>`)}</div>
+      <div class="row" style="margin-top:10px">${[10000, 50000, 100000].map((a) => `<button class="btn" data-act="borrow" data-v="${a}" ${s.loan.balance + a > limit ? 'disabled' : ''}>${money(a)} 빌리기</button>`).join('')}</div>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="repay" data-v="10000" ${s.loan.balance < 10000 || s.cash < 10000 ? 'disabled' : ''}>1억 갚기</button><button class="btn" data-act="repay" data-v="all" ${s.loan.balance <= 0 || s.cash < s.loan.balance ? 'disabled' : ''}>모두 갚기</button></div>
-      <p class="note">한도는 ${money(diffOf(s).loanBase)}에 최근 1년 매출의 ${Math.round(config.loan.revenueRatio * 100)}%를 더한 값입니다. 한도의 ${Math.round(config.loan.highUse * 100)}% 넘게 빌리면 이자가 올라갑니다. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다. 공고·교육·퇴직금·승급·건설비는 낼 때 현금에서 바로 나가고, 그달 장부에 일회성 지출로 적힙니다.</p>
+      <p class="note">한도는 ${money(diffOf(s).loanBase)}에 최근 1년 매출의 ${Math.round(config.loan.revenueRatio * 100)}%를 더한 값입니다. 한도의 ${Math.round(config.loan.highUse * 100)}% 넘게 빌리면 이자가 올라갑니다. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>
       <p class="hint bail-line" style="margin-top:6px">${bailInfo().line} · 난이도 ${esc(diffName(s.difficulty))}</p>
       ${s.cash < 0 && !s.loan.bailoutUsed ? `<div class="badbox" style="margin-top:10px">현금이 ${s.negMonths}개월째 마이너스입니다. 구제 금융(남은 ${bailInfo().left}번)을 받으면 현금이 0이 되지만 평판이 ${-config.bankruptcy.bailoutRep} 떨어지고 대출 한도가 절반이 됩니다.</div><button class="btn danger" data-act="bailout" style="width:100%;margin-top:8px">구제 금융 받기</button>` : ''}</div>`;
     const mine = sellingGens(s).reduce((a, g) => a + (g.sales[g.sales.length - 1] ?? 0), 0);
-    const rivals = `<div class="card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r) => `<div>${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small></span><small class="rv-strong">${rivalStrong(r.cells)}</small></div>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small style="color:#fffa">평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
+    const rivals = `<div class="card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r) => `<div>${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small></span><small class="rv-strong">${rivalStrong(r.cells)}</small></div>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small>평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
     // 0.9.0 지난 달들: 누르면 월 결산 창(장부 24개월)
     const months = led.length ? `<div class="card mon-list"><h3>월 결산 <small class="hint">최근 ${led.length}개월 · 누르면 펼쳐 봅니다</small></h3>${[...new Set(led.map((e) => e.year))].reverse().map((y) => `<p class="lbl mon-y">${y}년</p><div class="mbtns">${led.map((e, i) => [e, i] as const).filter(([e]) => e.year === y).reverse().map(([e, i]) => `<button class="btn mbtn" data-act="monthOpen" data-v="${i}" aria-label="${y}년 ${e.monthOfYear}월 결산 보기"><b>${e.monthOfYear}월</b><small class="${e.profit >= 0 ? 'pos' : 'neg'}">${money(e.profit, true)}</small></button>`).join('')}</div>`).join('')}</div>` : '';
-    return `<div class="cols">${fin}<div class="colstack">${months}${rivals}</div></div>`;
+    return `<div class="fin-wrap"><div class="fin-l">${V.finMain(s, finRange)}</div><div class="colstack">${sum}${loan}${months}${rivals}</div></div>`;
   }
 
   // ----- 0.8.0 직원 표 정렬·필터 -----
@@ -1816,7 +1912,7 @@ export function startApp(): void {
   }
   function showLogoSheet(): void {
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
-    sheetBody.innerHTML = `<div class="eyebrow"><i></i>메뉴</div><h2>회사 로고 바꾸기</h2>${logoMaker(ui.logo)}<div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">완료</button></div>`;
+    sheetBody.innerHTML = `<div class="eyebrow"><i></i>메뉴</div><h2>회사 로고 바꾸기</h2>${logoMaker(ui.logo)}<div class="row end" style="margin-top:12px"><button class="btn" data-act="settings">← 설정</button><button class="btn ink" data-act="closeSheet">완료</button></div>`;
     sheet.hidden = false; renderTop();
   }
 
@@ -1843,8 +1939,8 @@ export function startApp(): void {
   function adopt(g: Game, extra: S.UiExtra): void {
     game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
     restorePlan(extra.plan); garageId = -1; garageSum = true; cmpSel.clear(); gameOverShown = false; officeEvents.length = 0; thumbs.clear();
-    coTab = 'staff'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
-    garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false;
+    coTab = 'sum'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
+    garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false; noteLog = []; noteSeen = noteId;
     logDev(); // 주간 기록은 화면 메모리에만 있어 불러오면 비므로, 지금 상태 한 줄로 시작한다
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
     title.hidden = true; sheet.hidden = true; makeStage(); setSpeed(1);
@@ -1869,28 +1965,46 @@ export function startApp(): void {
     inp.click();
   }
 
-  // ---------- 메뉴(저장·설정) ----------
+  // ---------- 메뉴(저장·불러오기·내보내기·설정·되돌리기·처음 화면) ----------
   async function showMenu(): Promise<void> {
     if (!game) return;
     const saves = await S.list(), by = new Map(saves.map((x) => [x.key, x]));
     const line = (k: S.SlotKey) => { const x = by.get(k); return x ? `${esc(x.company)} · ${esc(diffName(x.difficulty))} · ${esc(Q.dateLabel(x.week))} · ${esc(x.when.slice(0, 16).replace('T', ' '))}` : '비어 있음'; };
-    sheetBody.innerHTML = `<div class="eyebrow"><i></i>메뉴</div><h2>저장과 설정</h2><p class="hint menu-diff" style="margin:-4px 0 10px">이 게임의 난이도: <b>${esc(diffName(game.state.difficulty))}</b> (게임 중에는 바꿀 수 없습니다)</p><div class="menu-slots">
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    sheetBody.innerHTML = `<div class="eyebrow"><i></i>메뉴</div><h2>저장과 불러오기</h2><p class="hint menu-diff" style="margin:-4px 0 10px">이 게임의 난이도: <b>${esc(diffName(game.state.difficulty))}</b> (게임 중에는 바꿀 수 없습니다)</p><div class="menu-slots">
       ${S.SLOT_KEYS.map((k, i) => `<div class="slot"><div><b>저장 칸 ${i + 1}</b><small>${line(k)}</small></div><div class="row"><button class="btn ink" data-act="saveSlot" data-v="${k}">저장</button><button class="btn" data-act="loadSlot" data-v="${k}" ${by.has(k) ? '' : 'disabled'}>불러오기</button></div></div>`).join('')}
       <div class="slot"><div><b>자동 저장</b><small>${esc(saveWhen())} · ${line('auto')}</small></div><button class="btn" data-act="loadSlot" data-v="auto" ${by.has('auto') ? '' : 'disabled'}>불러오기</button></div></div>
       <div class="row" style="margin-top:10px"><button class="btn" data-act="export">파일로 내보내기</button><button class="btn" data-act="import">파일에서 가져오기</button></div>
       <p class="note">브라우저 저장소는 지워질 수 있으니 파일로 내보내 두는 것이 안전합니다.</p>
       ${undoLine()}
-      <p class="lbl" style="margin-top:14px">자동 저장 <small class="hint auto-last">마지막 자동 저장: ${lastAuto !== null ? Q.monthLabel(monthOf(lastAuto)) : by.get('auto') && by.get('auto')!.company === game.state.companyName ? Q.monthLabel(monthOf(by.get('auto')!.week)) : '아직 없음'}</small></p>
-      <div class="seg auto-every" role="group" aria-label="자동 저장 간격">${SAVE_EVERY.map(([k, n]) => `<button data-act="saveEvery" data-v="${k}" aria-pressed="${saveSet.every === k}">${n}</button>`).join('')}</div>
-      <div class="toggle" style="margin-top:6px"><span>큰 결정 뒤 저장(출시·개발 시작·증설·승급·해고·채용·임원 임명)</span><button class="btn" data-act="saveBig" aria-pressed="${saveSet.big}">${saveSet.big ? '켜짐' : '꺼짐'}</button></div>
-      <p class="note">끄지 않았으면 탭을 숨기거나 닫을 때도 저장합니다. 이 기기에 저장됩니다.</p>
+      <button class="btn menu-set" data-act="settings" style="width:100%;margin-top:10px">설정 <small>시간·알림·소리·저장·화면</small></button>
       <p class="note help-line">이 게임의 역사 사건과 시장 수치는 게임에 맞게 어림한 것이라 실제와 다를 수 있습니다.</p>
-      <button class="btn" data-act="logoSheet" style="width:100%;margin-top:10px">회사 로고 바꾸기</button>
-      <p class="lbl" style="margin-top:14px">자동 멈춤</p><div class="pause-set">${PAUSE_ITEMS.map(([k, n]) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="autoPause" data-v="${k}" aria-pressed="${pauseOn[k]}">${pauseOn[k] ? '켜짐' : '꺼짐'}</button></div>`).join('')}</div>
-      <p class="note">켜 둔 항목이 생기면 시간을 멈추고 알림을 띄웁니다. 끄면 알림만 띄우고 시간은 계속 흐릅니다. 이 기기에 저장됩니다.</p>
-      ${soundSet()}
-      <div class="toggle" style="margin-top:10px"><span>디버그 표시(화면 속도·주 번호·시드)</span><button class="btn" data-act="debug" aria-pressed="${debugOn}">${debugOn ? '켜짐' : '꺼짐'}</button></div>
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  // ---------- 0.12.0 설정 화면: 시간(자동 멈춤)·알림(종류별)·소리·저장(자동 저장)·화면(로고·디버그). 값은 예전과 같은 기기 저장소 키 ----------
+  const SET_TABS = [['time', '시간'], ['note', '알림'], ['sound', '소리'], ['save', '저장'], ['view', '화면']] as const;
+  type SetTab = typeof SET_TABS[number][0];
+  let setTab: SetTab = 'time';
+  const onOff = (act: string, v: string, label: string, on: boolean, sub = '', dis = false) => `<div class="toggle"><span>${label}${sub ? `<small>${sub}</small>` : ''}</span><button class="btn" data-act="${act}" data-v="${v}" aria-pressed="${on}" ${dis ? 'disabled' : ''}>${on ? '켜짐' : '꺼짐'}</button></div>`;
+  const revealOn = () => { try { return localStorage.getItem(REVEAL_KEY) !== '0'; } catch { return true; } };
+  function showSettings(t: SetTab = setTab): void {
+    if (!game) return;
+    setTab = t;
+    const auto = lastAuto !== null ? Q.monthLabel(monthOf(lastAuto)) : '아직 없음';
+    const body = t === 'time' ? `<p class="lbl">자동 멈춤</p><div class="set-list">${PAUSE_ITEMS.map(([k, n]) => onOff('autoPause', k, n, pauseOn[k])).join('')}</div>
+        <p class="note">켜 둔 항목이 생기면 시간을 멈추고 알림을 띄웁니다. 끄면 알림만 띄우고 시간은 계속 흐릅니다. [다음 일까지]도 켜 둔 항목에서 멈춥니다.</p>`
+      : t === 'note' ? `<p class="lbl">알림 종류</p><div class="set-list">${NOTE_CATS.filter(([k]) => k !== 'pauseStop').map(([k, n, f]) => onOff('noteCat', k, n, noteOn(k), f ? '끌 수 없습니다' : '', !!f)).join('')}</div>
+        <p class="note">꺼 둔 종류는 화면에 띄우지 않고 상단 '할 일' 창의 알림 탭(지난 알림 기록함)에만 남깁니다. 같은 종류가 연달아 오면 "평판 변화 3건"처럼 한 알림으로 묶습니다. 시간을 멈춘 자동 멈춤 알림은 늘 띄웁니다.</p>`
+      : t === 'sound' ? soundSet()
+      : t === 'save' ? `<p class="lbl">자동 저장 <small class="hint auto-last">마지막 자동 저장: ${auto}</small></p>
+        <div class="seg auto-every" role="group" aria-label="자동 저장 간격">${SAVE_EVERY.map(([k, n]) => `<button data-act="saveEvery" data-v="${k}" aria-pressed="${saveSet.every === k}">${n}</button>`).join('')}</div>
+        <div class="set-list">${onOff('saveBig', '', '큰 결정 뒤 저장', saveSet.big, '출시·개발 시작·증설·승급·해고·채용·임원 임명')}</div>
+        <p class="note">끄지 않았으면 탭을 숨기거나 닫을 때도 저장합니다. 이 기기에 저장됩니다. 저장 칸과 파일 내보내기는 메뉴에 있습니다.</p>`
+      : `<p class="lbl">화면</p><div class="set-list"><button class="btn" data-act="logoSheet" style="width:100%">회사 로고 바꾸기</button>${onOff('reveal', '', '출시 공개 장면', revealOn(), '출시할 때 무대의 공개 연출(누르면 건너뜀)')}${onOff('debug', '', '디버그 표시', debugOn, '화면 속도·주 번호·시드')}</div>`;
+    sheetBody.innerHTML = `<div class="settings"><div class="eyebrow"><i></i>메뉴 · 설정</div><h2>설정</h2><div class="seg set-tabs" role="tablist" aria-label="설정 묶음">${SET_TABS.map(([k, n]) => `<button role="tab" data-act="setTab" data-v="${k}" aria-selected="${t === k}">${n}</button>`).join('')}</div>
+      <div class="set-body" data-tab="${t}">${body}</div><p class="note">설정은 이 기기에 저장되며 모든 게임에 함께 쓰입니다.</p>
+      <div class="row end" style="margin-top:12px"><button class="btn" data-act="menuBack">← 메뉴</button><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
   }
   const saveWhen = () => saveSet.every === 'off' ? '자동 저장 꺼짐' : `${SAVE_EVERY.find(([k]) => k === saveSet.every)![1]} 저장`;
@@ -1899,8 +2013,8 @@ export function startApp(): void {
   /** 메뉴의 소리 설정: 음량 슬라이더 3개, 음소거, 주 넘김 소리. 값은 sound.set()이 이 기기에 저장한다 */
   const SND_LEVELS = [['master', '전체 음량'], ['sfx', '효과음'], ['music', '배경 음악']] as const;
   function soundSet(): string {
-    const st = sound.settings(), sw = (k: 'muted' | 'weekTick', n: string) => `<div class="toggle" style="margin-top:6px"><span>${n}</span><button class="btn" data-act="snd" data-v="${k}" aria-pressed="${st[k]}">${st[k] ? '켜짐' : '꺼짐'}</button></div>`;
-    return `<p class="lbl" style="margin-top:14px">소리</p><div class="snd-set">${SND_LEVELS.map(([k, n]) => `<label class="snd-row"><span>${n}</span><input type="range" class="snd-r" data-k="${k}" min="0" max="100" step="5" value="${Math.round(st[k] * 100)}"><b>${Math.round(st[k] * 100)}%</b></label>`).join('')}
+    const st = sound.settings(), sw = (k: 'muted' | 'weekTick', n: string) => onOff('snd', k, n, st[k]);
+    return `<p class="lbl">소리</p><div class="snd-set">${SND_LEVELS.map(([k, n]) => `<label class="snd-row"><span>${n}</span><input type="range" class="snd-r" data-k="${k}" min="0" max="100" step="5" value="${Math.round(st[k] * 100)}"><b>${Math.round(st[k] * 100)}%</b></label>`).join('')}
       ${sw('muted', '음소거')}${sw('weekTick', '주 넘김 소리(한 주가 지날 때마다 짧게)')}</div>
       <p class="note">이 기기에 저장됩니다. 상단바의 스피커 버튼으로도 소리를 끄고 켤 수 있습니다.</p>`;
   }
@@ -1927,7 +2041,7 @@ export function startApp(): void {
   let dirty = false; // 마지막 저장·불러오기 뒤에 진행·변경이 있었나(불러오기 경고용)
   function run(r: CommandResult): boolean {
     if (!r.ok) { err(r.reason); return false; }
-    if (ACT_SFX[curAct]) sfx(ACT_SFX[curAct]);
+    if (ACT_SFX[curAct] && !(curAct === 'doLaunch' && revealWanted(stage))) sfx(ACT_SFX[curAct]); // 출시 공개 장면이 켜져 있으면 효과음은 장면이 불을 켤 때 낸다
     dirty = true;
     if (saveSet.big && BIG_ACTS.has(curAct)) autoSave(); // 0.8.0 큰 결정 뒤 자동 저장
     if (curAct !== 'doLaunch') for (const e of r.events ?? []) if (e.kind === 'reputation') onEvent(e); // 출시는 평론 창 배지가 평판 변화를 보여 준다
@@ -2061,8 +2175,13 @@ export function startApp(): void {
         devLog.delete(L.pid); delete ui.colors[L.pid]; launch = null; screen = 'garage'; garageId = g?.id ?? -1; garageSum = false; lastPanel = '';
         render();
         const news = r.ok ? r.events?.find((e) => e.kind === 'news') : undefined;
-        if (lifted && ed) showNews(ed.headline ?? news?.text ?? '', `${nameOf(lifted)}${josa(nameOf(lifted), '이/가')} 새 얼굴로 돌아왔다. 판매가 되살아나고 인지도도 오를 것으로 보인다.`, undefined, undefined, true);
-        else if (g) showReview(g, game.state.reputation - rep0);
+        const rep = game.state.reputation - rep0, after = () => {
+          if (lifted && ed) showNews(ed.headline ?? news?.text ?? '', `${nameOf(lifted)}${josa(nameOf(lifted), '이/가')} 새 얼굴로 돌아왔다. 판매가 되살아나고 인지도도 오를 것으로 보인다.`, undefined, undefined, true);
+          else if (g) showReview(g, rep);
+        };
+        // M3 출시 공개 장면(사용자 조작 출시만, 설정 'car-company-reveal'). 끝나면 평론 창·신문
+        if (g && stage && revealWanted(stage)) playReveal({ stage, sheet, body: sheetBody, kind: lifted ? 'facelift' : 'new', name: nameOf(g), sub: `${g.number}세대${lifted ? ' 페이스리프트' : ''} · ${bodyById(g.body).name} · ${segName(g.segment)}용`, sound: () => sfx('launch'), done: after });
+        else after();
         return;
       }
       case 'closeReview': reviewTimers.forEach(clearTimeout); sheet.hidden = true; go('garage'); return;
@@ -2071,7 +2190,11 @@ export function startApp(): void {
       case 'gopen': garageAt(Number(el.dataset.id)); return;
       case 'gsum': garageSum = true; go('garage'); return;
       case 'gSort': { const k = v as GSort; if (gSort.k === k) gSort.desc = !gSort.desc; else { gSort.k = k; gSort.desc = k !== 'name' && k !== 'launch'; } render(); return; }
-      case 'cmpPick': { const id = Number(el.dataset.id); if (!cmpSel.delete(id)) { if (cmpSel.size >= 4) return err('비교는 4대까지 고를 수 있습니다. 다른 차를 빼고 고르세요.'); cmpSel.add(id); } render(); return; }
+      case 'cmpPick': { const id = Number(el.dataset.id); if (!cmpSel.delete(id)) cmpSel.add(id); render(); return; }
+      case 'cmpAll': if (game) { for (const g of garageList()) cmpSel.add(g.id); render(); } return;
+      case 'bulkOpen': bulk = null; showBulk(); return;
+      case 'bulkPick': bulk = bulk?.v === v ? null : { kind: el.dataset.k as 'policy' | 'mk', v }; showBulk(); return;
+      case 'bulkApply': await applyBulk(); return; // 기다려야 [되돌리기] 알림이 붙는다
       case 'cmpClear': cmpSel.clear(); render(); return;
       case 'cmpOpen': showCompare(); return;
       case 'setPrice': { if (!game) return; const id = Number(el.dataset.id), price = garagePrice.get(id), pol = Q.generationById(game.state, id)?.pricePolicy; if (price === undefined) return;
@@ -2105,6 +2228,7 @@ export function startApp(): void {
       }
       case 'later': sheet.hidden = true; render(); return;
       case 'newsOpen': if (s) { const n = Q.newsLog(s)[Number(v)]; if (n) showNewsItem(n.text, n.week, n.category); } return;
+      case 'finRange': if (V.FIN_RANGES.some(([k]) => k === v)) { finRange = v as V.FinRange; render(); } return;
       case 'rectab': recTab = v as RecTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'goResearch': go('research'); if (v) showTech(v); return;
       case 'backPlan': go(draft ? 'plan' : lift ? 'lift' : 'garage'); return;
@@ -2135,6 +2259,7 @@ export function startApp(): void {
       }
       case 'goCo': goCo(v); return;
       case 'devSel': devSel = Number(el.dataset.id); go('dev'); return;
+      case 'devStep': if (s && s.projects.length) { const P = s.projects, i = Math.max(0, P.findIndex((p) => p.id === curProj()?.id)); devSel = P[(i + Number(v) + P.length) % P.length].id; lastPanel = ''; render(); } return;
       case 'devHome': go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로
       case 'resumePlan': go(draft ? 'plan' : lift ? 'lift' : 'dev'); return;
       case 'staffSel': { const id = Number(el.dataset.id); staffSel = staffSel === id ? null : id; render(); if (staffSel !== null) document.getElementById('staff-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
@@ -2236,17 +2361,23 @@ export function startApp(): void {
       }
       case 'export': if (game) { download(saveFileName(), JSON.stringify(S.makeSave(game, uiSnap()))); dirty = false; toast('파일로 내보냈습니다'); } return;
       case 'import': importFile(); return;
-      case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
-      case 'saveEvery': if (SAVE_EVERY.some(([k]) => k === v)) { saveSet.every = v as SaveEvery; keep(SAVE_SET_KEY, saveSet); void showMenu(); } return;
-      case 'saveBig': saveSet.big = !saveSet.big; keep(SAVE_SET_KEY, saveSet); void showMenu(); return;
+      case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); showSettings(); return;
+      case 'saveEvery': if (SAVE_EVERY.some(([k]) => k === v)) { saveSet.every = v as SaveEvery; keep(SAVE_SET_KEY, saveSet); showSettings(); } return;
+      case 'saveBig': saveSet.big = !saveSet.big; keep(SAVE_SET_KEY, saveSet); showSettings(); return;
       case 'undo': doUndo(); return;
       case 'yearOpen': showYearReport(Number(v)); return;
       case 'monthOpen': showMonth(Number(v)); return;
       case 'decadeOpen': showDecade(Number(v)); return;
-      case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
-      case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
+      case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } showSettings(); return; }
+      case 'noteCat': { const k = v as NoteCat; if (!NOTE_CATS.some(([c]) => c === k) || noteFixed(k)) return; noteSet[k] = !noteOn(k); keep(NOTE_KEY, noteSet); showSettings(); return; }
+      case 'settings': showSettings(); return;
+      case 'reveal': try { localStorage.setItem(REVEAL_KEY, revealOn() ? '0' : '1'); } catch { /* 저장 불가 */ } showSettings(); return;
+      case 'setTab': if (SET_TABS.some(([k]) => k === v)) showSettings(v as SetTab); return;
+      case 'menuBack': void showMenu(); return;
+      case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); showSettings(); return; }
       case 'closeSheet': sheet.hidden = true; todoTab = 'todo'; render(); return;
-      case 'todoTab': showTodo(v as 'todo' | 'reports'); return;
+      case 'todoTab': showTodo(v as 'todo' | 'reports' | 'notes'); return;
+      case 'noteGo': { const x = noteLog.find((y) => y.id === Number(v)); if (x?.open) { sheet.hidden = true; todoTab = 'todo'; x.open.fn(); } return; }
       case 'todoGo': { const t = game && todos().find((x) => x.key === el.dataset.k); if (t) goTarget(t.goto); else if (game) showTodo('todo'); return; }
       case 'todoGoCo': goTarget({ tab: 'company', sub: v }); return;
       case 'repRole': repRole = v as ExecReport['role'] | ''; showTodo('reports'); return;
@@ -2286,7 +2417,7 @@ export function startApp(): void {
     curAct = b.dataset.act!; actHist = game?.state.history.length ?? -1; undoShown = false;
     void act(curAct, b).finally(() => { // 0.8.0 되돌릴 수 있는 조작인데 알림이 없었으면 [되돌리기] 한 줄
       if (game && game.state.history.length > actHist && !Q.undoInfo(game.state).available) dropUndoBtns(); // 되돌릴 수 없는 조작을 했으면 이전 버튼도 무효
-      if (undoFresh()) toast(Q.undoInfo(game!.state).label, '', '조작함', 8000, 'undo');
+      if (undoFresh()) toast(Q.undoInfo(game!.state).label, '', '조작함', 8000, 'undo', undefined, 'act');
       actHist = -1;
     });
   });
