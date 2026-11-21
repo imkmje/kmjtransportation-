@@ -5,8 +5,11 @@ export const config = {
   reputation: { // 9.5
     min: 0, max: 100,
     // 0.4.2: 평판을 올릴 길이 명차(+4)뿐이라 리콜(−5)에 깎여 30년 뒤 중앙값이 0이었다(본사 3등급 조건 30에 닿지 못함). 두 가지를 더한다(시상식은 아직 없음)
-    launchBase: 5, launchPer: 1, // 신차·풀체인지 출시: 평판 += (평론 평균 − 5) × 1(명차·실패작 가감과 별도)
-    yearSoldDiv: 3000, yearMax: 2, // 12월 결산: 평판 += min(2, 그해 판매 대수 / 3,000)
+    launchBase: 5, launchPer: 1, // 신차·풀체인지 출시: 평론 평균이 5 넘으면 평판 += (평균 − 5) × 1, 5 미만은 0(0.5.1, 혹평만 감점. 명차·혹평 가감과 별도)
+    yearSoldDiv: 3000, yearMax: 3, // 12월 결산: 평판 += min(3, 그해 판매 대수 / 3,000). 0.5.1: 상한 2 → 3
+    yearGoodReview: 6, yearGoodRep: 1, // 12월 결산: 판매 중인 차의 평론 평균이 6 이상이면 +1(0.5.1)
+    milestones: [1000, 5000, 10000, 50000, 100000, 500000, 1000000], milestoneRep: [2, 2, 3, 3, 3, 3, 3], // 회사 누적 판매가 이 대수를 넘을 때마다 평판 +2~3(0.5.1)
+    recallPer: 5000, recallMin: 0.5, // 리콜 평판 감점 = 누적 판매 / 5,000(0.5~3, 최대는 recall.rep), × 난이도 감점 배수(0.5.1: −5 고정에서 바꿈)
   },
   grade: { base: 100, max: 10, mid: 5, // 기준(연도) = 100 × 구간별 상승률의 곱(5.1)
     // 0.4.2: 기준 상승률을 구간별로(사용자 피드백 "다음 작품일수록 좋은 평가가 어렵다"). 1970~80년 7%, 1980~90년 2%, 1990년부터 2.5%.
@@ -41,7 +44,7 @@ export const config = {
     noise: 0.7, manyDefects: 15, manyDefectsPenalty: 1, okDefects: 5, // 결함 15개 이상이면 전원 −1. 5개 이하면 화면에서 "출시해도 좋습니다"
     min: 1, max: 10,
     valueEps: 1, // 가성비파의 가격 매력 = (기준가 / 판매가)^1 (0.2~2.5)
-    masterpiece: 8, masterpieceRep: 4, flop: 4, flopRep: -3,
+    masterpiece: 8, masterpieceRep: 4, flop: 3.5, flopRep: -3, // 혹평: 평균 3.5 이하면 평판 −3 × 난이도 감점 배수(0.5.1: 4 → 3.5, 첫 차 평론 4점대는 혹평이 아니다)
   },
   market: { // 7.3
     scale: 0.53, // 시장 규모 배수(보정용). 2단계 1.15 → 2.1(기하 보간으로 1970년대 시장이 줄어서). 3단계 2.1 → 0.53: 공장 증설로 생산 한도가 풀리자
@@ -49,6 +52,7 @@ export const config = {
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
     overpriceExp: 6, overpriceHardAt: 1.08, overpriceHardExp: 20, // 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^6 × (기준가 × 1.08/판매가)^20(108% 넘는 부분만, 가격 올리기 봇이 유리해지지 않게). 0.5.0: 지수 20 하나였을 때 108%만 받아도 판매가 1/20로 줄었다(자르기 뒤에 곱한다)
+    erosion: { fromYear: 1995, perYear: 0.004, max: 0.06 }, // 0.5.1 시장 포화: 1995년부터 시장 기준가가 해마다 0.4%씩 낮아져 최대 6%(후반 현금 폭발 억제, 원가는 그대로)
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -60,7 +64,7 @@ export const config = {
     rate: 0.15, // 매달 목표값으로 15%씩 다가간다
   },
   life: { start: 0.6, rampMonths: 3, plateauMonths: 30, decay: 0.006 }, // 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6%. 0.4.2: 매달 −1.2%(3개월부터)에서 바꿈. 기준 상승(등급 낮아짐)만으로도 판매가 해마다 약 20%씩 줄어, 수명 감소를 늦게·약하게 해야 6~7년에 정점의 25% 아래가 된다
-  recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 12, rep: -5, awarenessMult: 0.8 }, // 6.3. 리콜 대당 비용 0.4.1에서 15 → 12만원(결함이 남은 차의 부담 완화)
+  recall: { perDefect: 0.02, maxYear: 0.4, costPerCar: 12, rep: -3, awarenessMult: 0.8 }, // rep: 평판 감점 최대(0.5.1: −5 고정 → 규모 비례 최대 −3) // 6.3. 리콜 대당 비용 0.4.1에서 15 → 12만원(결함이 남은 차의 부담 완화)
   factory: { // 9.3 공장. capacity·lines·upkeep·costMult는 1등급 값(화면 호환용), sim은 levels를 쓴다
     capacity: 300, lines: 1, upkeep: 3000, costMult: 1, // 0.4.1: 1등급 유지비 5,000 → 4,000. 0.4.2: 4,000 → 3,000(보통에서 서툰 플레이 봇 30년 파산 25% → 15%)
     levels: [ // 월 생산, 생산 라인(동시 차종), 건설비, 월 유지비, 원가 배수
@@ -69,7 +73,7 @@ export const config = {
       // 대당 이익이 판매가의 약 10%라 원가 배수 0.8이면 이익이 3배가 되어 돈이 폭발했다 → 배수를 완만하게, 건설비·유지비를 올림
       // 0.4.1 난이도 완화: 1·2등급 유지비 0.5/1.9억 → 0.4/1.6억(초반 부담), 3등급 건설비 260 → 320억·유지비 15.6 → 22억(초반 완화로 신중 봇의 공장이 너무 빨리 커지지 않게)
       { capacity: 300, lines: 1, cost: 0, upkeep: 3000, costMult: 1 },
-      { capacity: 1000, lines: 2, cost: 170000, upkeep: 16000, costMult: 0.99 },
+      { capacity: 1000, lines: 3, cost: 170000, upkeep: 16000, costMult: 0.99 },
       // 4단계 보정: 3~5등급 유지비 5.2/18.6/52.5억 → 15.6/84/240억(연구로 차체·동력이 좋아져 1980년대 이익이 커진 만큼, 큰 공장을 굴리는 비용을 올림)
       { capacity: 3000, lines: 3, cost: 3200000, upkeep: 220000, costMult: 0.98 },
       { capacity: 8000, lines: 5, cost: 22000000, upkeep: 1100000, costMult: 0.97 },
@@ -120,6 +124,7 @@ export const config = {
   },
   lifecycle: { // 8장
     facelift: {
+      goodFromMonths: 30, // 0.5.1: 출시 뒤 이보다 이르면 미리보기에 '지금 하면 효과가 작다'
       afterMonths: 18, designWeeks: 12, costShare: 0.4, // 출시 18개월 뒤, 설계 12주(0.4.2 시간 척도: 4 → 12, 리프트 전체 약 16~28주), 비용 = 그 세대 개발비의 40%(설계 4주 + 최소 시험 2주에 나눠 낸다). 설계서 25% → 40%(설계자 허용 25~40%, 리프트가 필수가 되지 않게, 3단계 봇 측정)
       dCap: 0.1, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +10%(설계서 +15% → 허용 8~15% 안)
       refresh: 0.025, // 0.4.2: 디자인 밖의 능력치(성능·연비·실용·품질)도 × 1.06(연식 변경 개선). 기준 상승으로 해마다 등급이 낮아지는 만큼을 약 1.3년 되돌린다(리프트 이익이 너무 작아서)
@@ -129,11 +134,11 @@ export const config = {
     },
     fullChange: {
       afterMonths: 36, sameBodyCost: 0.85, newBodyCost: 1, // 출시 36개월 뒤(또는 단종 상태), 비용 85%(같은 차체) / 100%
-      equityPerReview: 0.03, equityReviewBase: 0.12, equityReviewMax: 0.2, equitySalesDiv: 500000, equitySalesMax: 0.1, equityMax: 0.3, // 자산 = clamp(0.03 × 평론 − 0.12, 0, 0.2) + min(0.1, 누적/50만)
+      equityPerReview: 0.03, equityReviewBase: 0.09, equityReviewMax: 0.2, equitySalesDiv: 150000, equitySalesMax: 0.1, equityMax: 0.3, // 자산 = clamp(0.03 × 평론 − 0.09, 0, 0.2) + min(0.1, 누적/15만). 0.5.1: −0.12·50만에서 바꿈(평론 4점·누적 5천 대부터 눈에 띄게)
       recallEquity: -0.05, newBodyEquity: 0.5, revivalMonths: 36, revivalEquity: 0.5, // 리콜 −0.05, 차체 변경 ×0.5, 단종 36개월 넘으면 부활 ×0.5
       worseReview: -1, betterReview: 0.5, // 전작 비교(0.4.2: 원점수 = 절대 성능): 어느 능력치든 전 세대 마지막 판보다 낮으면 평론 전원 −1, 모두 낮지 않고 평균이 뚜렷이 높으면 +0.5
       worseTolerance: 0.05, betterShare: 0.1, // 평균이 5% 넘게 낮아야 "못하다", 10% 이상 높아야 "진화했다"
-      rebuyShare: 0.03, rebuyMonths: 12, rebuyMinQ: 5, // 전 세대 누적 판매의 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 5 미만이면 0)
+      rebuyShare: 0.03, rebuyMonths: 12, rebuyMinQ: 3, // 전 세대 누적 판매의 3%를 12개월에 나눠 추가 수요(전 세대 품질 등급 3 미만이면 0, 0.5.1: 5 → 3)
     },
     retrofit: { costShare: 0.05, min: 5000 }, // 0.4.2 의무 장비 추가: 일시 비용 = 그 세대 개발비 × 5%(최소 5,000만원). 대당 원가는 장비 원가만큼 오른다
     lookCandidates: 3, // 3D 모양 후보 수
@@ -161,6 +166,7 @@ export const config = {
     earlyRate: 0.25, earlyMax: 4, // 등장 연도보다 먼저: 비용 × (1 + 0.25 × 앞당긴 햇수), 최대 4년
     lateYears: 8, lateMult: 0.5, // 등장 연도 + 8년이 지나면 비용 × 0.5
     repeatGrowth: 1.5, // 반복 기술(차세대)은 할 때마다 비용 × 1.5
+    priorityShare: 0.5, // 0.5.1: 진행 중 연구는 주간 점수를 고르게 나눠 받고, 우선 연구가 있으면 그 연구가 50%, 나머지가 50%를 나눈다(다 끝나 남는 점수는 다른 연구로)
     worldFirst: 1, // 먼저 연구한 기술을 쓴 첫 차의 평론 +1(기술마다 한 번)
   },
   events: { // 11장 시대 사건
@@ -176,11 +182,11 @@ export const config = {
   },
   // 0.4.1 난이도(설계자 결정): 새 게임에서 고른다(인자를 빼면 easy). 예전 저장은 normal로 본다. 공식은 그대로, 아래 값을 읽는 자리에서 바꾼다.
   // cash: 시작 현금, loanBase: 대출 기본 한도, bankruptcyMonths: 파산 유예, rivalMult: 경쟁 차 A 배수, upkeepMult: 본사·공장 유지비 배수,
-  // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수
+  // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수, repLossMult: 평판 감점 배수(혹평·리콜·단종, 0.5.1)
   difficulty: {
-    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 24, rivalMult: 0.8, upkeepMult: 0.5, prototypeMult: 0.7, recallMult: 0.6, manyDefects: 20, bailouts: 2 },
-    normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1 },
-    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0 },
+    easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 24, rivalMult: 0.8, upkeepMult: 0.5, prototypeMult: 0.7, recallMult: 0.6, manyDefects: 20, bailouts: 2, repLossMult: 0.5 },
+    normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1, repLossMult: 1 },
+    hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0, repLossMult: 1 },
   },
   devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%

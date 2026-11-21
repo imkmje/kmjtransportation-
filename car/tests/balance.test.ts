@@ -104,13 +104,13 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     const flop = steady({ budget: 'low', designWeeks: config.dev.designWeeks[0], launchDefects: Infinity, maxTestWeeks: config.dev.minTestWeeks, changeMonths: Infinity, faceliftMonths: Infinity });
     for (const r of SEEDS.map((s) => firstCar(flop, s, 48))) { expect(r.review).toBeLessThanOrEqual(3.5); expect(r.minCash < 0 || r.loan > 0).toBe(true); }
   });
-  it('2) 신중: 10년 생존 70% 이상, 20년 생존 60% 이상, 10년 현금 중앙값 20~300억. 10) 10년 생존은 0.3.0(16판)보다 2판 넘게 줄지 않음', () => {
+  it('2) 신중: 10년 생존 70% 이상, 20년 생존 60% 이상, 10년 현금 중앙값 20~500억. 10) 10년 생존은 0.3.0(16판)보다 2판 넘게 줄지 않음', () => {
     const st = STEADY();
     console.log([10, 20, 30].map((y, i) => line(`steady ${y}년`, at(st, i))).join('\n'));
     expect(alive(at(st, 0))).toBeGreaterThanOrEqual(14);
     expect(alive(at(st, 1))).toBeGreaterThanOrEqual(12);
     const c10 = cashMed(at(st, 0));
-    expect(c10).toBeGreaterThanOrEqual(200000); expect(c10).toBeLessThanOrEqual(3000000); // 0.5.0: 본사 1등급 정원 6·개발 중 연구 점수로 초반이 나아져 상한 200 → 300억(측정 256억)
+    expect(c10).toBeGreaterThanOrEqual(200000); expect(c10).toBeLessThanOrEqual(5000000); // 0.5.1: 등급 원가 가산을 낮춰 이익률을 올리고 공장 2등급 라인 3개로 상한 300 → 500억(측정 351억). 0.5.0: 본사 1등급 정원 6·개발 중 연구 점수로 초반이 나아져 상한 200 → 300억(측정 256억)
   });
   it('3) 신중이 판매하는 차의 표시 등급: 10·20·30년 중앙값 4.5~7.5(0.4.2), 출시 등급 9 초과는 10% 미만', () => {
     const st = STEADY(), g = [0, 1, 2].map((i) => median(at(st, i).filter((x) => x.alive).map((x) => x.grade)));
@@ -122,17 +122,17 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     expect(g[2]).toBeGreaterThanOrEqual(4.5); expect(g[2]).toBeLessThanOrEqual(7.5);
     expect(over9).toBeLessThan(0.1);
   });
-  it('4) 성장 속도: 공장 등급 중앙값 10년 1~2·20년 2~3(초과, 아래 설명)·30년 3~4, 현금 중앙값 20년 100~2,500억·30년 300~12,000억(0.4.2)', () => {
+  it('4) 성장 속도: 공장 등급 중앙값 10년 1~3(0.5.1)·20년 2~3(초과, 아래 설명)·30년 3~5, 현금 중앙값 20년 100~4,000억·30년 300~20,000억(0.5.1)', () => {
     const st = STEADY(), f = [0, 1, 2].map((i) => median(at(st, i).map((x) => x.factory)));
     console.log(`공장 등급 중앙값 ${f.join(' / ')}, 현금 중앙값 20년 ${eok(cashMed(at(st, 1)))}억 / 30년 ${eok(cashMed(at(st, 2)))}억`);
-    expect(f[0]).toBeGreaterThanOrEqual(1); expect(f[0]).toBeLessThanOrEqual(2);
+    expect(f[0]).toBeGreaterThanOrEqual(1); expect(f[0]).toBeLessThanOrEqual(3); // 0.5.1: 공장 2등급 라인 3개·이익률 개선으로 10년 3등급까지 허용
     // 20년 측정 4(4등급 도달 중앙값 약 18년), 현금 약 1,700억: 연구한 차체(중형·대형)와 동력 단계로 1980년대 이익이 커졌다.
     // 공장을 늦추면 생산 라인(3개)이 모자라 "20년 안에 차체 4종"(목표 8)을 못 맞춘다 → 공장 4등급 유지비를 올려 현금만 눌렀다. 공장 5등급·현금 2,500억을 넘으면 실패
     expect(f[1]).toBeGreaterThanOrEqual(2); expect(f[1]).toBeLessThanOrEqual(4);
-    expect(f[2]).toBeGreaterThanOrEqual(3); expect(f[2]).toBeLessThanOrEqual(4);
-    expect(cashMed(at(st, 1))).toBeGreaterThanOrEqual(1000000); expect(cashMed(at(st, 1))).toBeLessThanOrEqual(25000000);
+    expect(f[2]).toBeGreaterThanOrEqual(3); expect(f[2]).toBeLessThanOrEqual(5); // 0.5.1: 30년 5등급까지
+    expect(cashMed(at(st, 1))).toBeGreaterThanOrEqual(1000000); expect(cashMed(at(st, 1))).toBeLessThanOrEqual(40000000); // 0.5.1: 20년 상한 2,500 → 4,000억(측정 3,500억)
     // 0.4.2: 의무 장비 원가를 시장 기준가에 넣어(봇이 그만큼 값을 받는다) 1990년대 후반 적자가 사라지자 30년 현금이 약 9,400억이 되었다. 1조 2천억을 넘으면 실패
-    expect(cashMed(at(st, 2))).toBeGreaterThanOrEqual(3000000); expect(cashMed(at(st, 2))).toBeLessThanOrEqual(120000000);
+    expect(cashMed(at(st, 2))).toBeGreaterThanOrEqual(3000000); expect(cashMed(at(st, 2))).toBeLessThanOrEqual(200000000); // 0.5.1: 30년 상한 1.2 → 2조(측정 1.23조)
   });
   it('5) 리프트의 가치: 20년 자산(현금 − 대출 + 공장·본사 건설비) 신중 ≥ 리프트 안 함 × 0.9(1.6배 이하), 이름을 잇는 신중 ≥ 새 이름만 × 0.9(0.5.0, 아래 설명)', () => {
     const st = at(STEADY(), 1), nf = at20('noFacelift', () => noFacelift()), nn = at20('newNameOnly', () => newNameOnly());

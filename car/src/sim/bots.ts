@@ -7,7 +7,7 @@ import { researchCost, researchError } from './research';
 import { loanLimit } from './finance';
 import { hash01 } from './rng';
 import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, optionSlots, staffCap, trainCost, trainError, upkeepOf } from './company';
-import { Game, allGens, sellingGens } from './game';
+import { Game, allGens, linesUsed, sellingGens } from './game';
 import { REGION, basePriceOf, cellMonthly, currentEdition } from './market';
 import { planPreview } from './queries';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
@@ -201,7 +201,7 @@ function launchReady(g: Game, o: SteadyOptions): void {
       continue;
     }
     if (p.kind === 'fullchange') { launch(Math.round(basePriceOf(s, p.body) * o.priceMult)); continue; } // 같은 생산 라인을 이어받는다. 가격은 시장 기준가(의무 장비 원가 포함) 기준
-    if (sellingGens(s).length < linesOf(s)) { launch(Math.round(basePriceOf(s, p.body) * o.priceMult)); continue; }
+    if (linesUsed(s) < linesOf(s)) { launch(Math.round(basePriceOf(s, p.body) * o.priceMult)); continue; }
     // 라인이 없으면 교체 시기가 된 가장 오래된 차를 단종(그달 말 라인이 빈다)
     const old = sellingGens(s).filter((x) => x.status === 'onSale' && m - x.launchMonth >= changeAt(s, o, x)).sort((a, b) => a.launchMonth - b.launchMonth || a.id - b.id)[0];
     if (old && !sellingGens(s).some((x) => x.status === 'ending')) g.command({ type: 'discontinue', generationId: old.id });

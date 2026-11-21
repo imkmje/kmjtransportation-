@@ -100,14 +100,19 @@ function personSvg(role: Role, lk: Look): string {
 const DESK_TOP = '#d9c4a3', LEG = '#8d939b', CHAIR = '#4a505a', GLASS = '#bcd6e2';
 function faceVec(face: Face): [number, number] { return face === '+x' ? [1, 0] : face === '-x' ? [-1, 0] : face === '+y' ? [0, 1] : [0, -1]; }
 
+/** 시험차: 낮은 차체 + 앞뒤 유리가 기운 객실(상자 두 개로 보이지 않게). +x 쪽이 앞(앞 유리·전조등) */
 function carBox(x: number, y: number, z: number, w: number, d: number, col: string, wheels = true): string {
   let s = '';
-  const wz = wheels ? 0.33 : 0;
-  if (wheels) for (const [wx, wy] of [[x + 0.8, y + d], [x + w - 0.8, y + d]] as [number, number][]) { const [cx, cy] = P(wx, wy, z + 0.33); s += `<ellipse cx="${cx}" cy="${cy}" rx="10" ry="10.5" fill="#2a2d31"/><ellipse cx="${cx}" cy="${cy}" rx="4" ry="4.3" fill="#9aa1a8"/>`; }
-  s = box(x, y, z + wz, w, d, 0.62, col) + s;
-  s += box(x + w * 0.28, y + 0.12, z + wz + 0.62, w * 0.42, d - 0.24, 0.48, shade(col, -0.05));
-  s += poly([P(x + w * 0.28, y + d - 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 1.06), P(x + w * 0.28, y + d - 0.12, z + wz + 1.06)], '#8fa7b6', 'opacity=".9"');
-  s += poly([P(x + w * 0.7, y + 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 0.66), P(x + w * 0.7, y + d - 0.12, z + wz + 1.06), P(x + w * 0.7, y + 0.12, z + wz + 1.06)], '#a4bac7', 'opacity=".9"');
+  const wz = wheels ? 0.3 : 0, zb = z + wz, hb = 0.5, zt = zb + hb, hc = 0.42, y0 = y + 0.14, y1 = y + d - 0.14;
+  const xb0 = x + w * 0.24, xb1 = x + w * 0.74, xr0 = x + w * 0.34, xr1 = x + w * 0.63; // 객실 아래·지붕 앞뒤
+  if (wheels) for (const [wx, wy] of [[x + w * 0.2, y + d], [x + w * 0.8, y + d]] as [number, number][]) { const [cx, cy] = P(wx, wy, z + 0.3); s += `<ellipse cx="${cx}" cy="${cy}" rx="10" ry="10.5" fill="#2a2d31"/><ellipse cx="${cx}" cy="${cy}" rx="4.5" ry="5" fill="#9aa1a8"/>`; }
+  s = box(x, y, zb, w, d, hb, col) + s;
+  s += poly([P(x + w, y + 0.2, zb + 0.32), P(x + w, y + 0.55, zb + 0.32), P(x + w, y + 0.55, zb + 0.42), P(x + w, y + 0.2, zb + 0.42)], '#f4efd8'); // 전조등
+  s += poly([P(x + w, y + d - 0.55, zb + 0.32), P(x + w, y + d - 0.2, zb + 0.32), P(x + w, y + d - 0.2, zb + 0.42), P(x + w, y + d - 0.55, zb + 0.42)], '#f4efd8');
+  s += poly([P(xb0, y1, zt), P(xb1, y1, zt), P(xr1, y1, zt + hc), P(xr0, y1, zt + hc)], shade(col, 0.12)); // 객실 옆
+  s += poly([P(xb0 + 0.12, y1, zt + 0.05), P(xb1 - 0.12, y1, zt + 0.05), P(xr1 - 0.04, y1, zt + hc - 0.06), P(xr0 + 0.04, y1, zt + hc - 0.06)], '#8fa7b6', 'opacity=".95"'); // 옆 유리
+  s += poly([P(xb1, y0, zt), P(xb1, y1, zt), P(xr1, y1, zt + hc), P(xr1, y0, zt + hc)], '#a4bac7'); // 앞 유리(기울어짐)
+  s += poly([P(xr0, y0, zt + hc), P(xr1, y0, zt + hc), P(xr1, y1, zt + hc), P(xr0, y1, zt + hc)], shade(col, -0.06)); // 지붕
   return s;
 }
 
@@ -702,7 +707,7 @@ export function createOffice(host: HTMLElement): Office {
   function pop(at: [number, number], label: string, col: string, delay: number) {
     later(() => {
       if (disposed) return;
-      const fs = 11 / cam.s, now = performance.now(), w = label.length * fs * 0.9;
+      const fs = 13 / cam.s, now = performance.now(), w = label.length * fs * 0.9;
       // 최근 점수 글자와 겹치면 위로 한 줄씩 올린다
       at = [at[0], at[1]];
       for (let moved = true, n = 0; moved && n < 6; n++) {
@@ -725,7 +730,7 @@ export function createOffice(host: HTMLElement): Office {
     const old = bubbles.findIndex((b) => b.id === a.staff.id);
     if (old >= 0) dropBubble(old);
     if (bubbles.length >= 2) dropBubble(0);
-    const fs = 11 / cam.s, h = fs * 1.9, [ax, ay] = anchorOf(a);
+    const fs = 13 / cam.s, h = fs * 1.9, [ax, ay] = anchorOf(a);
     const g = document.createElementNS(NS, 'g');
     g.setAttribute('class', 'bub');
     g.innerHTML = `<text font-size="${f(fs)}">${esc(text)}</text>`;

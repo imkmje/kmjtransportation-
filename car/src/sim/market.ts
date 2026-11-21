@@ -39,7 +39,9 @@ export const priceAppeal = (basePrice: number, attract: number, price: number, e
   * Math.min(1, basePrice / price) ** config.market.overpriceExp * Math.min(1, (basePrice * config.market.overpriceHardAt) / price) ** config.market.overpriceHardExp;
 
 /** 시장 기준가(0.4.2) = 차체 기준가 + 지금 규제 의무 장비의 원가. 모든 회사가 의무 장비를 넣으므로 시장 가격이 그만큼 오른다(가격 매력·가성비 평론·봇 가격에 쓴다) */
-export const basePriceOf = (s: CarState, body: string): number => bodyById(body).basePrice + requiredOptions(s).reduce((a, o) => a + optionById(o).cost, 0);
+export const basePriceOf = (s: CarState, body: string): number => bodyById(body).basePrice * priceErosion(Math.floor(s.week / config.time.weeksPerMonth)) + requiredOptions(s).reduce((a, o) => a + optionById(o).cost, 0);
+/** 0.5.1 시장 포화(가격 경쟁): fromYear부터 시장 기준가가 해마다 perYear씩 낮아진다(최대 max). month: 월 번호 */
+export const priceErosion = (month: number): number => { const e = config.market.erosion, y = config.time.startYear + month / config.time.monthsPerYear; return 1 - Math.min(e.max, Math.max(0, (y - e.fromYear) * e.perYear)); };
 
 /** 판매 계산에 필요한 차 한 대의 요약(출시 전 미리보기에도 쓴다). powertrain: 동력 종류(유행·사건 수요 배수, 없으면 배수 1) */
 export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number; powertrain?: string }

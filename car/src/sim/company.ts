@@ -20,7 +20,10 @@ export const linesOf = (s: CarState): number => factoryDef(s).lines;
 /** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율) */
 export const costMultOf = (s: CarState): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s);
 /** 월 유지비 = (공장 × (1 − 연구 유지비 인하) + 본사) × 난이도 배수 */
-export const upkeepOf = (s: CarState): number => (factoryDef(s).upkeep * (1 - upkeepCut(s)) + hqDef(s).upkeep) * diffOf(s).upkeepMult;
+export const upkeepOf = (s: CarState): number => factoryUpkeep(s, s.factory.level) + hqUpkeep(s, s.hqLevel);
+/** 0.5.1: 등급별 실제 월 유지비(난이도 배수, 공장은 연구 감면 반영). 화면 등급표·승급 미리보기·장부가 같은 값을 쓴다 */
+export const factoryUpkeep = (s: CarState, level: number): number => config.factory.levels[level - 1].upkeep * (1 - upkeepCut(s)) * diffOf(s).upkeepMult;
+export const hqUpkeep = (s: CarState, level: number): number => config.hq.levels[level - 1].upkeep * diffOf(s).upkeepMult;
 
 export const isDevRole = (r: Role): boolean => r !== 'sales';
 /** 교육 중(교육을 시작한 주부터 4주) */

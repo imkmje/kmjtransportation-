@@ -366,7 +366,7 @@ describe('공장(9.3)', () => {
       expect(s.factory).toEqual({ level: lv + 1, build: null });
     }
     expect([capacityOf(s), linesOf(s)]).toEqual([20000, 8]);
-    expect(L.map((x) => [x.capacity, x.lines])).toEqual([[300, 1], [1000, 2], [3000, 3], [8000, 5], [20000, 8]]);
+    expect(L.map((x) => [x.capacity, x.lines])).toEqual([[300, 1], [1000, 3], [3000, 3], [8000, 5], [20000, 8]]);
     expect(reason(g.command({ type: 'expandFactory' }))).toBe('공장이 최고 등급입니다.');
     toMonthEnd(g);
     expect(s.ledger.at(-1)!.upkeep).toBe(L[4].upkeep + config.hq.levels[0].upkeep);
@@ -380,12 +380,16 @@ describe('공장(9.3)', () => {
     const l = g.state.ledger.at(-1)!, ed = gen.editions[0];
     expect(l.cogs).toBeCloseTo(gen.sales.at(-1)! * unitCost(gen.body, gen.powertrain, ed.tier, ed.options, config.factory.levels[2].costMult), 6);
   });
-  it('생산 라인 수만큼 동시 판매, 라인이 없으면 출시 거부(증설 안내)', () => {
+  it('생산 라인 수만큼 동시 판매(2등급 라인 3개, 0.5.1), 라인이 없으면 출시 거부(증설 안내)', () => {
     const { g } = twoCars(1);
     expect(sellingGens(g.state).length).toBe(2);
-    ok(g.command({ type: 'startProject', ...SPEC, name: '셋째' }));
+    for (const name of ['셋째', '넷째']) {
+      ok(g.command({ type: 'startProject', ...SPEC, name }));
+      const q = g.state.projects[0];
+      while (q.phase === 'design' || q.testWeeks < 2) g.tick();
+      if (name === '셋째') ok(g.command({ type: 'launch', projectId: q.id, price: 1200, marketing: 0, color: 'red', wheels: 0 }));
+    }
     const p = g.state.projects[0];
-    while (p.phase === 'design' || p.testWeeks < 2) g.tick();
     expect(reason(g.command({ type: 'launch', projectId: p.id, price: 1200, marketing: 0, color: 'red', wheels: 0 }))).toBe('빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.');
   });
   it('생산 배분: 자동은 수요 비례, 수동 몫은 한도 × 몫까지, 남은 한도는 자동 차에. 합이 1을 넘으면 거부, null이면 자동', () => {

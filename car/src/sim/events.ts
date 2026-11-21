@@ -2,11 +2,12 @@
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
 import { config } from '../config';
 import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, segmentById } from '../data';
-import { grades } from './cars';
+import { grades, salaryOf } from './cars';
+import { diffOf } from './difficulty';
 import { josa } from './josa';
 import { hash01 } from './rng';
 import { monthOf, monthLabel, yearOf, yearOfMonth } from './time';
-import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type Stat, type Stats, type TechDef } from './types';
+import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type PendingChoice, type Stat, type Stats, type TechDef } from './types';
 
 const E = config.events, MPY = config.time.monthsPerYear;
 export const REGION = 'domestic';
@@ -210,7 +211,9 @@ const modText = (x: EventMod): string =>
   : `경쟁 차가 크게 히트해 ${x.body ? bodyById(x.body).name : '그 차급'} 손님을 한동안 많이 빼앗아 갑니다.`;
 export interface ActiveEvent { id: string; name: string; text: string; effects: string[]; startMonth: number; monthsLeft: number | null; kind: 'era' | 'random' }
 /** 진행 중인 사건 효과와 남은 기간(쉬운 설명): 고정 사건 + 무작위 사건의 기간 효과 */
-export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfra: number; requiredOptions: string[] } {
+/** 0.5.1: 예고됐지만 아직 시행 전인 국내 규제(예고~시행): 이름, 의무 장비, 예고·발표·시행 주, 아직 안 한 필요 기술 이름 */
+export interface RegulationDeadline { name: string; options: string[]; warnWeek: number; startWeek: number; enforceWeek: number; missingTechs: string[] }
+export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfra: number; requiredOptions: string[]; regulations: RegulationDeadline[] } {
   const m = monthOf(s.week);
   const era = eraTimeline(s.seed).filter((sp) => activeAt(sp, m)).map((sp): ActiveEvent => ({
     id: sp.def.id, name: sp.def.name, text: sp.def.start, effects: sp.def.effects.map((e) => eraEffectText(e, m - sp.start)), startMonth: sp.start, monthsLeft: sp.end === null ? null : sp.end - m, kind: 'era',
@@ -218,7 +221,14 @@ export function activeEvents(s: CarState): { events: ActiveEvent[]; chargingInfr
   const mods = s.events.mods.filter((x) => m < x.untilMonth).map((x, i): ActiveEvent => ({
     id: `mod${i}`, name: x.label, text: x.label, kind: 'random', startMonth: m, monthsLeft: x.untilMonth - m, effects: [modText(x)],
   }));
-  return { events: [...era, ...mods], chargingInfra: chargingInfra(s.seed, m), requiredOptions: regulationsNow(s.seed, m).flatMap((r) => r.rule.options ?? []) };
+  const W = config.time.weeksPerMonth, regulations = eraTimeline(s.seed).flatMap((sp) => sp.def.effects.flatMap((e): RegulationDeadline[] => {
+    if (e.type !== 'regulation' || e.region !== REGION || !e.options?.length) return [];
+    const enforce = sp.start + e.graceMonths;
+    if (m < sp.start - E.warnMonths || m >= enforce) return [];
+    const missing = e.options.map(optionTech).filter((t): t is TechDef => !!t && !s.research.done.includes(t.id)).map((t) => t.name);
+    return [{ name: sp.def.name, options: e.options, warnWeek: (sp.start - E.warnMonths) * W, startWeek: sp.start * W, enforceWeek: enforce * W, missingTechs: missing }];
+  }));
+  return { events: [...era, ...mods], chargingInfra: chargingInfra(s.seed, m), requiredOptions: regulationsNow(s.seed, m).flatMap((r) => r.rule.options ?? []), regulations };
 }
 /** 판매 중인 차 한 대에 지금 걸린 사건 효과(쉬운 문장, "사건 이름: 내용"): 그 차의 차체·동력·고객층에 걸린 것과,
  *  모든 차에 걸리지만 이 차에 특히 유리·불리한 것(고객이 더 따지는 능력치가 이 차에서 높거나 낮을 때) */
@@ -247,10 +257,19 @@ export function eventImpactOn(s: CarState, generationId: number): string[] {
   return out;
 }
 /** 답을 기다리는 무작위 사건: 선택지·기본 선택·남은 주 */
+/** 선택지의 돈 변화(만원, 0.5.1): +수입 / −지출. 현금 효과(기본 + 최근 월평균 매출 × 비율 + 월급 합 × 비율)와 결함 수리비(대상 차 누적 판매 × 리콜 대당 비용 × 난이도 × 비율) */
+export function choiceMoney(s: CarState, pc: PendingChoice, idx: number): number {
+  const def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, g = pc.genId === null ? undefined : s.nameplates.flatMap((n) => n.generations).find((x) => x.id === pc.genId && x.status !== 'discontinued');
+  const rev = s.ledger.slice(-E.revenueMonths), avgRev = rev.length ? rev.reduce((a, e) => a + e.revenue, 0) / rev.length : 0, salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
+  return def.choices[idx].effects.reduce((a, e) => a + (e.type === 'cash' ? e.base + (e.revenue ?? 0) * avgRev + (e.salaries ?? 0) * salaries
+    : e.type === 'fixDefects' && g ? -g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare : 0), 0);
+}
+const moneyText = (x: number): string | null => { const v = Math.abs(x); if (v < 1) return null; const t = v >= 10000 ? `${(v / 10000).toFixed(1)}억원` : `${Math.round(v).toLocaleString()}만원`; return `${x < 0 ? '비용' : '수입'} 약 ${t}`; };
+/** 답을 기다리는 사건. choices[].cost: 지출(만원, 수입이면 음수), costText: "비용 약 3.2억원"(돈 변화가 없으면 null). 0.5.1 */
 export function pendingChoices(s: CarState) {
   return s.events.pending.map((p) => {
     const def = RANDOM_EVENTS.find((d) => d.id === p.eventId)!;
-    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c) => ({ label: c.label, result: c.result })), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
+    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c, i) => { const mny = choiceMoney(s, p, i); return { label: c.label, result: c.result, cost: -mny, costText: moneyText(mny) }; }), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
   });
 }
 /** 뉴스 기록(최신이 앞). category가 없는 예전 항목은 'other' */

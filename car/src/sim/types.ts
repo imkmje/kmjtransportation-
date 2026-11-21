@@ -143,6 +143,7 @@ export interface RivalState { id: string; name: string; cells: Record<string, nu
 export interface LedgerEntry {
   month: number; year: number; monthOfYear: number;
   revenue: number; cogs: number; salaries: number; upkeep: number; dev: number; marketing: number; interest: number; recall: number;
+  upkeepHq?: number; // 0.5.1: upkeep 중 본사 몫(공장 몫 = upkeep − upkeepHq). 예전 장부에는 없다
   oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
 }
@@ -152,6 +153,7 @@ export interface ResearchState {
   done: string[];
   active: { techId: string; points: number; need: number; startWeek: number }[];
   early: string[];
+  priority?: string; // 0.5.1 우선 연구(맨 앞, 주간 점수의 50%). 없으면 고르게 나눈다
 }
 /** 무작위 사건의 답을 기다리는 선택(4주 뒤 기본 선택) */
 export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null }
@@ -222,6 +224,7 @@ export type Command =
   // ---------- 연구(10장)·사건(11장) ----------
   | { type: 'startResearch'; techId: string }
   | { type: 'cancelResearch'; techId: string } // 쓴 돈은 돌아오지 않는다
+  | { type: 'prioritizeResearch'; techId: string } // 0.5.1: 그 연구를 맨 앞으로(주간 점수의 50%를 받는다)
   | { type: 'resolveEvent'; eventId: number; choice: number }
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
@@ -237,4 +240,6 @@ export interface DevWeekEvent {
   kind: 'devWeek'; text: string; id: number; projectId: number;
   staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number;
 }
-export type GameEvent = BasicEvent | DevWeekEvent;
+/** 평판 변화(0.5.1, 화면 알림용): delta 실제 변화량(상한·하한 적용 뒤), reason 이유 한 줄, text = "평판 +2(이유)" */
+export interface ReputationEvent { kind: 'reputation'; text: string; delta: number; reason: string }
+export type GameEvent = BasicEvent | DevWeekEvent | ReputationEvent;

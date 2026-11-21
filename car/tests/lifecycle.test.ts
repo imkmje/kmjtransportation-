@@ -165,17 +165,18 @@ describe('풀체인지(8.3)', () => {
     ok(g.command({ type: 'launch', projectId: toTest(g).id, ...LAUNCH }));
     expect(np.generations.map((x) => x.number)).toEqual([1, 2, 3]);
   });
-  it('차종 자산 = clamp(0.03 × 평론 − 0.12, 0, 0.2) + min(0.1, 누적/50만), 리콜 −0.05, 항상 0~0.3', () => {
+  it('차종 자산 = clamp(0.03 × 평론 − 0.09, 0, 0.2) + min(0.1, 누적/15만)(0.5.1), 리콜 −0.05, 항상 0~0.3. 평론 4점·누적 5천 대면 눈에 띈다(0.03 이상)', () => {
     const { g, gen } = aged(1);
     const id = g.state.nameplates[0].id;
     for (const review of [1, 3, 4, 5, 6.5, 8, 10]) for (const sold of [0, 1000, 49999, 200000, 2e6]) for (const recalls of [0, 1]) {
       gen.reviewAvg = review; gen.totalSold = sold; gen.recalls = recalls;
-      const want = Math.min(0.3, Math.max(0, Math.min(0.2, Math.max(0, 0.03 * review - 0.12)) + Math.min(0.1, sold / 500000) - (recalls ? 0.05 : 0)));
+      const want = Math.min(0.3, Math.max(0, Math.min(0.2, Math.max(0, 0.03 * review - 0.09)) + Math.min(0.1, sold / 150000) - (recalls ? 0.05 : 0)));
       const e = nameplateEquity(g.state, id);
       expect(e).toBeCloseTo(want, 12); expect(e).toBeGreaterThanOrEqual(0); expect(e).toBeLessThanOrEqual(0.3);
     }
     gen.reviewAvg = 10; gen.totalSold = 1e6; gen.recalls = 0;
-    expect(nameplateEquity(g.state, id)).toBeCloseTo(0.28, 12); // 평론 10점 0.18 + 판매 0.1
+    expect(nameplateEquity(g.state, id)).toBeCloseTo(0.3, 12); // 평론 10점 0.2(상한) + 판매 0.1
+    gen.reviewAvg = 4; gen.totalSold = 5000; expect(nameplateEquity(g.state, id)).toBeGreaterThanOrEqual(0.03);
   });
   it('자산은 새 세대의 시작 인지도에 더해지고, 차체를 바꾸면 절반', () => {
     for (const body of ['sedanS', 'hatch']) {
