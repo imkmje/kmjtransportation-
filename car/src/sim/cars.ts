@@ -24,11 +24,12 @@ export const grades = (s: Stats, year: number): Stats => { const g = zeroStats()
 export const avgGrade = (s: Stats, year: number): number => { const g = grades(s, year); return STATS.reduce((a, k) => a + g[k], 0) / STATS.length; };
 
 /** 동력·옵션 점수(차체 배수 적용 전). level: 실제 동력 단계(연구로 오른다, 5.3) */
-export function partStats(powertrain: string, level: number, options: string[]): Stats {
+export function partStats(powertrain: string, level: number, options: string[], partial: Record<string, number> = {}): Stats {
   const pt = powertrainById(powertrain), s = zeroStats();
   const score = config.powertrain.base * config.powertrain.growth ** (level - 1);
   s.P = score * pt.split.P; s.E = score * pt.split.E;
   for (const id of options) { const o = optionById(id); s.U += o.U; s.D += o.D; s.Q += o.Q; }
+  for (const [id, w] of Object.entries(partial)) { const o = optionById(id); s.U += o.U * w; s.D += o.D * w; s.Q += o.Q * w; } // 1.1.0 선택 사양: 효과 일부
   return s;
 }
 
@@ -36,8 +37,8 @@ export function partStats(powertrain: string, level: number, options: string[]):
 export const defectQMult = (defects: number): number => 1 - Math.min(config.dev.defectQMax, defects * config.dev.defectQPer);
 
 /** 최종 능력치 = 차체 배수 × (동력·옵션 점수 + 개발 점수), 품질은 결함 감점. level: 실제 동력 단계 */
-export function finalStats(body: string, powertrain: string, level: number, options: string[], points: Stats, defects: number): Stats {
-  const b = bodyById(body), part = partStats(powertrain, level, options), s = zeroStats();
+export function finalStats(body: string, powertrain: string, level: number, options: string[], points: Stats, defects: number, partial: Record<string, number> = {}): Stats {
+  const b = bodyById(body), part = partStats(powertrain, level, options, partial), s = zeroStats();
   for (const k of STATS) s[k] = b.mult[k] * (part[k] + points[k]);
   s.Q *= defectQMult(defects);
   return s;
