@@ -316,11 +316,13 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
 
   // ── 앞얼굴(faceOf) ── fw: 얼굴이 쓰는 반폭
   // 데칼 탐색이 시작되는 단면(바퀴 아치 바로 앞뒤)의 실제 옆면 폭을 넘지 않게 한다(앞뒤가 짧고 둥근 경차 등)
-  const fw = Math.min(hw * E.faceW, ...([[1, p.belt - F.lampDrop + fc.lampDy], [1, p.clr + .15], [-1, p.belt - F.tailDrop + fc.tailDy], [-1, p.clr + .15]] as const)
+  // 차체 성격에 맞춘 눈: 스포츠·쿠페는 얇고 넓게, SUV·픽업은 크고 곧게, 경차는 조금 크고 순하게
+  const BK = id === 'sports' || id === 'coupe' ? { w: 1.2, h: .8 } : p.suv || p.bed != null ? { w: 1.08, h: 1.25 } : id === 'kei' ? { w: 1.05, h: 1.15 } : { w: 1, h: 1 };
+  const lampY = p.belt - F.lampDrop + fc.lampDy, lw = fc.lampW * BK.w, LH = F.lampH * BK.h;
+  const fw = Math.min(hw * E.faceW, ...([[1, lampY], [1, p.clr + .15], [-1, p.belt - F.tailDrop + fc.tailDy], [-1, p.clr + .15]] as const)
     .map(([s, y]) => (sideZ(s * loOf(s), y) - .01) / .96));
   const L2 = F.lift * 2, L3 = F.lift * 3, plateTop = p.clr + F.plateY + F.plateH;
-  const lampY = p.belt - F.lampDrop + fc.lampDy, lw = fc.lampW;
-  let lampTop = lampY + F.lampH / 2, lampIn = fw * .5; // 라이트 바 높이, 그릴이 넘지 말아야 할 전조등 안쪽 끝
+  let lampTop = lampY + LH / 2, lampIn = fw * .5; // 라이트 바 높이, 그릴이 넘지 말아야 할 전조등 안쪽 끝
   // 윗면(지붕·보닛) 높이: 그 x 단면의 지붕 점 6개(k=27..32)를 |z|로 보간
   const topY = (x: number, z: number) => {
     const P = ring(x).P; z = Math.abs(z);
@@ -337,38 +339,46 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   };
   const ring2 = (zc: number, yc: number, r: number) => { decal(circle(zc, yc, r + F.roundRing), M.chrome, 1); decal(circle(zc, yc, r), M.lamp, 1, L2); };
   switch (fc.lamp) {
-    case 'round': { const r = F.roundLampR * lw; pair(g => ring2(g * fw * F.roundLampZ, lampY, r)); lampIn = fw * F.roundLampZ - r - F.roundRing; break; }
+    case 'round': { const r = F.roundLampR * Math.min(1.25, lw * (BK.h > 1 ? 1.12 : 1)); pair(g => ring2(g * fw * F.roundLampZ, lampY, r)); lampIn = fw * F.roundLampZ - r - F.roundRing; break; }
     case 'twin': { const r = .062 * lw; pair(g => { ring2(g * fw * .58, lampY, r); ring2(g * fw * .82, lampY, r); }); lampIn = fw * .58 - r - F.roundRing; break; }
-    case 'oval': { const rz = .12 * lw, ry = .055; pair(g => { decal(ellipse(g * fw * .68, lampY, rz, ry), M.lens, 1); decal(ellipse(g * (fw * .68 + rz * .3), lampY + .004, rz * .5, ry * .62), M.lamp, 1, L2); }); lampIn = fw * .68 - rz; break; }
-    case 'vertical': { const z0 = fw * (.88 - .16 * lw), z1 = fw * .88; pair(g => { decal(rect(g * z0, g * z1, lampY - .1, lampY + .05, 3, 6), M.lens, 1); for (const y of [lampY + .012, lampY - .05]) decal(rect(g * (z0 + .015), g * (z1 - .015), y - .018, y + .018, 2, 1), M.lamp, 1, L2); }); lampIn = z0; lampTop = lampY + .05; break; }
-    case 'swept': { // 안쪽은 가늘고 낮게, 바깥으로 갈수록 두껍고 높게
-      const z0 = fw * (.88 - .4 * lw);
-      const sw = (k: number) => grid(8, 3, (u, v) => [g0 * (z0 + (fw * .88 - z0) * u), lampY - .01 + .05 * u + (v - .5 + (1 - k) * .2) * (.03 + .05 * u) * k]);
-      let g0 = 1; pair(g => { g0 = g; decal(sw(1), M.lens, 1); decal(sw(.4), M.lamp, 1, L2); });
-      lampIn = z0; lampTop = lampY + .055; break;
+    case 'oval': { const rz = Math.min(.14 * lw, fw * .3), ry = .065 * BK.h; pair(g => { decal(ellipse(g * fw * .66, lampY, rz, ry), M.lens, 1); decal(ellipse(g * (fw * .66 + rz * .22), lampY + .004, rz * .62, ry * .7), M.lamp, 1, L2); }); lampIn = fw * .66 - rz; break; }
+    case 'vertical': { // 세로로 긴 덮개 안 위쪽에 발광체 한 덩어리
+      const z0 = fw * (.88 - .22 * lw), z1 = fw * .88, y0 = lampY - .11 * BK.h, y1 = lampY + .055;
+      pair(g => { decal(rect(g * z0, g * z1, y0, y1, 3, 6), M.lens, 1); decal(rect(g * (z0 + .012), g * (z1 - .012), y1 - (y1 - y0) * .55, y1 - .012, 2, 2), M.lamp, 1, L2); });
+      lampIn = z0; lampTop = y1; break;
     }
-    case 'slim': { const z0 = fw * (.88 - .38 * lw), y = lampY + F.lampH * .2, lh = F.lampH * .55; pair(g => { decal(rect(g * z0, g * fw * .88, y - lh / 2, y + lh / 2), M.lens, 1); decal(rect(g * (z0 + .01), g * (fw * .88 - .01), y + lh * .05, y + lh * .4, 6, 1), M.lamp, 1, L2); }); lampIn = z0; lampTop = y + lh / 2; break; }
+    case 'swept': { // 안쪽은 가늘고 낮게, 바깥으로 갈수록 두껍고 높게
+      const z0 = fw * Math.max(.3, .88 - .5 * lw), hk = BK.h;
+      const sw = (k: number) => grid(8, 3, (u, v) => [g0 * (z0 + (fw * .88 - z0) * u), lampY - .01 + .05 * u * hk + (v - .5 + (1 - k) * .15) * (.035 + .055 * u) * hk * k]);
+      let g0 = 1; pair(g => { g0 = g; decal(sw(1), M.lens, 1); decal(sw(.55), M.lamp, 1, L2); });
+      lampIn = z0; lampTop = lampY + .06 * hk; break;
+    }
+    case 'slim': { // 2020년대 얇은 일자 LED: 덮개는 가늘고 길게, 발광 줄은 덮개 거의 끝까지
+      const z0 = fw * Math.max(.3, .88 - .5 * lw), y = lampY + LH * .2, lh = LH * .5;
+      pair(g => { decal(rect(g * z0, g * fw * .9, y - lh / 2, y + lh / 2), M.lens, 1); decal(rect(g * (z0 + .008), g * (fw * .9 - .008), y - lh * .05, y + lh * .36, 8, 1), M.lamp, 1, L2); });
+      lampIn = z0; lampTop = y + lh / 2; break;
+    }
     case 'popup': { // 닫힌 팝업 램프: 보닛 앞쪽 윗면의 덮개 선 + 범퍼 위 얇은 차폭등
       const x1 = h - E.re - .04, x0 = x1 - .26, z0 = fw * .42, z1 = fw * .84, t = .008;
       pair(g => { for (const [a, b, c, d] of [[x0, x1, z0, z0 + t], [x0, x1, z1 - t, z1], [x0, x0 + t, z0, z1], [x1 - t, x1, z0, z1]]) topDecal(rect(a, b, g * c, g * d, 4, 1), M.trim); });
       const y = lampY - .02; pair(g => decal(rect(g * fw * .55, g * fw * .86, y - .014, y + .014, 4, 1), M.lamp, 1)); lampIn = fw * .55; lampTop = y + .014; break;
     }
     case 'projector': { // 어두운 램프 칸 안에 둥근 렌즈 + 가는 주간등
-      const z0 = fw * (F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), z1 = fw * F.lampZ1, r = Math.min(.045, (z1 - z0) * .22);
+      const z0 = fw * Math.max(.3, F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), z1 = fw * F.lampZ1, r = Math.min(.05, (z1 - z0) * .24, LH * .38);
       pair(g => {
-        decal(rect(g * z0, g * z1, lampY - F.lampH / 2, lampY + F.lampH / 2), M.lens, 1);
+        decal(rect(g * z0, g * z1, lampY - LH / 2, lampY + LH / 2), M.lens, 1);
         for (const t of [.3, .7]) decal(circle(g * (z0 + (z1 - z0) * t), lampY + .004, r), M.lamp, 1, L2);
-        decal(rect(g * z0, g * z1, lampY - F.lampH / 2, lampY - F.lampH / 2 + .012, 6, 1), M.lamp, 1, L2);
+        decal(rect(g * z0, g * z1, lampY - LH / 2, lampY - LH / 2 + .014, 6, 1), M.lamp, 1, L2);
       });
       lampIn = z0; break;
     }
     default: { // rect
-      const z0 = fw * (F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), lh = E.classic ? .1 : F.lampH;
+      const z0 = fw * Math.max(.3, F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), lh = E.classic ? .1 : LH;
       pair(g => {
         if (E.classic) { decal(rect(g * (z0 - .015), g * (fw * F.lampZ1 + .015), lampY - lh / 2 - .015, lampY + lh / 2 + .015), M.chrome, 1); decal(rect(g * z0, g * fw * F.lampZ1, lampY - lh / 2, lampY + lh / 2), M.lamp, 1, L2); return; }
         // 유리 덮개 안에 바깥쪽 발광체(덮개보다 낮고 짧게)
         const z1 = fw * F.lampZ1; decal(rect(g * z0, g * z1, lampY - lh / 2, lampY + lh / 2), M.lens, 1);
-        decal(rect(g * (z0 + (z1 - z0) * .38), g * (z1 - .012), lampY - lh * .22, lampY + lh * .3, 4, 1), M.lamp, 1, L2);
+        decal(rect(g * (z0 + (z1 - z0) * .14), g * (z1 - .012), lampY - lh * .28, lampY + lh * .32, 4, 1), M.lamp, 1, L2);
       });
       lampIn = z0;
     }
@@ -376,12 +386,13 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   if (fc.bar) decal(rect(-fw * F.barZ, fw * F.barZ, lampTop - F.barH, lampTop, 12, 1), M.lamp, 1, L2);
   if (fc.bumper === 'black' && !E.classic) for (const s of [1, -1] as const) decal(rect(-fw * .8, fw * .8, p.clr + .06, p.clr + .22, 24, 6), M.trim, s, F.lift * 1.5);
   if (!ev) {
-    const gz = Math.min(fw * (E.classic ? F.classicGrilleZ : F.grilleZ) * fc.grilleW, lampIn - .04), fr = F.grilleFrame;
-    const g1 = fc.bar ? Math.min(lampY + F.grilleUp, lampTop - F.barH - .015) : lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * fc.grilleH, plateTop + .03);
+    const gW = fc.grilleW * (BK.h > 1.2 ? 1.12 : 1), gH = fc.grilleH * (BK.h > 1.2 ? 1.2 : 1); // SUV·픽업은 크고 곧은 그릴
+    const gz = Math.min(fw * (E.classic ? F.classicGrilleZ : F.grilleZ) * gW, lampIn - .04), fr = F.grilleFrame;
+    const g1 = fc.bar ? Math.min(lampY + F.grilleUp, lampTop - F.barH - .015) : lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * gH, plateTop + .03);
     const framed = (z0: number, z1: number, y0: number, y1: number) => { decal(rect(z0 - fr, z1 + fr, y0 - fr, y1 + fr, 8, 3), M.chrome, 1); decal(rect(z0, z1, y0, y1, 8, 3), M.trim, 1, L2); };
     switch (fc.grille) {
       case 'hex': { // 위는 좁고 가운데가 가장 넓고 아래로 범퍼까지 내려오는 육각
-        const y0 = Math.max(lampY - .17 * fc.grilleH, plateTop + .03), hx = (e: number) => grid(8, 6, (u, v) => {
+        const y0 = Math.max(lampY - .17 * gH, plateTop + .03), hx = (e: number) => grid(8, 6, (u, v) => {
           const fwv = v > .6 ? gz - (gz * .2) * (v - .6) / .4 : gz * .72 + gz * .28 * v / .6;
           return [(2 * u - 1) * (fwv + e), y0 - e + (g1 - y0 + 2 * e) * v];
         });

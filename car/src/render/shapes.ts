@@ -113,7 +113,7 @@ export const ERA_FACE: Record<Era, EraFace> = {
   // 2010: 큰 그릴 + 날카롭게 치켜 올라간 전조등, 라이트 바 없음 / 2020: 작거나 막힌 그릴 + 얇은 전조등과 가로 라이트 바
   2010: { lamp: ['swept', 'swept', 'rect', 'projector'], grille: ['hex', 'hex', 'twin', 'rect', 'mesh', 'kidney', 'vertical', 'hex'], intake: ['three', 'wide', 'slim', 'fog'], bumper: ['body', 'black'], tail: ['L', 'split', 'bar', 'vertical'], wheel: ['twin5', 'spoke5', 'multi', 'turbine', 'mesh'], bar: 0, grilleW: [1.2, 1.5],
     def: { lamp: 'swept', lampW: 1.1, lampDy: 0, bar: false, grille: 'hex', grilleW: 1.4, grilleH: 1.25, intake: 'three', bumper: 'body', tail: 'L', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'twin5' } },
-  2020: { lamp: ['slim', 'slim', 'slim', 'vertical'], grille: ['none', 'none', 'rect', 'bars', 'mesh', 'kidney'], intake: ['slim', 'wide', 'slim'], bumper: ['body', 'body', 'black'], tail: ['full', 'full', 'full', 'L'], wheel: ['aero', 'aero', 'twin5', 'multi', 'turbine'], bar: .85, grilleW: [.45, .7],
+  2020: { lamp: ['slim', 'slim', 'slim', 'vertical'], grille: ['none', 'none', 'rect', 'bars', 'mesh', 'kidney'], intake: ['slim', 'wide', 'slim'], bumper: ['body', 'body', 'black'], tail: ['full', 'full', 'full', 'L'], wheel: ['aero', 'aero', 'twin5', 'multi', 'turbine'], bar: .85, grilleW: [.7, 1.0],
     def: { lamp: 'slim', lampW: 1, lampDy: 0, bar: true, grille: 'none', grilleW: .6, grilleH: .8, intake: 'wide', bumper: 'black', tail: 'full', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'twin5' } },
 };
 

@@ -221,7 +221,7 @@ export class Stage {
     // 보이는 폭(길이·폭을 각도로 섞음)에 맞춰 거리를 정한다: 정면 사진도 차가 작아지지 않게
     const ext = fit ?? Math.max(2.6, Math.abs(Math.cos(yaw)) * c.L + Math.abs(Math.sin(yaw)) * c.W);
     const cam = new THREE.PerspectiveCamera(28, w / h, .1, 100), d = Math.max(ext * 1.4, ext * 2 * h / w) + Math.abs(Math.sin(yaw)) * (c.L - c.W) / 2; // 정면·뒷면이면 가까운 끝까지의 거리를 더한다
-    cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .62, 0);
+    const ly = .62 - .2 * Math.abs(Math.sin(yaw)); cam.position.set(0, d * .22 + ly - .12, d); cam.lookAt(0, ly, 0); // 정면·뒷면은 범퍼까지 보이게 조금 낮춰 본다
     let url = '';
     try {
       R.setPixelRatio(1); R.setSize(w, h, false);

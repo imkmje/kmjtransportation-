@@ -170,6 +170,7 @@ export function faceOf(look: CarLook): FaceSpec {
     if (ev && r() < .5) f.wheel = 'aero';
   }
   if (f.lamp === 'popup' && look.bodyId !== 'sports' && look.bodyId !== 'coupe') f.lamp = 'rect'; // 팝업 램프는 스포츠카·쿠페만
+  if (look.bodyId === 'kei' && f.lamp === 'swept') f.lamp = 'oval'; // 경차는 날 선 램프 대신 둥글고 순한 눈
   if (ev) f.grille = 'none'; // 전기차는 막힌 그릴
   return f;
 }
