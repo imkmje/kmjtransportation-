@@ -24,14 +24,15 @@ import { createSound, type Sfx } from './sound';
 import { testCut } from '../sim/dev';
 import * as I from './insight';
 import * as V from './views';
+import * as EQ from './equip';
 
 type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records';
 type Tab = 'garage' | 'dev' | 'research' | 'company' | 'fin' | 'records'; // 0.9.0 큰 메뉴 6개(연구·재무를 회사 안쪽에서 꺼냄)
 type PlanTab = 'sum' | 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir' | 'budget';
 /** 기획 초안. nameplateId 0 = 새 차종, 아니면 그 차종의 풀체인지 */
-type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step' }; // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
+type Draft = ProjectSpec & { equip?: EQ.Equip; equipMode?: 'rec' | 'prev' | 'custom'; color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step' }; // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
 /** 페이스리프트 기획 */
-interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
+interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[]; equip?: EQ.Equip } // 1.1.0 equip: 장비 구성(options는 sim에 넘기는 파생값)
 type RecTab = 'cars' | 'hall' | 'combo' | 'news' | 'years';
 type CoTab = 'sum' | 'staff' | 'hq' | 'factory' | 'exec'; // 1.0.0 첫 화면 'sum'(요약 칸)
 type GSort = 'name' | 'launch' | 'price' | 'sold' | 'unit' | 'profit' | 'life' | 'review'; // 0.9.0 차고 요약 표 정렬
@@ -69,7 +70,7 @@ const SKIP_MAX_WEEKS = 2 * 48; // [다음 일까지] 최대 진행: 2년
 type ExecReport = ReturnType<typeof Q.execReports>[number];
 const PICKUP_YAW = 0.75; // 픽업 무대·썸네일 기본 각도: 뒤 3/4(짐칸이 보이게)
 const DEBUG_KEY = 'car-company-debug';
-const ALL_TABS: [PlanTab, string][] = [['prev', '전 세대'], ['body', '차체'], ['look', '모양'], ['seg', '고객층'], ['power', '동력'], ['opt', '옵션'], ['dir', '개발 방향'], ['budget', '예산·기간']];
+const ALL_TABS: [PlanTab, string][] = [['prev', '전 세대'], ['body', '차체'], ['look', '모양'], ['seg', '고객층'], ['power', '동력'], ['opt', '장비'], ['dir', '개발 방향'], ['budget', '예산·기간']];
 const planTabs = (d: Draft): [PlanTab, string][] => (d.nameplateId ? ALL_TABS : ALL_TABS.slice(1));
 const PLANNED_KEY = 'car-company-planned'; // 한 번이라도 개발을 시작한 기기(첫 게임의 첫 차만 단계별 기획이 기본, 0.8.0)
 const CRITIC_SUB: Record<string, string> = { performance: '성능과 디자인을 봅니다', household: '실용·연비·품질을 봅니다', design: '디자인과 품질을 봅니다', value: '가격 대비 가치를 봅니다' };
@@ -981,6 +982,7 @@ export function startApp(): void {
     if (g.clearance) b.push(['가격 인하 판매 중', 'warn']);
     else { const R = Q.rescueOptions(s, g.id); if (R && R.target === null && (R.fix.ok || R.clearance.ok)) b.push(['수습 가능', 'bad']); } // 0.10.0 혹평·부진 차의 긴급 개선·가격 인하 판매
     if (T.has(`retrofit:${g.id}`)) b.push(['의무 장비 필요', 'bad']);
+    if (EQ.equipLive() && g.status === 'onSale' && EQ.equipInfo(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, equip: edEquip(currentEdition(g)) }).totals.missingExpected.length) b.push(['장비 기대 미달', 'warn']); // 1.1.0(규칙이 들어온 뒤에만)
     if (T.has(`capacity:${g.id}`)) b.push(['생산 한도', 'warn']);
     if (T.has(`facelift:${g.id}`)) b.push(['페이스리프트 적기', 'on']);
     if (np && T.get(`full:${np.id}`)?.title.includes('권장')) b.push(['풀체인지 권장', 'on']);
@@ -996,7 +998,7 @@ export function startApp(): void {
     const row = (g: Generation) => {
       const e = currentEdition(g), up = Q.generationUnitProfit(g, s), mp = carMonthProfit(g), name = nameOf(g);
       return `<div class="gtr-w"><button class="s-pick" data-act="cmpPick" data-id="${g.id}" aria-pressed="${cmpSel.has(g.id)}" aria-label="${esc(name)} 비교에 넣기"></button><button class="gtr" data-act="gopen" data-id="${g.id}">
-        <span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(name)}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></span>
+        <span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name" title="${esc(EQ.equipLine(edEquip(e)))}"><b>${esc(name)}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></span>
         <span class="g-when g-opt">${Q.monthLabel(g.launchMonth)}<small>${ageText(g)}</small></span><span class="g-num g-opt">${num(e.price)}<small>${policyShort(g)}</small></span>
         <span class="g-num">${qty(g.sales.at(-1) ?? 0)}대</span><span class="g-num g-opt ${up >= 0 ? 'pos' : 'neg'}">${money(up, true)}</span><span class="g-num ${mp >= 0 ? 'pos' : 'neg'}">${money(mp, true)}</span>
         ${lifeMini(Q.lifeBar(s, g))}<span class="g-num g-opt">${score(g.reviewAvg)}${g.masterpiece ? '<small>명차</small>' : ''}</span><span class="g-st">${genBadges(g)}</span></button></div>`;
@@ -1104,7 +1106,7 @@ export function startApp(): void {
     const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
       <div class="key key-life"><small>수명${ib('term:수명')}</small><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div><b>${Math.round(lb * 100)}<span>%</span></b></div>
       <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}</b></div></div>`;
-    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 10px">${launchWhen(g)}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
+    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
       ${chart ? `<p class="lbl" style="margin-top:12px">최근 판매(달마다)</p>${chart}` : ''}
       <p class="hint">수명은 출시 뒤 시간이 지날수록 줄고, 줄수록 판매가 줄어듭니다.</p>
       ${adviceLine(g)}${orderLine(g)}${Q.eventImpactOn(s, g.id).map((t) => `<div class="warnbox ev-line" style="margin-top:8px">${esc(t)}</div>`).join('')}</div>`;
@@ -1202,7 +1204,7 @@ export function startApp(): void {
     if (!bodies.includes(d.body)) { out.push(`차체를 ${bodyById(bodies[0]).name}${josa(bodyById(bodies[0]).name, '으로/로')}`); d.body = bodies[0]; }
     if (!pts.includes(d.powertrain)) { out.push(`동력을 ${powertrainById(pts[0]).name}${josa(powertrainById(pts[0]).name, '으로/로')}`); d.powertrain = pts[0]; }
     const nt = powertrainById(d.powertrain).tiers.length; if (!(d.tier >= 1 && d.tier <= nt)) { d.tier = Math.min(2, nt); out.push('동력 등급을 표준으로'); }
-    const lostOpt = d.options.filter((o) => !opts.has(o)); if (lostOpt.length) { d.options = d.options.filter((o) => opts.has(o)).slice(0, Q.optionSlots(s)); out.push(`쓸 수 없는 옵션 ${lostOpt.length}개를 뺌`); }
+    { const e = eqOf(d), lost = Object.keys(e).filter((o) => !opts.has(o)); setEquip(d, Object.fromEntries(Object.entries(e).filter(([o]) => opts.has(o)))); if (lost.length) out.push(`쓸 수 없는 장비 ${lost.length}개를 뺌`); } // 1.1.0 장비 구성 기준(options는 파생)
     const team = keepIdle(d.team); if (team.length !== d.team.length) { out.push(`다른 일을 맡았거나 회사를 떠난 직원 ${d.team.length - team.length}명을 팀에서 뺌`); d.team = team; }
     if (d.year !== undefined && d.year !== y) out.push(`해가 바뀌어(${d.year}년 → ${y}년) 예상 등급을 다시 계산함`);
     d.year = y;
@@ -1210,7 +1212,7 @@ export function startApp(): void {
   }
   function fixLift(L: LiftSet): void {
     const s = game!.state, opts = new Set(Q.optionsAt(s).map((o) => o.id)), out: string[] = [];
-    const lostOpt = L.options.filter((o) => !opts.has(o)); if (lostOpt.length) { L.options = L.options.filter((o) => opts.has(o)); out.push(`쓸 수 없는 옵션 ${lostOpt.length}개를 뺌`); }
+    { const e = eqOf(L), lost = Object.keys(e).filter((o) => !opts.has(o)); setEquip(L, Object.fromEntries(Object.entries(e).filter(([o]) => opts.has(o)))); if (lost.length) out.push(`쓸 수 없는 장비 ${lost.length}개를 뺌`); }
     const team = keepIdle(L.team); if (team.length !== L.team.length) { out.push(`다른 일을 맡았거나 회사를 떠난 직원 ${L.team.length - team.length}명을 팀에서 뺌`); L.team = team; }
     if (out.length) draftNote = `초안을 지금 상황에 맞췄습니다: ${out.join(', ')}.`;
   }
@@ -1226,12 +1228,32 @@ export function startApp(): void {
       // 1.0.0 풀체인지 기본 모양: 전작과 충분히 다른 첫 후보(옆모습·얼굴)
       const base = lookOf({ body: d.body, powertrain: d.powertrain, tier: d.tier, color: d.color, wheels: 1, year: yearOf(s.week), chassisSeed: d.chassisSeed, faceSeed: d.faceSeed });
       d.chassisSeed = LP.firstDistinct('chassis', planCtx(d, 'chassis', base)); d.faceSeed = LP.firstDistinct('face', planCtx(d, 'face', { ...base, chassisSeed: d.chassisSeed }));
+      setEquip(d, edEquip(e, d.options), 'prev'); // 1.1.0 풀체인지는 전작 구성을 물려받는다
       return d;
     }
     const first = !s.nameplates.length && !s.projects.length && (() => { try { return localStorage.getItem(PLANNED_KEY) !== '1'; } catch { return true; } })();
     const d0: Draft = { name: '', body: Q.bodiesAt(s)[0].id, segment: 'worker', powertrain: Q.powertrainsAt(s)[0].id, tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: PAINT[0][1], mode: first ? 'step' : 'sum', ...seeds };
     d0.segment = Q.planPreview(s, d0).bestSegment; // 기본 고객층: 이 차가 가장 매력적인 고객층
+    setEquip(d0, EQ.recommendedEquip(s, d0.body, d0.segment, d0.powertrain), 'rec'); // 1.1.0 새 기획은 추천 구성으로 시작
     return d0;
+  }
+  // ----- 1.1.0 장비 구성: equip이 기준, options(넣은 장비 전부)는 지금 sim에 넘기는 파생값 -----
+  /** 판의 장비 구성(sim에 equip이 없으면 옵션 = 모두 기본 장비) */
+  const edEquip = (e: { options: string[] }, fallback?: string[]): EQ.Equip => { const x = (e as { equip?: EQ.Equip }).equip; return x ? { ...x } : EQ.fromOptions(fallback ?? e.options); };
+  function setEquip(o: { equip?: EQ.Equip; options: string[]; equipMode?: string }, e: EQ.Equip, mode?: 'rec' | 'prev' | 'custom'): void {
+    const req = new Set(Q.requiredOptions(game!.state)); o.equip = Object.fromEntries(Object.entries(e).filter(([k]) => !req.has(k))); o.options = EQ.toOptions(o.equip);
+    if (mode && 'equipMode' in o || mode) o.equipMode = mode;
+  }
+  const eqOf = (o: { equip?: EQ.Equip; options: string[] }): EQ.Equip => (o.equip ??= EQ.fromOptions(o.options));
+  const MODE_WORD = { rec: '추천 구성', prev: '전작 구성', custom: '직접 고름' } as const;
+  /** 장비 고르기 칸(기획·페이스리프트 공통) */
+  function equipView(t: 'plan' | 'lift'): string {
+    const s = game!.state;
+    if (t === 'plan' && draft) { const e = eqOf(draft), prev = draft.nameplateId ? s.nameplates.find((n) => n.id === draft!.nameplateId)?.generations.at(-1) : undefined;
+      return EQ.equipPicker(s, { ...draft, equip: e }, 'plan', ib, prev ? EQ.equipChanges(s, e, draft.body, draft.segment) : [], MODE_WORD[draft.equipMode ?? 'custom']); }
+    if (t === 'lift' && lift) { const g = Q.generationById(s, lift.genId); if (!g) return ''; const e = eqOf(lift);
+      return EQ.equipPicker(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, tier: lift.tier, equip: e }, 'lift', ib, EQ.equipChanges(s, e, g.body, g.segment)); }
+    return '';
   }
   /** 팀으로 고를 수 있는 직원: 프로젝트에 배치되지 않은 개발 직무(교육·휴식 중이면 그동안 일하지 않음) */
   const idleDev = () => { const lab = new Set(game!.state.staff.filter((x) => x.lab).map((x) => x.id)); return Q.staffInfo(game!.state).filter((x) => x.projectId === null && x.role !== 'sales' && !lab.has(x.id)); }; // 전담 연구원은 개발에 넣지 않는다
@@ -1325,7 +1347,7 @@ export function startApp(): void {
         <p class="lbl">${esc(pt.name)} 등급${ib('term:동력 등급')}</p><div class="opts">${pt.tiers.map((t, i) => `<button class="opt" data-act="pick" data-k="tier" data-v="${i + 1}" data-tip="tier:${i + 1}" aria-pressed="${d.tier === i + 1}">${ib(`tier:${i + 1}`, t.name)}<b>${esc(t.name)}</b><small class="lv">${esc(pt.name)} ${Q.levelForTier(s, d.powertrain, i + 1)}단계</small><small>${TIER_SUB[i] ?? ''}</small><span class="cost">${t.costAdd ? `원가 +${Math.round(t.costAdd * 100)}%` : '원가 기본'}</span></button>`).join('')}</div>
         ${add ? `<p class="hint pt-add" style="margin-top:10px">${esc(pt.name)} 동력은 차 원가가 <b>${Math.round(add * 100)}%</b> 더 듭니다.${pt.minCostAdd !== undefined ? ' 배터리를 연구하면 줄어듭니다.' : ''}</p>` : ''}${d.powertrain === EV ? chargeBox() : ''}
         <p class="note">단계는 연구로 오릅니다. 등급은 연구한 가장 높은 단계(고급)에서 한두 단계 낮춘 것입니다. 고급 동력을 고르면 차에 스포일러가 붙습니다.</p>`;
-    } else if (planTab === 'opt') body = optTiles(d.options, 'opt', d.segment);
+    } else if (planTab === 'opt') body = equipView('plan');
     else if (planTab === 'dir') {
       const left = dirLeft(d);
       body = `<p class="left">남은 점수 <b>${left}</b> / ${config.dev.dirTotal}점${ib('term:개발 방향')}</p>${STATS.map((k) => `<div class="dir"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><button data-act="dir" data-k="${k}" data-v="-1" aria-label="${STAT_NAME[k]} 빼기" ${d.direction[k] <= 0 ? 'disabled' : ''}>−</button><div class="dots" aria-label="${STAT_NAME[k]} ${d.direction[k]}점">${Array.from({ length: config.dev.dirMax }, (_, i) => `<i class="${i < d.direction[k] ? 'on' : ''}"></i>`).join('')}</div><button data-act="dir" data-k="${k}" data-v="1" aria-label="${STAT_NAME[k]} 더하기" ${d.direction[k] >= config.dev.dirMax || left <= 0 ? 'disabled' : ''}>+</button></div>`).join('')}<p class="note">한 능력치에 0~${config.dev.dirMax}점을 줄 수 있습니다. 2점이 보통이며, 많이 줄수록 그 능력치가 더 크게 오릅니다. ${config.dev.dirTotal}점을 모두 나눠야 개발을 시작할 수 있습니다.</p>`;
@@ -1357,12 +1379,11 @@ export function startApp(): void {
     const s = game!.state, pt = powertrainById(d.powertrain), left = dirLeft(d), reg = Q.regulationError(s, d), block = Q.regulationBlock(s), req = Q.requiredOptions(s).filter((o) => !d.options.includes(o));
     const staff = s.staff.filter((x) => d.team.includes(x.id)), busy = busyReason(), minT = config.dev.minTestWeeks;
     const roles = (['designer', 'engineer', 'tester'] as const).map((r) => [r, staff.filter((x) => x.role === r).length] as const).filter(([, n]) => n).map(([r, n]) => `${ROLE_NAME[r]} ${n}`).join(' · ');
-    const optNames = d.options.map((o) => optionById(o).name).join(', ');
     const rows: { tab: PlanTab; k: string; label: string; value: string; note?: string; bad?: boolean }[] = [
       { tab: 'body', k: 'body', label: '차체', value: bodyById(d.body).name, note: fcp?.bodyChanged ? '전작과 다른 차체: 이름값 절반' : '' },
       { tab: 'seg', k: 'seg', label: '고객층', value: `${segName(d.segment)} · 매력 ${score(tp.segmentScore)}`, note: tp.bestSegment !== d.segment ? `더 맞는 고객층: ${segName(tp.bestSegment)}` : '가장 맞는 고객층' },
       { tab: 'power', k: 'power', label: '동력', value: `${pt.name} ${tierName(d.powertrain, d.tier)} · ${Q.levelForTier(s, d.powertrain, d.tier)}단계`, note: reg && !block ? reg : '', bad: !!reg && !block },
-      { tab: 'opt', k: 'opt', label: `옵션 ${d.options.length}/${Q.optionSlots(s)}`, value: optNames || '없음', note: block ? '규제 의무 장비 연구 필요' : req.length ? `의무 장비 ${req.length}개 자동 포함` : '', bad: !!block },
+      { tab: 'opt', k: 'opt', label: `장비 · ${MODE_WORD[d.equipMode ?? 'custom']}`, value: EQ.equipLine(eqOf(d)), note: block ? '규제 의무 장비 연구 필요' : req.length ? `의무 장비 ${req.length}개 자동 포함` : '', bad: !!block },
       { tab: 'dir', k: 'dir', label: '개발 방향', value: STATS.every((k) => d.direction[k] === d.direction.P) ? `고르게 ${d.direction.P}점씩` : `${STATS.filter((k) => d.direction[k] > 2).sort((a, b) => d.direction[b] - d.direction[a]).map((k) => `${STAT_NAME[k]} ${d.direction[k]}`).join(' · ') || '낮춘 능력치 있음'} 중시`, note: left ? `${left}점 남음` : STATS.filter((k) => d.direction[k] < 2).map((k) => `${STAT_NAME[k]} ${d.direction[k]}`).join(' · '), bad: left > 0 },
       { tab: 'look', k: 'look', label: '외관', value: `${paintName(d.color)} · ${describeLook(look).chassis}` },
       { tab: 'budget', k: 'team', label: '개발팀', value: `${d.team.length}명`, note: busy ?? (d.team.length ? roles : '고른 직원이 없습니다'), bad: !!busy || !d.team.length },
@@ -1387,36 +1408,13 @@ export function startApp(): void {
     const req = new Set(Q.requiredOptions(s)), known = prev.plan?.opts;
     if (known) {
       const fresh = Q.optionsAt(s).filter((o) => !known.includes(o.id) && !req.has(o.id) && !d.options.includes(o.id));
-      const room = Math.max(0, Q.optionSlots(s) - d.options.length);
-      if (fresh.length) { out.opts = fresh.slice(0, room).map((o) => o.id); out.items.push(`새 옵션: ${fresh.map((o) => o.name).join(', ')}${fresh.length > room ? `(빈 옵션 칸 ${room}개)` : ''}`); }
+      if (fresh.length) { out.opts = fresh.map((o) => o.id); out.items.push(`새 장비(선택 사양으로): ${fresh.map((o) => o.name).join(', ')}`); } // 1.1.0 장비 수 제한 없음
     }
     const newReq = [...req].filter((o) => !e.options.includes(o));
     if (newReq.length) out.info.push(`새 의무 장비: ${newReq.map((o) => optionById(o).name).join(', ')}(자동으로 들어갑니다)`);
-    if (!out.opts.length) { out.info.unshift(...out.items); out.items = []; } // 적용할 것이 없으면(옵션 칸이 참 등) 알림만
+    if (!out.opts.length) { out.info.unshift(...out.items); out.items = []; } // 적용할 것이 없으면 알림만
     return out;
   }
-  /** 옵션 고르기 타일(기획·페이스리프트 공용). act: 누르면 부를 조작 이름 */
-  function optTiles(chosen: string[], act = 'opt', segment = ''): string {
-    const s = game!.state, max = Q.optionSlots(s), open = Q.optionsAt(s), req = new Set(Q.activeEvents(s).requiredOptions), st = techStatus();
-    const eff = (o: (typeof OPTIONS)[number]) => (['U', 'D', 'Q'] as const).filter((k) => o[k]).map((k) => `${STAT_NAME[k]} +${o[k]}`).join(' · ');
-    const locked = OPTIONS.filter((o) => !open.includes(o)), soon = locked.filter((o) => st.get(UNLOCK_TECH.get(`option:${o.id}`)?.id ?? '') !== 'hidden');
-    const base = open.filter((o) => req.has(o.id)), free = chosen.filter((id) => !req.has(id)).length; // 0.4.2: 시행된 규제의 의무 장비는 기본 장비(옵션 칸 밖, 원가는 든다)
-    return `${base.length ? `<div class="base-eq"><p class="lbl">기본 장비 · 규제 의무${ib('term:유예 기간')}</p><div class="eqs">${base.map((o) => `<span class="eq" data-opt="${o.id}">${esc(o.name)}</span>`).join('')}</div><p class="hint">옵션 칸을 차지하지 않고 자동으로 들어갑니다. 대당 원가 +${num(base.reduce((a, o) => a + o.cost, 0))}만원.</p></div>` : ''}<p class="left">옵션 <b>${free}</b> / ${max}개</p><div class="opts">${open.filter((o) => !req.has(o.id)).map((o) => { const on = chosen.includes(o.id); return `<button class="opt" data-act="${act}" data-v="${o.id}" data-tip="opt:${o.id}" aria-pressed="${on}" ${!on && free >= max ? 'disabled' : ''}>${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b><small>${eff(o)}</small>${segment ? optVal(o.id, o.cost, segment) : `<span class="cost">대당 +${num(o.cost)}만원</span>`}</button>`; }).join('')}
-      ${soon.map((o) => lockedOpt('option', o.id, `${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b>${req.has(o.id) ? '<small class="reqtag">규제 의무 장비: 연구해야 개발할 수 있음</small>' : ''}<small>${eff(o)}</small>`)).join('')}</div>
-      <p class="note">옵션은 고르지 않아도 됩니다. 흐린 옵션은 연구로 엽니다.${locked.length > soon.length ? ` 그 밖에 ${locked.length - soon.length}개 옵션은 시대가 흐르면 연구할 수 있습니다.` : ''}${(Q.hqInfo(s).next?.optionSlots ?? 0) > max ? ' 본사를 키우면 옵션 칸이 늘어납니다.' : ''}</p>`;
-  }
-  /** 1.0.0 옵션 값: 이 고객층이 쳐 주는 값(차별 기준가에 더해짐)과 지금 원가. 원가보다 낮으면 표시 */
-  const optVal = (id: string, cost: number, segment: string) => { const s = game!.state, v = Q.optionValue(id, segment, yearOf(s.week)), c = cost * Q.costMultOf(s);
-    return `<span class="cost opt-val">손님이 쳐 주는 값 ${num(v)}만원 <small>(원가 ${num(c)}만원)</small></span>${v < c ? '<small class="why opt-less">이 고객층은 덜 쳐 줍니다</small>' : ''}`; };
-  /** 옵션 누르기(기획·페이스리프트 공용): 고른 것은 빼고, 빈 칸이 있으면 넣는다. 의무 장비는 칸을 세지 않는다(11.3, optTiles의 표시와 같은 셈). 칸이 차면 이유를 알린다 */
-  function toggleOpt(list: string[], v: string): string[] {
-    if (list.includes(v)) return list.filter((x) => x !== v);
-    const s = game!.state, req = Q.activeEvents(s).requiredOptions, max = Q.optionSlots(s);
-    if (list.filter((x) => !req.includes(x)).length < max) return [...list, v];
-    err(`옵션 칸 ${max}개가 다 찼습니다. 다른 옵션을 빼고 고르세요.`); return list;
-  }
-  /** 연구 기술의 상태(연구 화면과 같은 판단: sim researchInfo) */
-  const techStatus = () => new Map(Q.researchInfo(game!.state).fields.flatMap((f) => f.techs.map((t) => [t.id, t.status] as const)));
   /** 아직 연구 안 한 차체·옵션·동력 칸: 흐리게 + "연구 필요: ○○", 누르면 그 기술의 연구 화면으로 */
   function lockedOpt(type: 'body' | 'option', id: string, inner: string, cls = ''): string {
     const t = UNLOCK_TECH.get(`${type}:${id}`);
@@ -1434,7 +1432,7 @@ export function startApp(): void {
   };
 
   // ----- 0.8.0 기획 프리셋(게임마다 저장 칸의 UiExtra에) -----
-  const presetLine = (p: S.PlanPreset) => [p.body ? BODIES.find((b) => b.id === p.body)?.name ?? p.body : '차체 제외', segName(p.segment), `${POWERTRAINS.find((x) => x.id === p.powertrain)?.name ?? p.powertrain} ${tierName(p.powertrain, p.tier)}`, `옵션 ${p.options.length}개`, `${p.designWeeks}주`, BUDGET[p.budget as Budget]?.name ?? ''].join(' · ');
+  const presetLine = (p: S.PlanPreset) => [p.body ? BODIES.find((b) => b.id === p.body)?.name ?? p.body : '차체 제외', segName(p.segment), `${POWERTRAINS.find((x) => x.id === p.powertrain)?.name ?? p.powertrain} ${tierName(p.powertrain, p.tier)}`, `장비 ${Object.keys((p as { equip?: object }).equip ?? p.options).length}개`, `${p.designWeeks}주`, BUDGET[p.budget as Budget]?.name ?? ''].join(' · ');
   function showPresets(): void {
     if (!draft) return;
     const list = ui.presets ?? [], bn = bodyById(draft.body).name;
@@ -1451,10 +1449,10 @@ export function startApp(): void {
     if (SEGMENTS.some((x) => x.id === p.segment)) d.segment = p.segment;
     if (Q.powertrainsAt(s).some((x) => x.id === p.powertrain)) { d.powertrain = p.powertrain; d.tier = Math.max(1, Math.min(powertrainById(p.powertrain).tiers.length, Math.round(p.tier) || 2)); }
     else out.push(`동력 ${POWERTRAINS.find((x) => x.id === p.powertrain)?.name ?? p.powertrain}`);
-    const ok = p.options.filter((o) => opts.has(o) && !req.has(o)), slots = Q.optionSlots(s);
-    for (const o of p.options) if (!opts.has(o)) out.push(`옵션 ${OPTIONS.find((x) => x.id === o)?.name ?? o}`);
-    for (const o of ok.slice(slots)) out.push(`옵션 ${optionById(o).name}(옵션 칸 부족)`);
-    d.options = ok.slice(0, slots);
+    // 1.1.0 프리셋의 장비 구성(equip). 옛 프리셋(options만)은 모두 기본 장비로 읽는다
+    const pe = (p as { equip?: EQ.Equip }).equip ?? EQ.fromOptions(p.options ?? []);
+    for (const o of Object.keys(pe)) if (!opts.has(o)) out.push(`장비 ${OPTIONS.find((x) => x.id === o)?.name ?? o}`);
+    setEquip(d, Object.fromEntries(Object.entries(pe).filter(([o, v]) => opts.has(o) && !req.has(o) && (v === 'std' || v === 'opt'))), 'custom');
     const dir = p.direction as Partial<Stats>;
     if (STATS.every((k) => Number.isInteger(dir[k]) && dir[k]! >= 0 && dir[k]! <= config.dev.dirMax) && STATS.reduce((a, k) => a + dir[k]!, 0) === config.dev.dirTotal) d.direction = { ...(dir as Stats) };
     if (config.dev.designWeeks.includes(p.designWeeks)) d.designWeeks = p.designWeeks;
@@ -1474,7 +1472,7 @@ export function startApp(): void {
     const card1 = `<div class="card">${noteBox()}<p class="lbl">1. 새 얼굴 고르기</p><div class="faces lift-cmp">${LP.compareHtml(cur, { ...cur, faceSeed: L.faceSeed }, thumb, false, ['지금 얼굴', '새 얼굴'])}</div>
       ${LP.candHtml('face', liftCtx(g), L.faceSeed, thumb, 'liftPick', 'face')}
       <p class="note">차대(옆모습·차체 크기)는 그대로 두고 앞뒤 모습만 바꿉니다.</p></div>`;
-    const card2 = `<div class="card"><p class="lbl">2. 옵션 갱신</p>${optTiles(L.options, 'liftOpt', Q.generationById(game!.state, L.genId)?.segment ?? '')}
+    const card2 = `<div class="card"><p class="lbl">2. 옵션 갱신</p>${equipView('lift')}
       <p class="lbl" style="margin-top:14px">3. 동력 등급(${esc(pt.name)})</p><div class="opts">${pt.tiers.map((t, i) => `<button class="opt" data-act="liftPick" data-k="tier" data-v="${i + 1}" aria-pressed="${L.tier === i + 1}" ${i + 1 < e.tier ? 'disabled' : ''}><b>${esc(t.name)}</b><small class="lv">${esc(pt.name)} ${Q.levelForTier(s, g.powertrain, i + 1)}단계</small><small>${i + 1 < e.tier ? '낮출 수 없음' : i + 1 === e.tier ? '지금 등급' : '한 등급 올리기'}</small></button>`).join('')}</div>
       <p class="note">동력 종류와 차체는 바꿀 수 없습니다. 바꾸려면 풀체인지가 필요합니다.</p></div>`;
     const bar = (label: string, a: number, b: number, term = '') => `<p class="lbl" style="margin-top:12px">${label}${term ? ib(`term:${term}`) : ''}</p><div class="ba"><span>지금</span><div class="life"><u style="width:${(a * 100).toFixed(1)}%"></u></div><b>${Math.round(a * 100)}%</b></div><div class="ba"><span>바꾼 뒤</span><div class="life"><u style="width:${(b * 100).toFixed(1)}%"></u></div><b>${Math.round(b * 100)}%</b></div>`;
@@ -1823,10 +1821,10 @@ export function startApp(): void {
     const s = game!.state, h = Q.hqInfo(s), c = h.current, n = h.next;
     const steps = `<ol class="lv5">${config.hq.levels.map((l, i) => `<li class="${i + 1 < c.level ? 'done' : i + 1 === c.level ? 'on' : ''}"><b>${i + 1}</b><small>${esc(l.name)}</small></li>`).join('')}</ol>`;
     const cur = `<div class="card hq-cur"><p class="lbl">지금 본사 · ${c.level}등급</p><h2>${esc(c.name)}</h2>${steps}
-      <div class="kpis">${kpi('정원', `${h.staffCount}/${c.staffCap}<span>명</span>`)}${kpi('동시에 개발할 수 있는 차', `${c.teams}<span>대</span>`)}${kpi('옵션 칸', `${c.optionSlots}<span>개</span>`)}${kpi('월 유지비', money((c.upkeep)))}</div>
+      <div class="kpis">${kpi('정원', `${h.staffCount}/${c.staffCap}<span>명</span>`)}${kpi('동시에 개발할 수 있는 차', `${c.teams}<span>대</span>`)}${kpi('월 유지비', money((c.upkeep)))}</div>
       <p class="note">본사가 클수록 직원을 더 뽑고, 여러 차를 함께 개발하고, 차에 옵션을 더 넣을 수 있습니다. 개발 탭의 사무실도 넓어집니다.</p></div>`;
     const next = n ? `<div class="card hq-next"><p class="lbl">다음 등급 · ${n.level}등급</p><h2>${esc(n.name)}</h2>
-      <table class="tbl" style="margin-top:8px"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">키우면</th></tr>${cmpRow('정원', `${c.staffCap}명`, `${n.staffCap}명`)}${cmpRow('동시에 개발할 수 있는 차', `${c.teams}대`, `${n.teams}대`)}${cmpRow('옵션 칸', `${c.optionSlots}개`, `${n.optionSlots}개`)}${cmpRow('월 유지비', money((c.upkeep)), money((n.upkeep)), true)}</table>
+      <table class="tbl" style="margin-top:8px"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">키우면</th></tr>${cmpRow('정원', `${c.staffCap}명`, `${n.staffCap}명`)}${cmpRow('동시에 개발할 수 있는 차', `${c.teams}대`, `${n.teams}대`)}${cmpRow('월 유지비', money((c.upkeep)), money((n.upkeep)), true)}</table>
       <div class="kpis" style="margin-top:10px">${kpi('승급 비용', money(n.cost))}${kpi('필요한 평판', n.rep ? `${n.rep}<span>이상 (지금 ${Math.floor(s.reputation)})</span>` : '없음')}</div>
       ${h.canUpgrade ? '' : `<div class="badbox" style="margin-top:10px">${esc(h.reason ?? '')}</div>`}
       <button class="go" data-act="upgradeHQ" ${h.canUpgrade ? '' : 'disabled'}>본사 키우기 · ${money(n.cost)}</button></div>`
@@ -1975,7 +1973,7 @@ export function startApp(): void {
       return `<article class="rec" data-gen="${g.id}"><div class="ph">${ph ? `<img src="${ph}" alt="${esc(nameOf(g))} ${g.number}세대 출시 사진">` : thumb(genLook(g, g.editions[0].id), -0.65, 320, 200)}
         ${lift ? `<div class="lift-ph" title="페이스리프트 뒤 모습">${lph ? `<img src="${lph}" alt="페이스리프트 뒤 사진">` : thumb(genLook(g, lift.id), -0.65, 160, 100)}<span>바뀐 얼굴</span></div>` : ''}</div>
         <div class="bd"><h3>${l.number}세대 <small class="hint">${bodyById(g.body).name}</small></h3>
-        <div class="meta">${Q.monthLabel(l.launchMonth)} 출시 · 평론 ${score(l.reviewAvg)} · 누적 ${num(l.totalSold)}대${lift ? `<br>페이스리프트 ${Q.monthLabel(monthOf(lift.launchWeek))}` : ''}</div>
+        <div class="meta">${Q.monthLabel(l.launchMonth)} 출시 · 평론 ${score(l.reviewAvg)} · 누적 ${num(l.totalSold)}대<br>${esc(EQ.equipLine(edEquip(currentEdition(g))))}${lift ? `<br>페이스리프트 ${Q.monthLabel(monthOf(lift.launchWeek))}` : ''}</div>
         <div class="row">${g.masterpiece ? '<span class="chip gold">명차</span>' : ''}<span class="chip ${l.status === 'onSale' ? 'on' : ''}">${esc(l.label)}</span>${lift ? '<span class="chip">페이스리프트</span>' : ''}${g.recalls ? `<span class="chip bad">리콜 ${g.recalls}번</span>` : ''}</div></div></article>`;
     };
     return `<div class="card"><div class="rec-co">${myLogo(36)}<b>${esc(s.companyName)}</b></div><h3>지금까지 낸 차 ${gens.length}대</h3><div class="kpis">${kpi('누적 판매', `${qty(total)}<span>대</span>`)}${kpi('차종', `${nps.length}<span>개</span>`)}${kpi('명차', `${gens.filter((g) => g.masterpiece).length}<span>대</span>`)}${kpi('평판', String(Math.round(s.reputation)))}</div></div>
@@ -2184,11 +2182,10 @@ export function startApp(): void {
         if (lift?.genId === id) { go('lift'); return; }
         if (!(await dropDraft())) return;
         const ed = currentEdition(g), opts = new Set(Q.optionsAt(s).map((o) => o.id));
-        lift = { genId: id, faceSeed: LP.firstDistinct('face', liftCtx(g)), options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: Q.faceliftPreview(s, id, { options: ed.options, tier: ed.tier })?.recommendedTeam ?? idleDev().map((x) => x.id) }; // 기본은 추천 팀(디자이너·테스터)
+        lift = { genId: id, faceSeed: LP.firstDistinct('face', liftCtx(g)), equip: Object.fromEntries(Object.entries(edEquip(ed)).filter(([o]) => opts.has(o))), options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: Q.faceliftPreview(s, id, { options: ed.options, tier: ed.tier })?.recommendedTeam ?? idleDev().map((x) => x.id) }; // 기본은 추천 팀(디자이너·테스터)
         go('lift'); return;
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
-      case 'liftOpt': if (lift) { lift.options = toggleOpt(lift.options, v); render(); } return;
       case 'autoTeam': autoTeam(v); return;
       case 'teamPick': case 'liftTeam': { const o = a === 'teamPick' ? draft : lift, id = Number(el.dataset.id); if (o) { o.team = o.team.includes(id) ? o.team.filter((x) => x !== id) : [...o.team, id]; render(); } return; }
       case 'startLift': {
@@ -2205,7 +2202,7 @@ export function startApp(): void {
       case 'planMode': if (!draft) return; draft.mode = v === 'step' ? 'step' : 'sum'; draftNote = ''; planTab = draft.mode === 'sum' ? 'sum' : planTabs(draft)[0][0]; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'applyNew': {
         if (!draft) return; const nt = newTech(draft); if (!nt.items.length) return;
-        draft.options = [...draft.options, ...nt.opts];
+        { const e = { ...eqOf(draft) }; for (const o of nt.opts) e[o] ??= 'opt'; setEquip(draft, e, 'custom'); }
         toast(`새 기술을 반영했습니다: ${nt.items.join(' / ')}`); render(); return;
       }
       case 'presets': showPresets(); return;
@@ -2213,7 +2210,7 @@ export function startApp(): void {
         if (!draft) return; const list = ui.presets ?? [], name = ($<HTMLInputElement>('#preset-name')?.value ?? '').trim() || `프리셋 ${list.length + 1}`, withBody = !!$<HTMLInputElement>('#preset-body')?.checked;
         const i = list.findIndex((x) => x.name === name);
         if (i < 0 && list.length >= S.PRESET_MAX) return err(`프리셋은 ${S.PRESET_MAX}개까지 저장할 수 있습니다. 하나를 지우고 저장하세요.`);
-        const d = draft, ps: S.PlanPreset = { name, ...(withBody ? { body: d.body } : {}), segment: d.segment, powertrain: d.powertrain, tier: d.tier, options: [...d.options], direction: { ...d.direction }, designWeeks: d.designWeeks, budget: d.budget };
+        const d = draft, ps: S.PlanPreset = { name, ...(withBody ? { body: d.body } : {}), segment: d.segment, powertrain: d.powertrain, tier: d.tier, options: [...d.options], direction: { ...d.direction }, designWeeks: d.designWeeks, budget: d.budget, ...{ equip: { ...eqOf(d) } } as object }; // 1.1.0 장비 구성도 함께(옛 판은 options만 읽음)
         ui.presets = i < 0 ? [...list, ps] : list.map((x, k) => (k === i ? ps : x)); dirty = true;
         toast(`프리셋 「${name}」${josa(name, '을/를')} ${i < 0 ? '저장' : '덮어쓰기'}했습니다. 게임을 저장하면 저장 칸에 함께 남습니다.`); showPresets(); return;
       }
@@ -2257,7 +2254,17 @@ export function startApp(): void {
         if (k === 'powertrain') draft.tier = Math.min(draft.tier, powertrainById(v).tiers.length);
         render(); return;
       }
-      case 'opt': if (!draft) return; draft.options = toggleOpt(draft.options, v); render(); return;
+      // 1.1.0 장비: 단계 바꾸기·추천 구성·모두 빼기·전작 이후 기대 변화 반영(data-t: plan | lift)
+      case 'eqSet': case 'eqRec': case 'eqNone': case 'eqApply': {
+        if (!game) return; const o = el.dataset.t === 'lift' ? lift : draft; if (!o) return;
+        const g = lift && o === lift ? Q.generationById(game.state, lift.genId) : undefined, body = g?.body ?? (o as Draft).body, seg = g?.segment ?? (o as Draft).segment, pt = g?.powertrain ?? (o as Draft).powertrain;
+        const e = { ...eqOf(o) };
+        if (a === 'eqSet') { const k = el.dataset.k!; if (v === 'opt' || v === 'std') e[k] = v; else delete e[k]; setEquip(o, e, 'custom'); }
+        else if (a === 'eqRec') setEquip(o, EQ.recommendedEquip(game.state, body, seg, pt), 'rec');
+        else if (a === 'eqNone') setEquip(o, {}, 'custom');
+        else { for (const c of EQ.equipChanges(game.state, e, body, seg)) { if (c.to) e[c.id] = c.to; else delete e[c.id]; } setEquip(o, e, 'custom'); toast('기대가 바뀐 장비를 한 번에 반영했습니다.'); }
+        render(); return;
+      }
       case 'dir': { if (!draft) return; const k = el.dataset.k as Stat, n = draft.direction[k] + Number(v); if (n < 0 || n > config.dev.dirMax || (Number(v) > 0 && dirLeft(draft) <= 0)) return; draft.direction[k] = n; render(); return; }
       case 'cancelPlan': draft = null; lift = null; draftNote = ''; go('garage'); return;
       case 'startDev': {
