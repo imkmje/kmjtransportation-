@@ -70,6 +70,9 @@ describe('임원 자리·임명·채용', () => {
     ok(g.command({ type: 'appointExec', role: 'research', staffId: 3 }));
     expect(X.seatAllowance[2]).toBeGreaterThan(0);
     expect(pay('hr')).toBe(base + X.seatAllowance[2]);
+    g.state.cash = 1e6; ok(g.command({ type: 'postExecJob', role: 'market' })); // 후보 카드 월급 = 뽑으면 실제 받을 월급(4명째 수당 포함)
+    const c = g.state.execs!.candidates[0];
+    expect(execInfo(g.state).roles.find((x) => x.role === 'market')!.candidates[0].pay).toBe(c.pay + X.seatAllowance[3]);
     toMonthEnd(g); expect(g.state.ledger.at(-1)!.salaries).toBe(g.state.staff.reduce((a, y) => a + salaryOf(y.ability), 0) + pay('hr') + pay('product') + pay('research'));
   });
   it('채용: 공고비, 후보 3명, 외부 임원 월급 = 직원 월급 × 1.6, 해임하면 퇴직금을 받고 떠난다', () => {
@@ -272,20 +275,21 @@ describe('맡기기', () => {
 const steadyRun = (seed: number, years: number, bot = steady()) => { const g = Game.create({ seed, difficulty: 'easy' }); for (let w = 0; w < years * 48; w++) { bot.step(g); g.tick(); } return { g }; };
 
 describe('교체 고용', () => {
-  /** 디자이너 둘(한 명은 능력 20에서 성장 한계, 다른 한 명은 60)과 인사 임원, 넉넉한 현금. 0.8.0: 교체 기준이 능력 + 50이 되어 30 → 20(기준 70이 공고로 닿는다) */
+  const cap = X.replace.capGain;
+  /** 디자이너 둘(한 명은 능력 30에서 성장 한계, 다른 한 명은 60)과 인사 임원, 넉넉한 현금 */
   function setup(seed = 1) {
     const g = Game.create({ seed, difficulty: 'normal' }); g.state.reputation = 50; hireExec(g, 'hr', 90);
-    const d = g.state.staff.find((x) => x.role === 'designer')!; d.ability = d.potential = 20;
+    const d = g.state.staff.find((x) => x.role === 'designer')!; d.ability = d.potential = 30;
     g.state.staff.push({ ...d, id: g.state.nextId++, name: '보조디자이너', ability: 60, potential: 70 });
     g.state.cash = 1e8;
     return { g, d };
   }
   const propose = (g: Game) => { toMonthEnd(g); const r = g.state.execs!.replacements.find((x) => x.status === 'proposed'); expect(r).toBeDefined(); return r!; };
-  it('제안: 성장 한계·같은 직무 평균보다 낮은 직원, 한 번에 한 건, 기준 = max(능력 + 50, 평균)(0.8.0: 15 → 50)', () => {
+  it('제안: 성장 한계·같은 직무 평균보다 낮은 직원, 한 번에 한 건, 기준 = max(능력 + 25, 평균)(0.8.0: 15 → 25)', () => {
     const { g, d } = setup(), r = propose(g);
-    expect(r.staffId).toBe(d.id); expect(r.minAbility).toBe(20 + X.replace.minGain);
+    expect(r.staffId).toBe(d.id); expect(r.minAbility).toBe(60);
     const rep = execReports(g.state).find((x) => x.replacement?.id === r.id)!;
-    expect(rep.text).toContain(`${d.name}(디자인 20, 더 성장하기 어려움)`); expect(rep.text).toContain('디자인 70 이상');
+    expect(rep.text).toContain(`${d.name}(디자인 30, 더 성장하기 어려움)`); expect(rep.text).toContain('디자인 60 이상');
     toMonthEnd(g);
     expect(g.state.execs!.replacements.filter((x) => x.status === 'proposed')).toHaveLength(1);
   });
@@ -297,7 +301,7 @@ describe('교체 고용', () => {
     g.tick();
     expect(r.status).toBe('waiting'); expect(r.waitingFor).toContain('개발이 끝나면');
     expect(g.state.staff.some((x) => x.id === d.id)).toBe(true);
-    r.minAbility = 1; // 어떤 후보든 기준 이상
+    r.minAbility = 1; X.replace.capGain = 100; // 어떤 후보든 기준 이상, 상한 없음
     ok(g.command({ type: 'cancelProject', projectId: g.state.projects[0].id }));
     const ev = g.tick();
     expect(r.status).toBe('done');
@@ -305,6 +309,23 @@ describe('교체 고용', () => {
     const t = ev.find((e) => e.kind === 'replacement')!;
     expect(t.text).toMatch(new RegExp(`${d.name} → .+\\(디자인 \\d+\\)`));
     expect(execReports(g.state)[0]).toMatchObject({ kind: 'replaceDone', auto: true });
+    X.replace.capGain = cap;
+    // 0.8.0: 같은 직무는 교체를 마친 뒤 gapMonths 동안 다시 교체를 제안하지 않는다(해고 권유는 그대로)
+    const d2 = g.state.staff.find((x) => x.role === 'designer' && x.ability >= 60)!;
+    g.state.staff.push({ ...d2, id: g.state.nextId++, name: '약한디자이너', ability: 20, potential: 20, projectId: null });
+    toMonthEnd(g);
+    expect(g.state.execs!.replacements.filter((x) => x.status === 'proposed')).toHaveLength(0);
+    for (let i = 0; i < X.replace.gapMonths * 4; i++) g.tick();
+    toMonthEnd(g);
+    expect(g.state.execs!.replacements.filter((x) => x.status === 'proposed' && x.staffName === '약한디자이너')).toHaveLength(1);
+  });
+  it('0.8.0: 기준 + capGain을 넘는 후보는 오지 않는다(기준 1·상한 0이면 모든 후보가 넘어 교체 안 됨)', () => {
+    const { g, d } = setup(), r = propose(g);
+    ok(g.command({ type: 'approveReplacement', id: r.id }));
+    r.minAbility = 1; X.replace.capGain = 0;
+    try { g.tick(); } finally { X.replace.capGain = cap; }
+    expect(r.status).toBe('approved'); expect(g.state.staff.some((x) => x.id === d.id)).toBe(true);
+    expect(execReports(g.state)[0].text).toContain('디자인 1~1에 맞는 후보가 없어');
   });
   it('기준 미달 후보뿐이면 교체하지 않고(공고비는 듦) 몇 주 뒤 한 번 더, 그래도 없으면 포기', () => {
     const { g, d } = setup(), r = propose(g);

@@ -227,13 +227,13 @@ describe('0.7.0 임원 봇·60년 생존', () => {
     for (let w = 1; w <= years * 48 && g.state.status === 'playing'; w++) { b.step(g); g.tick(); if (w % 480 === 0) cash.push(g.state.cash); }
     return { g, alive: g.state.status === 'playing', worth: g.state.status === 'playing' ? snapOf(g).worth : 0, cash, hi: allGens(g.state).map(launchAvgGrade) };
   });
-  it('임원 봇(steadyExec)은 신중보다 약간 유리: 40년 자산 중앙값 +5~25%, 출시 등급 9 초과 10% 미만(쉬움·보통)', () => {
+  it('임원 봇(steadyExec)은 신중보다 약간 유리: 40년 자산 중앙값 +5~35%(0.8.0: 교체 고용이 살아 있도록 25 → 35%), 출시 등급 9 초과 10% 미만(쉬움·보통)', () => {
     for (const d of ['easy', 'normal'] as const) {
       const a = run(() => steady(), d, 40), b = run(() => steadyExec(), d, 40);
       const wa = median(a.map((r) => r.worth)), wb = median(b.map((r) => r.worth)), hi = b.flatMap((r) => r.hi), hiShare = hi.filter((x) => x > 9).length / hi.length;
       console.log(`${d} 40년: 신중 생존 ${a.filter((r) => r.alive).length}/20 자산 ${eok(wa)}억, 임원 생존 ${b.filter((r) => r.alive).length}/20 자산 ${eok(wb)}억(${((wb / wa - 1) * 100).toFixed(1)}%), 임원 봇 출시 등급 9 초과 ${(hiShare * 100).toFixed(1)}%`);
       expect(b.filter((r) => r.alive).length).toBeGreaterThanOrEqual(a.filter((r) => r.alive).length);
-      expect(wb / wa).toBeGreaterThanOrEqual(1.05); expect(wb / wa).toBeLessThanOrEqual(1.25);
+      expect(wb / wa).toBeGreaterThanOrEqual(1.05); expect(wb / wa).toBeLessThanOrEqual(1.35);
       expect(hiShare).toBeLessThan(0.1);
     }
   });
