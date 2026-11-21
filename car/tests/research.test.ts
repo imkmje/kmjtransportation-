@@ -26,8 +26,8 @@ const toTest = (g: Game) => { const p = g.state.projects[0]; while (p.phase === 
 const LAUNCH = { price: 1200, marketing: 1, color: 'red', wheels: 0 as const };
 
 describe('자료 무결성(4단계)', () => {
-  it('차체 10종(3D 담당이 쓰는 ID), 원가 = 기준가의 82%, 동력 4종, 옵션 12 + 추가', () => {
-    expect(BODIES.map((b) => b.id)).toEqual(['sedanS', 'hatch', 'sedanM', 'coupe', 'sedanL', 'minivan', 'kei', 'suv', 'pickup', 'sports']);
+  it('차체 12종(3D 담당이 쓰는 ID, 0.5.2: SUV를 소·중·대로 나누고 세단·SUV를 크기 순으로 묶음), 원가 = 기준가의 82%, 동력 4종, 옵션 12 + 추가', () => {
+    expect(BODIES.map((b) => b.id)).toEqual(['sedanS', 'sedanM', 'sedanL', 'hatch', 'coupe', 'minivan', 'kei', 'suvS', 'suv', 'suvL', 'pickup', 'sports']);
     for (const b of BODIES) { expect(b.cost).toBe(Math.round(b.basePrice * 0.82)); expect(b.mult.Q).toBe(1); }
     expect(POWERTRAINS.map((p) => [p.id, p.year])).toEqual([['gasoline', 1970], ['diesel', 1982], ['hybrid', 1998], ['ev', 2010]]);
     for (const p of POWERTRAINS) expect(p.tiers.length).toBe(3);
@@ -37,8 +37,8 @@ describe('자료 무결성(4단계)', () => {
     const byYear = [...OPTIONS].sort((a, b) => a.year - b.year), pts = (o: typeof OPTIONS[0]) => o.U + o.D + o.Q;
     expect(pts(byYear.at(-1)!)).toBeGreaterThan(pts(byYear[0]) * 5); // 뒤 시대 옵션일수록 원점수가 크다
   });
-  it('기술 40~50개(0.5.0: 1970년 기초 기술 4개 추가)·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
-    expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(50);
+  it('기술 40~52개(0.5.0: 1970년 기초 기술 4개 추가, 0.5.2: 소형·대형 SUV 차체 2개 추가)·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
+    expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(52);
     expect(new Set(TECHS.map((t) => t.field))).toEqual(new Set(['powertrain', 'body', 'electronics', 'production', 'eco']));
     expect(new Set(TECHS.map((t) => t.id)).size).toBe(TECHS.length);
     const ids = new Set(TECHS.map((t) => t.id));
@@ -64,7 +64,7 @@ describe('자료 무결성(4단계)', () => {
     expect(POWERTRAINS.filter((p) => !unlocks('powertrain').has(p.id)).map((p) => p.id)).toEqual(['gasoline']);
     expect(OPTIONS.filter((o) => !unlocks('option').has(o.id))).toEqual([]);
   });
-  it('market: 연대별 칸 비중 합 1, 차체별 고객층 구성비 합 1, 칸 비중·구성비가 10종 모두 있음. compat 60칸(◎○△×)', () => {
+  it('market: 연대별 칸 비중 합 1, 차체별 고객층 구성비 합 1, 칸 비중·구성비가 12종 모두 있음. compat 72칸(◎○△×)', () => {
     const m = MARKET.domestic;
     expect(m.years).toEqual([1970, 1980, 1990, 2000, 2010, 2020, 2030]);
     m.years.forEach((_, i) => expect(BODIES.reduce((a, b) => a + m.bodyShare[b.id][i], 0)).toBeCloseTo(1, 9));
@@ -73,7 +73,7 @@ describe('자료 무결성(4단계)', () => {
       expect(SEGMENTS.reduce((a, s) => a + (m.mix[b.id][s.id] ?? NaN), 0)).toBeCloseTo(1, 9);
       for (const s of SEGMENTS) expect([1.2, 1, 0.8, 0.6]).toContain(COMPAT[b.id][s.id]);
     }
-    expect(Object.keys(COMPAT).length * SEGMENTS.length).toBe(60);
+    expect(Object.keys(COMPAT).length * SEGMENTS.length).toBe(72);
     expect([COMPAT.minivan.family, COMPAT.sports.enthusiast, COMPAT.sports.rich, COMPAT.kei.youth, COMPAT.kei.worker, COMPAT.pickup.fleet]).toEqual([1.2, 1.2, 1.2, 1.2, 1.2, 1]);
   });
   it('사건: 고정 13개(11.1 연도), 무작위 8종(선택지 2~3개, 기본 선택이 범위 안)', () => {
