@@ -1586,6 +1586,29 @@ export function startApp(): void {
         return;
       }
       case 'rest': { if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)); if (x && run(game.command({ type: 'rest', staffId: x.id, weeks: Number(v) }))) { toast(`${x.name}에게 ${v}주 휴식을 줬습니다.`); render(); } return; }
+      case 'staffPick': { const id = Number(el.dataset.id); if (!staffPick.delete(id)) staffPick.add(id); render(); return; }
+      case 'pickNone': staffPick.clear(); render(); return;
+      case 'pickTrainable': {
+        if (!game) return; const ids = Q.staffInfo(game.state).filter((x) => x.canTrain).map((x) => x.id);
+        if (!ids.length) return err('지금 교육을 보낼 수 있는 직원이 없습니다.');
+        staffPick = new Set(ids); render(); return;
+      }
+      case 'trainPicked': { // 기존 train 명령을 ID 순으로 차례로. 현금은 앞사람 교육비를 빼며 따진다
+        if (!game) return; const T = config.staff.train, rows = Q.staffInfo(game.state).filter((x) => staffPick.has(x.id));
+        let cash = game.state.cash; const ok: Q.StaffRow[] = [], no: string[] = [];
+        for (const x of rows) { const why = x.trainReason ?? (cash < x.trainCost ? '현금이 모자랍니다.' : null); if (why) no.push(`${x.name}: ${why}`); else { ok.push(x); cash -= x.trainCost; } }
+        const noText = no.length ? `\n\n교육할 수 없는 ${no.length}명(보내지 않음)\n${no.join('\n')}` : '';
+        if (!ok.length) return err(`고른 직원 중 교육을 보낼 수 있는 사람이 없습니다. ${no.join(' / ')}`);
+        const busy = ok.filter((x) => x.status === 'working').length, cost = ok.reduce((a, x) => a + x.trainCost, 0);
+        if (!(await ask(`${ok.length}명을 교육 보낼까요?\n총 비용 ${money(cost)}, ${T.weeks}주 동안 일하지 않습니다(능력 +${T.gainMin}~${T.gainMax}).${busy ? `\n개발 중인 직원 ${busy}명이 교육받는 동안 그 개발이 느려집니다.` : ''}${noText}`, '교육 보내기'))) return;
+        let n = 0; for (const x of ok) if (run(game.command({ type: 'train', staffId: x.id }))) n++;
+        staffPick.clear(); toast(`${n}명을 교육 보냈습니다. ${T.weeks}주 동안 일하지 않습니다.`); render(); return;
+      }
+      case 'restPicked': { // 기존 rest 명령(2주)을 차례로. 교육 중인 직원은 쉴 수 없다
+        if (!game) return; const rows = Q.staffInfo(game.state).filter((x) => staffPick.has(x.id)), skip = rows.filter((x) => x.status === 'training');
+        let n = 0; for (const x of rows) if (x.status !== 'training' && run(game.command({ type: 'rest', staffId: x.id, weeks: 2 }))) n++;
+        staffPick.clear(); if (n) toast(`${n}명에게 2주 휴식을 줬습니다.${skip.length ? ` 교육 중인 ${skip.length}명은 쉴 수 없어 뺐습니다.` : ''}`); else err('교육 중인 직원은 쉴 수 없습니다.'); render(); return;
+      }
       case 'assign': if (game && run(game.command({ type: 'assign', staffId: Number(el.dataset.id), projectId: v === '' ? null : v === 'lab' ? 'lab' : Number(v) }))) render(); return;
       case 'fire': {
         if (!game) return; const x = Q.staffInfo(game.state).find((y) => y.id === Number(el.dataset.id)); if (!x) return;
