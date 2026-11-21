@@ -215,5 +215,16 @@ export const config = {
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
   pricePolicy: { pctMin: 80, pctMax: 120, pctChoices: [95, 100, 105] }, // 0.8.0 자동 가격: 기준가 유지 비율(%) 허용 범위와 화면 선택지
+  // 0.10.0 실패한 차의 수습. 대상: 판매 중이고 평론 평균 reviewMax 이하이거나, 최근 poorMonths개월 평균 판매가 (공장 한도 ÷ 판매 차종 수)의 poorShare 미만
+  rescue: {
+    reviewMax: 4.5, poorMonths: 3, poorShare: 0.3,
+    // 긴급 개선: 테스터·엔지니어가 fixWeeks주 시험만 한다(결함 감소는 시험과 같은 식). 주간 비용 = max(세대 개발비 × costShare ÷ fixWeeks, 그 팀의 보통 시험 한 주 비용 × testCostMult).
+    // 뒤쪽 하한: 개선판이 '처음부터 시험을 더 한 경우'보다 싸지 않게(대충 내고 고치는 전략 방지). 끝나면 품질 × (1 + qGain), 평론·인지도·수명은 그대로. 세대당 1회
+    fixWeeks: 8, costShare: 0.12, testCostMult: 1, qGain: 0.04,
+    // 가격 인하 판매: 시장 기준가의 pct로 months개월 고정, 시작할 때 인지도 +awareness(광고 효과), 끝나면 자동 단종(평판 감점 없음). 수명 막대 lifeMax 이하이거나 평론 reviewMax 이하일 때만
+    clearPct: 0.88, clearMonths: 6, clearAwareness: 0.08, lifeMax: 0.5,
+  },
+  // 0.10.0 판매 요인 분해의 기준 상태(이 값과 비교해 몇 % 깎거나 올렸는지). awareness: 기준 인지도, slumpShare·dropShare: 요약 한 줄을 띄우는 부진 기준
+  factors: { awareness: 0.5, slumpShare: 0.3, dropShare: 0.3, minShow: 0.01 },
   todo: { candUrgentWeeks: 1, regUrgentMonths: 12 }, // 0.7.0 할 일 목록: 채용 후보가 이 주 이하로 남거나 규제 시행이 이 개월 이하로 남으면 급한 일
 };

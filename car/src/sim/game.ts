@@ -14,6 +14,8 @@ import { josa } from './josa';
 import { Rng, hash32 } from './rng';
 import { DIFFICULTIES, diffOf } from './difficulty';
 import { bestPrice } from './queries';
+import { ensureHist, newPnl, noteCar, pnlOf, startHist } from './history';
+import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
 import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
@@ -94,7 +96,7 @@ export class Game {
       ability: rng.intIn(config.start.abilityMin, config.start.abilityMax), potential: 0, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false,
     }));
     const rivals = initRivals(rng, opts.seed);
-    for (const x of staff) x.potential = rng.intIn(config.start.potentialMin, config.start.potentialMax); // 경쟁사 뒤에 뽑아 2단계까지의 난수 순서를 지킨다
+    for (const x of staff) { x.potential = rng.intIn(config.start.potentialMin, config.start.potentialMax); startHist(x, 0); } // 경쟁사 뒤에 뽑아 2단계까지의 난수 순서를 지킨다
     const state: CarState = {
       saveVersion: SAVE_VERSION, difficulty, seed: opts.seed, rng: rng.getState(), week: 0,
       companyName: opts.companyName?.trim() || NAMES.defaultCompany,
@@ -122,6 +124,7 @@ export class Game {
       });
       if (log.designDone) ev.push({ kind: 'designDone', id: p.id, text: `「${p.name}」 설계가 끝났습니다. 시험을 시작합니다.` });
       if (log.waitingNow) ev.push({ kind: 'advice', id: p.id, text: `「${p.name}」의 결함을 모두 잡았습니다. 이제 출시할 수 있습니다. 출시 대기 중에는 개발비가 들지 않습니다.` });
+      if (p.kind === 'fix' && p.testWeeks >= config.rescue.fixWeeks) this.finishFix(p, ev);
     }
     this.researchWeek(ev); // 10장: 쉬는 엔지니어·전담 연구원의 연구 점수(직원 컨디션 갱신 전, 이번 주 배치 기준)
     this.staffWeek(ev);
@@ -194,20 +197,21 @@ export class Game {
     let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
     const ylog = this.yearLog(year);
     gens.forEach((g, i) => {
-      const n = made[i], p0 = g.profit;
+      const n = made[i], p0 = g.profit, P = pnlOf(g); // 0.10.0 손익 누적(예전 저장은 여기서 추정으로 시작)
       const ed = currentEdition(g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s), ptCostAdd(s, g.powertrain));
       const mk = config.awareness.marketingCost[g.marketing];
       g.lastDemand = demand[i]; g.lostSales = Math.max(0, demand[i] - n);
       g.sales.push(n); g.totalSold += n; sold += n;
       revenue += n * ed.price; cogs += n * uc; marketing += mk;
       g.profit += n * (ed.price - uc) - mk;
+      P.rev += n * ed.price; P.cogs += n * uc; P.mk += mk;
       const target = awarenessTarget(s.reputation, g.marketing, grade(ed.stats.Q, year));
       g.awareness += (target - g.awareness) * (config.awareness.rate + salesAwarenessBonus(s)); // 영업 직원이 수렴을 빠르게(9.1)
       if (ed.defects > 0) { // 6.3 리콜: 연 확률 min(40%, 결함 × 2%)을 달로 나눠 굴린다
         const pYear = Math.min(config.recall.maxYear, ed.defects * config.recall.perDefect);
         if (this.rng.next() < 1 - (1 - pYear) ** (1 / config.time.monthsPerYear)) {
           const cost = g.totalSold * config.recall.costPerCar * diffOf(s).recallMult;
-          recall += cost; g.profit -= cost; g.recalls++;
+          recall += cost; g.profit -= cost; g.recalls++; P.recall += cost;
           g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
           const R = config.reputation, before = s.reputation; // 0.5.1: 평판 감점은 규모 비례(누적 판매 / 5,000, 0.5~3) × 난이도 배수
           this.addRep(-Math.min(-config.recall.rep, Math.max(R.recallMin, g.totalSold / R.recallPer)), `「${this.nameOf(g)}」 리콜`);
@@ -218,6 +222,11 @@ export class Game {
       if (g.status === 'onSale' && last.length === dc.adviceMonths && last.every((x) => x < dc.adviceSales) && !(g.sales.length > dc.adviceMonths && g.sales[g.sales.length - dc.adviceMonths - 1] < dc.adviceSales))
         ev.push({ kind: 'advice', id: g.id, text: `「${this.nameOf(g)}」 판매가 ${dc.adviceMonths}개월째 월 ${dc.adviceSales}대 미만입니다. 단종을 권합니다.` });
       ylog.cars[g.id] = (ylog.cars[g.id] ?? 0) + g.profit - p0;
+      P.months.push(g.profit - p0);
+      if (g.status === 'onSale' && g.clearance && m >= g.clearance.lastMonth) { // 0.10.0 가격 인하 판매가 끝나면 자동 단종(평판 감점 없음)
+        g.status = 'discontinued'; g.endMonth = m; g.allocShare = null;
+        ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 가격 인하 판매를 마치고 단종했습니다. 다음 달부터 생산 라인이 빕니다.` });
+      }
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
     const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s); // 0.7.0 임원 월급 포함
@@ -227,6 +236,9 @@ export class Game {
     const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
     s.ledger.push(e);
     ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
+    const everyone = [...s.staff, ...Object.values(s.execs?.seats ?? {}).map((x) => x!.staff)];
+    for (const x of everyone) ensureHist(x, s.week); // 0.10.0 성장 기록(예전 저장은 지금부터)
+    if (e.monthOfYear === config.time.monthsPerYear) for (const x of everyone) x.hist!.years[year] = x.ability;
     if (e.monthOfYear === config.time.monthsPerYear) { ylog.staff = s.staff.length; ylog.execs = Object.entries(s.execs?.seats ?? {}).map(([r, x]) => `${EXEC_TITLE[r as keyof typeof EXEC_TITLE]} ${x!.staff.name}`); }
     if (s.ledger.length > config.ledgerMonths) s.ledger.splice(0, s.ledger.length - config.ledgerMonths);
     ev.push({ kind: 'monthEnd', text: `${monthLabel(m)} 결산: 판매 ${sold}대, 이익 ${Math.round(profit).toLocaleString()}만원` });
@@ -361,6 +373,7 @@ export class Game {
       case 'setMarketing': {
         const g = allGens(s).find((x) => x.id === cmd.generationId);
         if (!g || g.status !== 'onSale') return fail('판매 중인 차가 아닙니다.');
+        if (cmd.type === 'setPrice' && g.clearance) return fail('가격 인하 판매 중에는 값을 바꿀 수 없습니다.');
         const bad = cmd.type === 'setPrice' ? priceError(g.body, cmd.price) : marketingError(cmd.marketing);
         if (bad) return fail(bad);
         if (cmd.type === 'setPrice') { currentEdition(g).price = cmd.price; delete g.pricePolicy; } else g.marketing = cmd.marketing; // 수동 가격은 자동 가격을 끈다
@@ -369,6 +382,7 @@ export class Game {
       case 'setPricePolicy': { // 0.8.0
         const g = allGens(s).find((x) => x.id === cmd.generationId);
         if (!g || g.status !== 'onSale') return fail('판매 중인 차가 아닙니다.');
+        if (g.clearance) return fail('가격 인하 판매 중에는 값을 바꿀 수 없습니다.');
         const bad = policyError(cmd.policy ?? null);
         if (bad) return fail(bad);
         if (cmd.policy) g.pricePolicy = { ...cmd.policy }; else delete g.pricePolicy;
@@ -378,8 +392,29 @@ export class Game {
         const info = retrofitInfo(s, cmd.generationId);
         if (!info.ok) return fail(info.reason!);
         const g = allGens(s).find((x) => x.id === cmd.generationId)!, ed = currentEdition(g), mult = bodyById(g.body).mult;
-        this.spend(info.cost);
+        this.spend(info.cost); pnlOf(g).dev.retro += info.cost;
         for (const o of info.options) { const d = optionById(o); ed.options.push(o); ed.stats.U += mult.U * d.U; ed.stats.D += mult.D * d.D; ed.stats.Q += mult.Q * d.Q * defectQMult(ed.defects); }
+        return OK;
+      }
+      case 'quickFix': { // 0.10.0 긴급 개선: 시험만 하는 짧은 프로젝트(끝나면 finishFix가 반영)
+        const err = fixError(s, cmd.generationId) ?? this.teamError();
+        if (err) return fail(err);
+        const team = cmd.team === undefined ? fixTeam(s) : this.teamFor(cmd.team);
+        if (typeof team === 'string') return fail(team);
+        if (!team.length || team.some((x) => x.role !== 'tester' && x.role !== 'engineer')) return fail('긴급 개선에는 테스터나 엔지니어만 넣을 수 있습니다(쉬는 사람이 한 명 이상 필요).');
+        const g = allGens(s).find((x) => x.id === cmd.generationId)!, ed = currentEdition(g);
+        const spec: ProjectSpec = { name: this.nameOf(g), body: g.body, segment: g.segment, powertrain: g.powertrain, tier: ed.tier, options: [...ed.options], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 0 };
+        const p = this.addProject('fix', g.id, spec, g.chassisSeed, ed.faceSeed, team);
+        p.phase = 'test'; p.options = [...ed.options]; p.level = ed.level; p.defects = ed.defects; p.defectEst = Math.round(ed.defects);
+        return OK;
+      }
+      case 'clearance': { // 0.10.0 가격 인하 판매: 기준가의 clearPct로 clearMonths개월, 인지도 가산, 끝나면 자동 단종
+        const err = clearError(s, cmd.generationId);
+        if (err) return fail(err);
+        const g = allGens(s).find((x) => x.id === cmd.generationId)!, R = config.rescue, m = monthOf(s.week), price = clearPriceOf(s, g);
+        currentEdition(g).price = price; delete g.pricePolicy;
+        g.awareness = Math.min(1, g.awareness + R.clearAwareness);
+        g.clearance = { startMonth: m, lastMonth: m + R.clearMonths - 1, price };
         return OK;
       }
       case 'borrow': {
@@ -427,7 +462,7 @@ export class Game {
         if (!c) return fail('없는 후보입니다.');
         if (s.staff.length >= staffCap(s)) return fail(`정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.`);
         s.candidates = s.candidates.filter((x) => x !== c);
-        s.staff.push({ id: c.id, name: c.name, role: c.role, ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
+        s.staff.push(startHist({ id: c.id, name: c.name, role: c.role, ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week));
         return OK;
       }
       case 'dismissCandidates': {
@@ -567,7 +602,7 @@ export class Game {
       case 'mod': s.events.mods.push({ kind: e.mod, value: e.value || (pc.fx ?? 1), untilMonth: m + e.months, label: def.name }); break;
       case 'hire': if (s.staff.length < staffCap(s)) {
         const ability = this.rng.intIn(e.abilityMin, e.abilityMax), id = s.nextId++;
-        s.staff.push({ id, name: this.newName(), role: 'engineer', ability, potential: Math.min(100, ability + this.rng.intIn(config.staff.hire.potentialMin, config.staff.hire.potentialMax)), condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
+        s.staff.push(startHist({ id, name: this.newName(), role: 'engineer', ability, potential: Math.min(100, ability + this.rng.intIn(config.staff.hire.potentialMin, config.staff.hire.potentialMax)), condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week));
       } break;
     }
     addNews(s, ev, `[${def.name}] ${choice.label}${auto ? '(답하지 않아 기본 선택)' : ''} — ${choice.result}`, 'result');
@@ -616,6 +651,19 @@ export class Game {
     return p;
   }
 
+  /** 0.10.0 긴급 개선 끝: 지금 판의 남은 결함을 시험 결과로, 품질은 결함 감점을 다시 계산하고 × (1 + qGain). 평론·인지도·수명은 그대로 */
+  private finishFix(p: Project, ev: GameEvent[]): void {
+    const s = this.state, g = allGens(s).find((x) => x.id === p.targetId);
+    if (g && g.status !== 'discontinued') {
+      const ed = currentEdition(g), before = ed.defects;
+      ed.stats.Q = (ed.stats.Q / defectQMult(before)) * (1 + config.rescue.qGain) * defectQMult(p.defects);
+      ed.defects = p.defects; g.fixed = { week: s.week, cost: p.spent }; pnlOf(g).dev.fix += p.spent;
+      noteCar(s.staff.filter((x) => x.projectId === p.id), s.week, g.id, 'fix');
+      ev.push({ kind: 'news', id: g.id, category: 'other', text: `「${p.name}」 ${g.number}세대 개선판: 품질을 손보고 결함을 줄였습니다(리콜 위험 연 ${Math.round(Math.min(config.recall.maxYear, before * config.recall.perDefect) * 100)}% → ${Math.round(Math.min(config.recall.maxYear, p.defects * config.recall.perDefect) * 100)}%).` });
+    }
+    this.closeProject(p);
+  }
+
   private closeProject(p: Project): void {
     const s = this.state;
     for (const x of s.staff) if (x.projectId === p.id) x.projectId = null;
@@ -626,6 +674,7 @@ export class Game {
   private launch(cmd: Extract<Command, { type: 'launch' }>): CommandResult {
     const s = this.state, p = s.projects.find((x) => x.id === cmd.projectId);
     if (!p) return fail('없는 개발 프로젝트입니다.');
+    if (p.kind === 'fix') return fail('긴급 개선은 끝나면 저절로 반영됩니다.');
     if (p.phase !== 'test' || p.testWeeks < config.dev.minTestWeeks) return fail(`시험을 최소 ${config.dev.minTestWeeks}주 해야 출시할 수 있습니다.`);
     const liftGen = p.kind === 'facelift' ? allGens(s).find((x) => x.id === p.targetId) : undefined;
     const np = p.kind === 'fullchange' ? nameplateById(s, p.targetId!) : undefined, prev = np?.generations.length ? latestGen(np) : undefined;
@@ -651,7 +700,7 @@ export class Game {
       const age = month - g.lifeMonth, late = month - g.launchMonth >= fl.lateMonths;
       g.lifeMonth = month - age * (late ? fl.lateLifeKeep : fl.lifeKeep); // 수명 나이를 40%로(늦으면 70%로)
       g.awareness = Math.min(1, g.awareness + fl.awareness);
-      g.marketing = cmd.marketing; g.devCost += p.spent;
+      g.marketing = cmd.marketing; pnlOf(g).dev.lift += p.spent; g.devCost += p.spent;
       const text = `「${p.name}」 ${g.number}세대 페이스리프트 출시: 새 얼굴로 돌아왔다${late ? '(다소 늦은 변경)' : ''}`;
       g.editions.push(edition(stats, 'facelift', text));
       events.push({ kind: 'news', id: g.id, text, category: 'other' });
@@ -684,15 +733,16 @@ export class Game {
         launchWeek: s.week, launchMonth: month, lifeMonth: month, chassisSeed: p.chassisSeed, points: { ...p.points }, equity, rebuy,
         marketing: cmd.marketing, awareness: Math.min(1, awarenessStart(s.reputation, avg) + equity),
         status: 'onSale', endMonth: null, editions: [],
-        reviews, reviewAvg: avg, masterpiece: avg >= c.masterpiece, sales: [], totalSold: 0, lastDemand: 0, lostSales: 0, allocShare: null, devCost: p.spent, profit: 0, recalls: 0,
+        reviews, reviewAvg: avg, masterpiece: avg >= c.masterpiece, sales: [], totalSold: 0, lastDemand: 0, lostSales: 0, allocShare: null, devCost: p.spent, profit: 0, recalls: 0, pnl: newPnl(p.spent),
         plan: { direction: { ...p.direction }, budget: p.budget, designWeeks: p.designWeeks, opts: optionsAt(s).map((o) => o.id) }, // 0.8.0 풀체인지가 물려받을 기획 값
       };
       gen.editions.push(edition(stats, 'initial', headline));
       if (np) np.generations.push(gen); else s.nameplates.push({ id: s.nextId++, name: p.name, generations: [gen] });
     }
     // 9.1 경험: 프로젝트를 마친(출시) 참여 직원 능력 +1~2(잠재력 상한), 직원 ID 순
-    const ex = config.staff.exp;
-    for (const x of s.staff.filter((y) => y.projectId === p.id || p.crew?.includes(y.id)).sort((a, b) => a.id - b.id)) // 출시 대기로 풀려난 직원 포함
+    const ex = config.staff.exp, crew = s.staff.filter((y) => y.projectId === p.id || p.crew?.includes(y.id)).sort((a, b) => a.id - b.id);
+    noteCar(crew, s.week, liftGen ? liftGen.id : allGens(s).at(-1)!.id, p.kind); // 0.10.0 직원 경력: 참여한 차
+    for (const x of crew) // 출시 대기로 풀려난 직원 포함
       x.ability = Math.max(x.ability, Math.min(x.potential, x.ability + this.rng.intIn(ex.min, ex.max)));
     this.closeProject(p);
     return events.length ? { ok: true, events } : OK;

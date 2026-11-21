@@ -3,7 +3,7 @@ import { config } from '../config';
 import { COMPAT, MARKET, RIVALS, SEGMENTS, bodyById, optionById } from '../data';
 import { grades, lifeFactor } from './cars';
 import { salesFleetMult } from './company';
-import { REGION, chargingInfra, eraNow, eraWeights, marketMult, requiredOptions, rivalHitAdd, trendOf } from './events';
+import { REGION, chargingInfra, eraNow, type EraNow, eraWeights, marketMult, requiredOptions, rivalHitAdd, trendOf } from './events';
 import { hash01, type Rng } from './rng';
 import { diffOf } from './difficulty';
 import { STATS, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
@@ -28,9 +28,9 @@ export function cellMonthly(body: string, t: number): number {
 }
 
 /** 매력(차, 고객층) = Σ 가중치 × 표시 등급/5 × 궁합 × 유행. w: 사건이 바꾼 가중치(생략하면 자료값), trend: 유행 계수(차체 × 동력, 생략하면 1) */
-export function attractiveness(g: Stats, body: string, segment: string, w?: Stats, trend = 1): number {
+export function attractiveness(g: Stats, body: string, segment: string, w?: Stats, trend = 1, compat = COMPAT[body]?.[segment] ?? 1): number {
   const seg = SEGMENTS.find((s) => s.id === segment)!, ww = w ?? seg.w;
-  return STATS.reduce((a, k) => a + ww[k] * (g[k] / config.grade.mid), 0) * (COMPAT[body]?.[segment] ?? 1) * trend;
+  return STATS.reduce((a, k) => a + ww[k] * (g[k] / config.grade.mid), 0) * compat * trend;
 }
 
 /** 가격 매력 = (기준가 × 매력 / 판매가)^ε, 0.2~2.5. 기준가보다 비싸면 (기준가/판매가)^6, 기준가의 108%(overpriceHardAt)를 넘으면 그 넘는 부분에 ^20을 더 곱한다(자르기 뒤, 0.5.0) */
@@ -48,8 +48,8 @@ export interface SaleCar { body: string; segment: string; stats: Stats; price: n
 
 /** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림). fleetMult: 영업 직원의 법인·택시 매력 배수(9.1).
  *  w·trend: 사건이 바꾼 고객층 가중치와 유행 계수(생략하면 자료값·1) */
-export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1, w?: Stats, trend = 1, base = bodyById(c.body).basePrice): number {
-  const attract = attractiveness(grades(c.stats, Math.floor(year)), c.body, segment, w, trend) * (segment === config.staff.sales.fleetSegment ? fleetMult : 1);
+export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1, w?: Stats, trend = 1, base = bodyById(c.body).basePrice, compat?: number): number {
+  const attract = attractiveness(grades(c.stats, Math.floor(year)), c.body, segment, w, trend, compat) * (segment === config.staff.sales.fleetSegment ? fleetMult : 1);
   const eps = SEGMENTS.find((s) => s.id === segment)!.eps;
   const aw = Math.min(1, c.awareness * (segment === c.segment ? config.market.primaryBoost : 1));
   return attract * priceAppeal(base, attract, c.price, eps) * aw * c.life;
@@ -57,8 +57,12 @@ export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1,
 
 /** 월 수요(생산 상한 적용 전) = Σ 고객층 칸 월 규모 × 비중 × 점유율. others: 같은 칸의 내 다른 차. year: 소수 연도(monthTime, 시장 규모가 달마다 변한다).
  *  시대 사건(11장): 칸 규모 × 차체 수요 × 시장 규모, 고객층 비중 × 고객층 배수, 가중치 배수, 유행(차체 × 동력), 동력 수요 배수, 전기는 × 충전 인프라, 경쟁 차 히트작 */
-export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number): number {
-  const m = Math.floor((year - config.time.startYear) * config.time.monthsPerYear + 1e-6), n = eraNow(state.seed, m);
+/** 0.10.0 판매 요인 분해용 바꿔 넣기(생략하면 실제 계산): noEra 시대 사건 효과(충전 인프라 포함) 없음, rivalA 경쟁 차마다 이 A(난이도 배수 전, 히트작 없음),
+ *  noOthers 같은 차급의 우리 다른 차 없음, compatSeg 이 고객층의 궁합을 1로 */
+export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string }
+const NO_ERA: EraNow = { statW: {}, body: {}, pt: {}, seg: {}, market: {}, trendAdd: {}, loan: 1, production: 1 };
+export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number, alt: DemandAlt = {}): number {
+  const m = Math.floor((year - config.time.startYear) * config.time.monthsPerYear + 1e-6), n = alt.noEra ? NO_ERA : eraNow(state.seed, m);
   const size = cellMonthly(car.body, year) * (n.body[car.body] ?? 1) * marketMult(n), mix = MARKET[REGION].mix[car.body] ?? {};
   const e = config.market.shareExp, fm = salesFleetMult(state), rm = diffOf(state).rivalMult; // rm: 난이도의 경쟁 차 A 배수
   const tr = (c: SaleCar) => trendOf(c.body, year, n) * (c.powertrain ? trendOf(c.powertrain, year, n) : 1);
@@ -68,13 +72,13 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
     const w = (mix[seg.id] ?? 0) * (n.seg[seg.id] ?? 1);
     if (w <= 0) continue;
     const ww = eraWeights(seg.w, n);
-    const mine = scoreA(car, seg.id, year, fm, ww, trMine, basePriceOf(state, car.body)) ** e;
+    const mine = scoreA(car, seg.id, year, fm, ww, trMine, basePriceOf(state, car.body), alt.compatSeg === seg.id ? 1 : undefined) ** e;
     let rest = 0;
-    for (const r of state.rivals) rest += (((r.cells[car.body] ?? 0) + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e;
-    for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year, fm, ww, tr(o), basePriceOf(state, o.body)) ** e;
+    for (const r of state.rivals) rest += ((alt.rivalA ?? (r.cells[car.body] ?? 0) + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e;
+    if (!alt.noOthers) for (const o of others) if (o.body === car.body) rest += scoreA(o, seg.id, year, fm, ww, tr(o), basePriceOf(state, o.body)) ** e;
     if (mine > 0) total += size * w * (mine / (mine + rest));
   }
-  if (car.powertrain) total *= (n.pt[car.powertrain] ?? 1) * (car.powertrain === config.events.charging.powertrain ? chargingInfra(state.seed, m) : 1);
+  if (car.powertrain) total *= (n.pt[car.powertrain] ?? 1) * (car.powertrain === config.events.charging.powertrain && !alt.noEra ? chargingInfra(state.seed, m) : 1);
   return total;
 }
 

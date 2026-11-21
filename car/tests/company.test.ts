@@ -87,7 +87,7 @@ describe('채용(9.1)', () => {
     ok(g.command({ type: 'postJob', role: 'tester', tier: 2 }));
     const c = g.state.candidates[1];
     ok(g.command({ type: 'hire', candidateId: c.id }));
-    expect(g.state.staff.at(-1)).toEqual({ id: c.id, name: c.name, role: 'tester', ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
+    expect(g.state.staff.at(-1)).toEqual({ id: c.id, name: c.name, role: 'tester', ability: c.ability, potential: c.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false, hist: { join: g.state.week, joinAbility: c.ability, since: g.state.week, years: {}, cars: [], execs: [] } }); // 0.10.0 성장 기록
     expect(g.state.candidates.length).toBe(2);
     expect(reason(g.command({ type: 'hire', candidateId: c.id }))).toBe('없는 후보입니다.');
     while (g.state.staff.length < 8) g.state.staff.push({ ...g.state.staff[0], id: 900 + g.state.staff.length });
