@@ -1037,21 +1037,19 @@ export function startApp(): void {
     ];
     const nt = full(d) ? newTech(d) : null;
     const ntBox = nt && (nt.items.length || nt.info.length) ? `<div class="okbox new-tech" style="margin-bottom:10px"><b>전작 이후 새로 가능</b><ul>${[...nt.items, ...nt.info].map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${nt.items.length ? '<button class="btn ink" data-act="applyNew" style="width:100%;margin-top:6px">새 기술 반영</button>' : ''}</div>` : '';
-    const k4 = `<div class="kpis sum-kpis" style="margin-top:10px">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${fcp ? kpi('전작 대비', COMPARE[compare], compare === 'worse' ? 'neg' : compare === 'better' ? 'pos' : '') : kpi(`고객층 매력${ib('term:고객층 매력')}`, score(tp.segmentScore))}${kpi('예상 개발비', money(est.cost))}${kpi('기간', `약 ${d.designWeeks + minT}<span>주</span>`)}</div>`;
+    const k4 = `<div class="kpis sum-kpis" style="margin-top:10px">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${fcp ? kpi('전작 대비', ({ better: '더 좋음', worse: '못함', same: '비슷함' } as const)[compare], compare === 'worse' ? 'neg' : compare === 'better' ? 'pos' : '') : kpi(`고객층 매력${ib('term:고객층 매력')}`, score(tp.segmentScore))}${kpi('예상 개발비', money(est.cost))}${kpi('기간', `약 ${d.designWeeks + minT}<span>주</span>`)}</div>`;
     return `${ntBox}<div class="sumrows">${rows.map((r) => `<button class="sumrow${r.bad ? ' bad' : ''}" data-act="ptab" data-v="${r.tab}" data-row="${r.k}"><small>${r.label}</small><b>${esc(r.value)}</b>${r.note ? `<em>${esc(r.note)}</em>` : ''}</button>`).join('')}</div>${k4}
       ${fcp?.hints.length ? `<div class="warnbox fc-hints" style="margin-top:8px"><b>전작보다 낫게 하려면</b><ul>${fcp.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : ''}
       <div class="row sum-go" style="margin-top:10px"><button class="btn" data-act="planMode" data-v="step">단계별로</button><button class="btn" data-act="presets">프리셋</button><button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button></div>`;
   }
   const full = (d: Draft) => d.nameplateId > 0;
-  /** 풀체인지: 전작 이후 새로 가능해진 것. items는 [새 기술 반영]이 적용하는 것(동력 단계·새 옵션), info는 알림만(의무 장비·이미 오른 동력 단계) */
-  function newTech(d: Draft): { items: string[]; info: string[]; tier: number | null; opts: string[] } {
-    const s = game!.state, n = s.nameplates.find((x) => x.id === d.nameplateId), prev = n?.generations.at(-1), out = { items: [] as string[], info: [] as string[], tier: null as number | null, opts: [] as string[] };
+  /** 풀체인지: 전작 이후 새로 가능해진 것. items는 [새 기술 반영]이 적용하는 것(새 옵션), info는 알림만(의무 장비·연구로 오른 동력 단계) */
+  function newTech(d: Draft): { items: string[]; info: string[]; opts: string[] } {
+    const s = game!.state, n = s.nameplates.find((x) => x.id === d.nameplateId), prev = n?.generations.at(-1), out = { items: [] as string[], info: [] as string[], opts: [] as string[] };
     if (!prev) return out;
     const e = currentEdition(prev), pt = powertrainById(d.powertrain), lv = (t: number) => Q.levelForTier(s, d.powertrain, t);
-    if (d.powertrain === prev.powertrain) {
-      if (lv(d.tier) > e.level) out.info.push(`동력 단계가 전작 ${e.level}단계에서 ${lv(d.tier)}단계로 오릅니다(연구).`);
-      else { const t = pt.tiers.findIndex((_, i) => lv(i + 1) > e.level); if (t >= 0) { out.tier = t + 1; out.items.push(`${pt.name} ${lv(t + 1)}단계(${pt.tiers[t].name}) 사용 가능 · 전작 ${e.level}단계`); } }
-    }
+    // 동력 등급은 연구한 최신 단계 기준이라, 연구로 단계가 오르면 같은 등급이 곧 더 높은 단계다(따로 반영할 것 없음)
+    if (d.powertrain === prev.powertrain && lv(d.tier) > e.level) out.info.push(`${pt.name} 동력이 전작 ${e.level}단계에서 ${lv(d.tier)}단계로 오릅니다(연구).`);
     const req = new Set(Q.requiredOptions(s)), known = prev.plan?.opts;
     if (known) {
       const fresh = Q.optionsAt(s).filter((o) => !known.includes(o.id) && !req.has(o.id) && !d.options.includes(o.id));
@@ -1060,7 +1058,7 @@ export function startApp(): void {
     }
     const newReq = [...req].filter((o) => !e.options.includes(o));
     if (newReq.length) out.info.push(`새 의무 장비: ${newReq.map((o) => optionById(o).name).join(', ')}(자동으로 들어갑니다)`);
-    if (!out.opts.length && out.tier === null) { out.info.unshift(...out.items); out.items = []; } // 적용할 것이 없으면(옵션 칸이 참 등) 알림만
+    if (!out.opts.length) { out.info.unshift(...out.items); out.items = []; } // 적용할 것이 없으면(옵션 칸이 참 등) 알림만
     return out;
   }
   /** 옵션 고르기 타일(기획·페이스리프트 공용). act: 누르면 부를 조작 이름 */
@@ -1820,7 +1818,6 @@ export function startApp(): void {
       case 'planMode': if (!draft) return; draft.mode = v === 'step' ? 'step' : 'sum'; draftNote = ''; planTab = draft.mode === 'sum' ? 'sum' : planTabs(draft)[0][0]; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'applyNew': {
         if (!draft) return; const nt = newTech(draft); if (!nt.items.length) return;
-        if (nt.tier !== null) draft.tier = nt.tier;
         draft.options = [...draft.options, ...nt.opts];
         toast(`새 기술을 반영했습니다: ${nt.items.join(' / ')}`); render(); return;
       }

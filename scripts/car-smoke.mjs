@@ -997,7 +997,7 @@ await shot('logo-sheet');
 await act('closeSheet');
 // ---- 설정: 자동 멈춤 항목별 켬/끔(기기 저장소) ----
 await openMenu();
-check('메뉴: 자동 멈춤 3항목(후보·출시 대기·결정 사건), 기본 켬', (await page.locator('#sheet [data-act="autoPause"]').count()) === 3 && (await page.locator('#sheet [data-act="autoPause"][aria-pressed="true"]').count()) === 3);
+check('메뉴: 자동 멈춤 4항목(후보·출시 대기·결정 사건·연 보고서), 기본 켬', (await page.locator('#sheet [data-act="autoPause"]').count()) === 4 && (await page.locator('#sheet [data-act="autoPause"][aria-pressed="true"]').count()) === 4);
 await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act="autoPause"][data-v="cands"][aria-pressed="false"]').waitFor({ timeout: 3000 }).catch(() => {});
 check('자동 멈춤 끄기: 버튼 꺼짐·기기 저장소에 저장', (await page.locator('#sheet [data-act="autoPause"][data-v="cands"]').getAttribute('aria-pressed')) === 'false' && (await G(() => JSON.parse(localStorage.getItem('car-company-autopause')).cands)) === false);
 await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act="autoPause"][data-v="cands"][aria-pressed="true"]').waitFor({ timeout: 3000 }).catch(() => {});
