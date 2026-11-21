@@ -91,7 +91,7 @@ export const steadyExec = (opts: Partial<SteadyOptions> = {}): Bot => {
   const base = steady(opts);
   return { name: 'steadyExec', step(g) { base.step(g); if (g.state.week % config.time.weeksPerMonth === 0) manageExecs(g); } };
 };
-const EXEC_ORDER: ExecRole[] = ['hr', 'production', 'research']; // 봇은 제안을 읽지 않으므로 맡기기가 있는 자리만 채운다(임원도 정원을 차지한다)
+const EXEC_ORDER: ExecRole[] = ['hr', 'production', 'research']; // 봇은 제안을 읽지 않으므로 맡기기가 있는 자리만 채운다
 function manageExecs(g: Game): void {
   const s = g.state, X = config.exec;
   for (const role of EXEC_ORDER) {

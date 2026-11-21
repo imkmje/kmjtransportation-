@@ -8,8 +8,8 @@ import type { CarState, Role, Staff } from './types';
 const C = config.staff;
 export const hqDef = (s: CarState) => config.hq.levels[s.hqLevel - 1];
 export const factoryDef = (s: CarState) => config.factory.levels[s.factory.level - 1];
-/** 직원 정원 = 본사 등급의 정원 − 임원 수(0.7.0: 임원도 정원 안에서 자리를 차지한다) */
-export const staffCap = (s: CarState): number => hqDef(s).staff - Object.keys(s.execs?.seats ?? {}).length;
+/** 직원 정원 = 본사 등급의 정원. 임원은 정원 밖(0.8.0, 사용자 지시) */
+export const staffCap = (s: CarState): number => hqDef(s).staff;
 /** 동시 개발팀 수(6.4) */
 export const devTeams = (s: CarState): number => hqDef(s).teams;
 /** 옵션 슬롯(5.4) */

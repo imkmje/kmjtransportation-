@@ -56,9 +56,11 @@ const seated = (s: CarState): [ExecRole, Staff, boolean][] => EXEC_ROLES.flatMap
 export const execSkill = (role: ExecRole, x: Pick<Staff, 'ability' | 'role'>): number => Math.round(Math.min(100, x.ability * (X.related[role]?.[x.role] ?? X.match)));
 /** 제안의 구체성 1~3 */
 export const execTier = (skill: number): 1 | 2 | 3 => (skill < X.tiers[0] ? 1 : skill < X.tiers[1] ? 2 : 3);
-/** 임원 월급: 임명한 직원은 원래 월급 + 수당, 외부 임원은 직원 월급 공식 × 1.6 */
-export const execPayOf = (x: Staff, hired: boolean): number => (hired ? Math.round(salaryOf(x.ability) * X.hiredPayMult) : salaryOf(x.ability) + X.allowance);
-export const execPay = (s: CarState): number => seated(s).reduce((a, [, x, h]) => a + execPayOf(x, h), 0);
+/** 임원 수에 따라 임원마다 더 붙는 수당(0.8.0: 임원이 정원 밖이 되어 균형을 수당으로 맞춘다) */
+export const seatAllowance = (n: number): number => X.seatAllowance[Math.min(n, X.seatAllowance.length) - 1] ?? 0;
+/** 임원 월급: 임명한 직원은 원래 월급 + 수당, 외부 임원은 직원 월급 공식 × 1.6. 둘 다 임원 수에 따른 수당이 더 붙는다 */
+export const execPayOf = (s: CarState, x: Staff, hired: boolean): number => (hired ? Math.round(salaryOf(x.ability) * X.hiredPayMult) : salaryOf(x.ability) + X.allowance) + seatAllowance(seated(s).length);
+export const execPay = (s: CarState): number => seated(s).reduce((a, [, x, h]) => a + execPayOf(s, x, h), 0);
 /** 운영비(월): 직원 월급 + 임원 월급 + 본사·공장 유지비. 맡기기·교체 고용의 현금 기준 */
 export const monthlyFixed = (s: CarState): number => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s) + upkeepOf(s);
 
@@ -75,7 +77,7 @@ export function execInfo(s: CarState) {
       const seat = s.execs?.seats[role], skill = seat ? execSkill(role, seat.staff) : 0;
       return {
         role, title: EXEC_TITLE[role],
-        holder: seat ? { staffId: seat.staff.id, name: seat.staff.name, skill, tier: execTier(skill), hired: seat.hired, pay: execPayOf(seat.staff, seat.hired), staffRole: seat.staff.role } : null,
+        holder: seat ? { staffId: seat.staff.id, name: seat.staff.name, skill, tier: execTier(skill), hired: seat.hired, pay: execPayOf(s, seat.staff, seat.hired), staffRole: seat.staff.role } : null,
         canFill: !seat && used < seats, // 빈 자리(임명·채용 가능). 자리가 다 찼으면 false(잠김)
         delegations: DELEGATIONS[role].map((d) => {
           const whyNot = !seat ? '임원이 없습니다.' : skill < X.delegateSkill ? `임원 능력이 ${X.delegateSkill} 이상이어야 맡길 수 있습니다(지금 ${skill}).` : null;
@@ -83,7 +85,7 @@ export function execInfo(s: CarState) {
         }),
         internal: [...s.staff].map((x) => ({ staffId: x.id, name: x.name, role: x.role, skill: execSkill(role, x), busyWith: x.projectId !== null ? `「${s.projects.find((p) => p.id === x.projectId)?.name ?? ''}」 개발 중` : x.lab ? '전담 연구원' : null }))
           .sort((a, b) => b.skill - a.skill || a.staffId - b.staffId),
-        candidates: (s.execs?.candidates ?? []).filter((c) => c.role === role).map((c) => ({ id: c.id, name: c.name, skill: c.skill, tier: execTier(c.skill), pay: c.pay, weeksLeft: c.expiresWeek - s.week })),
+        candidates: (s.execs?.candidates ?? []).filter((c) => c.role === role).map((c) => ({ id: c.id, name: c.name, skill: c.skill, tier: execTier(c.skill), pay: c.pay + seatAllowance(seated(s).length + 1), weeksLeft: c.expiresWeek - s.week })),
       };
     }),
   };
@@ -152,12 +154,14 @@ const roleAvg = (s: CarState, x: Staff): number | null => { const o = s.staff.fi
 export const weakCapped = (s: CarState, x: Staff): boolean => { const a = roleAvg(s, x); return x.ability >= x.potential && a !== null && x.ability <= a - X.hr.weakGap; };
 const replaceTier = (s: CarState, min: number): 2 | 3 => (min > config.staff.hire.abilityMax[1] - 10 && s.reputation >= config.staff.hire.tier3Rep ? 3 : 2);
 const repBonus = (s: CarState): number => Math.floor(Math.min(config.staff.hire.repBonusMax, s.reputation / config.staff.hire.repBonusDiv));
-/** 교체 기준 능력(대상 능력 + 15와 같은 직무 평균 중 큰 값, 공고로 닿을 수 있을 때만) */
+/** 교체 기준 능력(대상 능력 + replace.minGain과 같은 직무 평균 중 큰 값, 공고로 닿을 수 있을 때만) */
 export function replaceMin(s: CarState, x: Staff): number | null {
   const a = roleAvg(s, x); if (a === null) return null;
   const min = Math.max(x.ability + X.replace.minGain, Math.ceil(a)), H = config.staff.hire;
   return min <= H.abilityMax[replaceTier(s, min) - 1] + repBonus(s) - 5 ? min : null;
 }
+/** 같은 직무에서 교체를 마친 지 replace.gapMonths가 안 지났다(0.8.0: 교체 빈도 제한. 마친 교체의 nextWeek = 마친 주) */
+const recentReplace = (s: CarState, role: Role): boolean => !!s.execs?.replacements.some((r) => r.status === 'done' && r.staffRole === role && s.week < r.nextWeek + X.replace.gapMonths * config.time.weeksPerMonth);
 const openReplacement = (s: CarState): Replacement | undefined => s.execs?.replacements.find((r) => r.status === 'proposed' || r.status === 'approved' || r.status === 'waiting');
 
 // ---------- 제안 만들기 ----------
@@ -172,8 +176,8 @@ function hrIdeas(s: CarState): Idea[] {
   for (const x of weak) {
     const avg = Math.round(roleAvg(s, x)!), sk = SKILL_KO[x.role], min = replaceMin(s, x);
     const facts = [`${x.name}: ${ROLE_KO[x.role]}, ${sk} ${x.ability}(성장 한계 ${x.potential})`, `같은 직무 평균 ${avg}`, `월급 ${won(salaryOf(x.ability))}, 내보내면 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}`];
-    if (canReplace && min !== null && !((s.execs?.rejected[x.id] ?? -1) > s.week)) {
-      out.push({ kind: 'replace', key: String(x.id), goto: staffGoto(x.id), facts: [...facts, `기준: ${sk} ${min} 이상, 공고비 ${won(config.staff.hire.postCost[replaceTier(s, min) - 1])}`],
+    if (canReplace && min !== null && !((s.execs?.rejected[x.id] ?? -1) > s.week) && !recentReplace(s, x.role)) {
+      out.push({ kind: 'replace', key: String(x.id), goto: staffGoto(x.id), facts: [...facts, `기준: ${sk} ${min} 이상(${min + X.replace.capGain}을 넘는 후보는 오지 않음), 공고비 ${won(config.staff.hire.postCost[replaceTier(s, min) - 1])}`],
         text: ['더 성장하기 어려운 직원 한 명을 더 나은 사람으로 바꾸는 것을 제안합니다. 승인하시면 알맞은 때에 공고를 내 교체하겠습니다.',
           `${x.name}${J(x.name, '은/는')} 더 성장하기 어렵습니다. 내보내고 ${sk}${J(sk, '이/가')} 더 높은 사람을 고용할까요?`,
           `${x.name}(${sk} ${x.ability}, 더 성장하기 어려움)${J(x.name + ')', '을/를')} 내보내고 ${sk} ${min} 이상인 사람을 고용할까요? 승인하시면 공고를 내고, 기준 이상인 후보가 있을 때만 교체합니다. 개발 중이면 그 개발이 끝난 뒤에 진행합니다.`],
@@ -241,7 +245,7 @@ function financeIdeas(s: CarState): Idea[] {
   if (s.loan.balance > 0 && s.cash - s.loan.balance >= fixed * F.repayMonths)
     out.push({ kind: 'repay', key: 'loan', goto: fin, facts: [`대출 ${won(s.loan.balance)}, 월 이자 ${won(s.loan.balance * loanRate(s))}`, `갚고 남는 현금 ${won(s.cash - s.loan.balance)}(운영비 ${Math.floor((s.cash - s.loan.balance) / fixed)}개월 치)`],
       text: ['현금에 여유가 있습니다. 대출 상환을 검토해 보시죠.', '대출을 갚을 여유가 있습니다. 이자를 줄이시죠.', `대출 ${won(s.loan.balance)}${J(won(s.loan.balance), '을/를')} 모두 갚아도 운영비 ${F.repayMonths}개월 치 이상이 남습니다. 월 이자 ${won(s.loan.balance * loanRate(s))}${J(won(s.loan.balance * loanRate(s)), '을/를')} 줄일 수 있습니다.`] });
-  for (const g of sellingGens(s).filter((x) => x.status === 'onSale')) {
+  for (const g of sellingGens(s).filter((x) => x.status === 'onSale' && !x.pricePolicy)) { // 자동 가격을 켠 차는 가격 제안을 하지 않는다(0.8.0)
     const n = gName(s, g), ed = currentEdition(g), base = basePriceOf(s, g.body), top = base * config.market.overpriceHardAt, go: ExecGoto = { tab: 'garage', id: g.id }, sold = g.sales.at(-1) ?? 0, unit = generationUnitProfit(g, s);
     if (g.lostSales >= 1 && ed.price < top - 1) {
       const p = Math.round(Math.min(top, ed.price * 1.05)), f = priceForecast(s, g.id, p) ?? 0;
@@ -358,13 +362,12 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       const err = roleErr(cmd.role); if (err) return fail(err);
       const seat = s.execs?.seats[cmd.role]; if (!seat) return fail('비어 있는 자리입니다.');
       delete s.execs!.seats[cmd.role]; s.execs!.delegations[cmd.role] = [];
-      if (seat.hired) c.spend(severanceOf(execPayOf(seat.staff, true))); // 외부 임원은 회사를 떠난다(퇴직금)
+      if (seat.hired) c.spend(severanceOf(execPayOf(s, seat.staff, true))); // 외부 임원은 회사를 떠난다(퇴직금)
       else { seat.staff.projectId = null; seat.staff.lab = false; s.staff.push(seat.staff); s.staff.sort((a, b) => a.id - b.id); } // 원래 직무로 복귀
       return OK;
     }
     case 'postExecJob': {
       const err = roleErr(cmd.role) ?? seatErr(cmd.role); if (err) return fail(err);
-      if (s.staff.length >= staffCap(s)) return fail(`정원이 찼습니다. 임원도 정원 안에서 자리를 차지합니다. 직원을 임원으로 임명하거나 본사를 키우세요.`);
       if (s.execs?.candidates.some((x) => x.role === cmd.role)) return fail('이미 공고한 후보가 있습니다. 먼저 뽑거나 기다리세요.');
       if (s.cash < X.postCost) return fail('현금이 모자랍니다.');
       s.execs ??= emptyExecs();
@@ -379,7 +382,6 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
     case 'hireExec': {
       const err = roleErr(cmd.role) ?? seatErr(cmd.role); if (err) return fail(err);
       const cd = s.execs?.candidates.find((x) => x.id === cmd.candidateId && x.role === cmd.role); if (!cd) return fail('없는 후보입니다.');
-      if (s.staff.length >= staffCap(s)) return fail(`정원이 찼습니다. 임원도 정원 안에서 자리를 차지합니다.`);
       const e = s.execs!;
       e.candidates = e.candidates.filter((x) => x.role !== cmd.role);
       e.seats[cmd.role] = { staff: { id: cd.id, name: cd.name, role: EXEC_BASE_ROLE[cmd.role], ability: cd.skill, potential: cd.skill, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, hired: true, since: s.week };
@@ -451,21 +453,23 @@ function runReplacement(c: ExecCtx, rp: Replacement, ev: GameEvent[]): void {
   c.spend(cost); // 인사 임원이 공고를 낸다(후보는 채용 화면에 오지 않고 바로 고른다)
   const bonus = repBonus(s);
   const cands = Array.from({ length: H.candidates }, () => { const ability = Math.min(100, c.rng.intIn(H.abilityMin[tier - 1], H.abilityMax[tier - 1]) + bonus); return { ability, potential: Math.min(100, ability + c.rng.intIn(H.potentialMin, H.potentialMax)) }; });
-  const best = cands.sort((a, b) => b.ability - a.ability)[0];
+  const top = rp.minAbility + X.replace.capGain, best = cands.filter((a) => a.ability >= rp.minAbility && a.ability <= top).sort((a, b) => b.ability - a.ability)[0]; // 0.8.0: 기준 + capGain을 넘는 후보는 이 자리 조건으로 오지 않는다(교체로 얻는 능력 폭 제한)
+  const why = `${sk} ${rp.minAbility}~${top}에 맞는 후보가 없어`, seen = `후보 ${cands.map((a) => a.ability).sort((a, b) => b - a).join('·')}`;
   rp.tries++;
-  if (best.ability >= rp.minAbility) {
+  if (best) {
     const id = s.nextId++, name = c.newName();
     c.spend(severanceOf(salaryOf(x.ability)));
     s.staff = s.staff.filter((y) => y !== x);
     s.staff.push({ id, name, role: x.role, ability: best.ability, potential: best.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
+    rp.nextWeek = s.week;
     return end('done', 'replaceDone', `${x.name} → ${name}(${sk} ${best.ability}). 공고비 ${won(cost)}, 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}.`);
   }
   if (rp.tries < X.replace.maxTries) {
-    addReport(s, 'hr', 'replaceFail', `${sk} ${rp.minAbility} 이상인 후보가 없어 ${x.name}${J(x.name, '을/를')} 교체하지 않았습니다(가장 나은 후보 ${best.ability}). 공고비 ${won(cost)}${J(won(cost), '이/가')} 들었습니다. ${X.replace.retryWeeks}주 뒤 한 번 더 공고합니다.`, [], staffGoto(x.id), true, rp.id);
+    addReport(s, 'hr', 'replaceFail', `${why} ${x.name}${J(x.name, '을/를')} 교체하지 않았습니다(${seen}). 공고비 ${won(cost)}${J(won(cost), '이/가')} 들었습니다. ${X.replace.retryWeeks}주 뒤 한 번 더 공고합니다.`, [], staffGoto(x.id), true, rp.id);
     rp.status = 'approved'; rp.nextWeek = s.week + X.replace.retryWeeks; rp.waitingFor = `${X.replace.retryWeeks}주 뒤 다시 공고`;
     return;
   }
-  end('failed', 'replaceFail', `두 번 공고했지만 ${sk} ${rp.minAbility} 이상인 후보가 없어 ${x.name} 교체를 그만둡니다(가장 나은 후보 ${best.ability}, 공고비 ${won(cost)}).`);
+  end('failed', 'replaceFail', `두 번 공고했지만 ${why} ${x.name} 교체를 그만둡니다(${seen}, 공고비 ${won(cost)}).`);
 }
 
 /** 월 결산 뒤: 맡기기 실행 → 임원별 제안(최대 2건, 재발행 간격) */

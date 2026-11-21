@@ -1,7 +1,7 @@
 // 카 컴퍼니 게임 본체: 상태, 1주 진행(tick), 명령(command), 저장(toJSON/fromJSON)
 import { config } from '../config';
 import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
-import { defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
+import { defectQMult, finalStats, grade, optionsAt, partStats, salaryOf, unitCost, zeroStats } from './cars';
 import { specError, stepProject, withRequired } from './dev';
 import { allocate, hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
@@ -13,9 +13,10 @@ import { criticScores, mean } from './reviews';
 import { josa } from './josa';
 import { Rng, hash32 } from './rng';
 import { DIFFICULTIES, diffOf } from './difficulty';
-import { execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
+import { bestPrice } from './queries';
+import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
-import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PendingChoice, type Project, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
+import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
@@ -32,8 +33,39 @@ const priceError = (body: string, price: number): string | null => {
 };
 const seedError = (x: unknown): string | null =>
   x === undefined || (Number.isInteger(x) && (x as number) >= 0 && (x as number) <= 0xffffffff) ? null : '모양 시드가 올바르지 않습니다.';
+/** 자동 가격 정책 검사(0.8.0): null(수동) / 기준가 pct%(정수, config 범위) / 최고 이익 */
+const policyError = (x: PricePolicy | null): string | null => {
+  const P = config.pricePolicy;
+  if (x === null || x?.kind === 'best') return null;
+  return x?.kind === 'base' && Number.isInteger(x.pct) && x.pct >= P.pctMin && x.pct <= P.pctMax ? null : `기준가 유지 비율은 ${P.pctMin}~${P.pctMax}% 사이 정수여야 합니다.`;
+};
+/** 정책이 정하는 이번 달 가격(허용 범위 안으로). 수동이면 null */
+const policyPrice = (s: CarState, g: Generation): number | null => {
+  const x = g.pricePolicy, b = bodyById(g.body).basePrice;
+  if (!x) return null;
+  const want = x.kind === 'best' ? bestPrice(s, g.id)!.price : Math.round((basePriceOf(s, g.body) * x.pct) / 100 / 10) * 10;
+  return Math.min(Math.floor((b * config.price.max) / 10) * 10, Math.max(Math.ceil((b * config.price.min) / 10) * 10, want));
+};
 const marketingError = (m: number): string | null =>
   !Number.isInteger(m) || m < 0 || m >= config.awareness.marketingCost.length ? `광고 등급은 0~${config.awareness.marketingCost.length - 1} 중에서 고르세요.` : null;
+
+/** 0.8.0 되돌리기: 같은 주 안의 직전 조작 하나(명령 종류 → 알림 이름). 여기 없는 명령이 성공하면 되돌리기는 사라진다
+ *  (출시·개발 시작·사건 선택·구제 금융·개발자 메뉴는 결과를 보고 다시 고르는 꼼수가 되므로 일부러 뺐다) */
+const UNDO_KIND: Record<string, string> = {
+  fire: '해고', discontinue: '단종', expandFactory: '공장 증설', upgradeHQ: '본사 승급', borrow: '대출', repay: '대출 상환',
+  appointExec: '임원 임명', hireExec: '임원 채용', dismissExec: '임원 해임', hire: '채용', train: '교육', rest: '휴식',
+  setPrice: '가격 변경', setPricePolicy: '가격 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
+};
+/** 명령 직전 상태(JSON)와 알림 이름. 상태 밖(WeakMap)에 두어 저장 파일에 들어가지 않는다(불러오면 되돌리기 없음) */
+interface UndoRec { snap: string; week: number; kind: string; names: string[] }
+const undos = new WeakMap<CarState, UndoRec>();
+/** 되돌릴 수 있는 직전 조작(화면용): label 예 "해고: 김민수", 여럿을 한 번에 했으면 "교육: 김민수 외 2명" */
+export function undoInfo(s: CarState): { available: boolean; label: string } {
+  const u = undos.get(s);
+  if (!u || u.week !== s.week) return { available: false, label: '' };
+  return { available: true, label: u.names.length ? `${u.kind}: ${u.names[0]}${u.names.length > 1 ? ` 외 ${u.names.length - 1}명` : ''}` : u.kind };
+}
+const wonText = (v: number) => (v >= 10000 ? `${(v / 10000).toLocaleString()}억원` : `${v.toLocaleString()}만원`);
 
 /** 판매 중(생산 라인을 차지하는) 세대: 단종 신청한 달까지 포함 */
 export const sellingGens = (s: CarState): Generation[] =>
@@ -78,6 +110,7 @@ export class Game {
   // ---------- 1주 진행 ----------
   tick(): GameEvent[] {
     const s = this.state, ev: GameEvent[] = [];
+    undos.delete(s); // 시간이 흐르면 되돌리기는 사라진다
     if (s.status !== 'playing') return ev;
     for (const p of [...s.projects].sort((a, b) => a.id - b.id)) {
       if (p.waiting) continue; // 출시 대기: 개발비·진행 없음
@@ -90,7 +123,7 @@ export class Game {
       if (log.designDone) ev.push({ kind: 'designDone', id: p.id, text: `「${p.name}」 설계가 끝났습니다. 시험을 시작합니다.` });
       if (log.waitingNow) ev.push({ kind: 'advice', id: p.id, text: `「${p.name}」의 결함을 모두 잡았습니다. 이제 출시할 수 있습니다. 출시 대기 중에는 개발비가 들지 않습니다.` });
     }
-    researchWeek(s, ev); // 10장: 쉬는 엔지니어·전담 연구원의 연구 점수(직원 컨디션 갱신 전, 이번 주 배치 기준)
+    this.researchWeek(ev); // 10장: 쉬는 엔지니어·전담 연구원의 연구 점수(직원 컨디션 갱신 전, 이번 주 배치 기준)
     this.staffWeek(ev);
     if (isMonthEnd(s.week)) this.monthEnd(ev);
     if (s.status === 'playing') execWeek(this.execCtx(), ev); // 0.7.0 예약된 교체 고용(개발이 끝난 주에)
@@ -125,14 +158,27 @@ export class Game {
     const s = this.state, before = s.reputation, dd = d < 0 && scaleLoss ? d * diffOf(s).repLossMult : d;
     s.reputation = Math.min(config.reputation.max, Math.max(config.reputation.min, before + dd));
     const delta = s.reputation - before;
+    if (delta) { const r = this.yearLog().rep; r[reason] = (r[reason] ?? 0) + delta; } // 연 보고서: 이유별 합
     if (Math.abs(delta) >= 0.05) this.repEvents.push({ kind: 'reputation', delta, reason, text: `평판 ${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)}(${reason})` });
   }
   private repEvents: GameEvent[] = [];
+  /** 0.8.0 그해(생략하면 지금 해)의 연 보고서 기록. 없으면 만든다 */
+  private yearLog(y = yearOf(this.state.week)): YearLog {
+    const ys = (this.state.years ??= {});
+    return (ys[y] ??= { rep: {}, cars: {}, research: [], revenue: 0, profit: 0, sold: 0, months: 0 });
+  }
+  /** 연구 진행 + 이번에 끝난 기술을 연 보고서 기록에 */
+  private researchWeek(ev: GameEvent[]): void {
+    const d = this.state.research.done, n0 = d.length;
+    researchWeek(this.state, ev);
+    if (d.length > n0) this.yearLog().research.push(...d.slice(n0));
+  }
 
   /** 월말 정산: 판매·인지도·리콜·재무·장부·파산 */
   private monthEnd(ev: GameEvent[]): void {
     const s = this.state, m = monthOf(s.week), year = yearOf(s.week), wpm = config.time.weeksPerMonth, LC = config.lifecycle;
     updateRivals(s.rivals, s.seed, m); // 경쟁 차가 낡거나 새 모델로 바뀐다
+    for (const g of sellingGens(s)) if (g.status === 'onSale' && g.pricePolicy) { const pr = policyPrice(s, g); if (pr !== null && !priceError(g.body, pr)) currentEdition(g).price = pr; } // 0.8.0 자동 가격(경쟁 차 갱신 뒤, 판매 계산 전)
     const gens = sellingGens(s), cars = gens.map((g) => toSaleCar(g, m));
     const demand = gens.map((g, i) => {
       let d = monthlyDemand(s, cars[i], cars.filter((_, j) => j !== i), monthTime(m));
@@ -146,8 +192,9 @@ export class Game {
     // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로
     const made = allocate(capacityOf(s), demand, gens.map((g) => g.allocShare));
     let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
+    const ylog = this.yearLog(year);
     gens.forEach((g, i) => {
-      const n = made[i];
+      const n = made[i], p0 = g.profit;
       const ed = currentEdition(g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s), ptCostAdd(s, g.powertrain));
       const mk = config.awareness.marketingCost[g.marketing];
       g.lastDemand = demand[i]; g.lostSales = Math.max(0, demand[i] - n);
@@ -170,6 +217,7 @@ export class Game {
       const dc = config.discontinue, last = g.sales.slice(-dc.adviceMonths); // 8.6: 월 10대 미만이 6개월째가 된 달에 한 번 조언
       if (g.status === 'onSale' && last.length === dc.adviceMonths && last.every((x) => x < dc.adviceSales) && !(g.sales.length > dc.adviceMonths && g.sales[g.sales.length - dc.adviceMonths - 1] < dc.adviceSales))
         ev.push({ kind: 'advice', id: g.id, text: `「${this.nameOf(g)}」 판매가 ${dc.adviceMonths}개월째 월 ${dc.adviceSales}대 미만입니다. 단종을 권합니다.` });
+      ylog.cars[g.id] = (ylog.cars[g.id] ?? 0) + g.profit - p0;
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
     const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s); // 0.7.0 임원 월급 포함
@@ -178,6 +226,8 @@ export class Game {
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
     const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
     s.ledger.push(e);
+    ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
+    if (e.monthOfYear === config.time.monthsPerYear) { ylog.staff = s.staff.length; ylog.execs = Object.entries(s.execs?.seats ?? {}).map(([r, x]) => `${EXEC_TITLE[r as keyof typeof EXEC_TITLE]} ${x!.staff.name}`); }
     if (s.ledger.length > config.ledgerMonths) s.ledger.splice(0, s.ledger.length - config.ledgerMonths);
     ev.push({ kind: 'monthEnd', text: `${monthLabel(m)} 결산: 판매 ${sold}대, 이익 ${Math.round(profit).toLocaleString()}만원` });
     const R = config.reputation, total = allGens(s).reduce((a, x) => a + x.totalSold, 0); // 0.5.1 누적 판매 마일스톤
@@ -210,13 +260,47 @@ export class Game {
   private nameOf(g: Generation): string { return this.state.nameplates.find((n) => n.generations.includes(g))?.name ?? ''; }
 
   // ---------- 명령 ----------
-  command(cmd: Command): CommandResult {
+  /** chain: 일괄 조작(여러 명 교육 등)의 두 번째부터. 같은 주·같은 종류면 첫 명령 직전 상태를 그대로 두어 한 번에 되돌린다 */
+  command(cmd: Command, chain = false): CommandResult {
+    const s = this.state, kind = UNDO_KIND[cmd?.type], prev = undos.get(s);
+    const keep = !!kind && chain && prev?.week === s.week && prev.kind === kind;
+    const snap = kind && !keep ? JSON.stringify(s) : '', name = kind ? this.undoTarget(cmd) : '';
     let r = this.exec(cmd);
-    if (r.ok) this.state.history.push({ week: this.state.week, cmd: JSON.parse(JSON.stringify(cmd)) });
+    if (r.ok) {
+      s.history.push({ week: s.week, cmd: JSON.parse(JSON.stringify(cmd)) });
+      if (!kind) undos.delete(s);
+      else if (keep) { if (name) prev!.names.push(name); }
+      else undos.set(s, { snap, week: s.week, kind, names: name ? [name] : [] });
+    }
     if (r.ok && this.repEvents.length) r = { ok: true, events: [...(r.events ?? []), ...this.repEvents] };
     this.repEvents = [];
     this.state.rng = this.rng.getState();
     return r;
+  }
+
+  /** 0.8.0 직전 조작 되돌리기: 명령 직전 상태(난수 상태·명령 기록 포함)로 그대로 돌아간다 */
+  undoLast(): CommandResult {
+    const s = this.state, u = undos.get(s);
+    if (!u || u.week !== s.week) return fail('되돌릴 조작이 없습니다. 같은 주 안의 직전 조작만 되돌릴 수 있습니다.');
+    const old = JSON.parse(u.snap) as CarState;
+    for (const k of Object.keys(s)) delete (s as unknown as Record<string, unknown>)[k];
+    Object.assign(s, old); // 같은 상태 객체를 고쳐 쓴다(화면이 들고 있는 game.state가 그대로 맞게)
+    this.rng.setState(s.rng); this.repEvents = []; undos.delete(s);
+    return OK;
+  }
+  /** 되돌리기 알림에 쓸 대상 이름(명령 실행 전에 읽는다) */
+  private undoTarget(cmd: Command): string {
+    const s = this.state, c = cmd as Record<string, unknown>, id = c.staffId ?? c.candidateId, gid = c.generationId;
+    const gen = gid === undefined ? '' : `「${s.nameplates.find((n) => n.generations.some((g) => g.id === gid))?.name ?? ''}」`;
+    switch (cmd.type) {
+      case 'fire': case 'train': case 'rest': case 'appointExec': return s.staff.find((x) => x.id === id)?.name ?? '';
+      case 'hire': return s.candidates.find((x) => x.id === id)?.name ?? '';
+      case 'hireExec': return s.execs?.candidates.find((x) => x.id === id)?.name ?? '';
+      case 'dismissExec': return s.execs?.seats[cmd.role]?.staff.name ?? '';
+      case 'borrow': case 'repay': return Number.isFinite(cmd.amount) ? wonText(cmd.amount) : '';
+      case 'startResearch': case 'cancelResearch': return TECHS.some((t) => t.id === cmd.techId) ? `「${techById(cmd.techId).name}」` : '';
+      default: return gen;
+    }
   }
 
   private exec(cmd: Command): CommandResult {
@@ -279,7 +363,15 @@ export class Game {
         if (!g || g.status !== 'onSale') return fail('판매 중인 차가 아닙니다.');
         const bad = cmd.type === 'setPrice' ? priceError(g.body, cmd.price) : marketingError(cmd.marketing);
         if (bad) return fail(bad);
-        if (cmd.type === 'setPrice') currentEdition(g).price = cmd.price; else g.marketing = cmd.marketing;
+        if (cmd.type === 'setPrice') { currentEdition(g).price = cmd.price; delete g.pricePolicy; } else g.marketing = cmd.marketing; // 수동 가격은 자동 가격을 끈다
+        return OK;
+      }
+      case 'setPricePolicy': { // 0.8.0
+        const g = allGens(s).find((x) => x.id === cmd.generationId);
+        if (!g || g.status !== 'onSale') return fail('판매 중인 차가 아닙니다.');
+        const bad = policyError(cmd.policy ?? null);
+        if (bad) return fail(bad);
+        if (cmd.policy) g.pricePolicy = { ...cmd.policy }; else delete g.pricePolicy;
         return OK;
       }
       case 'retrofit': { // 0.4.2 의무 장비 추가: 일시 비용, 지금 판에 장비를 넣고 능력치(차체 배수 × 장비 점수, 품질은 결함 감점)를 더한다
@@ -442,7 +534,7 @@ export class Game {
         switch (cmd.kind) {
           case 'cash': s.cash += config.devCheat.cash; break;
           case 'reputation': this.addRep(config.devCheat.reputation, '개발자 메뉴'); break;
-          case 'finishResearch': for (const a of s.research.active) a.points = a.need; researchWeek(s, ev); break;
+          case 'finishResearch': for (const a of s.research.active) a.points = a.need; this.researchWeek(ev); break;
           case 'finishDev': for (const p of [...s.projects].sort((a, b) => a.id - b.id)) if (!p.waiting) {
             const team = s.staff.filter((x) => x.projectId === p.id).sort((a, b) => a.id - b.id);
             p.phase = 'test'; p.weeksDone = Math.max(p.weeksDone, p.designWeeks); p.testWeeks = Math.max(p.testWeeks, config.dev.minTestWeeks);
@@ -593,6 +685,7 @@ export class Game {
         marketing: cmd.marketing, awareness: Math.min(1, awarenessStart(s.reputation, avg) + equity),
         status: 'onSale', endMonth: null, editions: [],
         reviews, reviewAvg: avg, masterpiece: avg >= c.masterpiece, sales: [], totalSold: 0, lastDemand: 0, lostSales: 0, allocShare: null, devCost: p.spent, profit: 0, recalls: 0,
+        plan: { direction: { ...p.direction }, budget: p.budget, designWeeks: p.designWeeks, opts: optionsAt(s).map((o) => o.id) }, // 0.8.0 풀체인지가 물려받을 기획 값
       };
       gen.editions.push(edition(stats, 'initial', headline));
       if (np) np.generations.push(gen); else s.nameplates.push({ id: s.nextId++, name: p.name, generations: [gen] });
