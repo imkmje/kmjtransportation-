@@ -4,7 +4,7 @@ import { Game, allGens, sellingGens } from '../src/sim/game';
 import { todoItems, type TodoItem } from '../src/sim/todo';
 import { config } from '../src/config';
 import { eraTimeline } from '../src/sim/events';
-import { faceliftPreview } from '../src/sim/queries';
+import { faceliftPreview, todoItems as qTodo } from '../src/sim/queries';
 import { devReady, grant, launched, ok } from './util';
 
 const CO_SUBS = ['fin', 'staff', 'hq', 'factory', 'research', 'exec'];
@@ -101,6 +101,11 @@ describe('할 일 목록(0.7.0)', () => {
     expect(a.find((x) => x.kind === 'reports')?.goto).toEqual({ tab: 'reports' });
     expect(a.find((x) => x.kind === 'reports')!.key).not.toBe(b.find((x) => x.kind === 'reports')!.key);
     expect(kinds(g)).not.toContain('reports');
+  });
+  it('조회(Q.todoItems): 새 게임에는 빈 임원 자리 항목(본사 1등급 1자리), 보고는 없음', () => {
+    const g = Game.create({ seed: 1, difficulty: 'normal' }), t = qTodo(g.state);
+    expect(t.find((x) => x.kind === 'exec')?.title).toBe('비어 있는 임원 자리 1개');
+    expect(t.some((x) => x.kind === 'reports')).toBe(false);
   });
   it('순수: 목록을 만들어도 상태가 바뀌지 않는다', () => {
     const { g } = launched(2);

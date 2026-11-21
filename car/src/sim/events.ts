@@ -4,6 +4,7 @@ import { config } from '../config';
 import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, segmentById } from '../data';
 import { grades, salaryOf } from './cars';
 import { diffOf } from './difficulty';
+import { staffCap } from './company';
 import { josa } from './josa';
 import { hash01 } from './rng';
 import { monthOf, monthLabel, yearOf, yearOfMonth } from './time';
@@ -155,7 +156,7 @@ function rollRandom(s: CarState, m: number, ev: GameEvent[]): void {
   randomMonths(s.seed, year).forEach((mon, k) => {
     if (mon !== m % MPY) return;
     const gens = onSaleGens(s), defect = gens.filter((g) => g.editions[g.editions.length - 1].defects > 0);
-    const room = s.staff.length < config.hq.levels[s.hqLevel - 1].staff;
+    const room = s.staff.length < staffCap(s);
     const ok = RANDOM_EVENTS.filter((d) => d.needs === 'none' || (d.needs === 'defectCar' ? defect.length > 0 : d.needs === 'staffRoom' ? room : gens.length > 0));
     if (!ok.length) return;
     const def = ok[Math.floor(hash01(s.seed, 53, year, k) * ok.length)];

@@ -1066,6 +1066,59 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   if (process.argv[2]) await tp.screenshot({ path: process.argv[2].replace('.png', '-garage-price-1024x768.png') });
   await tctx.close(); }
 
+// ---- 0.7.0 할 일·보고·다음 일까지(새 게임, 1366×1024 → 1024×768) ----
+{ const ectx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const ep = await ectx.newPage(); ep.on('pageerror', (e) => errors.push(String(e))); ep.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const EG = (fn, a) => ep.evaluate(fn, a), eshot = (n) => process.argv[2] ? ep.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
+  await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
+  await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '할일 시험'); await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
+  const n0 = await EG(() => window.__car.todos().length);
+  check('할 일 버튼: 상단바에 있고 배지 = 할 일 수, 높이 44px 이상', n0 > 0 && (await ep.locator('#todo-n').innerText()) === String(n0) && (await ep.locator('#todobtn').boundingBox()).height >= 44, `${n0}건`);
+  await ep.click('#todobtn'); await ep.waitForSelector('#sheet:not([hidden]) .todo-it');
+  check('할 일 창: 항목 수 = 배지, 새 게임에는 개발팀·정원 여유 항목', (await ep.locator('.todo-it').count()) === n0 && (await ep.locator('.todo-it[data-kind="team"]').count()) === 1 && (await ep.locator('.todo-it[data-kind="hire"]').count()) === 1, (await ep.locator('.todo-list').innerText()).replace(/\n/g, ' / ').slice(0, 160));
+  await eshot('todo-1366x1024');
+  await ep.click('.todo-it[data-kind="team"]');
+  check('할 일 항목 누르기(개발팀) → 신차 기획, 창 닫힘', ['plan', 'start'].includes(await EG(() => window.__car.screen)) && !(await ep.locator('#sheet').isVisible()));
+  await ep.click('#todobtn'); await ep.click('.todo-it[data-kind="hire"]');
+  check('할 일 항목 누르기(정원 여유) → 회사 탭', (await EG(() => window.__car.screen)) === 'company' && (await ep.locator('#panel [data-act="cotab"][data-v="staff"]').getAttribute('aria-selected')) === 'true');
+  await ep.click('#todobtn'); await ep.click('[data-act="todoTab"][data-v="reports"]');
+  check('보고 탭: 임원이 없으면 안내와 [임원 화면] 버튼', (await ep.locator('#sheet').innerText()).includes('임원을 두면 제안을 받을 수 있습니다') && (await ep.locator('#sheet [data-act="todoGoCo"][data-v="exec"]').count()) === 1);
+  await eshot('reports-empty-1366x1024');
+  await ep.click('#sheet [data-act="todoGoCo"]');
+  check('[임원 화면] → 회사 탭, 창 닫힘', (await EG(() => window.__car.screen)) === 'company' && !(await ep.locator('#sheet').isVisible()));
+  // 개발 시작 → [다음 일까지]로 출시 대기까지
+  await ep.click('#tabs button[data-tab="garage"]'); await ep.click('#ov [data-act="plan"]'); await ep.click('[data-act="ptab"][data-v="budget"]'); await ep.click('[data-act="startDev"]');
+  const w0 = await EG(() => window.__car.game.state.week), stops = [];
+  check('[다음 일까지] 버튼 44px 이상', (await ep.locator('#skipbtn').boundingBox()).height >= 44);
+  await ep.click('#skipbtn'); check('[다음 일까지] 누르면 진행 중 표시', (await EG(() => window.__car.skip)) && (await ep.locator('#skipbtn').getAttribute('aria-pressed')) === 'true');
+  await ep.click('#skipbtn'); check('진행 중 다시 누르면 즉시 중단(빠르기 멈춤)', !(await EG(() => window.__car.skip)) && (await EG(() => window.__car.speed)) === 0);
+  for (let i = 0; i < 12; i++) {
+    if (await EG(() => window.__car.game.state.projects[0]?.waiting)) break;
+    if (await ep.locator('#sheet').isVisible()) await ep.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click();
+    await ep.click('#skipbtn');
+    await ep.waitForFunction(() => !window.__car.skip, null, { timeout: 60000 });
+    stops.push(`${await EG(() => window.__car.game.dateLabel)}: ${(await ep.locator('#toasts').innerText()).replace(/\s+/g, ' ').slice(-90)}`);
+  }
+  const rdy = await EG(() => ({ waiting: !!window.__car.game.state.projects[0]?.waiting, speed: window.__car.speed, week: window.__car.game.state.week }));
+  check('[다음 일까지]로 출시 대기까지 넘어가 멈춤(알림에 이유)', rdy.waiting && rdy.speed === 0 && rdy.week > w0 && /출시 대기/.test(await ep.locator('#toasts').innerText()), `${w0}주 → ${rdy.week}주, 멈춘 곳 ${stops.length}번: ${stops.join(' | ')}`);
+  check('출시 대기 → 할 일에 출시 항목(급함), 누르면 출시 준비 화면', await EG(() => window.__car.todos()[0]?.kind === 'ready' && window.__car.todos()[0].urgent));
+  await ep.click('#todobtn'); await ep.click('.todo-it[data-kind="ready"]');
+  check('출시 항목 → 출시 준비 화면', (await EG(() => window.__car.screen)) === 'launch');
+  // 1024×768: 상단바 넘침·새 버튼 44px(진행 중 표시 포함)
+  await ep.setViewportSize({ width: 1024, height: 768 }); await ep.waitForTimeout(200);
+  const topOk = () => EG(() => { const t = document.getElementById('top'); return t.scrollWidth <= t.clientWidth + 1 && t.getBoundingClientRect().height < 80 && ['#todobtn', '#skipbtn'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.height >= 44 && r.right <= innerWidth; }); });
+  await ep.click('#tabs button[data-tab="garage"]');
+  check('상단바(1024×768): 할 일·다음 일까지 버튼이 넘치지 않고 44px', await topOk());
+  await EG(() => { window.__car.game.state.cash = -5; window.__car.render(); }); // 급한 일 표시 점검용
+  await EG(() => document.getElementById('skipbtn').click()); const onOk = await topOk(); await EG(() => window.__car.skip && document.getElementById('skipbtn').click());
+  check('상단바(1024×768): 진행 중 표시일 때도 넘치지 않음', onOk);
+  await eshot('top-1024x768');
+  await ep.click('#todobtn'); await ep.waitForTimeout(200);
+  { const ks = await ep.locator('.todo-it').evaluateAll((l) => l.map((b) => [b.dataset.kind, b.classList.contains('urgent')]));
+    check('할 일 창(1024×768): 급한 일(출시 대기·현금)이 맨 위에 모임', ks.some(([k, u]) => k === 'cash' && u) && ks.slice(0, ks.filter(([, u]) => u).length).every(([, u]) => u), JSON.stringify(ks)); }
+  await eshot('todo-1024x768');
+  await ectx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);
 await done(fails.length ? 1 : 0);

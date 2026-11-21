@@ -1,18 +1,19 @@
 // 균형 점검 봇(설계서 16장): 방치·신중·서툰 플레이·리프트 안 함·새 이름만·가격 올리기·확장 안 함·연구 안 함
 import { config } from '../config';
 import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS, bodyById } from '../data';
-import { bodiesAt, optionsAt, salaryOf, unitCost } from './cars';
+import { bodiesAt, optionsAt, unitCost } from './cars';
 import { eraTimeline, optionTech, requiredOptions } from './events';
 import { researchCost, researchError } from './research';
 import { loanLimit } from './finance';
 import { hash01 } from './rng';
-import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, optionSlots, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, optionSlots, staffCap, trainCost, trainError } from './company';
 import { Game, allGens, linesUsed, sellingGens } from './game';
 import { REGION, basePriceOf, cellMonthly, currentEdition } from './market';
 import { planPreview } from './queries';
+import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, yearOf } from './time';
-import type { Budget, CarState, Difficulty, Generation, Role, Staff } from './types';
+import type { Budget, CarState, Difficulty, ExecRole, Generation, Role, Staff } from './types';
 
 export interface Bot { name: string; step(g: Game): void }
 
@@ -84,6 +85,29 @@ export const noExpand = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady
 /** 연구 안 함: 신중과 같되 연구를 전혀 하지 않는다(소형 세단·가솔린 3단계·옵션 없음으로만) */
 export const noResearch = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ research: false, ...opts }), name: 'noResearch' });
 
+/** 임원을 쓰는 신중(0.7.0 균형 점검): 신중과 같고, 달 첫 주마다 빈 임원 자리를 채운다(맡기기를 켤 수 있는 직원이 있으면 임명, 없으면 공고를 내 가장 나은 후보를 채용),
+ *  켤 수 있는 맡기기를 모두 켜고, 교체 고용 제안은 승인한다. 그 밖의 제안(보고)은 읽기만 한다 */
+export const steadyExec = (opts: Partial<SteadyOptions> = {}): Bot => {
+  const base = steady(opts);
+  return { name: 'steadyExec', step(g) { base.step(g); if (g.state.week % config.time.weeksPerMonth === 0) manageExecs(g); } };
+};
+const EXEC_ORDER: ExecRole[] = ['hr', 'production', 'research', 'product', 'market', 'finance'];
+function manageExecs(g: Game): void {
+  const s = g.state, X = config.exec;
+  for (const role of EXEC_ORDER) {
+    const yearProfit = s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0);
+    if (Object.keys(s.execs?.seats ?? {}).length >= seatsOf(s) || s.cash < fixedCost(s) * B.execCashMonths || yearProfit <= 0) break; // 지난 1년 흑자이고 현금에 여유가 있을 때만(창업 초기에 가장 나은 직원을 개발에서 빼 무너지지 않게)
+    if (s.execs?.seats[role]) continue;
+    const inside = s.staff.filter((x) => x.projectId === null && execSkill(role, x) >= X.delegateSkill).sort((a, b) => execSkill(role, b) - execSkill(role, a) || a.id - b.id)[0];
+    if (inside) { g.command({ type: 'appointExec', role, staffId: inside.id }); continue; }
+    if (s.cash < X.postCost + fixedCost(s) * B.reserveMonths || !g.command({ type: 'postExecJob', role }).ok) break;
+    const best = (s.execs?.candidates ?? []).filter((c) => c.role === role).sort((a, b) => b.skill - a.skill || a.id - b.id)[0];
+    if (best) g.command({ type: 'hireExec', role, candidateId: best.id });
+  }
+  for (const role of EXEC_ORDER) if (s.execs?.seats[role]) for (const d of DELEGATIONS[role]) if (!s.execs.delegations[role]?.includes(d.key)) g.command({ type: 'setDelegation', role, key: d.key, on: true });
+  for (const r of s.execs?.replacements ?? []) if (r.status === 'proposed') g.command({ type: 'approveReplacement', id: r.id });
+}
+
 const RANDOM_DEFAULT = (eventId: string): number => RANDOM_EVENTS_BY_ID.get(eventId)!.defaultChoice;
 const RANDOM_EVENTS_BY_ID = new Map(RANDOM_EVENTS.map((d) => [d.id, d]));
 
@@ -122,7 +146,7 @@ function pickOptions(s: CarState, body: string, keep?: string[]): string[] {
 }
 
 const bodyPrice = (id: string) => bodyById(id).basePrice;
-const fixedCost = (s: CarState) => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + upkeepOf(s);
+const fixedCost = (s: CarState) => monthlyFixed(s); // 직원·임원 월급 + 유지비(임원이 없으면 0.7.0 전과 같다)
 
 /** 달마다: 가격(gouge), 공장 증설, 본사 승급, 채용, 교육 */
 function monthly(g: Game, o: SteadyOptions): void {

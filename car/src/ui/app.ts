@@ -38,6 +38,9 @@ const PAUSE_ITEMS = [['cands', '채용 후보가 왔을 때'], ['ready', '개발
 type PauseKey = typeof PAUSE_ITEMS[number][0];
 const OFFICE_GAP_MS = 1800; // 사무실 점수 연출 최소 간격(점수 글자가 떠 있는 시간)
 const MAX_TICKS_PER_FRAME = 4;
+const SKIP_SPEED = 8; // [다음 일까지] 진행 중 표시용 빠르기(빠르기 버튼 어느 것과도 같지 않게). 실제로는 프레임마다 tick 상한만큼
+const SKIP_MAX_WEEKS = 2 * 48; // [다음 일까지] 최대 진행: 2년
+type ExecReport = ReturnType<typeof Q.execReports>[number];
 const PICKUP_YAW = 0.75; // 픽업 무대·썸네일 기본 각도: 뒤 3/4(짐칸이 보이게)
 const DEBUG_KEY = 'car-company-debug';
 const ALL_TABS: [PlanTab, string][] = [['prev', '전 세대'], ['body', '차체'], ['look', '모양'], ['seg', '고객층'], ['power', '동력'], ['opt', '옵션'], ['dir', '개발 방향'], ['budget', '예산·기간']];
@@ -101,7 +104,7 @@ export function startApp(): void {
   const sound = createSound();
   let skipping = false; // 1년 건너뛰기 동안은 효과음을 내지 않는다
   /** 효과음 한 곳. 아주 빠름에서는 매주·매달 반복음을 뺀다 */
-  const sfx = (n: Sfx) => { if (!skipping && !(speed >= 4 && (n === 'weekTick' || n === 'monthClose'))) sound.play(n); };
+  const sfx = (n: Sfx) => { if (!skipping && !(speed >= 4 && (n === 'weekTick' || n === 'monthClose'))) sound.play(n); }; // [다음 일까지]는 빠르기 SKIP_SPEED(8)라 아주 빠름 규칙을 따른다
   // 브라우저는 사용자 조작 안에서만 소리를 켤 수 있다(터치는 pointerup이 조작으로 인정되는 브라우저가 있어 둘 다)
   for (const ev of ['pointerdown', 'pointerup', 'keydown'] as const) document.addEventListener(ev, () => sound.unlock(), true);
   // 버튼 소리: 문서 전체 click 하나에서. 탭 전환·스위치·가격 −/+는 따로, 나머지 버튼은 tap
@@ -349,18 +352,23 @@ export function startApp(): void {
   let skipPause = false; // 개발자 메뉴 1년 건너뛰기: 자동 멈춤 무시
   let quietChoice = false; // 점검용 __car.tick: 사건 창을 띄우지 않는다(popups를 주면 띄움)
   let weekFresh = false; // 한 주에 여러 프로젝트의 주간 기록이 오면 모두 모은다
-  function tickOnce(): void {
-    if (!game) return;
+  let weekReports = 0; // 이번 주(월 결산)에 새로 온 임원 보고 수
+  function tickOnce(): GameEvent[] {
+    if (!game) return [];
     const ev = game.tick();
+    weekReports = ev.reduce((a, e) => a + (e.kind === 'execReport' ? e.count : 0), 0);
     logDev(); weekFresh = true; sfx('weekTick'); dirty = true;
     for (const e of ev) onEvent(e);
+    return ev;
   }
   function onEvent(e: GameEvent): void {
     const s = game!.state;
     switch (e.kind) {
+      case 'execReport': break; // 보고는 튀어나오지 않는다: 월 결산 알림 한 줄과 '할 일' 배지로만
+      case 'replacement': toast(e.text, '', '임원', 7000); break;
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
-        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
+        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}${weekReports ? ` · 임원 보고 ${weekReports}건` : ''}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
         // 큰 흑자 = 10억 이상이면서 최근 24개월 최고 이익인 달(늘 버는 후반에 매달 울리지 않게)
         sfx(L && L.profit >= 100000 && s.ledger.every((x) => x.profit <= L.profit) ? 'cashIn' : 'monthClose');
         void S.put('auto', S.makeSave(game!, uiSnap())); // 매월 자동 저장
@@ -411,7 +419,7 @@ export function startApp(): void {
       devLog.set(p.id, list.slice(0, 14)); devPrev.set(p.id, val);
     }
   }
-  function setSpeed(v: number): void { speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
+  function setSpeed(v: number): void { if (v !== SKIP_SPEED) skip = null; speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
   /** 자동 멈춤(설정에서 항목별로 끔): 알림은 늘 띄우고, 켜져 있으면 시간을 멈춘다 */
   function autoPause(k: PauseKey, text: string, head: string, open?: { label: string; fn: () => void }): void {
     const stop = pauseOn[k] && speed > 0 && !skipPause;
@@ -427,15 +435,109 @@ export function startApp(): void {
     autoPause('cands', `${ROLE_NAME[fresh[0].role]} 후보 ${fresh.length}명이 왔습니다. ${wk}주 안에 채용하지 않으면 다른 회사로 갑니다.`, '채용 후보', screen === 'company' && coTab === 'staff' ? undefined : { label: '채용 화면', fn: () => { coTab = 'staff'; go('company'); } }); // 이미 채용 화면이면 바로 가기 버튼 없이
   }
 
+  // ---------- 0.7.0 할 일 목록 · 다음 일까지 ----------
+  let todoMemo: { g: Game; k: string; list: Q.TodoItem[] } | null = null;
+  /** 할 일 목록(한 주·명령마다 한 번 계산) */
+  const todos = (): Q.TodoItem[] => {
+    const s = game!.state, k = `${s.week}:${s.history.length}:${s.cash}:${s.candidates.length}:${s.projects.length}:${s.events.pending.length}:${s.staff.length}:${execUnread(s)}`;
+    if (todoMemo?.g !== game || todoMemo.k !== k) todoMemo = { g: game!, k, list: Q.todoItems(s) };
+    return todoMemo.list;
+  };
+  /** 다음 일까지: seen = 시작할 때와 진행 중에 이미 본 할 일 키(새 키가 생기면 멈춤) */
+  let skip: { seen: Set<string>; from: number } | null = null;
+  function startSkip(): void {
+    if (!game || game.state.status !== 'playing') return;
+    if (skip) { setSpeed(0); toast('진행을 멈췄습니다.', '', '다음 일까지', 3000, 'skip'); return; } // 진행 중 다시 누르면 중단
+    if (isHeld()) return;
+    skip = { seen: new Set(todos().map((t) => t.key)), from: game.state.week };
+    setSpeed(SKIP_SPEED);
+  }
+  function endSkip(text: string, open?: { label: string; fn: () => void }): void { setSpeed(0); if (text) toast(text, 'alert', '다음 일까지 · 멈춤', 9000, 'skip', open); }
+  /** 자동 멈춤을 꺼 둔 항목(채용 후보·출시 대기·결정할 사건)은 새로 생겨도 멈추지 않는다 */
+  const skipStops = (k: Q.TodoKind) => !(k === 'cands' || k === 'ready' || k === 'choice') || pauseOn[k];
+  /** 한 주 진행 뒤 멈춤 조건. 자동 멈춤(출시 대기·채용 후보)과 사건 창은 이미 시간을 멈춰 skip이 풀린 상태로 온다 */
+  function skipCheck(ev: GameEvent[]): void {
+    const s = game!.state, sk = skip!;
+    if (s.status !== 'playing') { setSpeed(0); return; }
+    if (ev.some((e) => e.kind === 'cashWarning')) { endSkip(''); return; } // 현금 경고 알림이 이미 떴다
+    if (weekReports) { endSkip(`임원 보고 ${weekReports}건이 왔습니다.`, { label: '보고 보기', fn: () => showTodo('reports') }); return; }
+    const list = todos(), fresh = list.find((t) => !sk.seen.has(t.key) && skipStops(t.kind));
+    for (const t of list) sk.seen.add(t.key);
+    if (fresh) { endSkip(`${fresh.title}.`, { label: '할 일 보기', fn: () => showTodo('todo') }); return; }
+    if (s.week - sk.from >= SKIP_MAX_WEEKS) endSkip('2년 동안 새로 할 일이 없어 멈췄습니다.');
+  }
+
+  // ----- 할 일·보고 창 -----
+  const execReports = Q.execReports, execUnread = Q.execUnread;
+  const hasExec = (s: Game['state']): boolean => Q.execInfo(s).used > 0;
+  const EXEC_ROLE = (r: ExecReport['role']) => Q.EXEC_TITLE[r].replace(/ 임원$/, ''); // 필터 칩: "인사", "연구소장"
+  const execTitle = (r: ExecReport['role']) => Q.EXEC_TITLE[r];
+  let todoTab: 'todo' | 'reports' = 'todo', repRole: ExecReport['role'] | '' = '', repFresh = new Set<number>(); // repFresh: 이번에 열기 전까지 읽지 않았던 보고(읽음 처리 뒤에도 표시)
+  const REP_STATUS: Record<NonNullable<ExecReport['replacement']>['status'], string> = { proposed: '승인을 기다립니다', approved: '승인함 · 곧 진행합니다', waiting: '예약됨 · 기다리는 중', done: '진행했습니다', cancelled: '취소했습니다', failed: '진행하지 못했습니다' };
+  function reportCard(r: ExecReport): string {
+    const rp = r.replacement, when = Q.monthLabel(monthOf(r.week));
+    const on = rp && (rp.status === 'approved' || rp.status === 'waiting'), wf = rp?.waitingFor ?? ''; // waitingFor: "「아리아」 개발이 끝나면", "현금이 늘면", "4주 뒤 다시 공고"
+    const st = rp ? `<p class="rep-st">${on && wf ? esc(wf.endsWith('면') ? `${wf} 진행합니다` : `예약됨 · ${wf}`) : REP_STATUS[rp.status]}${on ? ` · 능력 ${rp.minAbility} 이상 후보면 다시 묻지 않고 뽑습니다` : ''}</p>` : '';
+    const btns = [r.goto ? `<button class="btn" data-act="repGo" data-id="${r.id}">해당 화면으로</button>` : '',
+      rp?.status === 'proposed' ? `<button class="btn ink" data-act="repOk" data-id="${rp.id}">승인</button><button class="btn" data-act="repNo" data-id="${rp.id}">거절</button>` : '',
+      rp && (rp.status === 'approved' || rp.status === 'waiting') ? `<button class="btn danger" data-act="repCancel" data-id="${rp.id}">예약 취소</button>` : '',
+      `<button class="btn" data-act="repClose" data-id="${r.id}">닫기</button>`].join('');
+    return `<div class="rep-card${r.auto ? ' auto' : ''}${repFresh.has(r.id) ? ' unread' : ''}" data-id="${r.id}"><div class="rep-h"><b>${esc(execTitle(r.role))} ${esc(r.execName)}</b><small>${esc(when)}${r.auto ? ' · 맡긴 일 기록' : ''}${repFresh.has(r.id) ? ' · 새 보고' : ''}</small></div>
+      <h3>${esc(r.title)}</h3><p>${esc(r.text)}</p>${r.facts.length ? `<ul class="rep-facts">${r.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}${st}<div class="row">${btns}</div></div>`;
+  }
+  function todoBody(): string {
+    const list = todos();
+    if (!list.length) return '<p class="todo-empty">지금 할 일이 없습니다. 시간을 진행하세요.</p>';
+    return `<div class="todo-list">${list.map((t) => `<button class="todo-it${t.urgent ? ' urgent' : ''}" data-act="todoGo" data-k="${esc(t.key)}" data-kind="${t.kind}"><span><b>${esc(t.title)}</b><small>${esc(t.detail)}</small></span><span aria-hidden="true">→</span></button>`).join('')}</div>`;
+  }
+  function reportsBody(): string {
+    const s = game!.state, all = execReports(s);
+    if (!hasExec(s) && !all.length) return '<div class="todo-empty rep-none"><p>임원을 두면 제안을 받을 수 있습니다.</p><button class="btn ink" data-act="todoGoCo" data-v="exec">임원 화면</button></div>';
+    const roles = [...new Set(all.map((r) => r.role))], list = all.filter((r) => !repRole || r.role === repRole);
+    const chips = roles.length > 1 ? `<div class="seg rep-roles" role="tablist" aria-label="임원별">${[['', '전체'] as const, ...roles.map((r) => [r, EXEC_ROLE(r)] as const)].map(([k, n]) => `<button role="tab" data-act="repRole" data-v="${k}" aria-selected="${repRole === k}">${n}</button>`).join('')}</div>` : '';
+    return chips + (list.length ? `<div class="rep-list">${list.map(reportCard).join('')}</div>` : '<p class="todo-empty">아직 받은 보고가 없습니다. 임원은 월 결산 때 보고합니다.</p>');
+  }
+  /** 할 일·보고 창. 보고 탭을 열면 읽음 처리(이번에 새로 온 것은 창을 닫을 때까지 '새 보고'로 표시) */
+  function showTodo(t: 'todo' | 'reports' = todoTab): void {
+    if (!game) return;
+    const s = game.state;
+    if (t === 'reports' && todoTab !== 'reports') repFresh = new Set(execReports(s).filter((r) => r.unread).map((r) => r.id));
+    todoTab = t;
+    if (t === 'reports' && execUnread(s) > 0) game.command({ type: 'markReportsRead' });
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    const n = todos().length, un = execUnread(s);
+    sheetBody.innerHTML = `<div class="todo-sheet"><div class="eyebrow"><i></i>${esc(game.dateLabel)}</div><div class="seg todo-tabs" role="tablist" aria-label="할 일과 보고"><button role="tab" data-act="todoTab" data-v="todo" aria-selected="${t === 'todo'}">할 일 ${n}</button><button role="tab" data-act="todoTab" data-v="reports" aria-selected="${t === 'reports'}">보고${un ? ` ${un}` : ''}</button></div>
+      ${t === 'todo' ? todoBody() : reportsBody()}<div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  /** 할 일·보고의 바로 가기 */
+  function goTarget(t: { tab: string; sub?: string; id?: number }): void {
+    if (!game) return;
+    const s = game.state; sheet.hidden = true; todoTab = 'todo';
+    switch (t.tab) {
+      case 'garage': { const i = sellingGens(s).findIndex((x) => x.id === t.id); if (i >= 0) garageIdx = i; go('garage'); return; }
+      case 'dev':
+        if (t.sub === 'launch' && t.id !== undefined && Q.projectById(s, t.id)) { openLaunch(t.id); return; }
+        if (t.sub === 'plan') { void act('plan', document.createElement('i')); return; }
+        if (t.id !== undefined && Q.projectById(s, t.id)) devSel = t.id;
+        go(devScreen()); return;
+      case 'company': coTab = (t.sub ?? 'fin') as CoTab; go('company'); return;
+      case 'records': go('records'); return;
+      case 'choice': showChoice(); return;
+      case 'reports': showTodo('reports'); return;
+      default: go(screen);
+    }
+  }
+
   let last = performance.now(), frames = 0, fps = 0, fpsT = last;
   function frame(now: number): void {
     requestAnimationFrame(frame);
     const dt = Math.min(250, now - last); last = now;
     frames++; if (now - fpsT >= 500) { fps = (frames * 1000) / (now - fpsT); frames = 0; fpsT = now; renderDebug(); }
-    if (isHeld() || speed === 0) { acc = 0; return; }
-    acc += dt * speed;
+    if (isHeld() || speed === 0) { acc = 0; if (skip) setSpeed(0); return; } // 창이 뜨면(선택 사건 등) [다음 일까지]도 끝
+    acc = skip ? WEEK_MS * MAX_TICKS_PER_FRAME : acc + dt * speed; // 다음 일까지: 프레임마다 tick 상한만큼(화면 갱신은 유지)
     let n = 0;
-    while (acc >= WEEK_MS && n < MAX_TICKS_PER_FRAME) { acc -= WEEK_MS; tickOnce(); n++; if (isHeld()) { acc = 0; break; } }
+    while (acc >= WEEK_MS && n < MAX_TICKS_PER_FRAME) { acc -= WEEK_MS; const ev = tickOnce(); n++; if (skip) skipCheck(ev); if (isHeld() || !speed) { acc = 0; break; } }
     if (n) render();
   }
   requestAnimationFrame(frame);
@@ -482,6 +584,9 @@ export function startApp(): void {
     chip.title = full; chip.setAttribute('aria-label', `시대 사건: ${full}. 눌러서 효과 보기`);
     const pd = $('#pend'); pd.hidden = !pc; put(pd, `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4M12 17v.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><b>${pc}</b><span class="pd-t">결정 대기</span>`, true);
     pd.setAttribute('aria-label', `결정 대기 ${pc}건 보기`);
+    { const T = todos(), tb = $('#todobtn'); put($('#todo-n'), String(T.length)); tb.classList.toggle('urgent', T.some((x) => x.urgent)); tb.classList.toggle('none', !T.length);
+      const un = execUnread(s); tb.classList.toggle('has-rep', un > 0); tb.setAttribute('aria-label', `할 일 ${T.length}건${un ? `, 읽지 않은 임원 보고 ${un}건` : ''} 보기`); }
+    { const sb = $('#skipbtn'); sb.classList.toggle('on', !!skip); sb.setAttribute('aria-pressed', String(!!skip)); put(sb, skip ? '진행 중 · 멈추기' : '다음 일까지'); }
     const tab: Tab = deciding() ? 'dev' : (screen as Tab);
     for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
     { const dv = document.querySelector<HTMLElement>('#tabs button[data-tab="dev"]')!, on = !!(draft || lift); dv.classList.toggle('has-draft', on); if (on) dv.title = '기획 중인 차가 있습니다'; else dv.removeAttribute('title'); }
@@ -1671,7 +1776,19 @@ export function startApp(): void {
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
       case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
-      case 'closeSheet': sheet.hidden = true; render(); return;
+      case 'closeSheet': sheet.hidden = true; todoTab = 'todo'; render(); return;
+      case 'todoTab': showTodo(v as 'todo' | 'reports'); return;
+      case 'todoGo': { const t = game && todos().find((x) => x.key === el.dataset.k); if (t) goTarget(t.goto); else if (game) showTodo('todo'); return; }
+      case 'todoGoCo': goTarget({ tab: 'company', sub: v }); return;
+      case 'repRole': repRole = v as ExecReport['role'] | ''; showTodo('reports'); return;
+      case 'repGo': { const r = game && execReports(game.state).find((x) => x.id === Number(el.dataset.id)); if (r?.goto) goTarget(r.goto); return; }
+      case 'repClose': case 'repOk': case 'repNo': case 'repCancel': {
+        if (!game) return;
+        const type: 'dismissReport' | 'approveReplacement' | 'rejectReplacement' | 'cancelReplacement' = a === 'repClose' ? 'dismissReport' : a === 'repOk' ? 'approveReplacement' : a === 'repNo' ? 'rejectReplacement' : 'cancelReplacement';
+        if (a === 'repCancel' && !(await ask('교체 고용 예약을 취소할까요?', '예약 취소', true))) return;
+        if (run(game.command({ type, id: Number(el.dataset.id) }))) { if (a === 'repOk') toast('교체 고용을 승인했습니다. 조건이 맞으면 진행합니다.'); showTodo('reports'); }
+        return;
+      }
       case 'logoSheet': showLogoSheet(); return;
       case 'devCheat': {
         if (!game) return; const r = game.devCheat(v as typeof DEV_CHEATS[number][0]);
@@ -1751,6 +1868,8 @@ export function startApp(): void {
   { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 550) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
+  $('#todobtn').addEventListener('click', () => { if (game) showTodo(execUnread(game.state) && !todos().length ? 'reports' : 'todo'); });
+  $('#skipbtn').addEventListener('click', () => startSkip());
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('#ask').hidden) $('#ask-no').click();
@@ -1768,6 +1887,7 @@ export function startApp(): void {
     get tip() { return tip.hidden ? null : { key: tip.dataset.key, hover: tipHover, text: tip.innerText }; },
     setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
+    get skip() { return !!skip; }, todos: () => (game ? todos() : []),
   };
 
   makeStage();

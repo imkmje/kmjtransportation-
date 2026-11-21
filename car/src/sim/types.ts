@@ -164,6 +164,32 @@ export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice'
 export interface NewsItem { week: number; text: string; category?: NewsCategory } // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
+// ---------- 임원(0.7.0) ----------
+/** 임원 6자리: 인사·기획·재무·생산·연구소장·시장 조사 */
+export type ExecRole = 'hr' | 'product' | 'finance' | 'production' | 'research' | 'market';
+/** 임원 자리: 임명한 직원(직원 목록에서 빠져 여기 있다) 또는 외부에서 뽑은 사람(hired) */
+export interface ExecSeat { staff: Staff; hired: boolean; since: number }
+export interface ExecCandidate { id: number; name: string; role: ExecRole; skill: number; pay: number; expiresWeek: number }
+/** 이동할 화면(tab: 회사·차고 등, sub: 회사 탭 안쪽, id: 직원·세대 ID 등) */
+export interface ExecGoto { tab: string; sub?: string; id?: number }
+/** 보고 한 건. key: 제안 대상(직원·차·기술 ID 등, 재발행 금지에 쓴다). auto: 맡기기·교체 고용이 실행한 일의 기록 */
+export interface ExecReport { id: number; week: number; role: ExecRole; execName: string; kind: string; key: string; text: string; facts: string[]; goto: ExecGoto | null; unread: boolean; auto: boolean; replacementId: number | null }
+/** 교체 고용(인사): 제안 → 승인(예약) → 대상이 개발 중이면 대기 → 실행(완료·실패) / 취소 */
+export interface Replacement {
+  id: number; staffId: number; staffName: string; staffRole: Role; ability: number; minAbility: number;
+  status: 'proposed' | 'approved' | 'waiting' | 'done' | 'cancelled' | 'failed';
+  tries: number; nextWeek: number; waitingFor: string | null; held: boolean;
+}
+export interface ExecState {
+  seats: Partial<Record<ExecRole, ExecSeat>>;
+  delegations: Partial<Record<ExecRole, string[]>>; // 켠 맡기기 키
+  candidates: ExecCandidate[];
+  reports: ExecReport[]; // 오래된 것이 앞
+  cooldown: Record<string, number>; // "자리:종류:대상" → 다시 제안할 수 있는 주
+  replacements: Replacement[];
+  rejected: Record<string, number>; // 직원 ID → 교체를 다시 제안할 수 있는 주
+}
+
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
@@ -192,6 +218,7 @@ export interface CarState {
   events: EventsState; // 11장 무작위 사건·뉴스(고정 사건은 시드와 날짜로 계산)
   knownCombos: string[]; // 5.5 조합 노트: 출시해 본 "차체:고객층"
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
+  execs?: ExecState; // 0.7.0 임원(처음 임원 명령을 쓸 때 생긴다. 없으면 임원 없음, 저장 형식은 그대로 4)
   devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
 }
 
@@ -226,6 +253,17 @@ export type Command =
   | { type: 'cancelResearch'; techId: string } // 쓴 돈은 돌아오지 않는다
   | { type: 'prioritizeResearch'; techId: string } // 0.5.1: 그 연구를 맨 앞으로(주간 점수의 50%를 받는다)
   | { type: 'resolveEvent'; eventId: number; choice: number }
+  // ---------- 임원(0.7.0) ----------
+  | { type: 'appointExec'; role: ExecRole; staffId: number }
+  | { type: 'dismissExec'; role: ExecRole }
+  | { type: 'postExecJob'; role: ExecRole }
+  | { type: 'hireExec'; role: ExecRole; candidateId: number }
+  | { type: 'setDelegation'; role: ExecRole; key: string; on: boolean }
+  | { type: 'dismissReport'; id: number }
+  | { type: 'markReportsRead' }
+  | { type: 'approveReplacement'; id: number }
+  | { type: 'rejectReplacement'; id: number }
+  | { type: 'cancelReplacement'; id: number }
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';
@@ -242,4 +280,7 @@ export interface DevWeekEvent {
 }
 /** 평판 변화(0.5.1, 화면 알림용): delta 실제 변화량(상한·하한 적용 뒤), reason 이유 한 줄, text = "평판 +2(이유)" */
 export interface ReputationEvent { kind: 'reputation'; text: string; delta: number; reason: string }
-export type GameEvent = BasicEvent | DevWeekEvent | ReputationEvent;
+/** 임원(0.7.0): 월 결산 때 새 보고 수, 교체 고용 실행 결과 */
+export interface ExecReportEvent { kind: 'execReport'; text: string; count: number }
+export interface ReplacementEvent { kind: 'replacement'; text: string }
+export type GameEvent = BasicEvent | DevWeekEvent | ReputationEvent | ExecReportEvent | ReplacementEvent;

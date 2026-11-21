@@ -8,8 +8,8 @@ import type { CarState, Role, Staff } from './types';
 const C = config.staff;
 export const hqDef = (s: CarState) => config.hq.levels[s.hqLevel - 1];
 export const factoryDef = (s: CarState) => config.factory.levels[s.factory.level - 1];
-/** 정원(본사 등급) */
-export const staffCap = (s: CarState): number => hqDef(s).staff;
+/** 직원 정원 = 본사 등급의 정원 − 임원 수(0.7.0: 임원도 정원 안에서 자리를 차지한다) */
+export const staffCap = (s: CarState): number => hqDef(s).staff - Object.keys(s.execs?.seats ?? {}).length;
 /** 동시 개발팀 수(6.4) */
 export const devTeams = (s: CarState): number => hqDef(s).teams;
 /** 옵션 슬롯(5.4) */
@@ -24,6 +24,13 @@ export const upkeepOf = (s: CarState): number => factoryUpkeep(s, s.factory.leve
 /** 0.5.1: 등급별 실제 월 유지비(난이도 배수, 공장은 연구 감면 반영). 화면 등급표·승급 미리보기·장부가 같은 값을 쓴다 */
 export const factoryUpkeep = (s: CarState, level: number): number => config.factory.levels[level - 1].upkeep * (1 - upkeepCut(s)) * diffOf(s).upkeepMult;
 export const hqUpkeep = (s: CarState, level: number): number => config.hq.levels[level - 1].upkeep * diffOf(s).upkeepMult;
+
+/** 9.3 생산 배분: 수동 몫(share)이 있는 차는 한도 × 몫까지, 나머지 한도는 자동(null) 차들에 수요 비례. 차마다 만드는 대수(반올림). 월 결산과 임원 배분 제안이 같이 쓴다 */
+export function allocate(cap: number, demand: number[], shares: (number | null)[]): number[] {
+  const manual = shares.reduce<number>((a, x) => a + (x ?? 0), 0), autoCap = Math.max(0, cap * (1 - manual));
+  const autoTotal = demand.reduce((a, d, i) => a + (shares[i] === null ? d : 0), 0), fill = autoTotal > autoCap ? autoCap / autoTotal : 1;
+  return demand.map((d, i) => Math.round(shares[i] === null ? d * fill : Math.min(d, cap * shares[i]!)));
+}
 
 export const isDevRole = (r: Role): boolean => r !== 'sales';
 /** 교육 중(교육을 시작한 주부터 4주) */
