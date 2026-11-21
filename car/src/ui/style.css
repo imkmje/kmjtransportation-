@@ -1032,3 +1032,58 @@ button.co-box:hover{border-color:var(--ink)}
 .auto-team .chk{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}
 .auto-team .chk input{width:20px;height:20px}
 .auto-note{margin:0 0 10px;font-weight:600}.auto-note ul{margin:4px 0 2px 18px;padding:0}.auto-note small{display:block;font-size:12px;opacity:.85}
+/* 0.12.0 긴 금액(1조 1,714억 등): KPI 칸에서 말줄임 대신 글자를 줄이고 두 줄까지 */
+.kpis .kpi b.long,.kpi b.long{white-space:normal;overflow:visible;text-overflow:clip;font-size:clamp(16px,1.5vw,20px);line-height:1.2;word-break:keep-all}
+.kpis .kpi b.long span{font-size:11px}
+.pnl-card .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.co-box>b{white-space:normal;word-break:keep-all}
+/* 0.12.0 할 일 서랍: 오른쪽에서 나오는 옆 창(게임은 계속 보이고 시간도 흐른다) */
+.drawer{position:fixed;z-index:35;top:0;right:0;bottom:0;width:min(420px,calc(100vw - 96px));background:var(--bg);border-left:1px solid var(--line);box-shadow:-18px 0 40px -24px #1c263366;display:flex;flex-direction:column;padding:max(12px,env(safe-area-inset-top,0px)) 14px max(12px,env(safe-area-inset-bottom,0px));animation:drawer-in .25s cubic-bezier(.2,.8,.2,1);font-size:14px}
+@keyframes drawer-in{from{transform:translateX(40px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.drawer{animation:none}}
+@media (max-width:640px){.drawer{width:100vw}}
+.drawer .todo-sheet{display:flex;flex-direction:column;min-height:0;flex:1}
+.drawer-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.drawer-x{min-height:44px;flex:none}
+.drawer .todo-tabs{margin:0 0 10px;flex:none}
+.drawer .todo-tabs button{font-size:14px;min-height:46px}
+.drawer-body{flex:1;min-height:0;overflow:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.drawer .note-list{max-height:none}
+.drawer .note-it{grid-template-columns:auto minmax(0,1fr) auto}.drawer .note-it .chip{grid-row:1;grid-column:1}.drawer .note-it .nd{grid-column:2;grid-row:1}.drawer .note-it .nt-t{grid-column:1/-1}.drawer .note-it .ng{grid-column:3;grid-row:1}
+.drawer .rep-card p,.drawer .rep-card h3{font-size:14px}
+.todo-g{margin:10px 0 6px}.todo-g:first-child{margin-top:0}
+.todo-row{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:14px;overflow:hidden}
+.todo-row.urgent{border-left-color:var(--accent)}
+.todo-row .todo-it{border:0;border-radius:0;background:transparent;width:100%;min-height:56px;padding:8px 12px;gap:10px}
+.todo-row .todo-it b{font-size:14px}.todo-row .todo-it small{font-size:13px}
+.todo-row .tt{flex:1;min-width:0}
+.ti{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:12px;font-weight:900;background:var(--soft);color:var(--ink2)}
+.todo-row.urgent .ti{background:var(--accent-bg);color:var(--accent2)}
+.ti.t-cash,.ti.t-regulation{background:var(--neg-bg);color:var(--neg-ink)}.ti.t-ready,.ti.t-facelift,.ti.t-fullchange{background:var(--pos-bg);color:var(--pos-ink)}
+.tg{flex:none;color:var(--ink3);font-weight:800}
+.todo-acts{display:flex;gap:4px;padding:0 8px 4px 62px}
+.todo-acts:empty{display:none}
+.tl{border:0;background:transparent;min-height:44px;padding:0 8px;font-size:13px;font-weight:700;color:var(--ink2);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.todo-ref{margin-top:12px}
+.todo-ref>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:48px;padding:0 4px}
+.todo-ref>summary::-webkit-details-marker{display:none}
+.todo-ref>summary .lbl{margin:0}.todo-ref>summary small{font-size:13px;color:var(--ink2)}
+.todo-ref>summary::after{content:"펼치기 ▸";margin-left:auto;font-size:13px;font-weight:800;color:var(--ink3)}.todo-ref[open]>summary::after{content:"접기 ▾"}
+.todo-hid{margin-top:10px;font-size:13px}
+.todo-empty.small{padding:8px 4px;font-size:14px}
+#toasts{z-index:50}
+/* 0.12.0 기록: 차종 계보 정렬·필터, 명예의 전당 */
+.lin-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px}
+.lin-bar .seg{margin:0;flex:1 1 460px}.lin-bar .s-chips{margin:0}
+.rectabs{max-width:600px}
+.hall-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:8px}
+.hall-it{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;width:100%;min-height:72px;padding:8px 12px 8px 8px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);font:inherit}
+.hall-it:hover{border-color:var(--ink)}
+.hall-t{min-width:0;display:flex;flex-direction:column;gap:1px}
+.hall-t small{font-size:12px;font-weight:800;color:var(--ink3)}
+.hall-t b{font-size:15px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hall-t b em{font-style:normal;font-size:12px;color:var(--ink2);font-weight:700}
+.hall-t span{font-size:12.5px;color:var(--ink2)}
+.hall-v{font-size:15px;font-weight:900;text-align:right;white-space:nowrap}
+.hall-shame{margin-top:12px}.hall-shame>summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.hall-shame>summary .lbl{margin:0}
+.hall-co td{font-size:14px}
+@media (max-width:1100px){.hall-it{grid-template-columns:72px minmax(0,1fr)}.hall-it .g-th img,.hall-it .g-th svg{width:72px;height:45px}.hall-v{grid-column:2;text-align:left}}

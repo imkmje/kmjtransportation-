@@ -22,3 +22,5 @@ export const BUDGET = { low: { name: '절약', sub: '점수 적음 · 비용 절
 export const TIER_SUB = ['연비 우수 · 원가 낮음', '성능과 원가의 균형', '고출력 · 원가 높음'];
 /** 조사 고르기(sim과 같은 함수): josa('해치백', '을/를') → '을' */
 export { josa } from '../sim/josa';
+/** 0.12.0 KPI 칸의 긴 값(조 단위 금액 등, 글자 8자 이상)은 'long'(글자를 줄이고 두 줄 허용): 칸에서 말줄임되지 않게 */
+export const longCls = (cls: string, v: string): string => (v.replace(/<[^>]*>/g, '').length >= 8 ? `${cls} long`.trim() : cls);

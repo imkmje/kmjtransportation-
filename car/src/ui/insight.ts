@@ -4,7 +4,7 @@
 import { config } from '../config';
 import * as Q from '../sim/queries';
 import type { CarState } from '../sim/types';
-import { esc, money, num, score } from './fmt';
+import { esc, longCls, money, num, score } from './fmt';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const sign = (x: number) => (x > 0 ? '+' : x < 0 ? '−' : '±');
@@ -21,7 +21,7 @@ function bars(vals: number[], label: string, w = 300, h = 56): string {
 export function pnlCard(s: CarState, generationId: number): string {
   const p = Q.modelPnL(s, generationId);
   if (!p) return '';
-  const k = (label: string, v: string, cls = '') => `<div class="kpi"><small>${label}</small><b class="${cls}">${v}</b></div>`;
+  const k = (label: string, v: string, cls = '') => `<div class="kpi"><small>${label}</small><b class="${longCls(cls, v)}">${v}</b></div>`;
   const devParts = [['처음 개발', p.dev.base], ['페이스리프트', p.dev.lift], ['의무 장비', p.dev.retro], ['긴급 개선', p.dev.fix]].filter(([, v]) => (v as number) > 0).map(([n, v]) => `${n} ${money(v as number)}`).join(' · ');
   const pay = p.recovered ? `개발비를 회수했습니다${p.paybackMonths ? `(출시 ${p.paybackMonths}개월째)` : ''}.` : `개발비 회수까지 ${money(-p.net)} 남았습니다.`;
   return `<div class="card pnl-card"><p class="lbl">이 차의 손익${p.estimated ? ' <small class="hint">일부 추정</small>' : ''}</p>

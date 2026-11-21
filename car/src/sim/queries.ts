@@ -415,3 +415,4 @@ export function bestTeam(s: CarState, spec: ProjectSpec, opts: { includeBusy?: b
 }
 import { josa as josaQ } from './josa';
 const STAT_KO: Record<string, string> = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' };
+export { hallOfFame, type HallOfFame, type HallCar, type HallRow } from './hall';
