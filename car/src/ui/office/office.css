@@ -49,6 +49,8 @@
 /* 꺼진 모니터와 켜진 모니터 */
 .office .scr{fill:#3d4450;transition:fill .6s}
 .office .on .scr{fill:#bcd7e6}
+.office .on .scr.crt{fill:#b7cbd3}
+.office .on .scr.green{fill:#7fb08c} /* 80년대 단말기: 초록 글자 화면 */
 
 /* 이름표(누른 사람만) */
 .office .tagpop{position:absolute;pointer-events:none;background:#ffffffee;border:1px solid #c9d0d9;border-radius:8px;padding:5px 8px;font-size:12px;line-height:1.35;color:#2b313a;

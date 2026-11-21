@@ -50,12 +50,12 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
     // 2010은 날 선 캐릭터 라인(늘 1~2줄, 뒤로 치켜 오름), 2020은 매끈한 면(없거나 1줄)
     crease: era === 2010 ? (nc < .45 ? [c1] : [c1, c2]) : era === 2020 ? (nc < .5 ? [] : [c1]) : nc < (old ? .35 : .15) ? [] : nc < (old ? .9 : .7) ? [c1] : [c1, c2],
     kick: era === 2010 ? .05 + .07 * kick : era === 2020 ? .02 * kick : era === 1990 ? .02 * kick : 0,
-    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .3, 2020: .25 }[era], // 대형 세단은 늘 크롬 띠
+    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .5, 2020: .12 }[era], // 대형 세단은 늘 크롬 띠. 2010은 크롬 창틀이 흔하고 2020은 드물다
     strip: old ? (st < .45 ? (era === 1970 ? 'chrome' : 'dark') : st < .65 ? 'dark' : 'none') : era === 1990 && st < .4 ? 'dark' : 'none',
     sunroof: sr < (id === 'pickup' || id === 'kei' ? .15 : .35),
     rack: rk < (({ suvS: .6, suv: .85, suvL: .9, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
     clad: b.suv ? cl < (era === 2020 ? .45 : .85) : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < (era === 2020 ? .1 : .3), // 2020은 검은 클래딩이 줄어든다
-    blackPillar: era >= 2010 && !b.bed && bp < .35,
+    blackPillar: era >= 2010 && !b.bed && bp < (era === 2020 ? .55 : .2), // 떠 있는 지붕은 2020년대 유행
   };
 }
 
@@ -79,6 +79,7 @@ export function chassisOf(look: CarLook): Chassis {
   const pc = has ? Math.floor(r() * PERSONA.length) : -1;
   if (pc >= 0) for (const k of keys) dev[k] = Math.max(-1.4, Math.min(1.4, dev[k] * .65 + (PERSONA[pc][k] ?? 0)));
   if (!b.deck) dev.deck = 0;
+  if (b.suv && dev.roof < 0) dev.roof *= .45; // SUV는 지붕이 많이 낮아지면 왜건처럼 보인다
   // 지붕선 유형: 트렁크 있는 차만(쿠페·스포츠카는 패스트백이 더 흔하다)
   const rt = has ? r() : 0, sporty = look.bodyId === 'coupe' || look.bodyId === 'sports';
   const roofType: RoofType = !b.deck ? 'notch' : rt < (sporty ? .3 : .5) ? 'notch' : rt < (sporty ? .6 : .8) ? 'semi' : 'fast';

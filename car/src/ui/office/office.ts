@@ -2,7 +2,7 @@
 // 실제 사무실 비율(1m = U 사용자 단위, 사람 키 1.7m). 상태는 표정 대신 자세로, 사람은 통로를 따라 걸어 다닌다.
 // 난수는 연출에만 쓴다(직원 외모는 id 해시로 고정).
 import './office.css';
-import { roomFor, assignSeats, findPath, nearestFree, CAPACITY, DESK_H, type Face, type Furn, type Room, type Spot, type WallItem, type Zone } from './layout';
+import { roomFor, assignSeats, findPath, nearestFree, CAPACITY, DESK_H, type Face, type Furn, type Level, type Room, type Spot, type WallItem, type Zone } from './layout';
 import { pickLine, type Mood } from './lines';
 
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
@@ -17,6 +17,8 @@ export interface OfficeView {
   progress?: number;
   defects?: number;
   logo?: string;        // 내 회사 로고 SVG(art.ts logoSvg가 만든 것). 표지판·로비 벽에 끼워 넣는다
+  year?: number;        // 지금 연도: 책상 집기(제도판·타자기 → CRT → 모니터·태블릿)
+  execs?: { id: string; name: string; title: string }[]; // 임명된 임원(창가 임원실, 직함 문패)
 }
 export type Stat = '성능' | '연비' | '실용' | '디자인' | '품질';
 export type OfficeEvent =
@@ -74,8 +76,8 @@ const lookOf = (id: string): Look => {
 };
 
 // ---------- 사람(오른쪽을 보는 기본형, 원점=엉덩이, 키 1.7m) ----------
-function personSvg(role: Role, lk: Look): string {
-  const sh = ROLE[role].shirt, dk = shade(sh, 0.18), pn = lk.pants;
+function personSvg(role: Role, lk: Look, shirt?: string): string {
+  const sh = shirt ?? ROLE[role].shirt, dk = shade(sh, 0.18), pn = lk.pants;
   const arm = (cls: string, x: number, col: string) => `<g transform="translate(${x},-15.5)"><g class="arm ${cls}">
     <path d="M0,0 L0,14.5" stroke="${col}" stroke-width="2.8" stroke-linecap="round"/><circle cy="15.4" r="1.25" fill="${lk.skin}"/>
     ${cls === 'armN' ? `<rect class="cup" x="-1.4" y="14.2" width="2.8" height="3.2" rx=".6" fill="#f4f1ec" stroke="#9aa3ae" stroke-width=".4"/><rect class="clip" x="-3" y="11.5" width="6" height="7.5" rx=".8" fill="#e8dcc2" stroke="#9a8f78" stroke-width=".5"/>` : ''}</g></g>`;
@@ -116,27 +118,67 @@ function carBox(x: number, y: number, z: number, w: number, d: number, col: stri
   return s;
 }
 
-function deskSvg(fu: Furn, role: Role | undefined): string {
+function deskSvg(fu: Furn, role: Role | undefined, kit: Kit = 'lcd', top0 = DESK_TOP): string {
   const { x, y, w, d } = fu, h = DESK_H;
   let s = '';
   for (const [lx, ly] of [[x + 0.05, y + d - 0.08], [x + w - 0.1, y + d - 0.08], [x + w - 0.1, y + 0.03]] as [number, number][]) s += box(lx, ly, 0, 0.05, 0.05, h - 0.03, LEG);
-  s += box(x, y, h - 0.03, w, d, 0.03, DESK_TOP);
-  // 모니터는 칸막이 쪽, 화면은 앉은 사람 쪽
-  const my = fu.face === '+y' ? y + d - 0.12 : y + 0.06, n = role === 'engineer' ? 2 : 1, mw = 0.52;
-  const showScreen = fu.face === '-y';
-  for (let i = 0; i < n; i++) {
-    const mx = x + (n === 2 ? 0.14 + i * 0.58 : 0.44);
-    s += box(mx + mw / 2 - 0.03, my + 0.01, h, 0.06, 0.04, 0.1, '#5b6068');
-    s += box(mx, my, h + 0.1, mw, 0.05, 0.33, '#3b4048');
-    if (showScreen) s += poly([P(mx + 0.03, my + 0.05, h + 0.13), P(mx + mw - 0.03, my + 0.05, h + 0.13), P(mx + mw - 0.03, my + 0.05, h + 0.4), P(mx + 0.03, my + 0.05, h + 0.4)], '', 'class="scr"');
-  }
+  s += box(x, y, h - 0.03, w, d, 0.03, top0);
+  // 화면은 칸막이 쪽에 두고 앉은 사람 쪽을 본다. 시대별: 70년대 제도판·타자기, 80년대 단말기, 90년대 CRT, 2000년대 두꺼운 LCD, 2015~ 얇은 모니터·태블릿
+  const my = fu.face === '+y' ? y + d - 0.12 : y + 0.06, showScreen = fu.face === '-y';
+  const scr = (mx: number, mw: number, z0: number, z1: number, cls = 'scr') => showScreen ? poly([P(mx + 0.03, my + 0.05, z0), P(mx + mw - 0.03, my + 0.05, z0), P(mx + mw - 0.03, my + 0.05, z1), P(mx + 0.03, my + 0.05, z1)], '', `class="${cls}"`) : '';
   const ky = fu.face === '+y' ? y + 0.2 : y + d - 0.35;
+  if (kit === 'drafting') {
+    // 기울인 제도판(디자이너·엔지니어) 또는 타자기(그 밖)
+    if (role === 'designer' || role === 'engineer') { const by = fu.face === '+y' ? y + d - 0.1 : y + 0.1, ty = fu.face === '+y' ? y + 0.25 : y + d - 0.25; s += poly([P(x + 0.2, by, h + 0.42), P(x + 1.2, by, h + 0.42), P(x + 1.2, ty, h + 0.04), P(x + 0.2, ty, h + 0.04)], '#f1eee6', 'stroke="#bdb6aa" stroke-width="1"') + `<path d="M${P(x + 0.35, (by + ty) / 2, h + 0.24)} L${P(x + 1.0, (by + ty) / 2, h + 0.24)}" stroke="#8b94a1" stroke-width="1"/>`; }
+    else if (role) s += box(x + 0.45, ky - 0.05, h, 0.42, 0.3, 0.1, '#5d5148') + box(x + 0.52, ky + 0.18, h + 0.1, 0.28, 0.02, 0.16, '#faf8f3');
+    if (role) { const ph = P(x + 1.15, ky, h); s += `<ellipse cx="${ph[0]}" cy="${ph[1] - 2}" rx="4" ry="2.2" fill="#2f3236"/>`; } // 전화기
+  } else if (kit === 'terminal' || kit === 'crt') {
+    // 베이지색 상자형 화면(뒤가 깊다). 80년대는 엔지니어만, 90년대는 모두
+    if (kit === 'crt' || role === 'engineer') {
+      const mx = x + 0.42, mw = 0.46, dy = fu.face === '+y' ? -0.3 : 0;
+      s += box(mx + 0.06, my + dy, h, mw - 0.12, 0.42, 0.34, '#cfc8b6') + box(mx, my, h + 0.02, mw, 0.06, 0.4, '#ddd6c4');
+      s += scr(mx + 0.02, mw - 0.04, h + 0.08, h + 0.36, kit === 'terminal' ? 'scr crt green' : 'scr crt');
+    } else if (role) s += box(x + 0.45, ky - 0.05, h, 0.42, 0.3, 0.1, '#5d5148') + box(x + 0.52, ky + 0.18, h + 0.1, 0.28, 0.02, 0.16, '#faf8f3');
+  } else {
+    const n = role === 'engineer' ? 2 : 1, mw = kit === 'slim' ? 0.56 : 0.5, th = kit === 'slim' ? 0.025 : 0.06;
+    for (let i = 0; i < n; i++) {
+      const mx = x + (n === 2 ? 0.12 + i * 0.6 : 0.44);
+      s += box(mx + mw / 2 - 0.03, my + 0.01, h, 0.06, 0.04, 0.1, '#5b6068');
+      s += box(mx, my, h + 0.1, mw, th, 0.33, kit === 'slim' ? '#2b2f35' : '#3b4048');
+      s += scr(mx, mw, h + 0.13, h + 0.4);
+    }
+    if (kit === 'slim' && role === 'designer') s += top(x + 0.95, ky - 0.02, h + 0.006, 0.26, 0.18, '#2b2f35'); // 태블릿
+  }
+  if (kit === 'drafting' || kit === 'terminal') return s + (role ? top(x + 0.95, ky, h + 0.004, 0.3, 0.22, '#f4f1ea') : ''); // 서류
   if (role === 'designer') s += top(x + 0.95, ky - 0.05, h + 0.005, 0.38, 0.26, '#4b5059');
   if (role === 'tester') s += top(x + 0.98, ky - 0.08, h + 0.005, 0.28, 0.34, '#f2efe8') + top(x + 1.0, ky - 0.06, h + 0.02, 0.28, 0.34, '#faf8f3');
   if (role === 'sales') s += top(x + 1.05, ky, h + 0.005, 0.12, 0.2, '#30343a');
   if (role) s += top(x + 0.45, ky, h + 0.005, 0.45, 0.15, '#c3c7cc');
   if (role) { const cup = P(x + 0.25, ky + 0.05, h); s += `<rect x="${cup[0] - 1.6}" y="${cup[1] - 4}" width="3.2" height="4" rx=".7" fill="#f2efe8"/>`; }
   return s;
+}
+
+/** 임원 책상: 짙은 나무 상판과 앞가림판. 임원이 있으면 화면이 켜진다 */
+function xdeskSvg(fu: Furn, kit: Kit, on: boolean): string {
+  const { x, y, w, d } = fu;
+  return `<g class="desk${on ? ' on' : ''}">${deskSvg(fu, on ? 'sales' : undefined, kit, '#8a6a4e')}${box(x, y + d - 0.04, 0.08, w, 0.04, DESK_H - 0.11, '#6e5440')}</g>`;
+}
+/** 직함 문패: 유리 앞면(y=gy, 오른쪽 벽과 나란한 면)에 붙은 작은 판. 유리방이 아니면 책상 앞 바닥에 세운 작은 팻말 */
+function platePlate(x: number, gy: number, z: number, title: string, name: string, glass: boolean): string {
+  const w = 1.0 * U, h = 0.42 * U, [X, Y] = P(x, gy, z + 0.42);
+  const stand = glass ? '' : box(x + 0.45, gy - 0.02, 0, 0.04, 0.04, z, '#6f767e');
+  return stand + `<g transform="matrix(1 0.5 0 1 ${X} ${Y})"><rect width="${w}" height="${f(h)}" rx="1.5" fill="#2f343c"/><text x="${f(w / 2)}" y="6.4" text-anchor="middle" font-size="5.6" font-weight="700" fill="#f2f2f0">${esc(title)}</text><text x="${f(w / 2)}" y="12.2" text-anchor="middle" font-size="4.8" fill="#c9ced6">${esc(name)}</text></g>`;
+}
+/** 천장 조명(바닥 빛 자리는 따로): 1 알전구, 2·3 천장 매립(그림 없음), 4·5 긴 펜던트 */
+function lampsSvg(rm: Room, kind: LevelStyle['light']): string {
+  if (kind === 'panel') return '';
+  let s = '';
+  for (const [x, y] of rm.lights) {
+    const [tx, ty] = P(x, y, rm.H), [bx, by] = P(x, y, 2.2);
+    if (kind === 'bulb') s += `<path d="M${tx},${ty} L${bx},${by}" stroke="#5b6068" stroke-width=".8"/><circle cx="${bx}" cy="${f(by + 2.5)}" r="3" fill="#ffe7a3"/><circle cx="${bx}" cy="${f(by + 2.5)}" r="6" fill="#fff1c4" opacity=".35"/>`;
+    else { for (const dx of [-0.9, 0.9]) { const [ax, ay] = P(x + dx, y, rm.H), [cx, cy] = P(x + dx, y, 2.3); s += `<path d="M${ax},${ay} L${cx},${cy}" stroke="#8b929b" stroke-width=".6"/>`; } s += box(x - 1.2, y - 0.06, 2.24, 2.4, 0.12, 0.06, '#3b4048') + poly([P(x - 1.15, y + 0.06, 2.24), P(x + 1.15, y + 0.06, 2.24), P(x + 1.15, y + 0.06, 2.25), P(x - 1.15, y + 0.06, 2.25)], '#fff6d8'); }
+  }
+  return `<g class="lamps" pointer-events="none">${s}</g>`;
 }
 
 function chairParts(x: number, y: number, face: Face): { pre: string; post: string } {
@@ -183,12 +225,27 @@ function furnSvg(fu: Furn, room: Room, carCol: string | null): string {
   }
 }
 
+/** 창밖 풍경(창 안쪽 좌표, 아래가 h). 1 이웃 벽돌 벽 → 2·3 낮은 건물·가로수 → 4 나무와 먼 건물 → 5 높은 층에서 본 도심 */
+function windowView(lv: Level, w: number, h: number, seed: number): string {
+  const r = (i: number) => (hash(`${lv}:${seed.toFixed(1)}:${i}`) % 1000) / 1000;
+  let s = '';
+  if (lv === 1) { s += `<rect y="${f(h * .25)}" width="${w}" height="${f(h * .75)}" fill="#b58b72"/>`; for (let yy = h * .3; yy < h; yy += 4) s += `<path d="M0,${f(yy)} H${w}" stroke="#a37a62" stroke-width=".8"/>`; return s; }
+  if (lv === 5) { // 지평선이 낮다(높은 층). 가늘고 높은 건물 여러 채
+    for (let i = 0; i < 7; i++) { const bw = w * (.1 + .08 * r(i)), x = (w * (i + r(i + 9) * .6)) / 7, bh = h * (.25 + .5 * r(i + 20)); s += `<rect x="${f(x)}" y="${f(h * .92 - bh)}" width="${f(bw)}" height="${f(bh)}" fill="${i % 2 ? '#aebdca' : '#9fb0bf'}"/>`; }
+    return s + `<rect y="${f(h * .92)}" width="${w}" height="${f(h * .08)}" fill="#b9c3c9"/>`;
+  }
+  const far = lv >= 4, base = h * (far ? .78 : .7);
+  for (let i = 0; i < 4; i++) { const bw = w * (.22 + .12 * r(i)), x = w * (i * .27 - .05 + .08 * r(i + 5)), bh = h * (far ? .18 + .14 * r(i + 11) : .28 + .25 * r(i + 11)); s += `<rect x="${f(x)}" y="${f(base - bh)}" width="${f(bw)}" height="${f(bh + h - base)}" fill="${far ? '#b3c1cc' : ['#c9bfae', '#bfb8ad', '#cbc4b8', '#b7b2a9'][i]}"/>`; }
+  for (let i = 0; i < 3; i++) { const cx = w * (.15 + .35 * i + .1 * r(i + 30)), rr = h * (far ? .16 : .1); s += `<circle cx="${f(cx)}" cy="${f(h - rr * .6)}" r="${f(rr)}" fill="${far ? '#8fae8a' : '#9db596'}"/>`; }
+  return s;
+}
+
 function wallSvg(it: WallItem, room: Room): string {
   const w = it.w * U, h = it.h * U, zt = it.z + it.h;
   const [X, Y] = it.wall === 'R' ? P(it.at, 0, zt) : P(0, it.at + it.w, zt);
   const g = (inner: string) => `<g transform="matrix(1 ${it.wall === 'R' ? 0.5 : -0.5} 0 1 ${X} ${Y})">${inner}</g>`;
   switch (it.kind) {
-    case 'window': return g(`<rect width="${w}" height="${h}" fill="#cfe0ea" stroke="#f4f4f2" stroke-width="3"/><path d="M${w / 2},0 V${h}" stroke="#f4f4f2" stroke-width="2.5"/><rect y="${h}" width="${w}" height="2.5" fill="#d5d1ca"/>`);
+    case 'window': return g(`<rect width="${w}" height="${h}" fill="#d6e5ee"/>${windowView(room.level, w, h, it.at)}<rect width="${w}" height="${h}" fill="none" stroke="#f4f4f2" stroke-width="3"/><path d="M${w / 2},0 V${h}" stroke="#f4f4f2" stroke-width="2.5"/><rect y="${h}" width="${w}" height="2.5" fill="#d5d1ca"/>`);
     case 'whiteboard': return g(`<rect width="${w}" height="${h}" fill="#f7f7f5" stroke="#a8aeb5" stroke-width="1.5"/><path d="M${w * 0.1},${h * 0.35} h${w * 0.4} M${w * 0.1},${h * 0.55} h${w * 0.3} M${w * 0.6},${h * 0.3} l${w * 0.12},${h * 0.3} l${w * 0.14},${-h * 0.2}" stroke="#8b94a1" stroke-width="1.2" fill="none"/>`);
     case 'swatch': return g(`<rect width="${w}" height="${h}" fill="#efede8" stroke="#bdb6aa" stroke-width="1"/>` + ['#a8593a', '#c6a46e', '#6f8db8', '#4f8a64', '#d9d5ce', '#3d4148', '#a5566f', '#e1c49a'].map((c, i) => `<rect x="${4 + (i % 4) * (w - 8) / 4}" y="${4 + Math.floor(i / 4) * (h - 8) / 2}" width="${(w - 8) / 4 - 3}" height="${(h - 8) / 2 - 3}" fill="${c}"/>`).join(''));
     case 'sketch': return g(`<rect width="${w}" height="${h}" fill="#f6f4ef" stroke="#bdb6aa" stroke-width="1"/><g class="sketchcar"></g><path d="M${w * 0.1},${h * 0.85} h${w * 0.8}" stroke="#c9c3b8" stroke-width="1"/>`);
@@ -208,8 +265,21 @@ function wallSvg(it: WallItem, room: Room): string {
 }
 
 const FLOOR: Record<Zone['kind'], string> = {
-  office: '#c9ccd0', studio: '#dccbb0', test: '#bfc3c7', garage: '#c4c2bd', pantry: '#e2ddd3', meeting: '#c3c8cf', lab: '#c8cdd2', lobby: '#e6e2da', lounge: '#d9d6cf',
+  office: '#c9ccd0', studio: '#dccbb0', test: '#bfc3c7', garage: '#c4c2bd', pantry: '#e2ddd3', meeting: '#c3c8cf', lab: '#c8cdd2', lobby: '#e6e2da', lounge: '#d9d6cf', exec: '#cbbfae',
 };
+/** 등급별 마감: 바닥(전체·사무 구역), 벽 두 면, 바닥 줄눈(콘크리트 이음·카펫 타일·마루), 조명 모양.
+    1 차고형(콘크리트, 알전구) → 2 사무실 한 층(카펫 타일, 형광등) → 3 넓은 층 → 4 유리 벽·마루 스튜디오(긴 펜던트) → 5 대형 본사(돌 바닥) */
+interface LevelStyle { base: string; office: string; wallL: string; wallR: string; seam: 'concrete' | 'tile' | 'plank' | 'stone'; light: 'bulb' | 'panel' | 'pendant' }
+const LV: Record<Level, LevelStyle> = {
+  1: { base: '#c9c6c0', office: '#c4c3bf', wallL: '#ddd8cf', wallR: '#cfc9be', seam: 'concrete', light: 'bulb' },
+  2: { base: '#d3d0c9', office: '#c3c8cd', wallL: '#e4e1db', wallR: '#d6d2cb', seam: 'tile', light: 'panel' },
+  3: { base: '#d6d3cc', office: '#bfc6ce', wallL: '#e6e3dd', wallR: '#d8d4cd', seam: 'tile', light: 'panel' },
+  4: { base: '#d9d5cd', office: '#c9b99d', wallL: '#e9e6e0', wallR: '#dcd8d0', seam: 'plank', light: 'pendant' },
+  5: { base: '#e2dfd8', office: '#c4bba9', wallL: '#ecebe7', wallR: '#e0ddd6', seam: 'stone', light: 'pendant' },
+};
+/** 시대별 책상 집기 */
+type Kit = 'drafting' | 'terminal' | 'crt' | 'lcd' | 'slim';
+const kitOf = (year = 2020): Kit => year < 1980 ? 'drafting' : year < 1990 ? 'terminal' : year < 2005 ? 'crt' : year < 2015 ? 'lcd' : 'slim';
 
 // ---------- 그리는 순서(쿼터뷰 가림) ----------
 type FP = [number, number, number, number];             // x1,y1,x2,y2
@@ -296,12 +366,22 @@ export function createOffice(host: HTMLElement): Office {
     vb = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 
     // 벽·바닥
-    let s = poly([P(0, 0), P(0, D), P(0, D, H), P(0, 0, H)], '#e4e1db') + poly([P(0, 0), P(W, 0), P(W, 0, H), P(0, 0, H)], '#d6d2cb');
+    const ls = LV[rm.level], kit = kitOf(v.year);
+    let s = `<defs><radialGradient id="ofc-pool"><stop offset="0" stop-color="#fffdf4" stop-opacity=".55"/><stop offset="1" stop-color="#fffdf4" stop-opacity="0"/></radialGradient></defs>`;
+    s += poly([P(0, 0), P(0, D), P(0, D, H), P(0, 0, H)], ls.wallL) + poly([P(0, 0), P(W, 0), P(W, 0, H), P(0, 0, H)], ls.wallR);
     s += poly([P(0, 0, H), P(0, D, H), P(-0.2, D, H), P(-0.2, -0.2, H), P(W, -0.2, H), P(W, 0, H)], '#b7b2aa');
     s += poly([P(W, 0), P(W, D), P(W, D, -0.25), P(W, 0, -0.25)], '#9c968d') + poly([P(0, D), P(W, D), P(W, D, -0.25), P(0, D, -0.25)], '#aaa49b');
-    s += top(0, 0, 0, W, D, rm.level === 1 ? '#c9c6c0' : '#d3d0c9');
-    for (const z of rm.zones) s += top(z.x, z.y, 0.001, z.w, z.d, FLOOR[z.kind]) + (z.kind === 'garage' || z.kind === 'test' ? top(z.x + 0.3, z.y + 0.3, 0.002, z.w - 0.6, z.d - 0.6, 'none', 'stroke="#c9a94a" stroke-width="2" stroke-dasharray="8 6"') : '');
-    if (rm.level === 1) for (let x = 3; x < W; x += 3) s += `<path d="M${P(x, 0, 0.003)} L${P(x, D, 0.003)}" stroke="#bdb9b2" stroke-width="1"/>`;
+    s += top(0, 0, 0, W, D, ls.base);
+    for (const z of rm.zones) s += top(z.x, z.y, 0.001, z.w, z.d, z.kind === 'office' ? ls.office : FLOOR[z.kind]) + (z.kind === 'garage' || z.kind === 'test' ? top(z.x + 0.3, z.y + 0.3, 0.002, z.w - 0.6, z.d - 0.6, 'none', 'stroke="#c9a94a" stroke-width="2" stroke-dasharray="8 6"') : '');
+    // 바닥 줄눈: 콘크리트 이음(3m) / 카펫 타일(사무 구역 1m 격자) / 마루(사무 구역 한 방향 .3m) / 돌(전체 1.5m 격자)
+    const seam = (x0: number, y0: number, x1: number, y1: number, col: string, op: number) => `<path d="M${P(x0, y0, 0.003)} L${P(x1, y1, 0.003)}" stroke="${col}" stroke-width="1" opacity="${op}"/>`;
+    const oz = rm.zones.find((z) => z.kind === 'office')!;
+    if (ls.seam === 'concrete') for (let x = 3; x < W; x += 3) s += seam(x, 0, x, D, '#bdb9b2', 1);
+    if (ls.seam === 'tile') { for (let x = oz.x + 1; x < oz.x + oz.w; x += 1) s += seam(x, oz.y, x, oz.y + oz.d, '#000', .05); for (let y = oz.y + 1; y < oz.y + oz.d; y += 1) s += seam(oz.x, y, oz.x + oz.w, y, '#000', .05); }
+    if (ls.seam === 'plank') for (let y = oz.y + .3; y < oz.y + oz.d; y += .3) s += seam(oz.x, y, oz.x + oz.w, y, '#7a6040', .12);
+    if (ls.seam === 'stone') { for (let x = 1.5; x < W; x += 1.5) s += seam(x, 0, x, D, '#fff', .35); for (let y = 1.5; y < D; y += 1.5) s += seam(0, y, W, y, '#fff', .35); }
+    // 조명이 바닥에 떨어진 밝은 자리
+    for (const [lx, ly] of rm.lights) { const [cx, cy] = P(lx, ly + 0.4); s += `<ellipse cx="${cx}" cy="${cy}" rx="${f(2.4 * U)}" ry="${f(1.2 * U)}" fill="url(#ofc-pool)"/>`; }
     s += poly([P(0, 0), P(0, D), P(0, D, 0.1), P(0, 0, 0.1)], '#c3bfb8') + poly([P(0, 0), P(W, 0), P(W, 0, 0.1), P(0, 0, 0.1)], '#bcb7b0');
     for (const wi of rm.walls) s += wallSvg(wi, rm);
     // 가구 그림자(옅게)
@@ -312,15 +392,23 @@ export function createOffice(host: HTMLElement): Office {
     const list: Item[] = [];
     for (const fu of rm.furn) {
       const occ = fu.seat !== undefined ? occupant.get(fu.seat) : undefined;
-      const svg0 = fu.kind === 'desk' ? deskSvg(fu, occ?.role) : furnSvg(fu, rm, carCol);
+      const svg0 = fu.kind === 'desk' ? deskSvg(fu, occ?.role, kit) : fu.kind === 'xdesk' ? xdeskSvg(fu, kit, !!v.execs?.[rm.furn.filter((q) => q.kind === 'xdesk').indexOf(fu)]) : furnSvg(fu, rm, carCol);
       list.push({ fp: [fu.x, fu.y, fu.x + fu.w, fu.y + fu.d], svg: fu.kind === 'desk' ? `<g class="desk" data-seat="${fu.seat}">${svg0}</g>` : svg0 });
     }
     rm.seats.forEach((st, i) => {
       const { pre, post } = chairParts(st.x, st.y, st.face);
       list.push({ fp: [st.x - 0.25, st.y - 0.25, st.x + 0.25, st.y + 0.25], svg: `${pre}<g class="slot"></g>${post}`, seat: i });
     });
+    // 임원: 창가 자리에 정장 차림으로 앉고, 유리 앞에 직함 문패
+    rm.execs.forEach((ex, i) => {
+      const e = v.execs?.[i], { pre, post } = chairParts(ex.x, ex.y, ex.face);
+      const [hx, hy] = P(ex.x, ex.y, 0.47);
+      const person = e ? `<g class="pp vf sit p-work exec" transform="translate(${hx},${hy}) scale(-1,1)">${personSvg('sales', lookOf(e.id), '#3f4a5e')}</g>` : '';
+      list.push({ fp: [ex.x - 0.25, ex.y - 0.25, ex.x + 0.25, ex.y + 0.25], svg: pre + person + post });
+      if (e) list.push({ fp: [ex.plate[0], 3.12, ex.plate[0] + 1.0, 3.2], svg: platePlate(ex.plate[0], ex.glass ? 3.16 : 2.0, ex.plate[1], e.title, e.name, ex.glass) });
+    });
     const sorted = topoSort(list);
-    world.innerHTML = s + `<g class="items">${sorted.map((it) => `<g>${it.svg}</g>`).join('')}</g>`;
+    world.innerHTML = s + `<g class="items">${sorted.map((it) => `<g>${it.svg}</g>`).join('')}</g>` + lampsSvg(rm, ls.light);
     itemsG = world.querySelector('.items');
     items = sorted.map((it, i) => ({ ...it, node: itemsG!.children[i] as SVGGElement }));
     slots.clear();
@@ -551,8 +639,25 @@ export function createOffice(host: HTMLElement): Office {
   /** 범위가 위쪽 띠 아래 공간의 약 88%를 채우는 배율 */
   const fitOf = (b: [number, number, number, number]) => 0.88 * Math.min(hostW / (b[2] - b[0]), (hostH - topInset()) / (b[3] - b[1]));
   /** 범위 b를 보는 배율과 가운데. 사람 키는 화면 높이의 8~18%(구역이 다 들어가면 12% 이상이 되게 위에서 구역을 고른다) */
+  /** 간판(프로젝트 이름·진행 막대)까지 넣어도 사람이 너무 작아지지 않으면 간판을 함께 넣는다(위쪽 띠에 가려지지 않게) */
+  function withSign(b: [number, number, number, number] | null): [number, number, number, number] | null {
+    const w = room?.walls.find((q) => q.kind === 'sign');
+    if (!b || !w) return b;
+    const p0 = P(w.at, 0, w.z + w.h + 0.15), p1 = P(w.at + w.w, 0, w.z - 0.1);
+    const u: [number, number, number, number] = [Math.min(b[0], p0[0]), Math.min(b[1], p0[1]), Math.max(b[2], p1[0]), Math.max(b[3], p1[1])];
+    return fitOf(u) >= Math.max(hostH * 0.1 / PH, fitOf(b) * 0.85) ? u : b;
+  }
+  /** 간판이 위쪽 띠에 반쯤 걸리면 일하는 구역이 화면 아래로 나가지 않는 만큼 화면을 내려 간판을 띠 아래로 꺼낸다 */
+  function unhideSign(s: number, cx: number, cy: number, b: [number, number, number, number]): number {
+    const w = room?.walls.find((q) => q.kind === 'sign'), inset = topInset();
+    if (!w || !inset) return cy;
+    const [lx, top] = P(w.at, 0, w.z + w.h + 0.1), [rx2, bot] = P(w.at + w.w, 0, w.z), sx = (q: number) => (q - cx) * s + hostW / 2, sy = (q: number) => (q - cy) * s + hostH / 2;
+    if (sx(rx2) < 0 || sx(lx) > hostW || sy(top) >= inset || sy(bot) <= 0) return cy; // 옆으로 벗어났거나 이미 다 보이거나 띠 위로 완전히 나감
+    const need = inset + 4 - sy(top), room2 = hostH - 4 - sy(b[3]);
+    return cy - Math.max(0, Math.min(need, room2)) / s;
+  }
   function frame(list: Actor[]) {
-    const b = boundsOf(list);
+    const b = withSign(boundsOf(list));
     if (!b) return null;
     const want = fitOf(b), inset = topInset();
     const s = Math.max(fitS, Math.min(hostH * 0.18 / PH, Math.max(hostH * 0.08 / PH, want)));
@@ -560,7 +665,7 @@ export function createOffice(host: HTMLElement): Office {
     const hp = list.map((a) => P(a.home.x, a.home.y, 0.9)), fits = want >= s || !hp.length;
     const cx = fits ? (b[0] + b[2]) / 2 : hp.reduce((t, q) => t + q[0], 0) / hp.length;
     const cy = (fits ? (b[1] + b[3]) / 2 : hp.reduce((t, q) => t + q[1], 0) / hp.length) - (inset / 2) / s; // 위쪽 띠는 가려진 곳으로 본다
-    return { s, cx, cy };
+    return { s, cx, cy: unhideSign(s, cx, cy, b) };
   }
   function applyCam() {
     const vw = hostW / cam.s, vh = hostH / cam.s;
@@ -772,7 +877,7 @@ export function createOffice(host: HTMLElement): Office {
   return {
     update(v) {
       if (disposed) return;
-      const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name]).sort(), v.carSvg ?? '']);
+      const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name]).sort(), v.carSvg ?? '', kitOf(v.year), v.execs ?? []]);
       const lvChanged = !view || view.level !== v.level, phaseChanged = !!view && view.phase !== v.phase;
       view = v;
       const rebuilt = key !== structKey;

@@ -5,11 +5,11 @@
 export type Level = 1 | 2 | 3 | 4 | 5;
 export type Face = '+x' | '-x' | '+y' | '-y';
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
-export type ZoneKind = 'office' | 'studio' | 'test' | 'garage' | 'pantry' | 'meeting' | 'lab' | 'lobby' | 'lounge';
+export type ZoneKind = 'office' | 'studio' | 'test' | 'garage' | 'pantry' | 'meeting' | 'lab' | 'lobby' | 'lounge' | 'exec';
 export type FurnKind =
   | 'desk' | 'divider' | 'glass' | 'cabinet' | 'rack' | 'counter' | 'fridge' | 'sofa' | 'plant' | 'table' | 'mchair'
   | 'drafting' | 'clay' | 'car' | 'post' | 'cart' | 'diag' | 'workbench' | 'boxes' | 'dyno' | 'tunnel' | 'reception'
-  | 'printer' | 'cooler' | 'stool';
+  | 'printer' | 'cooler' | 'stool' | 'xdesk';
 export type WallKind = 'window' | 'whiteboard' | 'swatch' | 'sketch' | 'toolwall' | 'shutter' | 'logo' | 'sign' | 'clock';
 export type SpotKind = 'test' | 'studio' | 'lab' | 'coffee' | 'meeting';
 
@@ -20,16 +20,21 @@ export interface Furn { kind: FurnKind; x: number; y: number; w: number; d: numb
 export interface WallItem { kind: WallKind; wall: 'L' | 'R'; at: number; w: number; z: number; h: number }
 export interface Seat { x: number; y: number; face: Face; col: number; row: number; used: boolean; access: [number, number] }
 export interface Spot { kind: SpotKind; x: number; y: number; face: Face }
+/** 임원 자리: 의자 위치(x,y)와 방향, 문패 위치(at: 앞 유리 x, z 높이). glass=유리방 */
+export interface ExecSeat { x: number; y: number; face: Face; plate: [number, number]; glass: boolean }
 export interface Grid { cols: number; rows: number; free: Uint8Array }
 export interface Room {
   level: Level; name: string; W: number; D: number; H: number;
-  zones: Zone[]; furn: Furn[]; walls: WallItem[]; seats: Seat[]; spots: Spot[];
+  zones: Zone[]; furn: Furn[]; walls: WallItem[]; seats: Seat[]; spots: Spot[]; execs: ExecSeat[];
+  lights: [number, number][]; // 천장 조명 자리(바닥 x,y). 그림은 등급별로 다르다
   anchors: Record<Role, [number, number]>; grid: Grid;
 }
 
 export const CELL = 0.5;                 // 걷기 격자 칸(m)
 const CLEAR = 0.12;                      // 가구에서 띄울 거리(m)
 export const CAPACITY: Record<Level, number> = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20 };
+export const EXEC_SEATS: Record<Level, number> = { 1: 1, 2: 2, 3: 4, 4: 5, 5: 6 }; // config.exec.seats와 같다(본사 등급별 임원 자리)
+const EXW = 2.2, BACKE = 3.2;            // 임원실 한 칸 폭, 깊이(오른쪽 벽 쪽 띠 안)
 const NAME: Record<Level, string> = { 1: '창고 공장', 2: '소형 사옥', 3: '본사 빌딩', 4: '연구 단지', 5: '글로벌 본사' };
 // 4인 책상 묶음: 책상 1.4×0.75 두 개씩 마주 보고, 가운데 낮은 칸막이
 const POD_W = 2.8, POD_D = 2.75;
@@ -44,19 +49,23 @@ export function roomFor(level: number): Room {
   if (hit) return hit;
   const nPods = CAPACITY[lv] / 4;
   const pc = lv <= 2 ? nPods : lv === 5 ? 3 : 2, pr = Math.ceil(nPods / pc);
-  const AX = lv >= 4 ? 2.0 : 1.6, AY = 1.4;           // 묶음 사이 통로(책상 깊이보다 넓게)
-  const BACK = 3.4;                                    // 오른쪽 벽 쪽 띠(탕비·회의실·수납장)
+  const BACK = 3.4;                                    // 오른쪽 벽 쪽 띠(탕비·회의실·임원실·수납장)
   const studio = lv >= 2, glass = lv >= 3, lab = lv >= 4, lobby = lv === 5;
   const ox = lv === 1 ? 2.6 : 6.2;                     // 사무 구역 시작 x(왼쪽에 디자인 스튜디오)
   const oy = BACK + 1.6;                               // 사무 구역 시작 y(첫 줄 의자 뒤 통로 포함)
+  // 뒤쪽 띠: 탕비(0~4.8) → 회의실(3등급~) → 임원실(창가 유리방) → 간판·수납장. 임원실이 길면 건물이 넓어지고 넓어진 만큼 책상 묶음 사이 통로를 넓힌다
+  const cab0 = lv === 1 ? 6.0 : lv === 2 ? 8.0 : 11.0, exEnd = cab0 + EXEC_SEATS[lv] * EXW;
+  const rxMin = lv === 1 ? exEnd + 0.6 : exEnd + 0.4 + 3.2 + 0.4;
+  const AY = 1.4, AX0 = lv >= 4 ? 2.0 : 1.6;
+  const AX = pc > 1 ? Math.min(3.0, Math.max(AX0, (rxMin - 1.8 - ox - pc * POD_W) / (pc - 1))) : AX0; // 묶음 사이 통로(책상 깊이보다 넓게)
   const oaW = pc * POD_W + (pc - 1) * AX, oaD = pr * POD_D + (pr - 1) * AY;
-  const rx = ox + oaW + 1.8;                           // 오른쪽 열(시험실·연구실) 시작
+  const rx = Math.max(ox + oaW + 1.8, rxMin);          // 오른쪽 열(시험실·연구실) 시작
   const colW = lv >= 4 ? 7.6 : 6.8;
   const W = rx + colW;
   const D = Math.max(oy + oaD + 1.6 + (lobby ? 3.4 : 0), studio ? oy + 6.4 : 0, lab ? 13.4 : 0, lv === 1 ? 7.6 : 0);
   const H = 3.0;
 
-  const zones: Zone[] = [], furn: Furn[] = [], walls: WallItem[] = [], seats: Seat[] = [], spots: Spot[] = [];
+  const zones: Zone[] = [], furn: Furn[] = [], walls: WallItem[] = [], seats: Seat[] = [], spots: Spot[] = [], execs: ExecSeat[] = [], lights: [number, number][] = [];
   const F = (kind: FurnKind, x: number, y: number, w: number, d: number, h: number, extra: Partial<Furn> = {}) => furn.push({ kind, x, y, w, d, h, ...extra });
   const Wl = (kind: WallKind, wall: 'L' | 'R', at: number, w: number, z: number, h: number) => walls.push({ kind, wall, at, w, z, h });
   const S = (kind: SpotKind, x: number, y: number, face: Face) => spots.push({ kind, x, y, face });
@@ -84,7 +93,7 @@ export function roomFor(level: number): Room {
   S('coffee', 1.2, 1.25, '-y'); S('coffee', 2.2, 1.25, '-y');
   if (lv >= 2) { F('sofa', 0.6, 2.3, 2.0, 0.8, 0.8, { face: '-y' }); S('coffee', 3.3, 2.2, '-x'); }
   else { F('rack', 3.9, 0.05, 1.6, 0.5, 2.0); F('boxes', 0.3, 1.9, 0.9, 0.9, 0.9); }
-  let cabX = lv >= 2 ? 5.2 : 6.0;
+  let cabX = cab0;
   if (glass) {
     const mx = 5.2, mw = 5.2;
     zones.push({ kind: 'meeting', x: mx, y: 0, w: mw, d: BACK });
@@ -94,10 +103,28 @@ export function roomFor(level: number): Room {
     for (const dx of [1.45, 2.25, 3.05]) F('mchair', mx + dx, 0.4, 0.45, 0.45, 0.85, { face: '+y' });
     for (const dx of [1.6, 2.5, 3.4]) S('meeting', mx + dx, 2.5, '-y');
     Wl('whiteboard', 'R', mx + 1.0, 2.8, 1.0, 1.2);
-    cabX = mx + mw + 0.6;
-  } else if (lv === 2) { F('table', 6.0, 1.0, 1.2, 1.2, 0.74); F('stool', 6.3, 2.4, 0.4, 0.4, 0.5); cabX = 8.0; }
+  } else if (lv === 2) { F('table', 6.0, 1.0, 1.2, 1.2, 0.74); F('stool', 6.3, 2.4, 0.4, 0.4, 0.5); }
+  // 임원실: 창을 등진 큰 책상, 책장, 앞은 유리(오른쪽 0.8m가 문). 1등급은 벽 없는 책상 하나
+  for (let i = 0; i < EXEC_SEATS[lv]; i++) {
+    const x0 = cab0 + i * EXW;
+    zones.push({ kind: 'exec', x: x0, y: 0, w: EXW, d: BACKE });
+    if (lv >= 2) { F('glass', x0 + EXW - 0.05, 0, 0.05, BACKE, 2.4); F('glass', x0 + 0.05, BACKE - 0.05, EXW - 0.9, 0.05, 2.4); if (i === 0) F('glass', x0, 0, 0.05, BACKE, 2.4); }
+    F('xdesk', x0 + 0.35, 1.15, 1.5, 0.75, DESK_H, { face: '+y' });
+    if (lv >= 2) F('cabinet', x0 + 0.12, 0.05, 0.9, 0.4, 1.5); else F('boxes', x0 + 0.1, 0.1, 0.6, 0.6, 0.6);
+    if (lv >= 3) F('plant', x0 + EXW - 0.65, 0.15, 0.45, 0.45, 1.1);
+    execs.push({ x: x0 + 1.1, y: 0.75, face: '+y', plate: [x0 + 0.35, 1.55], glass: lv >= 2 });
+    Wl('window', 'R', x0 + 0.95, 1.1, 1.0, 1.4);
+  }
+  cabX = exEnd + 0.4;
   for (let x = cabX; x + 1.2 <= rx - 0.6; x += 1.25) F('cabinet', x, 0.05, 1.2, 0.5, 1.0);
-  if (lv === 1) Wl('sign', 'R', 2.4, 3.0, 2.05, 0.8); else Wl('sign', 'R', Math.max(cabX, ox), 3.2, 1.6, 0.9);
+  if (lv === 1) Wl('sign', 'R', 2.4, 3.0, 2.05, 0.8); else Wl('sign', 'R', cabX, 3.2, 1.6, 0.9);
+  // 넓어진 건물: 사무 구역과 오른쪽 열 사이에 남는 자리는 라운지(소파·탁자·화분)
+  const spare = rx - (ox + oaW + 1.8);
+  if (spare >= 3.2) {
+    const lx = ox + oaW + 1.0, ly = oy + 0.8;
+    zones.push({ kind: 'lounge', x: lx, y: ly, w: Math.min(spare - 0.4, 4.2), d: 3.6 });
+    F('sofa', lx + 0.4, ly + 0.3, 2.0, 0.8, 0.8, { face: '+y' }); F('table', lx + 0.7, ly + 1.5, 1.3, 0.7, 0.45); F('plant', lx + Math.min(spare - 0.4, 4.2) - 0.8, ly + 0.3, 0.5, 0.5, 1.3);
+  }
 
   // ---- 디자인 스튜디오(왼쪽 열) ----
   if (studio) {
@@ -108,6 +135,7 @@ export function roomFor(level: number): Room {
     const nd = lv >= 3 ? 2 : 1;
     for (let i = 0; i < nd; i++) { F('drafting', 0.8 + i * 2.0, sy + 3.4, 1.2, 0.9, 1.0); S('studio', 1.4 + i * 2.0, sy + 4.75, '-y'); }
     Wl('swatch', 'L', sy + 0.2, 1.6, 1.0, 1.0); Wl('sketch', 'L', sy + 2.2, 2.0, 0.9, 1.3);
+    if (lv >= 4) { F('glass', 0, sy - 0.45, 3.6, 0.05, 2.4); F('glass', 5.0, sy - 0.45, 0.05, 4.0, 2.4); } // 유리 벽 디자인 스튜디오(문 자리는 비운다)
   } else {
     // 등급 1: 왼쪽 벽 작업대와 공구 벽
     F('workbench', 0.05, 5.0, 0.75, 3.0, 0.9);
@@ -142,16 +170,19 @@ export function roomFor(level: number): Room {
   }
 
   // ---- 창문·시계·화분 ----
-  const winStart = Math.max(cabX, ox) + 3.6, winEnd = glass ? rx - 0.4 : W - 0.6;
+  const winStart = cabX + (lv === 1 ? 0 : 3.6), winEnd = glass || lv === 1 ? rx - 0.4 : W - 0.6;
   for (let x = winStart; x + 1.6 <= winEnd; x += 2.4) if (!(glass && x > rx - 1)) Wl('window', 'R', x, 1.8, 1.0, 1.5);
   if (lv === 1) Wl('window', 'R', 0.8, 1.4, 1.6, 0.9);
   Wl('clock', 'L', 1.2, 0.6, 2.1, 0.6);
   if (studio) for (let y = oy + 6.6; y + 1.6 <= D - (lobby ? 3.4 : 0.6); y += 2.4) Wl('window', 'L', y, 1.6, 1.0, 1.5);
   if (lv >= 2) F('plant', ox + oaW + 0.6, oy - 0.9, 0.5, 0.5, 1.2);
   if (lv === 1) { F('boxes', 0.3, D - 1.3, 1.0, 1.0, 0.8); F('boxes', W - 1.6, D - 1.6, 1.2, 1.2, 1.0); F('cart', rx + 0.8, D - 1.2, 0.7, 0.45, 0.9); }
+  // 천장 조명: 책상 묶음마다 가운데 위
+  for (const fu of furn) if (fu.kind === 'divider') lights.push([fu.x + fu.w / 2, fu.y]);
+  if (studio) lights.push([2.4, oy + 1.2]);
 
   // 자리 출입 칸·서는 곳을 걷기 격자의 빈 칸에 맞춘다
-  const grid = buildGrid(W, D, furn, seats);
+  const grid = buildGrid(W, D, furn, [...seats, ...execs]);
   for (const s of seats) {
     const b = s.face === '+y' ? -0.6 : s.face === '-y' ? 0.6 : 0, a = s.face === '+x' ? -0.6 : s.face === '-x' ? 0.6 : 0;
     s.access = nearestFree(grid, s.x + a, s.y + b);
@@ -164,7 +195,7 @@ export function roomFor(level: number): Room {
     tester: zc('test') ?? zc('garage')!,
     sales: zc('lobby') ?? [0, D],
   };
-  const room: Room = { level: lv, name: NAME[lv], W, D, H, zones, furn, walls, seats, spots, anchors, grid };
+  const room: Room = { level: lv, name: NAME[lv], W, D, H, zones, furn, walls, seats, spots, execs, lights, anchors, grid };
   cache.set(lv, room);
   return room;
 }
@@ -191,7 +222,7 @@ export function assignSeats(level: number, staff: { id: string; role: Role }[]):
 }
 
 // ---------- 걷기 격자 ----------
-function buildGrid(W: number, D: number, furn: Furn[], seats: Seat[]): Grid {
+function buildGrid(W: number, D: number, furn: Furn[], seats: { x: number; y: number }[]): Grid {
   const cols = Math.floor(W / CELL), rows = Math.floor(D / CELL), free = new Uint8Array(cols * rows).fill(1);
   const block = (x: number, y: number, w: number, d: number) => {
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {

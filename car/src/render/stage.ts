@@ -7,6 +7,18 @@ import { buildCar, createCarMaterials, disposeCar, type CarMaterials } from './c
 // 데모(r128, 구식 조명)의 세기를 지금 three의 물리 단위로 맞추려고 π를 곱한다.
 const LEGACY = Math.PI;
 
+/** 10년 단위 무대 분위기(미묘하게): 조명 색온도(주·반구광), 원판 색. 70년대 따뜻한 노란빛 → 2020년대 차가운 흰빛 */
+const ERA_LOOK: [number, { key: number; sky: number; ground: number; disc: number }][] = [
+  [1970, { key: 0xfff0d8, sky: 0xfff3e2, ground: 0xc8bba4, disc: 0xf2ece1 }],
+  [1980, { key: 0xfff3e4, sky: 0xfdf2ea, ground: 0xc4bcb2, disc: 0xf3efea }],
+  [1990, { key: 0xfff7ee, sky: 0xfffaf2, ground: 0xc0bfb9, disc: 0xf4f3f0 }],
+  [2000, { key: 0xffffff, sky: 0xffffff, ground: 0xb9c2cc, disc: 0xf5f6f8 }],
+  [2010, { key: 0xf8fbff, sky: 0xf6f9ff, ground: 0xb5bfcc, disc: 0xf4f6f9 }],
+  [2020, { key: 0xf2f6ff, sky: 0xf2f6ff, ground: 0xb0bccb, disc: 0xf3f5f9 }],
+];
+/** 출시 연출 조명 단계: off 평소, dark 어두운 무대에 뒤 윤곽광만(실루엣), lit 스포트라이트 */
+export type RevealLight = 'off' | 'dark' | 'lit';
+
 export class Stage {
   private R: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -26,6 +38,17 @@ export class Stage {
   private owned: { dispose(): void }[] = [];
   private canvas: HTMLCanvasElement;
   private host: HTMLElement;
+  private hemi: THREE.HemisphereLight;
+  private key: THREE.DirectionalLight;
+  private rim: THREE.DirectionalLight;
+  private spot: THREE.SpotLight;
+  private disc: THREE.MeshStandardMaterial;
+  private eraT = { key: new THREE.Color(0xffffff), sky: new THREE.Color(0xffffff), ground: new THREE.Color(0xb9c2cc), disc: new THREE.Color(0xf5f6f8) };
+  // 조명 배율(지금 값 → 목표 값으로 부드럽게): 주·반구광, 윤곽광, 스포트, 환경 반사
+  private lk = { main: 1, rim: 1, spot: 0, env: 1 };
+  private lkT = { main: 1, rim: 1, spot: 0, env: 1 };
+  private lkRate = 3;
+  private spin = 1; // 자동 회전 빠르기 배율(출시 연출은 천천히)
 
   static supported(): boolean {
     try { return !!document.createElement('canvas').getContext('webgl2'); } catch { return false; }
@@ -49,17 +72,19 @@ export class Stage {
     board(12, 5, 0, 9, 0, 0xffffff); board(9, 4, -9, 3, 5, 0xffffff); board(9, 4, 9, 3, -5, 0xdfe9ff); board(40, 40, 0, -4, 0, 0x6a7078);
     const pm = keep(new THREE.PMREMGenerator(R));
     scene.environment = keep(pm.fromScene(es, .03).texture);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c2cc, .55 * LEGACY));
-    const key = new THREE.DirectionalLight(0xffffff, 1.05 * LEGACY);
+    const hemi = this.hemi = new THREE.HemisphereLight(0xffffff, 0xb9c2cc, .55 * LEGACY); scene.add(hemi);
+    const key = this.key = new THREE.DirectionalLight(0xffffff, 1.05 * LEGACY);
     key.position.set(4, 9, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
     Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 1, far: 25 });
     key.shadow.bias = -.0004; key.shadow.radius = 3; scene.add(key);
     // 림 라이트: 뒤 위에서 차 윤곽(지붕선·어깨)을 밝혀 바닥과 떨어져 보이게(그림자 없음, 비용 거의 없음)
-    const rim = new THREE.DirectionalLight(0xdfe9ff, .55 * LEGACY); rim.position.set(-6, 5, -7); scene.add(rim);
+    const rim = this.rim = new THREE.DirectionalLight(0xdfe9ff, .55 * LEGACY); rim.position.set(-6, 5, -7); scene.add(rim);
+    // 출시 연출용 스포트라이트: 그림자 없음(그림자 맵을 더 만들지 않는다), 평소에는 꺼 둔다
+    const spot = this.spot = new THREE.SpotLight(0xfff4e0, 0, 22, .42, .55, 0); spot.position.set(1.5, 9, 3.5); spot.target.position.set(0, .4, 0); scene.add(spot, spot.target);
 
     // 회전 무대
     scene.add(table);
-    const disc = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.05, 3.05, .08, 96)), keep(new THREE.MeshStandardMaterial({ color: 0xf5f6f8, roughness: .5, metalness: .05 })));
+    const disc = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.05, 3.05, .08, 96)), this.disc = keep(new THREE.MeshStandardMaterial({ color: 0xf5f6f8, roughness: .5, metalness: .05 })));
     disc.position.y = -.04; disc.receiveShadow = true; table.add(disc);
     const ring = new THREE.Mesh(keep(new THREE.RingGeometry(2.86, 2.89, 128)), keep(new THREE.MeshBasicMaterial({ color: 0x14171c })));
     ring.rotation.x = -Math.PI / 2; ring.position.y = .002; table.add(ring);
@@ -98,13 +123,47 @@ export class Stage {
     const loop = this.loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(.05, Math.max(0, now - last) / 1000); last = now; // 멈췄다 다시 그릴 때 한 번에 튀지 않게 0.05초로 자른다
-      if (idle > 0) idle -= dt; else if (!drag && this.auto && !this.still) table.rotation.y += dt * .22;
+      if (idle > 0) idle -= dt; else if (!drag && this.auto && !this.still) table.rotation.y += dt * .22 * this.spin;
+      this.tickLights(dt);
       this.pop += (1 - this.pop) * Math.min(1, dt * 9);
       const k = .9 + .1 * this.pop; this.carG.scale.set(k, k, k);
       this.M.paint.color.lerp(this.target, Math.min(1, dt * 7));
       R.render(this.scene, this.cam);
     };
     this.raf = requestAnimationFrame(loop);
+  }
+
+  /** 조명·원판 색을 목표로 조금씩(시대가 바뀔 때·출시 연출) */
+  private tickLights(dt: number) {
+    const a = Math.min(1, dt * 1.2), b = Math.min(1, dt * this.lkRate), E = this.eraT, k = this.lk, T = this.lkT;
+    this.key.color.lerp(E.key, a); this.hemi.color.lerp(E.sky, a); this.hemi.groundColor.lerp(E.ground, a); this.disc.color.lerp(E.disc, a);
+    for (const n of ['main', 'rim', 'spot', 'env'] as const) k[n] += (T[n] - k[n]) * b;
+    this.hemi.intensity = .55 * LEGACY * k.main; this.key.intensity = 1.05 * LEGACY * k.main;
+    this.rim.intensity = .55 * LEGACY * k.rim; this.spot.intensity = 2.8 * LEGACY * k.spot; this.spot.visible = k.spot > .01;
+    this.scene.environmentIntensity = k.env;
+  }
+
+  /** 연도에 맞춘 무대 분위기(10년 단위, 2.5초쯤에 걸쳐 바뀐다). 처음 부르면 바로 맞춘다 */
+  setEra(year: number): void {
+    const d = Math.max(1970, Math.min(2020, Math.floor(year / 10) * 10)), L = ERA_LOOK.find(([y]) => y === d)![1], E = this.eraT, first = !this.eraSet;
+    E.key.set(L.key); E.sky.set(L.sky); E.ground.set(L.ground); E.disc.set(L.disc); this.eraSet = true;
+    if (first) { this.key.color.copy(E.key); this.hemi.color.copy(E.sky); this.hemi.groundColor.copy(E.ground); this.disc.color.copy(E.disc); }
+  }
+  private eraSet = false;
+
+  /** 출시 연출 조명. dark→lit은 빠르게(스포트라이트가 탁 켜짐), off로는 천천히 돌아온다 */
+  setRevealLight(m: RevealLight): void {
+    Object.assign(this.lkT, m === 'dark' ? { main: 0, rim: .55, spot: 0, env: .03 } : m === 'lit' ? { main: .2, rim: 1, spot: 1, env: .55 } : { main: 1, rim: 1, spot: 0, env: 1 });
+    this.lkRate = m === 'lit' ? 14 : m === 'dark' ? 10 : 4;
+    this.spin = m === 'off' ? 1 : .7;
+    if (m === 'dark') Object.assign(this.lk, this.lkT); // 장면이 검은 화면에서 서서히 나타나므로 바로 어둡게
+  }
+
+  /** 캔버스를 잠시 다른 칸(출시 연출)으로 옮겨 그린다. 돌려놓는 함수를 돌려준다(새 렌더러를 만들지 않는다) */
+  borrow(host: HTMLElement): () => void {
+    const home = this.canvas.parentElement, old = this.host;
+    host.append(this.canvas); this.host = host; this.ro.disconnect(); this.ro.observe(host); this.size();
+    return () => { if (home) home.prepend(this.canvas); this.host = old; this.ro.disconnect(); this.ro.observe(old); this.size(); };
   }
 
   private size() {
