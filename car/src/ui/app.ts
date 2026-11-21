@@ -74,6 +74,7 @@ export function startApp(): void {
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
   let coTab: CoTab = 'fin', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
+  let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
   let devSel: number | null = null; // 개발 탭에서 고른 프로젝트(동시 개발)
   let officeSent = -Infinity; // 마지막으로 점수·결함 연출을 보낸 시각
@@ -1120,12 +1121,14 @@ export function startApp(): void {
     const cond = (c: number) => { const w = condWord(c); return `<span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(c * 100)}%"></u></span>${w}`; };
     const list = ROLE_ORDER.map((r) => {
       const g = rows.filter((x) => x.role === r);
-      return g.length ? `<p class="lbl grp">${ROLE_NAME[r]} ${g.length}명</p>${g.map((x) => `<button class="srow" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><span class="s-name"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]}</small></span><span class="s-abil">${abil(x)}</span><span class="s-pay">${money(x.salary)}</span><span class="s-cond">${cond(x.condition)}</span><span class="s-do s-${x.status}">${doing(x)}</span></button>`).join('')}` : '';
+      return g.length ? `<p class="lbl grp">${ROLE_NAME[r]} ${g.length}명</p>${g.map((x) => `<div class="srow-w"><button class="s-pick" data-act="staffPick" data-id="${x.id}" aria-pressed="${staffPick.has(x.id)}" aria-label="${esc(x.name)} 고르기"></button><button class="srow" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><span class="s-name"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]}</small></span><span class="s-abil">${abil(x)}</span><span class="s-pay">${money(x.salary)}</span><span class="s-cond">${cond(x.condition)}</span><span class="s-do s-${x.status}">${doing(x)}</span></button></div>`).join('')}` : '';
     }).join('');
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
-    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>
-      <div class="srow head" aria-hidden="true"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
-      <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다.</p></div>`;
+    for (const id of staffPick) if (!rows.some((x) => x.id === id)) staffPick.delete(id); // 해고·퇴사한 직원은 뺀다
+    const nPick = staffPick.size, bulk = `<div class="row bulk"><button class="btn" data-act="pickTrainable">교육 가능한 직원 모두 고르기</button><button class="btn ink" data-act="trainPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 교육 보내기</button><button class="btn" data-act="restPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 2주 쉬기</button>${nPick ? '<button class="btn" data-act="pickNone">고르기 해제</button>' : ''}</div>`;
+    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>${rows.length ? bulk : ''}
+      <div class="srow-w head" aria-hidden="true"><span class="s-pick"></span><div class="srow head"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
+      <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다. 왼쪽 네모를 눌러 여러 명을 고르면 한 번에 교육·휴식을 보낼 수 있습니다.</p></div>`;
     const x = rows.find((y) => y.id === staffSel);
     let card2 = '';
     if (x) {
@@ -1354,7 +1357,7 @@ export function startApp(): void {
   function adopt(g: Game, extra: S.UiExtra): void {
     game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
     restorePlan(extra.plan); garageIdx = 0; gameOverShown = false; officeEvents.length = 0; thumbs.clear();
-    coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = '';
+    coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false;
     logDev(); // 주간 기록은 화면 메모리에만 있어 불러오면 비므로, 지금 상태 한 줄로 시작한다
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
