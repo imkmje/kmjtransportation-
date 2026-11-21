@@ -1,4 +1,6 @@
 // 0.7.0 임원: 자리·임명·채용, 제안(보고함) 일치, 맡기기 조건, 교체 고용, 결정론·저장
+import { equipOf, expectEffect } from '../src/sim/equip';
+import { yearOf } from '../src/sim/time';
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game, allGens, linesUsed, sellingGens } from '../src/sim/game';
@@ -124,6 +126,7 @@ const CHECK: Record<string, (s: CarState, r: ReturnType<typeof execReports>[numb
   build: (s, r) => { const [body, seg] = r.key.split(':'); return r.facts.length < 2 || r.facts[1].includes(`예상 월 판매 ${marketIdea(s, body, seg).sales}대`); },
   adUp: (s, r) => { const g = allGens(s).find((x) => x.id === r.goto!.id)!; return g.awareness < X.market.lowAwareness; },
   adDown: (s, r) => { const g = allGens(s).find((x) => x.id === r.goto!.id)!; return g.marketing >= 2 && g.lostSales >= 1; },
+  expectEquip: (s, r) => { const g = allGens(s).find((x) => x.id === r.goto!.id)!, fx = expectEffect(equipOf(currentEdition(g)), g.body, yearOf(s.week)); return fx.missing.length + fx.optOnly.length > 0; }, // 1.1.0
 };
 
 describe('제안(보고함)', () => {

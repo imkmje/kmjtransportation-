@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { Game, allGens, SAVE_VERSION } from '../src/sim/game';
 import { equipChanges, equipInfo, equipOf, expectEffect, expectation, optPerCar, optPrice, recommendedEquip, takeRate } from '../src/sim/equip';
 import { monthlyDemand } from '../src/sim/market';
-import { planPreview } from '../src/sim/queries';
+import { planPreview, salesFactors } from '../src/sim/queries';
 import { BODIES, OPTIONS } from '../src/data';
 import { config } from '../src/config';
 import { SPEC, grant, ok } from './util';
@@ -88,5 +88,18 @@ describe('명령과 저장 형식 5(1.1.0)', () => {
     expect(allGens(a.state).some((g) => Object.values(equipOf(g.editions.at(-1)!)).includes('opt'))).toBe(true);
     for (let i = 0; i < 40; i++) { a.tick(); b.tick(); }
     expect(JSON.stringify(b.toJSON())).toBe(JSON.stringify(a.toJSON()));
+  });
+});
+
+describe('판매 요인·임원 제안(1.1.0)', () => {
+  it('기대 장비가 빠진 차는 판매 요인에 "장비 기대"가 깎는 요인으로 나온다', () => {
+    const g = at(2010); g.state.cash = 1e9;
+    ok(g.command({ type: 'startProject', ...SPEC, body: 'sedanM', segment: 'family', options: [], equip: {} }));
+    const p = g.state.projects[0];
+    while (!(p.phase === 'test' && p.testWeeks >= config.dev.minTestWeeks)) g.tick();
+    ok(g.command({ type: 'launch', projectId: p.id, price: 2600, marketing: 1, color: 'red', wheels: 0 }));
+    for (let i = 0; i < 8; i++) g.tick();
+    const gen = allGens(g.state)[0], f = salesFactors(g.state, gen.id)!.factors.find((x) => x.key === 'equip')!;
+    expect(f.impact).toBeLessThan(-0.1); expect(f.detail).toContain('기대되는');
   });
 });

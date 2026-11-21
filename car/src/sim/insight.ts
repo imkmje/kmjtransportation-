@@ -1,7 +1,8 @@
 // 0.10.0 정보와 수습 수단: 차종별 손익, 판매 요인 분해, 직원 성장 기록, 10년 회고, 실패한 차의 수습(조건·미리보기). 순수 함수(상태를 바꾸지 않는다)
 import { config } from '../config';
-import { COMPAT, ERA_EVENTS, TECHS, bodyById, segmentById } from '../data';
+import { COMPAT, ERA_EVENTS, TECHS, bodyById, optionById, segmentById } from '../data';
 import { avgGrade, grade, lifeFactor, standard, unitCost } from './cars';
+import { equipOf, expectEffect } from './equip';
 import { capacityOf, costMultOf, devTeams as devTeamsOf } from './company';
 import { fixWeekCost, testCut } from './dev';
 import { eraNow, eraTimeline, eventImpactOn, marketMult } from './events';
@@ -81,7 +82,7 @@ export function nameplatePnL(s: CarState, nameplateId: number): NameplatePnL | n
 }
 
 // ---------- 2. 판매 요인 ----------
-export type FactorKey = 'price' | 'awareness' | 'ads' | 'life' | 'grade' | 'compat' | 'rivals' | 'ours' | 'era' | 'capacity';
+export type FactorKey = 'price' | 'awareness' | 'ads' | 'life' | 'grade' | 'compat' | 'rivals' | 'ours' | 'era' | 'equip' | 'capacity'; // equip(1.1.0): 장비 기대
 /** impact: 실제 수요 ÷ (이 요인만 기준 상태로 돌린 수요) − 1. 음수면 판매를 깎는 요인. units: 실제 − 기준(월 대수, 생산 한도 전). cf: 기준 상태 수요 */
 export interface SalesFactor { key: FactorKey; name: string; detail: string; impact: number; units: number; cf: number; fix: string }
 export interface SalesFactors { generationId: number; demand: number; sold: number | null; capacity: number; base: number; factors: SalesFactor[]; summary: string | null }
@@ -108,6 +109,7 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
     rivals: (c) => ({ ...c, alt: { ...c.alt, rivalA: rivalBase(m) } }),
     ours: mine ? (c) => ({ ...c, alt: { ...c.alt, noOthers: true } }) : null,
     era: (c) => ({ ...c, alt: { ...c.alt, noEra: true } }),
+    equip: (c) => ({ ...c, alt: { ...c.alt, noExpect: true } }),
     capacity: null, // 수요 밖(생산 한도). 지난달 실제로 못 판 몫으로 따로 센다
   };
   let all: Ctx = { car: car0, alt: {} };
@@ -147,6 +149,10 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
   if (patches.ours) add('ours', '우리 다른 차', `같은 차급의 우리 차 ${mine}대가 손님을 나눔`, '같은 차급의 차가 서로 손님을 나눠 갑니다. 고객층을 다르게 하거나 하나를 정리하세요.');
   const ev = eventImpactOn(s, g.id);
   add('era', '시대 사건', ev[0] ?? '지금 이 차에 걸린 사건 효과가 없습니다', ev.length ? '사건이 끝나면 돌아옵니다. 영구 사건이면 다음 세대에서 차체·동력을 바꿔야 합니다.' : '');
+  // 1.1.0 장비 기대: 기대되는 장비가 없거나 선택 사양으로만 있으면 감점, 드문 장비를 기본으로 넣었으면 가점
+  const fx = expectEffect(equipOf(ed), g.body, y), nm = (ids: string[]) => ids.map((id) => optionById(id).name).join('·');
+  add('equip', '장비 기대', fx.missing.length ? `이 차급에서 기대되는 ${nm(fx.missing)}${josa(nm(fx.missing), '이/가')} 없음` : fx.optOnly.length ? `기대되는 ${nm(fx.optOnly)}${josa(nm(fx.optOnly), '이/가')} 선택 사양으로만 있음` : fx.fresh.length ? `아직 드문 ${nm(fx.fresh)}${josa(nm(fx.fresh), '을/를')} 기본으로 넣음` : '기대되는 장비를 모두 갖췄습니다',
+    fx.missing.length || fx.optOnly.length ? '페이스리프트로 기대되는 장비를 기본 장비로 넣을 수 있습니다.' : '');
   // 생산 한도(지난달)
   if (g.lostSales >= 1 && g.lastDemand > 0) {
     const sold = g.sales.at(-1) ?? 0;

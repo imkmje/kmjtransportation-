@@ -1,7 +1,8 @@
 // 임원(0.7.0, 설계서 9.7): 자리·임명·채용, 월 결산 제안(보고함), 맡기기, 교체 고용.
 // 제안 수치는 화면이 쓰는 조회(queries·research·company)와 같은 함수로 계산한다. 상태를 바꾸는 것은 execCommand·execWeek·execMonth뿐
 import { config } from '../config';
-import { COMPAT, MARKET, SEGMENTS, bodyById, segmentById, techById } from '../data';
+import { COMPAT, MARKET, SEGMENTS, bodyById, optionById, segmentById, techById } from '../data';
+import { equipOf, expectEffect, recommendedEquip } from './equip';
 import { grade, salaryOf, unitCost } from './cars';
 import { allocate, capacityOf, costMultOf, isAway, isDevRole, isTraining, linesOf, repEffect, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
@@ -299,6 +300,13 @@ function researchIdeas(s: CarState): Idea[] {
   return out;
 }
 
+/** 1.1.0 새 차 제안에 붙는 추천 구성 한 줄 */
+const recLine = (s: CarState, body: string, seg: string): string => {
+  const e = recommendedEquip(s, body, seg, 'gasoline'), nm = (lv: string) => Object.keys(e).filter((k) => e[k] === lv).map((id) => optionById(id).name).join('·');
+  const std = nm('std'), opt = nm('opt');
+  const t = `${std ? `기본 장비 ${std}` : ''}${std && opt ? ', ' : ''}${opt ? `선택 사양 ${opt}` : ''}`;
+  return t ? ` 장비는 ${t}${J(t, '을/를')} 권합니다.` : '';
+};
 function marketIdeas(s: CarState): Idea[] {
   const out: Idea[] = [], M = X.market, selling = new Set(sellingGens(s).filter((g) => g.status === 'onSale').map((g) => g.body));
   const best = unlockedBodies(s).filter((b) => !selling.has(b.id)).map((b) => {
@@ -313,7 +321,14 @@ function marketIdeas(s: CarState): Idea[] {
     const rival = i.weakRival ? `경쟁사 ${i.weakRival}${J(i.weakRival, '이/가')} 약합니다` : '경쟁사들이 고르게 버팁니다';
     out.push({ kind: 'build', key: `${best.body}:${best.seg}`, goto: { tab: 'dev', sub: 'plan' }, facts: [`${bn}: 손님이 가장 많은 고객층 ${main}`, `기준가 ${i.price.toLocaleString()}만원에 내면 예상 월 판매 ${i.sales}대`, i.weakRival ? `가장 약한 경쟁사 ${i.weakRival}` : '경쟁사 강약이 고름'],
       text: ['수요는 큰데 우리 차가 없는 차급이 있습니다. 새 차종을 검토해 보시죠.', `${bn}${J(bn, '을/를')} ${sn}용으로 내 보는 건 어떨까요. 이 차급은 수요가 큰데 우리 차가 없습니다.`,
-        `${bn}${J(bn, '을/를')} ${sn}용으로 내 보는 건 어떨까요. 이 차급은 ${main} 손님이 가장 많고 ${rival}. 기준가에 내면 월 ${i.sales}대 안팎이 예상됩니다.${fit ? ` ${fit}` : ''}`] });
+        `${bn}${J(bn, '을/를')} ${sn}용으로 내 보는 건 어떨까요. 이 차급은 ${main} 손님이 가장 많고 ${rival}. 기준가에 내면 월 ${i.sales}대 안팎이 예상됩니다.${fit ? ` ${fit}` : ''}${recLine(s, best.body, best.seg)}`] });
+  }
+  for (const g of sellingGens(s).filter((x) => x.status === 'onSale')) { // 1.1.0: 이 차급에서 기대되는 장비가 됐는데 지금 차에 없거나 선택 사양으로만 있으면(페이스리프트로)
+    const fx = expectEffect(equipOf(currentEdition(g)), g.body, yearOf(s.week)), lack = [...fx.missing, ...fx.optOnly];
+    if (!lack.length) continue;
+    const n = gName(s, g), names = lack.map((id) => optionById(id).name).join('·'), how = fx.missing.length ? '지금 차에는 없습니다' : '지금 차에는 선택 사양으로만 있습니다';
+    out.push({ kind: 'expectEquip', key: `${g.id}:${lack.join(',')}`, goto: { tab: 'garage', id: g.id }, facts: [`「${n}」 ${bodyById(g.body).name} 차급에서 기대되는 장비: ${names}(${how})`, `기대 장비가 빠진 만큼 판매가 약 ${pct(1 - fx.mult)} 줄고 있습니다`],
+      text: ['요즘 손님들이 당연하게 여기는 장비가 빠진 차가 있습니다.', `「${n}」에 요즘 기대되는 장비가 빠져 있습니다. 페이스리프트로 넣으시죠.`, `이 차급에서 ${names}${J(names, '이/가')} 기대되는 장비가 됐습니다(${how}). 「${n}」 페이스리프트로 기본 장비로 넣으면 판매가 약 ${pct(1 - fx.mult)} 회복됩니다.`] });
   }
   for (const g of sellingGens(s).filter((x) => x.status === 'onSale')) {
     const n = gName(s, g), mk = config.awareness.marketingCost, go: ExecGoto = { tab: 'garage', id: g.id }, q = grade(currentEdition(g).stats.Q, yearOf(s.week));
