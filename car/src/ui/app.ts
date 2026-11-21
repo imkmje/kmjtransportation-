@@ -1832,7 +1832,7 @@ export function startApp(): void {
   }
 
   function factoryTab(): string {
-    const s = game!.state, f = Q.factoryInfo(s), c = f.current, n = f.next, b = f.building, BM = config.factory.buildMonths;
+    const s = game!.state, f = Q.factoryInfo(s), c = f.current, n = f.next, b = f.building, BM = Q.factoryBuildMonths(b?.level ?? n?.level ?? c.level);
     const cut = (m: number) => (m < 1 ? `${Math.round((1 - m) * 100)}%` : '없음');
     const build = b ? `<div class="build"><p class="lbl">증설 공사 중 · ${b.level}등급</p><div class="prog"><u style="width:${(Math.min(1, Math.max(0, (BM - b.monthsLeft) / BM)) * 100).toFixed(1)}%"></u></div><p class="hint">${b.monthsLeft}개월 남았습니다.${n ? ` 끝나면 한 달 생산 ${num(n.capacity)}대, 생산 라인 ${n.lines}개가 됩니다.` : ''}</p></div>` : '';
     const cur = `<div class="card fac-cur"><p class="lbl">지금 공장 · ${c.level}등급</p><div class="kpis">${kpi('한 달 생산', `${num(c.capacity)}<span>대</span>`)}${kpi(`생산 라인${ib('term:생산 라인')}`, `${f.linesUsed}/${c.lines}<span>개 사용</span>`)}${kpi('월 유지비', money((c.upkeep)))}${kpi('원가 절감', cut(c.costMult))}</div>${build}
@@ -2440,8 +2440,8 @@ export function startApp(): void {
       }
       case 'expandFactory': {
         if (!game) return; const f = Q.factoryInfo(game.state); if (!f.next) return;
-        if (!(await ask(`공장을 ${f.next.level}등급으로 증설할까요?\n건설비 ${money(f.next.cost)}이 바로 나갑니다. 공사는 ${config.factory.buildMonths}개월 걸리고, 그동안은 지금 공장으로 생산합니다. 다 지으면 공장 유지비가 매달 ${money((f.current.upkeep))}에서 ${money((f.next.upkeep))}${josa(money((f.next.upkeep)), '으로/로')} 늘어납니다.`, '증설하기'))) return;
-        if (run(game.command({ type: 'expandFactory' }))) { toast(`공장 증설 공사를 시작했습니다. ${config.factory.buildMonths}개월 뒤 끝납니다.`, 'alert', '공장'); render(); }
+        if (!(await ask(`공장을 ${f.next.level}등급으로 증설할까요?\n건설비 ${money(f.next.cost)}이 바로 나갑니다. 공사는 ${f.next.buildMonths}개월 걸리고, 그동안은 지금 공장으로 생산합니다. 다 지으면 공장 유지비가 매달 ${money((f.current.upkeep))}에서 ${money((f.next.upkeep))}${josa(money((f.next.upkeep)), '으로/로')} 늘어납니다.`, '증설하기'))) return;
+        if (run(game.command({ type: 'expandFactory' }))) { toast(`공장 증설 공사를 시작했습니다. ${f.next.buildMonths}개월 뒤 끝납니다.`, 'alert', '공장'); render(); }
         return;
       }
       case 'allocAuto': if (game && run(game.command({ type: 'setAllocation', generationId: Number(el.dataset.id), share: null }))) { allocWhy = ''; render(); } return;

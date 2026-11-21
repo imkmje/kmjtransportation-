@@ -6,6 +6,10 @@ import { diffOf } from './difficulty';
 import type { CarState, Role, Staff } from './types';
 
 const C = config.staff;
+/** 0.11.0 평판 효과: 평판 soft(100)까지는 평판 그대로, 넘으면 로그로 완만하게(200이면 133, 400이면 167). 인지도·채용 후보 능력 가산에 쓴다 */
+export const repEffect = (rep: number): number => { const R = config.reputation; return rep <= R.soft ? Math.max(0, rep) : R.soft * (1 + R.softStep * Math.log2(rep / R.soft)); };
+/** 0.11.0 그 등급 증설 공사 개월(등급마다 정하지 않았으면 buildMonths) */
+export const factoryBuildMonths = (level: number): number => (config.factory.levels[level - 1] as { buildMonths?: number }).buildMonths ?? config.factory.buildMonths;
 export const hqDef = (s: CarState) => config.hq.levels[s.hqLevel - 1];
 export const factoryDef = (s: CarState) => config.factory.levels[s.factory.level - 1];
 /** 직원 정원 = 본사 등급의 정원. 임원은 정원 밖(0.8.0, 사용자 지시) */
@@ -18,11 +22,13 @@ export const optionSlots = (s: CarState): number => hqDef(s).options;
 export const capacityOf = (s: CarState): number => factoryDef(s).capacity * productionMult(s);
 export const linesOf = (s: CarState): number => factoryDef(s).lines;
 /** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율) */
-export const costMultOf = (s: CarState): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s);
+export const costMultOf = (s: CarState): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s) * (1 + eraCostAdd(s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear));
+/** 0.11.0 시대별 원가 상승(인건비·부품 단가): costEra.from년까지 0, to년에 max, 사이는 직선. t: 소수 연도 */
+export const eraCostAdd = (t: number): number => { const E = config.market.costEra; return E.max * Math.min(1, Math.max(0, (t - E.from) / (E.to - E.from))); };
 /** 월 유지비 = (공장 × (1 − 연구 유지비 인하) + 본사) × 난이도 배수 */
 export const upkeepOf = (s: CarState): number => factoryUpkeep(s, s.factory.level) + hqUpkeep(s, s.hqLevel);
 /** 0.5.1: 등급별 실제 월 유지비(난이도 배수, 공장은 연구 감면 반영). 화면 등급표·승급 미리보기·장부가 같은 값을 쓴다 */
-export const factoryUpkeep = (s: CarState, level: number): number => config.factory.levels[level - 1].upkeep * (1 - upkeepCut(s)) * diffOf(s).upkeepMult;
+export const factoryUpkeep = (s: CarState, level: number): number => config.factory.levels[level - 1].upkeep * (1 - upkeepCut(s)) * (level >= config.factory.bigLevel ? diffOf(s).bigUpkeepMult : diffOf(s).upkeepMult);
 export const hqUpkeep = (s: CarState, level: number): number => config.hq.levels[level - 1].upkeep * diffOf(s).upkeepMult;
 
 /** 9.3 생산 배분: 수동 몫(share)이 있는 차는 한도 × 몫까지, 나머지 한도는 자동(null) 차들에 수요 비례. 차마다 만드는 대수(반올림). 월 결산과 임원 배분 제안이 같이 쓴다 */

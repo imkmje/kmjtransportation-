@@ -3,12 +3,12 @@
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById, segmentById, techById } from '../data';
 import { grade, salaryOf, unitCost } from './cars';
-import { allocate, capacityOf, costMultOf, isAway, isDevRole, isTraining, linesOf, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { allocate, capacityOf, costMultOf, isAway, isDevRole, isTraining, linesOf, repEffect, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { linesUsed, sellingGens } from './game';
 import { josa } from './josa';
 import { fullChangeEligibility } from './lifecycle';
-import { REGION, awarenessTarget, basePriceOf, currentEdition, monthlyDemand, toSaleCar } from './market';
+import { REGION, awarenessTarget, basePriceOf, genBasePrice, currentEdition, monthlyDemand, toSaleCar } from './market';
 import { advice, comboNotes, factoryInfo, faceliftPreview, generationUnitProfit, lifeBar, planPreview, priceForecast } from './queries';
 import { ptCostAdd, regulatedTechs, researchInfo, researchSlots, unlockedBodies } from './research';
 import { mean } from './reviews';
@@ -155,7 +155,7 @@ const roleAvg = (s: CarState, x: Staff): number | null => { const o = s.staff.fi
 /** 성장 한계에 닿았고 같은 직무 평균보다 weakGap 이상 낮다 */
 export const weakCapped = (s: CarState, x: Staff): boolean => { const a = roleAvg(s, x); return x.ability >= x.potential && a !== null && x.ability <= a - X.hr.weakGap; };
 const replaceTier = (s: CarState, min: number): 2 | 3 => (min > config.staff.hire.abilityMax[1] - 10 && s.reputation >= config.staff.hire.tier3Rep ? 3 : 2);
-const repBonus = (s: CarState): number => Math.floor(Math.min(config.staff.hire.repBonusMax, s.reputation / config.staff.hire.repBonusDiv));
+const repBonus = (s: CarState): number => Math.floor(repEffect(s.reputation) / config.staff.hire.repBonusDiv);
 /** 교체 기준 능력(대상 능력 + replace.minGain과 같은 직무 평균 중 큰 값, 공고로 닿을 수 있을 때만) */
 export function replaceMin(s: CarState, x: Staff): number | null {
   const a = roleAvg(s, x); if (a === null) return null;
@@ -248,7 +248,7 @@ function financeIdeas(s: CarState): Idea[] {
     out.push({ kind: 'repay', key: 'loan', goto: fin, facts: [`대출 ${won(s.loan.balance)}, 월 이자 ${won(s.loan.balance * loanRate(s))}`, `갚고 남는 현금 ${won(s.cash - s.loan.balance)}(운영비 ${Math.floor((s.cash - s.loan.balance) / fixed)}개월 치)`],
       text: ['현금에 여유가 있습니다. 대출 상환을 검토해 보시죠.', '대출을 갚을 여유가 있습니다. 이자를 줄이시죠.', `대출 ${won(s.loan.balance)}${J(won(s.loan.balance), '을/를')} 모두 갚아도 운영비 ${F.repayMonths}개월 치 이상이 남습니다. 월 이자 ${won(s.loan.balance * loanRate(s))}${J(won(s.loan.balance * loanRate(s)), '을/를')} 줄일 수 있습니다.`] });
   for (const g of sellingGens(s).filter((x) => x.status === 'onSale' && !x.pricePolicy)) { // 자동 가격을 켠 차는 가격 제안을 하지 않는다(0.8.0)
-    const n = gName(s, g), ed = currentEdition(g), base = basePriceOf(s, g.body), top = base * config.market.overpriceHardAt, go: ExecGoto = { tab: 'garage', id: g.id }, sold = g.sales.at(-1) ?? 0, unit = generationUnitProfit(g, s);
+    const n = gName(s, g), ed = currentEdition(g), base = genBasePrice(s, g), top = base * config.market.overpriceHardAt, go: ExecGoto = { tab: 'garage', id: g.id }, sold = g.sales.at(-1) ?? 0, unit = generationUnitProfit(g, s);
     if (g.lostSales >= 1 && ed.price < top - 1) {
       const p = Math.round(Math.min(top, ed.price * 1.05)), f = priceForecast(s, g.id, p) ?? 0;
       out.push({ kind: 'priceUp', key: String(g.id), goto: go, facts: [`「${n}」 지난달 주문 ${Math.round(g.lastDemand)}대, 판매 ${sold}대`, `가격 ${ed.price.toLocaleString()}만원 → ${p.toLocaleString()}만원(기준가 ${Math.round(base).toLocaleString()}만원)`, `바꾼 가격의 예상 월 판매 ${f}대`],
@@ -374,7 +374,7 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       if (s.cash < X.postCost) return fail('현금이 모자랍니다.');
       s.execs ??= emptyExecs();
       c.spend(X.postCost);
-      const bonus = Math.floor(Math.min(X.repBonusMax, s.reputation / X.repBonusDiv));
+      const bonus = Math.floor(repEffect(s.reputation) / X.repBonusDiv);
       for (let i = 0; i < X.candidates; i++) {
         const skill = Math.min(100, c.rng.intIn(X.hireSkillMin, X.hireSkillMax) + bonus);
         s.execs.candidates.push({ id: s.nextId++, name: c.newName(), role: cmd.role, skill, pay: Math.round(salaryOf(skill) * X.hiredPayMult), expiresWeek: s.week + X.expireWeeks });

@@ -3,10 +3,10 @@ import { config } from '../config';
 import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
 import { defectQMult, finalStats, grade, optionsAt, partStats, salaryOf, unitCost, zeroStats } from './cars';
 import { specError, stepProject, withRequired } from './dev';
-import { allocate, hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { allocate, factoryBuildMonths, hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, repEffect, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
-import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
+import { carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
 import { addNews, choiceMoney, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
 import { criticScores, mean } from './reviews';
@@ -45,7 +45,7 @@ const policyError = (x: PricePolicy | null): string | null => {
 const policyPrice = (s: CarState, g: Generation): number | null => {
   const x = g.pricePolicy, b = bodyById(g.body).basePrice;
   if (!x) return null;
-  const want = x.kind === 'best' ? bestPrice(s, g.id)!.price : Math.round((basePriceOf(s, g.body) * x.pct) / 100 / 10) * 10;
+  const want = x.kind === 'best' ? bestPrice(s, g.id)!.price : Math.round((genBasePrice(s, g) * x.pct) / 100 / 10) * 10;
   return Math.min(Math.floor((b * config.price.max) / 10) * 10, Math.max(Math.ceil((b * config.price.min) / 10) * 10, want));
 };
 const marketingError = (m: number): string | null =>
@@ -159,7 +159,7 @@ export class Game {
   /** 평판 변화: 감점(d < 0)은 난이도 감점 배수(repLossMult)를 곱한다(구제 금융 제외). 바뀐 만큼 이유와 함께 평판 이벤트를 쌓아 tick·명령 결과로 내보낸다(0.5.1) */
   private addRep(d: number, reason: string, scaleLoss = true): void {
     const s = this.state, before = s.reputation, dd = d < 0 && scaleLoss ? d * diffOf(s).repLossMult : d;
-    s.reputation = Math.min(config.reputation.max, Math.max(config.reputation.min, before + dd));
+    s.reputation = Math.max(config.reputation.min, before + dd); // 0.11.0: 위쪽 상한 없음
     const delta = s.reputation - before;
     if (delta) { const r = this.yearLog().rep; r[reason] = (r[reason] ?? 0) + delta; } // 연 보고서: 이유별 합
     if (Math.abs(delta) >= 0.05) this.repEvents.push({ kind: 'reputation', delta, reason, text: `평판 ${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)}(${reason})` });
@@ -452,7 +452,7 @@ export class Game {
         if (s.candidates.length) return fail('이미 공고한 후보가 있습니다. 먼저 채용하거나 돌려보내세요.');
         if (s.cash < cost) return fail('현금이 모자랍니다.');
         this.spend(cost);
-        const bonus = Math.floor(Math.min(H.repBonusMax, s.reputation / H.repBonusDiv));
+        const bonus = Math.floor(repEffect(s.reputation) / H.repBonusDiv);
         for (let i = 0; i < H.candidates; i++) {
           const ability = Math.min(100, this.rng.intIn(H.abilityMin[cmd.tier - 1], H.abilityMax[cmd.tier - 1]) + bonus);
           const potential = Math.min(100, ability + this.rng.intIn(H.potentialMin, H.potentialMax));
@@ -524,7 +524,7 @@ export class Game {
         const err = factoryExpandError(s);
         if (err) return fail(err);
         this.spend(config.factory.levels[s.factory.level].cost);
-        s.factory.build = { level: s.factory.level + 1, doneMonth: monthOf(s.week) + config.factory.buildMonths };
+        s.factory.build = { level: s.factory.level + 1, doneMonth: monthOf(s.week) + factoryBuildMonths(s.factory.level + 1) };
         return OK;
       }
       case 'setAllocation': {
@@ -685,7 +685,7 @@ export class Game {
     if (p.kind === 'fullchange' && !prev) return fail('없는 차종입니다.');
     const inherits = p.kind === 'facelift' || (prev !== undefined && prev.status !== 'discontinued'); // 같은 생산 라인을 이어 쓴다
     if (!inherits && linesUsed(s) >= linesOf(s)) return fail('빈 생산 라인이 없습니다. 판매 중인 차를 단종하거나 공장을 증설하세요.');
-    const base = basePriceOf(s, p.body), bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing); // 시장 기준가(의무 장비 원가 포함, 0.4.2)
+    const base = carBasePrice(s, p), bad = priceError(p.body, cmd.price) ?? marketingError(cmd.marketing); // 시장 기준가(의무 장비 원가 포함, 0.4.2)
     if (bad) return fail(bad);
     if (cmd.wheels !== 0 && cmd.wheels !== 1 && cmd.wheels !== 2) return fail('바퀴 모양은 0~2 중에서 고르세요.');
     if (typeof cmd.color !== 'string') return fail('색상을 고르세요.');

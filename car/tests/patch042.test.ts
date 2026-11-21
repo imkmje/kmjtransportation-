@@ -13,12 +13,12 @@ import { config } from '../src/config';
 import { SPEC, grant, ok } from './util';
 
 describe('개발자 메뉴(0.4.2)', () => {
-  it('devCheat: 현금·평판(상한)·연구 완료·개발 출시 대기·컨디션, devUsed, 명령 기록과 저장 왕복', () => {
+  it('devCheat: 현금·평판(0.11.0: 위쪽 상한 없음)·연구 완료·개발 출시 대기·컨디션, devUsed, 명령 기록과 저장 왕복', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     expect(s.devUsed).toBeUndefined();
     const cash = s.cash; ok(g.devCheat('cash')); expect(s.cash).toBe(cash + config.devCheat.cash); expect(s.devUsed).toBe(true);
     ok(g.devCheat('reputation')); expect(s.reputation).toBe(config.start.reputation + config.devCheat.reputation);
-    s.reputation = 95; ok(g.devCheat('reputation')); expect(s.reputation).toBe(100);
+    s.reputation = 95; ok(g.devCheat('reputation')); expect(s.reputation).toBe(105);
     ok(g.command({ type: 'startResearch', techId: 'el_radio' }));
     const r = g.devCheat('finishResearch');
     expect(s.research.active).toEqual([]); expect(s.research.done).toContain('el_radio'); expect(r.ok && r.events?.some((e) => e.kind === 'unlock')).toBe(true);

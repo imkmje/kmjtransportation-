@@ -2,12 +2,12 @@
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
-import { withRequired, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
+import { withRequired, devScale, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, linesUsed, sellingGens } from './game';
-import { factoryUpkeep, hqUpkeep, capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
+import { factoryBuildMonths, factoryUpkeep, hqUpkeep, capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
-export { basePriceOf } from './market';
-import { REGION, basePriceOf, awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
+export { basePriceOf, carBasePrice, genBasePrice, optionValue } from './market';
+import { REGION, carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
 import { criticScores, mean } from './reviews';
 import { diffOf } from './difficulty';
 import { regulationBlock, requiredOptions } from './events';
@@ -35,7 +35,7 @@ export function projectPreview(s: CarState, projectId: number): { stats: Stats; 
 export function expectedReviews(s: CarState, projectId: number, price: number): { scores: number[]; avg: number } | null {
   const p = projectById(s, projectId), pv = projectPreview(s, projectId);
   if (!p || !pv) return null;
-  const scores = criticScores(pv.stats, yearOf(s.week), basePriceOf(s, p.body), price, p.defects, () => 0, diffOf(s).manyDefects);
+  const scores = criticScores(pv.stats, yearOf(s.week), carBasePrice(s, p), price, p.defects, () => 0, diffOf(s).manyDefects);
   return { scores, avg: mean(scores) };
 }
 
@@ -78,7 +78,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
   const gr = grades(mid, y), fit = (seg: string) => STATS.reduce((a, k) => a + SEGMENTS.find((x) => x.id === seg)!.w[k] * gr[k], 0), mix = MARKET[REGION].mix[spec.body] ?? {};
   const bestSegment = [...SEGMENTS].sort((a, b) => fit(b.id) * (mix[b.id] ?? 0) - fit(a.id) * (mix[a.id] ?? 0) || (a.id < b.id ? -1 : 1))[0].id;
-  return { segmentScore: fit(spec.segment), bestSegment, blockedBy: regulationBlock(s), required: requiredOptions(s), stats: mid, grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult) * (spec.designWeeks + d.minTestWeeks) };
+  return { segmentScore: fit(spec.segment), bestSegment, blockedBy: regulationBlock(s), required: [...requiredOptions(s)], stats: mid, grades: grades(mid, y), avg: avgGrade(mid, y), min: Math.min(lo, hi), max: Math.max(lo, hi), cost: devCostPerWeek(team, spec.budget, diffOf(s).prototypeMult * devScale(s, spec.body)) * (spec.designWeeks + d.minTestWeeks) };
 }
 
 /** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */
@@ -99,7 +99,7 @@ function launchDemand(s: CarState, projectId: number, price: number, marketing: 
   const y = yearOf(s.week), m = monthOf(s.week);
   const others = sellingGens(s).filter((g) => g.status === 'onSale').map((g) => toSaleCar(g, m));
   const start = awarenessStart(s.reputation, ex.avg), target = Math.max(start, awarenessTarget(s.reputation, marketing, grade(pv.stats.Q, y)));
-  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain };
+  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain, options: withRequired(s, p.options) };
   const aw = target + (start - target) * (1 - config.awareness.rate) ** config.forecast.months;
   return monthlyDemand(s, { ...car, awareness: aw, life: 1 }, others, monthTime(m));
 }
@@ -127,7 +127,7 @@ export function advice(g: Generation, s?: CarState): string {
     return `${head} 후속 모델을 준비하세요.`;
   }
   if (g.lostSales >= 1) { // 0.5.1: 가격 벌점(기준가 초과 ^6, 108% 넘으면 급감)에 맞춘 조언
-    const top = (s ? basePriceOf(s, g.body) : bodyById(g.body).basePrice) * config.market.overpriceHardAt;
+    const top = (s ? genBasePrice(s, g) : bodyById(g.body).basePrice) * config.market.overpriceHardAt;
     return currentEdition(g).price < top - 1e-6 ? `주문이 생산량을 넘습니다. 기준가의 ${Math.round(config.market.overpriceHardAt * 100)}%까지는 값을 조금씩 올려 볼 만합니다. 공장 증설도 고려하세요.` : '주문이 생산량을 넘습니다. 값은 이미 충분히 높으니 공장 증설을 권합니다.';
   }
   if (currentEdition(g).defects > 0) return '남은 결함이 있어 리콜 위험이 있습니다.';
@@ -174,7 +174,7 @@ function faceliftMoney(s: CarState, g: Generation, stats: Stats, options: string
   const m = monthOf(s.week), ed = currentEdition(g), fl = config.lifecycle.facelift, t = monthTime(m);
   const others = sellingGens(s).filter((x) => x !== g && x.status === 'onSale').map((x) => toSaleCar(x, m)), cur = toSaleCar(g, m);
   const cap = capacityOf(s) * (g.allocShare ?? 1), mk = config.awareness.marketingCost[g.marketing];
-  const before = Math.min(cap, monthlyDemand(s, cur, others, t)), after = Math.min(cap, monthlyDemand(s, { ...cur, stats, awareness: Math.min(1, g.awareness + fl.awareness), life: lifeFactor(lifeAgeAfter) }, others, t));
+  const before = Math.min(cap, monthlyDemand(s, cur, others, t)), after = Math.min(cap, monthlyDemand(s, { ...cur, stats, options: withRequired(s, options), awareness: Math.min(1, g.awareness + fl.awareness), life: lifeFactor(lifeAgeAfter) }, others, t));
   const unit = (opts: string[], tr: number) => ed.price - unitCost(g.body, g.powertrain, tr, opts, costMultOf(s), ptCostAdd(s, g.powertrain));
   const pb = before * unit(ed.options, ed.tier) - mk, pa = after * unit(withRequired(s, options), tier) - mk, cost = faceliftWeekCost(g.devCost) * (fl.designWeeks + config.dev.minTestWeeks);
   return { salesBefore: Math.round(before), salesAfter: Math.round(after), profitBefore: pb, profitAfter: pa, paybackMonths: pa > pb ? Math.ceil(cost / (pa - pb)) : null };
@@ -256,7 +256,7 @@ export function hqInfo(s: CarState): { current: HqLevelInfo; next: HqLevelInfo |
   return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: s.staff.length }; // 임원은 정원 밖(0.8.0)
 }
 
-const factoryLevelInfo = (s: CarState, level: number) => { const f = config.factory.levels[level - 1]; return { level, capacity: f.capacity, lines: f.lines, cost: f.cost, upkeep: factoryUpkeep(s, level), costMult: f.costMult }; }; // upkeep: 실제 월 청구액(난이도 배수·연구 감면, 0.5.1)
+const factoryLevelInfo = (s: CarState, level: number) => { const f = config.factory.levels[level - 1]; return { level, capacity: f.capacity, lines: f.lines, cost: f.cost, upkeep: factoryUpkeep(s, level), costMult: f.costMult, buildMonths: factoryBuildMonths(level) }; }; // upkeep: 실제 월 청구액(난이도 배수·연구 감면, 0.5.1)
 export type FactoryLevelInfo = ReturnType<typeof factoryLevelInfo>;
 /** 공장 차종별 줄: 지난달 수요·생산(판매)·밀린 주문(못 판 대수), 배분(manual = 수동 몫 또는 null, share = 지난달 실제 몫) */
 export interface FactoryCar { generationId: number; name: string; demand: number; produced: number; backlog: number; manual: number | null; share: number }
@@ -341,26 +341,38 @@ export function priceForecast(s: CarState, generationId: number, price: number):
 /** 가격 결과: 가격, 예상 월 판매, 예상 월 이익(광고비 뺌, 월급·유지비 제외), 시장 기준가 대비 비율(1.05 = +5%) */
 export interface BestPrice { price: number; sales: number; profit: number; vsBase: number }
 /** 허용 가격(차체 기준가 × 0.6~2.0, sim setPrice 검사와 같은 범위)을 10만원 단위로 훑어 월 이익이 가장 큰 값. 같으면 싼 쪽 */
-function scanPrices(s: CarState, body: string, f: (price: number) => { sales: number; profit: number }): BestPrice {
+function scanPrices(body: string, base: number, f: (price: number) => { sales: number; profit: number }, uc = -Infinity, mk = 0): BestPrice {
   const b = bodyById(body).basePrice, step = 10, lo = Math.ceil((b * config.price.min) / step) * step, hi = Math.floor((b * config.price.max) / step) * step;
-  let best: BestPrice | null = null;
-  for (let price = lo; price <= hi; price += step) { const r = f(price); if (!best || r.profit > best.profit) best = { price, ...r, vsBase: 0 }; }
-  best!.vsBase = best!.price / basePriceOf(s, body);
-  return best!;
+  const scan = (from: number, cut: boolean): BestPrice => {
+    let best: BestPrice | null = null;
+    for (let price = from; price <= hi; price += step) {
+      const r = f(price);
+      if (!best || r.profit > best.profit) best = { price, ...r, vsBase: 0 };
+      if (cut && r.sales <= 0) break; // 수요는 값이 오를수록 줄므로 판매 0 뒤로는 이익이 −광고비뿐
+    }
+    return best!;
+  };
+  // 1.0.0 성능(같은 결과): 원가 이하 가격은 이익이 −광고비 이하라, 원가 위에서 −광고비보다 나은 값이 나오면 그것이 최댓값이다(아니면 전부 훑는다)
+  const start = Math.max(lo, Math.ceil((uc + 1e-9) / step) * step);
+  let best = start > lo ? scan(start, true) : null;
+  if (!best || best.profit <= -mk) best = scan(lo, false);
+  best.vsBase = best.price / base;
+  return best;
 }
 /** 판매 중인 세대의 이번 달 최고 이익 가격(priceForecast와 같은 계산: 생산 한도, 지금 광고비) */
 export function bestPrice(s: CarState, generationId: number): BestPrice | null {
   const g = generationById(s, generationId);
   if (!g) return null;
   const e = currentEdition(g), uc = unitCost(g.body, g.powertrain, e.tier, e.options, costMultOf(s), ptCostAdd(s, g.powertrain)), mk = config.awareness.marketingCost[g.marketing];
-  return scanPrices(s, g.body, (price) => { const sales = priceForecast(s, g.id, price)!; return { sales, profit: sales * (price - uc) - mk }; });
+  const m = monthOf(s.week), car = toSaleCar(g, m), cap = capacityOf(s), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m)); // priceForecast와 같은 계산(0.11.0 성능: 다른 차는 한 번만)
+  return scanPrices(g.body, genBasePrice(s, g), (price) => { const sales = Math.round(Math.min(cap, monthlyDemand(s, { ...car, price }, others, t))); return { sales, profit: sales * (price - uc) - mk }; }, uc, mk);
 }
 /** 출시 전 프로젝트의 최고 이익 가격(출시 3개월째 수요, salesForecast의 가운데 값·생산 한도) */
 export function bestLaunchPrice(s: CarState, projectId: number, marketing: number): BestPrice | null {
   const p = projectById(s, projectId);
   if (!p) return null;
   const uc = unitCost(p.body, p.powertrain, p.tier, withRequired(s, p.options), costMultOf(s), ptCostAdd(s, p.powertrain)), mk = config.awareness.marketingCost[marketing] ?? 0;
-  return scanPrices(s, p.body, (price) => { const sales = Math.round(Math.min(capacityOf(s), launchDemand(s, projectId, price, marketing)!)); return { sales, profit: sales * (price - uc) - mk }; });
+  return scanPrices(p.body, carBasePrice(s, { ...p, options: withRequired(s, p.options) }), (price) => { const sales = Math.round(Math.min(capacityOf(s), launchDemand(s, projectId, price, marketing)!)); return { sales, profit: sales * (price - uc) - mk }; });
 }
 
 // ---------- 0.7.0 할 일 목록 ----------
@@ -382,6 +394,37 @@ export { undoInfo } from './game';
 
 // ---------- 0.10.0 정보와 수습 수단 ----------
 export { modelPnL, nameplatePnL, salesFactors, staffHistory, staffBrief, decadeReview, decadeYears, rescueOptions, fixError, clearError, type ModelPnL, type NameplatePnL, type SalesFactor, type SalesFactors, type FactorKey, type StaffHistory, type DecadeReview, type RescueOptions } from './insight';
+
+// ---------- 0.11.0 평판 ----------
+export { repEffect, factoryBuildMonths } from './company';
+import { repEffect } from './company';
+/** 평판 효과가 eff가 되는 평판(repEffect의 역함수) */
+const repFor = (eff: number): number => { const R = config.reputation; return eff <= R.soft ? eff : R.soft * 2 ** ((eff / R.soft - 1) / R.softStep); };
+export interface ReputationInfo {
+  value: number; effect: number; // 평판, 평판 효과(100까지는 같고 넘으면 완만하게)
+  soft: boolean; // 평판이 soft(100)를 넘어 효과가 완만해지는 구간인가
+  effects: { key: 'awareness' | 'hire' | 'exec' | 'tier3' | 'hq'; label: string; text: string }[]; // 지금 평판이 주는 효과
+  next: { rep: number; text: string } | null; // 다음 문턱(가장 가까운 것)
+}
+/** 0.11.0 평판의 효과 목록과 다음 문턱(화면 ⓘ용). 평판은 위쪽 상한이 없고, 100을 넘으면 효과가 로그로 완만해진다 */
+export function reputationInfo(s: CarState): ReputationInfo {
+  const rep = s.reputation, eff = repEffect(rep), H = config.staff.hire, X = config.exec, hq = config.hq.levels[s.hqLevel];
+  const hire = Math.floor(eff / H.repBonusDiv), ex = Math.floor(eff / X.repBonusDiv);
+  const effects: ReputationInfo['effects'] = [
+    { key: 'awareness', label: '인지도', text: `새 차의 시작·목표 인지도 +${Math.round((eff / config.awareness.repDiv) * 100)}%p` },
+    { key: 'hire', label: '채용 후보', text: `직원 후보 능력 +${hire}` },
+    { key: 'exec', label: '임원 후보', text: `외부 임원 후보 능력 +${ex}` },
+    { key: 'tier3', label: '3등급 공고', text: rep >= H.tier3Rep ? '낼 수 있음' : `평판 ${H.tier3Rep}부터` },
+  ];
+  if (hq) effects.push({ key: 'hq', label: '본사 승급', text: rep >= hq.rep ? `${hq.name} 평판 조건 충족` : `${hq.name}: 평판 ${hq.rep} 필요` });
+  const cands: { rep: number; text: string }[] = [
+    ...config.hq.levels.filter((l) => l.rep > 0).map((l) => ({ rep: l.rep, text: `${l.name} 승급 조건` })),
+    { rep: H.tier3Rep, text: '3등급 채용 공고' },
+    { rep: repFor((hire + 1) * H.repBonusDiv), text: `직원 후보 능력 +${hire + 1}` },
+  ];
+  const next = cands.filter((c) => c.rep > rep + 1e-9).sort((a, b) => a.rep - b.rep)[0] ?? null;
+  return { value: rep, effect: eff, soft: rep > config.reputation.soft, effects, next: next && { rep: Math.ceil(next.rep), text: next.text } };
+}
 
 // ---------- 0.12.0 고객층에 맞는 개발팀 자동 배치(화면용 순수 조회) ----------
 /** shortcut: 멈춤 기준(매력 증가 최소값)은 화면 추천용 상수라 여기 둔다. 밸런스에서 조정할 일이 생기면 config.dev로 옮길 것 */

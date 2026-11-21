@@ -19,8 +19,12 @@ export function eraStart(seed: number, i: number): number {
   return (d.year + shift - config.time.startYear) * MPY + (d.month - 1);
 }
 export interface EraSpan { def: EraEventDef; index: number; start: number; end: number | null } // end: 끝나는 달(이 달부터 효과 없음), null = 영구
-export const eraTimeline = (seed: number): EraSpan[] =>
-  ERA_EVENTS.map((def, index) => { const start = eraStart(seed, index); return { def, index, start, end: def.months === null ? null : start + def.months }; });
+const eraCache = new Map<number, EraSpan[]>(); // 0.11.0 성능: 시드별 결과를 재사용(같은 값, 호출자는 고치지 않는다)
+export const eraTimeline = (seed: number): EraSpan[] => {
+  let t = eraCache.get(seed);
+  if (!t) { if (eraCache.size > 64) eraCache.clear(); t = ERA_EVENTS.map((def, index) => { const start = eraStart(seed, index); return { def, index, start, end: def.months === null ? null : start + def.months }; }); eraCache.set(seed, t); }
+  return t;
+};
 const activeAt = (sp: EraSpan, m: number) => m >= sp.start && (sp.end === null || m < sp.end);
 
 /** 한 달의 고정 사건 효과 합(배수는 곱, 유행 가산은 합) */
@@ -81,11 +85,13 @@ export function chargingInfra(seed: number, m: number): number {
 
 type Regulation = Extract<EraEffect, { type: 'regulation' }>;
 /** 지금 국내에서 효력이 있는 규제(유예가 끝난 것) */
-export const regulationsNow = (seed: number, m: number): { name: string; rule: Regulation }[] =>
-  eraTimeline(seed).flatMap((sp) => sp.def.effects.filter((e): e is Regulation => e.type === 'regulation' && e.region === REGION && m >= sp.start + e.graceMonths).map((rule) => ({ name: sp.def.name, rule })));
+const regCache = new Map<string, { name: string; rule: Regulation }[]>(), reqCache = new Map<string, string[]>(); // 1.0.0 성능: 판매 계산마다 불린다(시드·달이 같으면 같은 값, 호출자는 고치지 않는다)
+const memo = <T>(c: Map<string, T>, k: string, f: () => T): T => { let v = c.get(k); if (v === undefined) { if (c.size > 2000) c.clear(); c.set(k, (v = f())); } return v; };
+export const regulationsNow = (seed: number, m: number): { name: string; rule: Regulation }[] => memo(regCache, `${seed}:${m}`, () =>
+  eraTimeline(seed).flatMap((sp) => sp.def.effects.filter((e): e is Regulation => e.type === 'regulation' && e.region === REGION && m >= sp.start + e.graceMonths).map((rule) => ({ name: sp.def.name, rule }))));
 const optNames = (ids: string[]) => ids.map((o) => optionById(o).name).join('·');
 /** 0.4.2: 지금 국내 규제로 의무인 장비(옵션 ID). 기본 장비로 보고 옵션 칸을 차지하지 않는다(원가·능력치는 그대로 들어간다) */
-export const requiredOptions = (s: CarState): string[] => [...new Set(regulationsNow(s.seed, monthOf(s.week)).flatMap((r) => r.rule.options ?? []))];
+export const requiredOptions = (s: CarState): string[] => memo(reqCache, `${s.seed}:${monthOf(s.week)}`, () => [...new Set(regulationsNow(s.seed, monthOf(s.week)).flatMap((r) => r.rule.options ?? []))]);
 /** 옵션을 여는 기술(없으면 처음부터 쓸 수 있는 옵션) */
 export const optionTech = (id: string): TechDef | undefined => TECHS.find((t) => !t.repeatable && t.effects.some((e) => e.type === 'option' && e.id === id));
 /** 의무 장비를 여는 기술 중 아직 연구하지 않은 것 때문에 개발·출시·장비 추가를 못 하는 이유(없으면 null) */

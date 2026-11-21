@@ -39,7 +39,7 @@ describe('차종별 손익(0.10.0)', () => {
     expect(sum(gen2.pnl!.months)).toBeCloseTo(gen2.profit, 4);
     void gen;
   });
-  it('페이스리프트 전후 비교: 같은 개월 수의 이익과 리프트 비용', () => {
+  it('페이스리프트 비교(1.0.0 반사실): 리프트 뒤 같은 개월 수의 실제 이익과 하지 않았을 때 추정, 리프트 비용', () => {
     const { g, gen } = launched(5); months(g, 20);
     g.state.cash = 1e7;
     ok(g.command({ type: 'startFacelift', generationId: gen.id, options: [] }));
@@ -49,7 +49,7 @@ describe('차종별 손익(0.10.0)', () => {
     const p = modelPnL(g.state, gen.id)!, f = p.facelift!;
     expect(p.dev.lift).toBeGreaterThan(0); expect(p.devTotal).toBeCloseTo(gen.devCost, 6);
     expect(f.months).toBe(12); expect(f.gain).toBeCloseTo(f.after - f.before - f.cost, 6);
-    expect(f.text).toMatch(/이득|손해/);
+    expect(f.text).toContain('하지 않았을 때 추정'); expect(f.text).toContain('비용');
   });
 });
 
