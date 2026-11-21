@@ -253,7 +253,7 @@ export type HqLevelInfo = ReturnType<typeof hqLevelInfo>;
 /** 본사(9.2): 지금 등급, 다음 등급(없으면 null)과 승급 가능 여부·이유 */
 export function hqInfo(s: CarState): { current: HqLevelInfo; next: HqLevelInfo | null; canUpgrade: boolean; reason: string | null; staffCount: number } {
   const reason = hqUpgradeError(s);
-  return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: s.staff.length + Object.keys(s.execs?.seats ?? {}).length }; // 임원 포함(0.7.0)
+  return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: s.staff.length }; // 임원은 정원 밖(0.8.0)
 }
 
 const factoryLevelInfo = (s: CarState, level: number) => { const f = config.factory.levels[level - 1]; return { level, capacity: f.capacity, lines: f.lines, cost: f.cost, upkeep: factoryUpkeep(s, level), costMult: f.costMult }; }; // upkeep: 실제 월 청구액(난이도 배수·연구 감면, 0.5.1)
@@ -303,7 +303,7 @@ export function staffInfo(s: CarState): StaffRow[] {
 export function hiringInfo(s: CarState) {
   const H = config.staff.hire, full = s.staff.length >= staffCap(s);
   return {
-    staffCount: s.staff.length, capacity: staffCap(s), full, execs: Object.keys(s.execs?.seats ?? {}).length, // capacity: 임원 자리를 뺀 직원 정원(0.7.0)
+    staffCount: s.staff.length, capacity: staffCap(s), full,
     tiers: H.postCost.map((cost, i) => ({ tier: (i + 1) as 1 | 2 | 3, cost, abilityMin: H.abilityMin[i], abilityMax: H.abilityMax[i], minRep: i === 2 ? H.tier3Rep : 0 })), // minRep: 그 등급 공고에 필요한 평판
     canPost: !full && !s.candidates.length, reason: full ? `정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.` : s.candidates.length ? '이미 공고한 후보가 있습니다.' : null,
     candidates: s.candidates.map((c) => ({ ...c, weeksLeft: c.expiresWeek - s.week })),

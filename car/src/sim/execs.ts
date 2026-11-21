@@ -56,9 +56,11 @@ const seated = (s: CarState): [ExecRole, Staff, boolean][] => EXEC_ROLES.flatMap
 export const execSkill = (role: ExecRole, x: Pick<Staff, 'ability' | 'role'>): number => Math.round(Math.min(100, x.ability * (X.related[role]?.[x.role] ?? X.match)));
 /** 제안의 구체성 1~3 */
 export const execTier = (skill: number): 1 | 2 | 3 => (skill < X.tiers[0] ? 1 : skill < X.tiers[1] ? 2 : 3);
-/** 임원 월급: 임명한 직원은 원래 월급 + 수당, 외부 임원은 직원 월급 공식 × 1.6 */
-export const execPayOf = (x: Staff, hired: boolean): number => (hired ? Math.round(salaryOf(x.ability) * X.hiredPayMult) : salaryOf(x.ability) + X.allowance);
-export const execPay = (s: CarState): number => seated(s).reduce((a, [, x, h]) => a + execPayOf(x, h), 0);
+/** 임원 수에 따라 임원마다 더 붙는 수당(0.8.0: 임원이 정원 밖이 되어 균형을 수당으로 맞춘다) */
+export const seatAllowance = (n: number): number => X.seatAllowance[Math.min(n, X.seatAllowance.length) - 1] ?? 0;
+/** 임원 월급: 임명한 직원은 원래 월급 + 수당, 외부 임원은 직원 월급 공식 × 1.6. 둘 다 임원 수에 따른 수당이 더 붙는다 */
+export const execPayOf = (s: CarState, x: Staff, hired: boolean): number => (hired ? Math.round(salaryOf(x.ability) * X.hiredPayMult) : salaryOf(x.ability) + X.allowance) + seatAllowance(seated(s).length);
+export const execPay = (s: CarState): number => seated(s).reduce((a, [, x, h]) => a + execPayOf(s, x, h), 0);
 /** 운영비(월): 직원 월급 + 임원 월급 + 본사·공장 유지비. 맡기기·교체 고용의 현금 기준 */
 export const monthlyFixed = (s: CarState): number => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s) + upkeepOf(s);
 
@@ -75,7 +77,7 @@ export function execInfo(s: CarState) {
       const seat = s.execs?.seats[role], skill = seat ? execSkill(role, seat.staff) : 0;
       return {
         role, title: EXEC_TITLE[role],
-        holder: seat ? { staffId: seat.staff.id, name: seat.staff.name, skill, tier: execTier(skill), hired: seat.hired, pay: execPayOf(seat.staff, seat.hired), staffRole: seat.staff.role } : null,
+        holder: seat ? { staffId: seat.staff.id, name: seat.staff.name, skill, tier: execTier(skill), hired: seat.hired, pay: execPayOf(s, seat.staff, seat.hired), staffRole: seat.staff.role } : null,
         canFill: !seat && used < seats, // 빈 자리(임명·채용 가능). 자리가 다 찼으면 false(잠김)
         delegations: DELEGATIONS[role].map((d) => {
           const whyNot = !seat ? '임원이 없습니다.' : skill < X.delegateSkill ? `임원 능력이 ${X.delegateSkill} 이상이어야 맡길 수 있습니다(지금 ${skill}).` : null;
@@ -152,7 +154,7 @@ const roleAvg = (s: CarState, x: Staff): number | null => { const o = s.staff.fi
 export const weakCapped = (s: CarState, x: Staff): boolean => { const a = roleAvg(s, x); return x.ability >= x.potential && a !== null && x.ability <= a - X.hr.weakGap; };
 const replaceTier = (s: CarState, min: number): 2 | 3 => (min > config.staff.hire.abilityMax[1] - 10 && s.reputation >= config.staff.hire.tier3Rep ? 3 : 2);
 const repBonus = (s: CarState): number => Math.floor(Math.min(config.staff.hire.repBonusMax, s.reputation / config.staff.hire.repBonusDiv));
-/** 교체 기준 능력(대상 능력 + 15와 같은 직무 평균 중 큰 값, 공고로 닿을 수 있을 때만) */
+/** 교체 기준 능력(대상 능력 + replace.minGain과 같은 직무 평균 중 큰 값, 공고로 닿을 수 있을 때만) */
 export function replaceMin(s: CarState, x: Staff): number | null {
   const a = roleAvg(s, x); if (a === null) return null;
   const min = Math.max(x.ability + X.replace.minGain, Math.ceil(a)), H = config.staff.hire;
@@ -358,13 +360,12 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       const err = roleErr(cmd.role); if (err) return fail(err);
       const seat = s.execs?.seats[cmd.role]; if (!seat) return fail('비어 있는 자리입니다.');
       delete s.execs!.seats[cmd.role]; s.execs!.delegations[cmd.role] = [];
-      if (seat.hired) c.spend(severanceOf(execPayOf(seat.staff, true))); // 외부 임원은 회사를 떠난다(퇴직금)
+      if (seat.hired) c.spend(severanceOf(execPayOf(s, seat.staff, true))); // 외부 임원은 회사를 떠난다(퇴직금)
       else { seat.staff.projectId = null; seat.staff.lab = false; s.staff.push(seat.staff); s.staff.sort((a, b) => a.id - b.id); } // 원래 직무로 복귀
       return OK;
     }
     case 'postExecJob': {
       const err = roleErr(cmd.role) ?? seatErr(cmd.role); if (err) return fail(err);
-      if (s.staff.length >= staffCap(s)) return fail(`정원이 찼습니다. 임원도 정원 안에서 자리를 차지합니다. 직원을 임원으로 임명하거나 본사를 키우세요.`);
       if (s.execs?.candidates.some((x) => x.role === cmd.role)) return fail('이미 공고한 후보가 있습니다. 먼저 뽑거나 기다리세요.');
       if (s.cash < X.postCost) return fail('현금이 모자랍니다.');
       s.execs ??= emptyExecs();
@@ -379,7 +380,6 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
     case 'hireExec': {
       const err = roleErr(cmd.role) ?? seatErr(cmd.role); if (err) return fail(err);
       const cd = s.execs?.candidates.find((x) => x.id === cmd.candidateId && x.role === cmd.role); if (!cd) return fail('없는 후보입니다.');
-      if (s.staff.length >= staffCap(s)) return fail(`정원이 찼습니다. 임원도 정원 안에서 자리를 차지합니다.`);
       const e = s.execs!;
       e.candidates = e.candidates.filter((x) => x.role !== cmd.role);
       e.seats[cmd.role] = { staff: { id: cd.id, name: cd.name, role: EXEC_BASE_ROLE[cmd.role], ability: cd.skill, potential: cd.skill, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, hired: true, since: s.week };

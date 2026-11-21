@@ -740,3 +740,47 @@ body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자
 .exec-pick .opt{min-height:0}
 .exec-card .toggle .btn{min-width:72px}
 .srow.s-exec .s-abil b{margin-left:4px}
+/* 0.8.0 직원 표 정렬·필터: 머리글은 패널을 내려도 위에 붙어 있다 */
+.s-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
+.s-chip{min-height:44px;padding:0 12px;border-radius:22px;border:1.5px solid var(--line);background:var(--card);font-weight:700;font-size:13px;color:var(--ink2);display:inline-flex;align-items:center;gap:6px}
+.s-chip small{font-size:12px;color:var(--ink3);font-weight:800}
+.s-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--card)}.s-chip[aria-pressed="true"] small{color:#fffb}
+.srow-w.head{position:sticky;top:0;z-index:2;background:var(--card);border-bottom:1px solid var(--line);margin-bottom:4px}
+.srow.head{padding:0 10px}
+.srow.head .sh{min-height:44px;border:0;background:transparent;font:inherit;font-weight:800;color:inherit;padding:0 6px 0 0;text-align:left;white-space:nowrap}
+.srow.head .sh[aria-pressed="true"]{color:var(--ink)}.srow.head .sh i{font-style:normal;margin-left:2px;font-size:10px}
+.sh2{display:flex;flex-wrap:wrap;column-gap:6px}
+/* 0.8.0 연 보고서 */
+.yr h2{font-weight:900;font-size:24px;letter-spacing:-.03em;margin:2px 0 10px}
+.yr .kpi small.pos,.yr .kpi small.neg{display:block;margin-top:2px}
+.yr-cols{display:grid;gap:4px 20px;margin-top:6px}
+@media (min-width:900px){.yr-cols{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+.yr .lbl{margin-top:12px}
+.yr-list{margin:4px 0 0 18px;font-size:14px;line-height:1.5}
+.yr-rep{font-size:15px;margin:4px 0 6px}
+.yr-years{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:8px}
+.yr-years .btn{flex-direction:column;align-items:flex-start;min-height:60px;padding:8px 14px;gap:2px}
+.auto-every{margin:6px 0 0}
+/* 0.8.0 기획 한 화면 요약·프리셋·최고 이익 가격 */
+.sumrows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.sumrow{text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:6px 10px;min-height:46px;display:flex;flex-direction:column;justify-content:center;min-width:0;gap:1px}
+.sumrow small{font-size:11px;font-weight:700;color:var(--ink3)}
+.sumrow b{font-size:13.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sumrow em{font-style:normal;font-size:11px;font-weight:700;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sumrow.bad{border-color:#e9a3a3}.sumrow.bad em{color:#b42318}
+.sum-kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.sum-kpis .kpi{padding:8px 10px}.sum-kpis .kpi small{display:block;line-height:1.25}.sum-kpis .kpi b{font-size:clamp(16px,1.6vw,22px)}
+.sum-go > .btn{flex:0 0 auto}
+.new-tech ul{margin:4px 0 0 18px}
+.best-row .best-note{flex:1 1 160px}
+.preset-new{display:grid;gap:8px;margin:10px 0}
+.preset-new .chk{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:700}
+.presets{margin-top:6px;display:grid;gap:8px}
+@media (max-width:560px){.sumrows{grid-template-columns:minmax(0,1fr)}.sum-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1099px){.cols.co-staff{grid-template-columns:minmax(0,1fr)}} /* 태블릿 세로·1024×768: 직원 표를 한 줄 전체로(자세히·채용은 아래) */
+/* 0.8.0 임원 카드: 좁은 세 칸 KPI가 말줄임되지 않게(글자를 줄이고 줄바꿈 허용) */
+.exec-card .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+.exec-card .kpi{padding:8px 10px}
+.exec-card .kpi b{font-size:18px;white-space:normal;overflow-wrap:anywhere}
+.exec-card .kpi-word b{font-size:15px;line-height:1.25}
+.exec-card.locked .note{font-size:13px;color:var(--ink2)}

@@ -52,6 +52,8 @@ describe('할 일 목록(0.7.0)', () => {
     g.state.staff[0].restUntil = g.state.week + 2; expect(kinds(g)).not.toContain('tired');
     while (g.state.staff.length < config.hq.levels[0].staff) g.state.staff.push({ ...g.state.staff[0], id: 9000 + g.state.staff.length });
     expect(kinds(g)).not.toContain('hire');
+    ok(g.command({ type: 'appointExec', role: 'hr', staffId: g.state.staff[1].id })); // 0.8.0: 임원은 정원 밖이라 임명하면 정원에 한 자리가 빈다
+    expect(kinds(g)).toContain('hire');
   });
   it('결정할 사건이 생기면 항목, goto는 그 사건', () => {
     const g = Game.create({ seed: 3, difficulty: 'normal' }); g.state.cash = 1e9;

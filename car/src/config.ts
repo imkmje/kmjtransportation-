@@ -194,6 +194,7 @@ export const config = {
   exec: { // 0.7.0 임원(9.7). 금액 만원
     seats: [1, 2, 4, 5, 6], // 본사 등급별 임원 자리 수
     allowance: 300, // 직원을 임원으로 임명하면 월급에 더하는 수당(월)
+    seatAllowance: [0, 0, 5000, 7000, 9000, 10000], // 0.8.0: 임원이 n명일 때 임원마다 더 붙는 수당(월). 2명까지(본사 1~2등급)는 0, 3명부터 누진. 임원이 정원 밖이 되어 균형을 여기와 replace.minGain으로 맞춘다
     hiredPayMult: 1.6, // 외부에서 뽑은 임원의 월급 = 직원 월급 공식(능력) × 1.6
     postCost: 3000, candidates: 3, expireWeeks: 4, // 임원 공고비, 후보 수, 후보가 기다리는 주
     hireSkillMin: 45, hireSkillMax: 70, repBonusDiv: 10, repBonusMax: 10, // 외부 후보 능력 = 45~70 + 평판/10(최대 +10)
@@ -203,7 +204,7 @@ export const config = {
     delegateSkill: 45, // 맡기기를 켤 수 있는 임원 능력
     perExec: 2, reissueMonths: 6, ignoredMonths: 18, reportsMax: 60, // 월 결산 때 임원별 제안 최대 2건, 같은 제안은 6개월(지운 제안은 18개월) 뒤에 다시, 보고함 60건 보관
     hr: { growGap: 15, weakGap: 12, restWeeks: 2, trainCashMonths: 6, trainMax: 2 }, // 교육 권유: 성장 여지 15 이상, 해고 권유: 성장 한계 + 같은 직무 평균보다 12 낮음, 자동 교육: 현금이 운영비 6개월 치 이상, 동시에 2명까지
-    replace: { cashMonths: 6, minGain: 15, rejectYears: 2, retryWeeks: 8, maxTries: 2 }, // 교체 고용: 현금이 운영비 6개월 치 초과, 기준 = max(대상 능력 + 15, 같은 직무 평균), 거절하면 2년, 기준 미달이면 8주 뒤 한 번 더
+    replace: { cashMonths: 6, minGain: 50, rejectYears: 2, retryWeeks: 8, maxTries: 2 }, // 교체 고용: 현금이 운영비 6개월 치 초과, 기준 = max(대상 능력 + 50, 같은 직무 평균)(0.8.0: 15 → 50, 임원이 정원 밖이 되어 교체로 얻는 이익을 줄인다), 거절하면 2년, 기준 미달이면 8주 뒤 한 번 더
     research: { cashMonths: 6 }, // 자동 연구: 연구비를 내고도 운영비 6개월 치가 남을 때
     finance: { warnMonths: 6, avgMonths: 3, repayMonths: 6 }, // 현금 부족 예고: 최근 3개월 평균 손실이면 6개월 안에 바닥날 때, 대출 상환 권유: 갚고도 운영비 6개월 치가 남을 때
     product: { fullChangeLife: 0.55, faceliftPayback: 24 }, // 풀체인지 권유: 수명 막대 55% 아래, 페이스리프트 권유: 비용 회수 24개월 이내

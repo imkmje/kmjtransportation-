@@ -5,7 +5,7 @@ import { Game, allGens, linesUsed, sellingGens } from '../src/sim/game';
 import { steady, steadyExec } from '../src/sim/bots';
 import { capacityOf, isTraining, linesOf, staffCap } from '../src/sim/company';
 import { salaryOf } from '../src/sim/cars';
-import { advice, faceliftPreview, factoryInfo, lifeBar, priceForecast } from '../src/sim/queries';
+import { advice, faceliftPreview, factoryInfo, hiringInfo, hqInfo, lifeBar, priceForecast } from '../src/sim/queries';
 import { execInfo, execReports, execSkill, execTier, execUnread, marketIdea, monthlyFixed, profitAlloc, recommendTech, weakCapped } from '../src/sim/execs';
 import { regulatedTechs } from '../src/sim/research';
 import { currentEdition } from '../src/sim/market';
@@ -51,10 +51,26 @@ describe('임원 자리·임명·채용', () => {
     ok(g.command({ type: 'dismissExec', role: 'research' }));
     expect(g.state.staff.find((y) => y.id === 2)?.role).toBe('engineer');
   });
-  it('임원도 정원을 차지한다(직원 정원 = 본사 정원 − 임원 수)', () => {
+  it('임원은 정원 밖(0.8.0 사용자 지시): 직원을 임명하면 그 자리가 비어 한 명을 더 뽑을 수 있고, 정원이 찬 채로도 외부 임원을 뽑는다', () => {
     const g = Game.create({ seed: 1, difficulty: 'normal' });
     ok(g.command({ type: 'appointExec', role: 'hr', staffId: 1 }));
-    expect(staffCap(g.state)).toBe(config.hq.levels[0].staff - 1);
+    expect(staffCap(g.state)).toBe(config.hq.levels[0].staff);
+    expect(hiringInfo(g.state)).toMatchObject({ staffCount: 3, capacity: config.hq.levels[0].staff, full: false });
+    expect(hqInfo(g.state).staffCount).toBe(3);
+    hq(g, 2); while (g.state.staff.length < staffCap(g.state)) g.state.staff.push({ ...g.state.staff[0], id: g.state.nextId++ });
+    hireExec(g, 'market');
+    expect(g.state.staff.length).toBe(staffCap(g.state));
+  });
+  it('임원 수당 누진(0.8.0): 2명까지는 그대로, 3명부터 임원마다 seatAllowance가 더 붙는다', () => {
+    const g = Game.create({ seed: 1, difficulty: 'normal' }); hq(g, 3);
+    const pay = (r: ExecRole) => execInfo(g.state).roles.find((x) => x.role === r)!.holder!.pay;
+    const x = g.state.staff.find((y) => y.id === 1)!, base = salaryOf(x.ability) + X.allowance;
+    ok(g.command({ type: 'appointExec', role: 'hr', staffId: 1 })); ok(g.command({ type: 'appointExec', role: 'product', staffId: 2 }));
+    expect(pay('hr')).toBe(base);
+    ok(g.command({ type: 'appointExec', role: 'research', staffId: 3 }));
+    expect(X.seatAllowance[2]).toBeGreaterThan(0);
+    expect(pay('hr')).toBe(base + X.seatAllowance[2]);
+    toMonthEnd(g); expect(g.state.ledger.at(-1)!.salaries).toBe(g.state.staff.reduce((a, y) => a + salaryOf(y.ability), 0) + pay('hr') + pay('product') + pay('research'));
   });
   it('채용: 공고비, 후보 3명, 외부 임원 월급 = 직원 월급 × 1.6, 해임하면 퇴직금을 받고 떠난다', () => {
     const g = Game.create({ seed: 1, difficulty: 'normal' }), c0 = g.state.cash;
@@ -135,8 +151,8 @@ describe('제안(보고함)', () => {
   });
   it('모든 제안이 말한 조건이 그 순간의 실제 상태와 맞는다(신중 봇 + 임원 6명, 3판 × 30년)', () => {
     let skipped = 0;
-    const seen = new Map<string, number>(), caps = config.hq.levels.map((l) => l.staff);
-    config.hq.levels.forEach((l) => { l.staff += 6; }); // 임원 6명이 정원을 다 먹지 않게(이 테스트만)
+    const seen = new Map<string, number>(), sa = X.seatAllowance;
+    X.seatAllowance = sa.map(() => 0); // 창업 초 본사 1등급에 임원 6명을 앉힌 인공 상황이라 6명 몫 수당(0.8.0)이면 곧 파산한다(이 테스트는 제안 정합성만 본다)
     try { for (const seed of [1, 2, 3]) {
       const g = Game.create({ seed, difficulty: 'easy' }), b = steady();
       hq(g, 5); for (const r of ['hr', 'product', 'finance', 'production', 'research', 'market'] as ExecRole[]) hireExec(g, r);
@@ -155,7 +171,7 @@ describe('제안(보고함)', () => {
           expect(CHECK[r.kind](at, full), `${r.kind} ${r.text} ${r.facts.join(' / ')}`).toBe(true);
         }
       }
-    } } finally { config.hq.levels.forEach((l, i) => { l.staff = caps[i]; }); }
+    } } finally { X.seatAllowance = sa; }
     console.log('관찰한 제안:', [...seen].map(([k, v]) => `${k} ${v}`).join(', '), `(사건 효과가 바뀐 결산 ${skipped}번은 건너뜀)`);
     for (const k of ['fire', 'facelift', 'priceUp', 'build', 'emptySlot', 'expand']) expect(seen.has(k), k).toBe(true);
   });
@@ -256,20 +272,20 @@ describe('맡기기', () => {
 const steadyRun = (seed: number, years: number, bot = steady()) => { const g = Game.create({ seed, difficulty: 'easy' }); for (let w = 0; w < years * 48; w++) { bot.step(g); g.tick(); } return { g }; };
 
 describe('교체 고용', () => {
-  /** 디자이너 둘(한 명은 능력 30에서 성장 한계, 다른 한 명은 60)과 인사 임원, 넉넉한 현금 */
+  /** 디자이너 둘(한 명은 능력 20에서 성장 한계, 다른 한 명은 60)과 인사 임원, 넉넉한 현금. 0.8.0: 교체 기준이 능력 + 50이 되어 30 → 20(기준 70이 공고로 닿는다) */
   function setup(seed = 1) {
     const g = Game.create({ seed, difficulty: 'normal' }); g.state.reputation = 50; hireExec(g, 'hr', 90);
-    const d = g.state.staff.find((x) => x.role === 'designer')!; d.ability = d.potential = 30;
+    const d = g.state.staff.find((x) => x.role === 'designer')!; d.ability = d.potential = 20;
     g.state.staff.push({ ...d, id: g.state.nextId++, name: '보조디자이너', ability: 60, potential: 70 });
     g.state.cash = 1e8;
     return { g, d };
   }
   const propose = (g: Game) => { toMonthEnd(g); const r = g.state.execs!.replacements.find((x) => x.status === 'proposed'); expect(r).toBeDefined(); return r!; };
-  it('제안: 성장 한계·같은 직무 평균보다 낮은 직원, 한 번에 한 건, 기준 = max(능력 + 15, 평균)', () => {
+  it('제안: 성장 한계·같은 직무 평균보다 낮은 직원, 한 번에 한 건, 기준 = max(능력 + 50, 평균)(0.8.0: 15 → 50)', () => {
     const { g, d } = setup(), r = propose(g);
-    expect(r.staffId).toBe(d.id); expect(r.minAbility).toBe(60);
+    expect(r.staffId).toBe(d.id); expect(r.minAbility).toBe(20 + X.replace.minGain);
     const rep = execReports(g.state).find((x) => x.replacement?.id === r.id)!;
-    expect(rep.text).toContain(`${d.name}(디자인 30, 더 성장하기 어려움)`); expect(rep.text).toContain('디자인 60 이상');
+    expect(rep.text).toContain(`${d.name}(디자인 20, 더 성장하기 어려움)`); expect(rep.text).toContain('디자인 70 이상');
     toMonthEnd(g);
     expect(g.state.execs!.replacements.filter((x) => x.status === 'proposed')).toHaveLength(1);
   });
