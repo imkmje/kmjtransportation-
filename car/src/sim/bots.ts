@@ -118,12 +118,12 @@ export const steadyBest = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...stea
 export const steadyBestExec = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steadyExec({ best: true, ...opts }), name: 'steadyBestExec' });
 /** 수습 수단을 쓰는 신중(0.10.0 균형 점검) */
 export const steadyRescue = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ rescue: true, ...opts }), name: 'steadyRescue' });
-/** 수습: 대상 차에 긴급 개선(현금이 비용 + 여유분 이상, 개발팀이 비어 있을 때). 혹평 차의 후속 풀체인지를 개발 중이면 가격 인하 판매 */
+/** 수습: 평론이 혹평 쪽(rescue.reviewMax 이하)인 차에 긴급 개선(현금이 비용 + 여유분 이상, 개발팀이 비어 있을 때). 혹평 차의 후속 풀체인지를 개발 중이면 가격 인하 판매 */
 function rescue(g: Game): void {
   const s = g.state, reserve = fixedCost(s) * B.reserveMonths;
   for (const x of sellingGens(s).filter((y) => y.status === 'onSale')) {
     const r = rescueOptions(s, x.id);
-    if (!r || r.target) continue;
+    if (!r || r.target || x.reviewAvg > config.rescue.reviewMax) continue; // 혹평(평론 reviewMax 이하) 차에만
     if (r.fix.ok && s.cash >= r.fix.cost + reserve) { g.command({ type: 'quickFix', generationId: x.id }); continue; }
     const np = s.nameplates.find((n) => n.generations.includes(x))!;
     if (r.clearance.ok && x.reviewAvg <= config.rescue.reviewMax && s.projects.some((p) => p.kind === 'fullchange' && p.targetId === np.id)) g.command({ type: 'clearance', generationId: x.id });
