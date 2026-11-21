@@ -982,7 +982,7 @@ export function startApp(): void {
     if (g.clearance) b.push(['가격 인하 판매 중', 'warn']);
     else { const R = Q.rescueOptions(s, g.id); if (R && R.target === null && (R.fix.ok || R.clearance.ok)) b.push(['수습 가능', 'bad']); } // 0.10.0 혹평·부진 차의 긴급 개선·가격 인하 판매
     if (T.has(`retrofit:${g.id}`)) b.push(['의무 장비 필요', 'bad']);
-    if (EQ.equipLive() && g.status === 'onSale' && EQ.equipInfo(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, equip: edEquip(currentEdition(g)) }).totals.missingExpected.length) b.push(['장비 기대 미달', 'warn']); // 1.1.0(규칙이 들어온 뒤에만)
+    if (g.status === 'onSale') { const ei = genEquipInfo(g); if (!ei.legacy && ei.totals.missingExpected.length) b.push(['장비 기대 미달', 'warn']); } // 1.1.0 옛 구성(legacy) 차는 감점이 없어 배지도 없다
     if (T.has(`capacity:${g.id}`)) b.push(['생산 한도', 'warn']);
     if (T.has(`facelift:${g.id}`)) b.push(['페이스리프트 적기', 'on']);
     if (np && T.get(`full:${np.id}`)?.title.includes('권장')) b.push(['풀체인지 권장', 'on']);
@@ -1106,7 +1106,7 @@ export function startApp(): void {
     const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
       <div class="key key-life"><small>수명${ib('term:수명')}</small><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div><b>${Math.round(lb * 100)}<span>%</span></b></div>
       <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}</b></div></div>`;
-    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
+    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}${(() => { const ei = genEquipInfo(g); return ei.legacy ? '<br><span class="eq-legacy">옛 구성 · 다음 페이스리프트부터 장비 기대가 적용됩니다</span>' : ei.totals.missingExpected.length ? `<br><span class="why">장비 기대 미달: ${esc(ei.totals.missingExpected.join('·'))}</span>` : ''; })()}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
       ${chart ? `<p class="lbl" style="margin-top:12px">최근 판매(달마다)</p>${chart}` : ''}
       <p class="hint">수명은 출시 뒤 시간이 지날수록 줄고, 줄수록 판매가 줄어듭니다.</p>
       ${adviceLine(g)}${orderLine(g)}${Q.eventImpactOn(s, g.id).map((t) => `<div class="warnbox ev-line" style="margin-top:8px">${esc(t)}</div>`).join('')}</div>`;
@@ -1241,10 +1241,12 @@ export function startApp(): void {
   /** 판의 장비 구성(sim에 equip이 없으면 옵션 = 모두 기본 장비) */
   const edEquip = (e: { options: string[] }, fallback?: string[]): EQ.Equip => { const x = (e as { equip?: EQ.Equip }).equip; return x ? { ...x } : EQ.fromOptions(fallback ?? e.options); };
   function setEquip(o: { equip?: EQ.Equip; options: string[]; equipMode?: string }, e: EQ.Equip, mode?: 'rec' | 'prev' | 'custom'): void {
-    const req = new Set(Q.requiredOptions(game!.state)); o.equip = Object.fromEntries(Object.entries(e).filter(([k]) => !req.has(k))); o.options = EQ.toOptions(o.equip, game!.state);
+    const req = new Set(Q.requiredOptions(game!.state)); o.equip = Object.fromEntries(Object.entries(e).filter(([k]) => !req.has(k))); o.options = EQ.toOptions(o.equip);
     if (mode && 'equipMode' in o || mode) o.equipMode = mode;
   }
   const eqOf = (o: { equip?: EQ.Equip; options: string[] }): EQ.Equip => (o.equip ??= EQ.fromOptions(o.options));
+  /** 판매 중인 세대의 장비 정보(지금 판의 구성). legacy는 판에 붙은 표시도 본다 */
+  const genEquipInfo = (g: Generation) => { const ed = currentEdition(g), ei = EQ.equipInfo(game!.state, { body: g.body, segment: g.segment, powertrain: g.powertrain, equip: edEquip(ed) }); return { ...ei, legacy: !!(ei.legacy || (ed as { legacy?: boolean }).legacy || (g as { legacy?: boolean }).legacy) }; };
   const MODE_WORD = { rec: '추천 구성', prev: '전작 구성', custom: '직접 고름' } as const;
   /** 장비 고르기 칸(기획·페이스리프트 공통) */
   function equipView(t: 'plan' | 'lift'): string {
