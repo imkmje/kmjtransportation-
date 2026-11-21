@@ -699,3 +699,44 @@ body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자
 .seg.steps button small{white-space:normal;overflow:visible;line-height:1.2} /* "개발 방향"·"예산·기간"이 말줄임되지 않게 두 줄 허용 */
 .seg.steps button{min-height:48px;padding:2px}
 .px-kpis .px-sales b{white-space:normal;overflow:visible}
+
+/* ---------- 0.7.0: 할 일·보고 버튼, 다음 일까지, 할 일·보고 창 ---------- */
+.pill.todo{display:inline-flex;align-items:center;gap:5px;min-height:44px;cursor:pointer;font-weight:800;color:var(--ink)}
+.pill.todo svg{width:16px;height:16px;flex:none}
+.pill.todo b{min-width:20px;height:20px;line-height:20px;border-radius:10px;background:var(--ink);color:#fff;font-size:12px;text-align:center;padding:0 5px}
+.pill.todo.none b{background:var(--soft);color:var(--ink2)}
+.pill.todo.urgent{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pill.todo.urgent b{background:var(--accent)}
+.pill.todo.has-rep{position:relative}
+.pill.todo.has-rep::after{content:"";position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--neg)}
+.skipbtn{border:1px solid var(--line);background:var(--card);border-radius:14px;min-height:44px;padding:0 12px;font-weight:700;font-size:13px;color:var(--ink2);white-space:nowrap}
+.skipbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (max-width:1240px){.td-t{display:none}.skipbtn{padding:0 10px}}
+.todo-tabs{margin:4px 0 12px}
+.todo-list{display:flex;flex-direction:column;gap:6px}
+.todo-it{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;min-height:52px;padding:8px 14px;border:1px solid var(--line);border-left:4px solid var(--line);background:var(--card);border-radius:14px;color:var(--ink);font:inherit}
+.todo-it b{display:block;font-size:14px;font-weight:800}
+.todo-it small{display:block;font-size:12.5px;color:var(--ink2);line-height:1.4;margin-top:2px}
+.todo-it.urgent{border-left-color:var(--accent)}
+.todo-empty{color:var(--ink2);font-weight:700;padding:18px 4px;text-align:center}
+.rep-none .btn{margin-top:8px}
+.rep-roles{margin-bottom:10px;flex-wrap:wrap}
+.rep-list{display:flex;flex-direction:column;gap:8px}
+.rep-card{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:10px 14px}
+.rep-card.unread{border-left:4px solid var(--accent)}
+.rep-card.auto{opacity:.72;background:transparent;border-style:dashed}
+.rep-h{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px}
+.rep-h small{color:var(--ink2);font-size:12px}
+.rep-card h3{font-size:15px;margin:6px 0 4px}
+.rep-card p{margin:0 0 6px;font-size:13.5px;line-height:1.5}
+.rep-facts{margin:0 0 6px;padding-left:18px;font-size:12.5px;color:var(--ink2)}
+.rep-st{font-weight:800;color:var(--accent2)}
+.rep-card .row{flex-wrap:wrap;gap:6px}
+/* 0.7.0 임원 화면 */
+.exec-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px;margin-top:12px;align-items:start}
+.exec-card.locked{background:var(--soft)}
+.exec-card.locked h2,.exec-card.empty h2{color:var(--ink2)}
+.exec-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:8px;margin-top:10px}
+.exec-pick .opt{min-height:0}
+.exec-card .toggle .btn{min-width:72px}
+.srow.s-exec .s-abil b{margin-left:4px}

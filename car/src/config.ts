@@ -52,7 +52,8 @@ export const config = {
     shareExp: 2, // 점유율 = A^지수 / Σ A^지수. 설계서 7.3은 3, 승자 독식 완화로 2(설계자 결정 허용 범위 2~3)
     priceAppealMin: 0.2, priceAppealMax: 2.5,
     overpriceExp: 6, overpriceHardAt: 1.08, overpriceHardExp: 20, // 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^6 × (기준가 × 1.08/판매가)^20(108% 넘는 부분만, 가격 올리기 봇이 유리해지지 않게). 0.5.0: 지수 20 하나였을 때 108%만 받아도 판매가 1/20로 줄었다(자르기 뒤에 곱한다)
-    erosion: { fromYear: 1995, perYear: 0.004, max: 0.06 }, // 0.5.1 시장 포화: 1995년부터 시장 기준가가 해마다 0.4%씩 낮아져 최대 6%(후반 현금 폭발 억제, 원가는 그대로)
+    erosion: { fromYear: 1995, perYear: 0.004, max: 0.035 }, // 0.5.1 시장 포화: 1995년부터 시장 기준가가 해마다 0.4%씩 낮아져 최대 3.5%(후반 현금 폭발 억제, 원가는 그대로).
+    // 0.7.0: 최대 6% → 3.5%. 대당 이익이 판매가의 약 9%라 6%를 깎으면 2010년 전후 공장 5등급 유지비를 못 넘어 보통 신중 봇 60년 생존이 6/20이었다(3.5%면 18/20). 2003년까지는 같은 값
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
   },
@@ -155,6 +156,7 @@ export const config = {
     gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
     optionCostShare: 0.04, // 4단계: 옵션은 원가가 기준가의 4% 이하인 것만(규제 옵션은 예외, 가격을 올리지 않으므로 비싼 옵션은 대당 이익을 깎는다)
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
+    execCashMonths: 12, // 0.7.0 임원 봇: 지난 1년 흑자이고 현금이 고정비 12개월 치 이상일 때만 임원 자리를 채운다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
     clumsy: { priceMult: 1.1, changeMonths: 120, testWeeks: 5 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년, 시험 5주(0.4.2 시간 척도 전의 최소 2주와 같은 양)
     novice: { launchDefects: 10, changeMonths: 96, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 8년(0.4.2: 7.5 → 8년, 신중이 6.5년이 되어), 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
@@ -189,8 +191,27 @@ export const config = {
     normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1, repLossMult: 1 },
     hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0, repLossMult: 1 },
   },
+  exec: { // 0.7.0 임원(9.7). 금액 만원
+    seats: [1, 2, 4, 5, 6], // 본사 등급별 임원 자리 수
+    allowance: 300, // 직원을 임원으로 임명하면 월급에 더하는 수당(월)
+    hiredPayMult: 1.6, // 외부에서 뽑은 임원의 월급 = 직원 월급 공식(능력) × 1.6
+    postCost: 3000, candidates: 3, expireWeeks: 4, // 임원 공고비, 후보 수, 후보가 기다리는 주
+    hireSkillMin: 45, hireSkillMax: 70, repBonusDiv: 10, repBonusMax: 10, // 외부 후보 능력 = 45~70 + 평판/10(최대 +10)
+    match: 0.75, // 직원을 임명할 때 관련 직무가 아니면 임원 능력 = 직원 능력 × 0.75(관련 직무는 아래 related 배수)
+    related: { hr: { sales: 1, tester: 0.85 }, product: { designer: 1, tester: 0.85 }, finance: { sales: 1 }, production: { tester: 1, engineer: 0.9 }, research: { engineer: 1 }, market: { sales: 1, designer: 0.9 } } as Record<string, Record<string, number>>,
+    tiers: [40, 60], // 임원 능력 40 미만: 뭉뚱그린 말(1단계), 60 미만: 대상만 짚음(2단계), 60 이상: 수치까지(3단계)
+    delegateSkill: 45, // 맡기기를 켤 수 있는 임원 능력
+    perExec: 2, reissueMonths: 6, ignoredMonths: 18, reportsMax: 60, // 월 결산 때 임원별 제안 최대 2건, 같은 제안은 6개월(지운 제안은 18개월) 뒤에 다시, 보고함 60건 보관
+    hr: { growGap: 15, weakGap: 12, restWeeks: 2, trainCashMonths: 6, trainMax: 2 }, // 교육 권유: 성장 여지 15 이상, 해고 권유: 성장 한계 + 같은 직무 평균보다 12 낮음, 자동 교육: 현금이 운영비 6개월 치 이상, 동시에 2명까지
+    replace: { cashMonths: 6, minGain: 15, rejectYears: 2, retryWeeks: 8, maxTries: 2 }, // 교체 고용: 현금이 운영비 6개월 치 초과, 기준 = max(대상 능력 + 15, 같은 직무 평균), 거절하면 2년, 기준 미달이면 8주 뒤 한 번 더
+    research: { cashMonths: 6 }, // 자동 연구: 연구비를 내고도 운영비 6개월 치가 남을 때
+    finance: { warnMonths: 6, avgMonths: 3, repayMonths: 6 }, // 현금 부족 예고: 최근 3개월 평균 손실이면 6개월 안에 바닥날 때, 대출 상환 권유: 갚고도 운영비 6개월 치가 남을 때
+    product: { fullChangeLife: 0.55, faceliftPayback: 24 }, // 풀체인지 권유: 수명 막대 55% 아래, 페이스리프트 권유: 비용 회수 24개월 이내
+    market: { minSales: 30, lowAwareness: 0.35 }, // 새 차급 권유: 예상 월 판매 30대 이상, 광고 권유: 인지도 35% 아래
+  },
   devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
+  todo: { candUrgentWeeks: 1, regUrgentMonths: 12 }, // 0.7.0 할 일 목록: 채용 후보가 이 주 이하로 남거나 규제 시행이 이 개월 이하로 남으면 급한 일
 };

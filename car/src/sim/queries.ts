@@ -249,7 +249,7 @@ export type HqLevelInfo = ReturnType<typeof hqLevelInfo>;
 /** 본사(9.2): 지금 등급, 다음 등급(없으면 null)과 승급 가능 여부·이유 */
 export function hqInfo(s: CarState): { current: HqLevelInfo; next: HqLevelInfo | null; canUpgrade: boolean; reason: string | null; staffCount: number } {
   const reason = hqUpgradeError(s);
-  return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: s.staff.length };
+  return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: s.staff.length + Object.keys(s.execs?.seats ?? {}).length }; // 임원 포함(0.7.0)
 }
 
 const factoryLevelInfo = (s: CarState, level: number) => { const f = config.factory.levels[level - 1]; return { level, capacity: f.capacity, lines: f.lines, cost: f.cost, upkeep: factoryUpkeep(s, level), costMult: f.costMult }; }; // upkeep: 실제 월 청구액(난이도 배수·연구 감면, 0.5.1)
@@ -299,7 +299,7 @@ export function staffInfo(s: CarState): StaffRow[] {
 export function hiringInfo(s: CarState) {
   const H = config.staff.hire, full = s.staff.length >= staffCap(s);
   return {
-    staffCount: s.staff.length, capacity: staffCap(s), full,
+    staffCount: s.staff.length, capacity: staffCap(s), full, execs: Object.keys(s.execs?.seats ?? {}).length, // capacity: 임원 자리를 뺀 직원 정원(0.7.0)
     tiers: H.postCost.map((cost, i) => ({ tier: (i + 1) as 1 | 2 | 3, cost, abilityMin: H.abilityMin[i], abilityMax: H.abilityMax[i], minRep: i === 2 ? H.tier3Rep : 0 })), // minRep: 그 등급 공고에 필요한 평판
     canPost: !full && !s.candidates.length, reason: full ? `정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.` : s.candidates.length ? '이미 공고한 후보가 있습니다.' : null,
     candidates: s.candidates.map((c) => ({ ...c, weeksLeft: c.expiresWeek - s.week })),
@@ -332,3 +332,16 @@ export function priceForecast(s: CarState, generationId: number, price: number):
   const m = monthOf(s.week), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   return Math.round(Math.min(capacityOf(s), monthlyDemand(s, { ...toSaleCar(g, m), price }, others, monthTime(m))));
 }
+
+// ---------- 0.7.0 할 일 목록 ----------
+import { todoItems as todoCore, type TodoItem } from './todo';
+export type { TodoItem, TodoKind, TodoGoto } from './todo';
+/** 할 일 목록(급한 일 먼저). 임원 자리·보고는 임원 조회에서 받는다 */
+export const todoItems = (s: CarState): TodoItem[] => {
+  const unread = (s.execs?.reports ?? []).filter((r) => r.unread), info = execInfoQ(s);
+  return todoCore(s, { vacant: info.seats - info.used, unread: unread.length, lastUnread: unread.reduce((a, r) => Math.max(a, r.id), 0) });
+};
+import { execInfo as execInfoQ } from './execs';
+
+// ---------- 임원(0.7.0) ----------
+export { execInfo, execReports, execUnread, marketIdea, profitAlloc, recommendTech, execSkill, execTier, execPay, monthlyFixed, seatsOf, EXEC_ROLES, EXEC_TITLE, DELEGATIONS, type ExecInfo } from './execs';

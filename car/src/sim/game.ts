@@ -3,7 +3,7 @@ import { config } from '../config';
 import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
 import { defectQMult, finalStats, grade, partStats, salaryOf, unitCost, zeroStats } from './cars';
 import { specError, stepProject, withRequired } from './dev';
-import { hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { allocate, hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
 import { basePriceOf, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
@@ -13,6 +13,7 @@ import { criticScores, mean } from './reviews';
 import { josa } from './josa';
 import { Rng, hash32 } from './rng';
 import { DIFFICULTIES, diffOf } from './difficulty';
+import { execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
 import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PendingChoice, type Project, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
 
@@ -92,8 +93,10 @@ export class Game {
     researchWeek(s, ev); // 10장: 쉬는 엔지니어·전담 연구원의 연구 점수(직원 컨디션 갱신 전, 이번 주 배치 기준)
     this.staffWeek(ev);
     if (isMonthEnd(s.week)) this.monthEnd(ev);
+    if (s.status === 'playing') execWeek(this.execCtx(), ev); // 0.7.0 예약된 교체 고용(개발이 끝난 주에)
     if (s.status === 'playing') {
       s.week++;
+      execExpire(s, ev);
       const gone = s.candidates.filter((c) => s.week >= c.expiresWeek);
       if (gone.length) { s.candidates = s.candidates.filter((c) => s.week < c.expiresWeek); ev.push({ kind: 'company', text: `채용 후보 ${gone.length}명이 다른 회사로 갔습니다.` }); }
       for (const pc of s.events.pending.filter((x) => s.week >= x.deadline).sort((a, b) => a.id - b.id)) // 답하지 않은 사건은 기본 선택
@@ -141,12 +144,10 @@ export class Game {
       return d;
     });
     // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로
-    const cap = capacityOf(s), manual = gens.reduce((a, g) => a + (g.allocShare ?? 0), 0), autoCap = Math.max(0, cap * (1 - manual));
-    const autoTotal = gens.reduce((a, g, i) => a + (g.allocShare === null ? demand[i] : 0), 0);
-    const fill = autoTotal > autoCap ? autoCap / autoTotal : 1;
+    const made = allocate(capacityOf(s), demand, gens.map((g) => g.allocShare));
     let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
     gens.forEach((g, i) => {
-      const n = Math.round(g.allocShare === null ? demand[i] * fill : Math.min(demand[i], cap * g.allocShare));
+      const n = made[i];
       const ed = currentEdition(g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s), ptCostAdd(s, g.powertrain));
       const mk = config.awareness.marketingCost[g.marketing];
       g.lastDemand = demand[i]; g.lostSales = Math.max(0, demand[i] - n);
@@ -171,7 +172,7 @@ export class Game {
         ev.push({ kind: 'advice', id: g.id, text: `「${this.nameOf(g)}」 판매가 ${dc.adviceMonths}개월째 월 ${dc.adviceSales}대 미만입니다. 단종을 권합니다.` });
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
-    const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
+    const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s); // 0.7.0 임원 월급 포함
     const upkeep = upkeepOf(s), upkeepHq = hqUpkeep(s, s.hqLevel), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
     const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
@@ -201,7 +202,10 @@ export class Game {
         ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
       }
     } else s.negMonths = 0;
+    if (s.status === 'playing') execMonth(this.execCtx(), ev); // 0.7.0 맡기기 실행, 임원 제안(보고함)
   }
+  /** 임원 모듈(execs.ts)에 넘기는 손잡이 */
+  private execCtx(): ExecCtx { return { s: this.state, rng: this.rng, spend: (c) => this.spend(c), run: (cmd) => this.exec(cmd), newName: () => this.newName() }; }
 
   private nameOf(g: Generation): string { return this.state.nameplates.find((n) => n.generations.includes(g))?.name ?? ''; }
 
@@ -431,6 +435,8 @@ export class Game {
         this.applyChoice(pc, cmd.choice, events, false);
         return { ok: true, events };
       }
+      case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
+      case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원
       case 'devCheat': { // 개발자 메뉴(개발 단계용)
         const ev: GameEvent[] = [];
         switch (cmd.kind) {
@@ -479,7 +485,7 @@ export class Game {
   private spend(cost: number): void { this.state.cash -= cost; this.state.pendingOneOff += cost; }
   /** 채용 후보 이름(성 + 이름, 지금 직원·후보와 겹치지 않게 최대 20번 다시 뽑는다) */
   private newName(): string {
-    const s = this.state, used = new Set([...s.staff, ...s.candidates].map((x) => x.name));
+    const s = this.state, used = new Set([...s.staff, ...s.candidates, ...Object.values(s.execs?.seats ?? {}).map((x) => x.staff), ...(s.execs?.candidates ?? [])].map((x) => x.name));
     let name = '';
     for (let i = 0; i < 20 && (!name || used.has(name)); i++) name = NAMES.family[this.rng.intIn(0, NAMES.family.length - 1)] + NAMES.given[this.rng.intIn(0, NAMES.given.length - 1)];
     return name;

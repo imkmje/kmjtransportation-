@@ -207,7 +207,7 @@ await shot('garage');
 // ---- 회사·기록 ----
 await page.click('#tabs button[data-tab="company"]');
 const ctext = await page.locator('#panel').innerText();
-check('회사 탭: 안쪽 탭 5개(재무·직원·본사·공장·연구), 처음은 재무·경쟁사', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
+check('회사 탭: 안쪽 탭 6개(재무·직원·임원·본사·공장·연구), 처음은 재무·경쟁사', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,임원,본사,공장,연구' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
 const cash0 = await G(() => window.__car.game.state.cash);
 await act('borrow', '[data-v="10000"]');
 check('대출 1억 받기', (await G(() => window.__car.game.state.cash)) - cash0 === 10000 && (await G(() => window.__car.game.state.loan.balance)) === 10000);
@@ -518,7 +518,7 @@ await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300);
 const vb1 = await S3(() => document.querySelector('#office svg')?.getAttribute('viewBox') ?? '');
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭: 안쪽 탭 5개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 5);
+check('회사 탭: 안쪽 탭 6개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 6);
 await act('cotab', '[data-v="staff"]');
 const st0 = await page.locator('#panel').innerText();
 check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·하는 일), 정원 4/6(0.5.0 본사 1등급 정원 6)', (await page.locator('#panel .srow:not(.head)').count()) === 4 && st0.includes('4/6') && ['디자이너', '엔지니어', '테스터', '컨디션', '쉬는 중'].every((t) => st0.includes(t)));
@@ -695,7 +695,7 @@ await act('home'); await page.waitForTimeout(150); if (await page.locator('#ask'
 await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details.seed-det summary'); await page.fill('#t-seed', '4'); await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭 안쪽 탭 5개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구');
+check('회사 탭 안쪽 탭 6개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,임원,본사,공장,연구');
 await act('cotab', '[data-v="research"]');
 const r0 = await page.locator('#panel').innerText();
 check('연구 화면: 분야 5개와 기술 카드 40개 이상', (await page.locator('.rfield').count()) === 5 && (await page.locator('.tc').count()) >= 40 && ['동력', '차체·안전', '편의 장비', '생산', '친환경'].every((t) => r0.includes(t)));
@@ -1065,6 +1065,104 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   { const c = await noClip(); check('가격 카드(차고, 1024×768): 값이 말줄임되지 않음', c.length === 3 && c.every(([, d]) => d <= 0), JSON.stringify(c)); }
   if (process.argv[2]) await tp.screenshot({ path: process.argv[2].replace('.png', '-garage-price-1024x768.png') });
   await tctx.close(); }
+
+// ---- 0.7.0 할 일·보고·다음 일까지(새 게임, 1366×1024 → 1024×768) ----
+{ const ectx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const ep = await ectx.newPage(); ep.on('pageerror', (e) => errors.push(String(e))); ep.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const closeAny = async () => { if (await ep.locator('#sheet').isVisible()) await ep.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click(); }; // 선택 사건 창이 떠 있으면 닫기
+  const EG = (fn, a) => ep.evaluate(fn, a), eshot = (n) => process.argv[2] ? ep.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
+  await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
+  await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '할일 시험'); await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
+  const n0 = await EG(() => window.__car.todos().length);
+  check('할 일 버튼: 상단바에 있고 배지 = 할 일 수, 높이 44px 이상', n0 > 0 && (await ep.locator('#todo-n').innerText()) === String(n0) && (await ep.locator('#todobtn').boundingBox()).height >= 44, `${n0}건`);
+  await ep.click('#todobtn'); await ep.waitForSelector('#sheet:not([hidden]) .todo-it');
+  check('할 일 창: 항목 수 = 배지, 새 게임에는 개발팀·정원 여유 항목', (await ep.locator('.todo-it').count()) === n0 && (await ep.locator('.todo-it[data-kind="team"]').count()) === 1 && (await ep.locator('.todo-it[data-kind="hire"]').count()) === 1, (await ep.locator('.todo-list').innerText()).replace(/\n/g, ' / ').slice(0, 160));
+  await eshot('todo-1366x1024');
+  await ep.click('.todo-it[data-kind="team"]');
+  check('할 일 항목 누르기(개발팀) → 신차 기획, 창 닫힘', ['plan', 'start'].includes(await EG(() => window.__car.screen)) && !(await ep.locator('#sheet').isVisible()));
+  await ep.click('#todobtn'); await ep.click('.todo-it[data-kind="hire"]');
+  check('할 일 항목 누르기(정원 여유) → 회사 탭', (await EG(() => window.__car.screen)) === 'company' && (await ep.locator('#panel [data-act="cotab"][data-v="staff"]').getAttribute('aria-selected')) === 'true');
+  await ep.click('#todobtn'); await ep.click('[data-act="todoTab"][data-v="reports"]');
+  check('보고 탭: 임원이 없으면 안내와 [임원 화면] 버튼', (await ep.locator('#sheet').innerText()).includes('임원을 두면 제안을 받을 수 있습니다') && (await ep.locator('#sheet [data-act="todoGoCo"][data-v="exec"]').count()) === 1);
+  await eshot('reports-empty-1366x1024');
+  await ep.click('#sheet [data-act="todoGoCo"]');
+  check('[임원 화면] → 회사 탭, 창 닫힘', (await EG(() => window.__car.screen)) === 'company' && !(await ep.locator('#sheet').isVisible()));
+  // 개발 시작 → [다음 일까지]로 출시 대기까지
+  await ep.click('#tabs button[data-tab="garage"]'); await ep.click('#ov [data-act="plan"]'); await ep.click('[data-act="ptab"][data-v="budget"]'); await ep.click('[data-act="startDev"]');
+  const w0 = await EG(() => window.__car.game.state.week), stops = [];
+  check('[다음 일까지] 버튼 44px 이상', (await ep.locator('#skipbtn').boundingBox()).height >= 44);
+  await ep.click('#skipbtn'); check('[다음 일까지] 누르면 진행 중 표시', (await EG(() => window.__car.skip)) && (await ep.locator('#skipbtn').getAttribute('aria-pressed')) === 'true');
+  await ep.click('#skipbtn'); check('진행 중 다시 누르면 즉시 중단(빠르기 멈춤)', !(await EG(() => window.__car.skip)) && (await EG(() => window.__car.speed)) === 0);
+  for (let i = 0; i < 12; i++) {
+    if (await EG(() => window.__car.game.state.projects[0]?.waiting)) break;
+    if (await ep.locator('#sheet').isVisible()) await ep.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click();
+    await ep.click('#skipbtn');
+    await ep.waitForFunction(() => !window.__car.skip, null, { timeout: 60000 });
+    stops.push(`${await EG(() => window.__car.game.dateLabel)}: ${(await ep.locator('#toasts').innerText()).replace(/\s+/g, ' ').slice(-90)}`);
+  }
+  const rdy = await EG(() => ({ waiting: !!window.__car.game.state.projects[0]?.waiting, speed: window.__car.speed, week: window.__car.game.state.week }));
+  check('[다음 일까지]로 출시 대기까지 넘어가 멈춤(알림에 이유)', rdy.waiting && rdy.speed === 0 && rdy.week > w0 && /출시 대기/.test(await ep.locator('#toasts').innerText()), `${w0}주 → ${rdy.week}주, 멈춘 곳 ${stops.length}번: ${stops.join(' | ')}`);
+  check('출시 대기 → 할 일에 출시 항목(급함), 누르면 출시 준비 화면', await EG(() => window.__car.todos()[0]?.kind === 'ready' && window.__car.todos()[0].urgent));
+  await ep.click('#todobtn'); await ep.click('.todo-it[data-kind="ready"]');
+  check('출시 항목 → 출시 준비 화면', (await EG(() => window.__car.screen)) === 'launch');
+  // 1024×768: 상단바 넘침·새 버튼 44px(진행 중 표시 포함)
+  await ep.setViewportSize({ width: 1024, height: 768 }); await ep.waitForTimeout(200);
+  const topOk = () => EG(() => { const t = document.getElementById('top'); return t.scrollWidth <= t.clientWidth + 1 && t.getBoundingClientRect().height < 80 && ['#todobtn', '#skipbtn'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.height >= 44 && r.right <= innerWidth; }); });
+  await ep.click('#tabs button[data-tab="garage"]');
+  check('상단바(1024×768): 할 일·다음 일까지 버튼이 넘치지 않고 44px', await topOk());
+  await EG(() => { window.__car.game.state.cash = -5; window.__car.render(); }); // 급한 일 표시 점검용
+  await EG(() => document.getElementById('skipbtn').click()); const onOk = await topOk(); await EG(() => window.__car.skip && document.getElementById('skipbtn').click());
+  check('상단바(1024×768): 진행 중 표시일 때도 넘치지 않음', onOk);
+  await eshot('top-1024x768');
+  await closeAny(); await ep.click('#todobtn'); await ep.waitForTimeout(200);
+  { const ks = await ep.locator('.todo-it').evaluateAll((l) => l.map((b) => [b.dataset.kind, b.classList.contains('urgent')]));
+    check('할 일 창(1024×768): 급한 일(출시 대기·현금)이 맨 위에 모임', ks.some(([k, u]) => k === 'cash' && u) && ks.slice(0, ks.filter(([, u]) => u).length).every(([, u]) => u), JSON.stringify(ks)); }
+  await eshot('todo-1024x768');
+  // 임원 보고: 임원을 두고 [다음 일까지] → 월 결산 보고에서 멈춤, 알림은 한 줄, 보고 탭에 카드
+  await ep.locator('#sheet [data-act="closeSheet"]').click(); await ep.setViewportSize({ width: 1366, height: 1024 });
+  await ep.click('#tabs button[data-tab="garage"]');
+  await EG(() => { const g = window.__car.game; g.state.cash = 1e8; g.state.negMonths = 0; g.command({ type: 'appointExec', role: 'hr', staffId: g.state.staff.find((x) => x.projectId === null).id }); window.__car.render(); });
+  const sk = await EG(() => window.__car.todos().map((t) => t.key));
+  for (let i = 0; i < 5 && !(await EG(() => window.__car.game.state.execs.reports.length)); i++) { await closeAny(); await ep.click('#skipbtn'); await ep.waitForFunction(() => !window.__car.skip, null, { timeout: 60000 }); }
+  const tt = await ep.locator('#toasts').textContent(), reps = await EG(() => window.__car.game.state.execs.reports.filter((r) => r.unread).length);
+  check('임원 보고: 월 결산에 보고가 오면 [다음 일까지]가 멈추고 결산 알림에 "임원 보고 N건"만(보고 창은 뜨지 않음)', reps > 0 && tt.includes(`임원 보고 ${reps}건`) && (await ep.locator('#sheet .rep-card').count()) === 0, `${reps}건, 시작 할 일 ${sk.length}개`);
+  check('임원 보고: 할 일에 읽지 않은 보고 항목', await EG(() => window.__car.todos().some((t) => t.kind === 'reports')));
+  await closeAny(); await ep.click('#todobtn'); await ep.click('[data-act="todoTab"][data-v="reports"]');
+  check('보고 탭: 카드(직함·이름·본문·[이 보고 닫기]), 열면 읽음 처리', (await ep.locator('.rep-card').count()) >= reps && (await ep.locator('.rep-card').first().innerText()).includes('인사 임원') && (await EG(() => window.__car.game.state.execs.reports.every((r) => !r.unread))) && (await ep.locator('.rep-card.unread').count()) >= reps);
+  await eshot('reports-1366x1024');
+  const c0 = await ep.locator('.rep-card').count(); await ep.locator('.rep-card [data-act="repClose"]').first().click();
+  check('[이 보고 닫기] → 카드 하나 줄어듦', (await ep.locator('.rep-card').count()) === c0 - 1);
+  await ectx.close(); }
+
+// ---- 0.7.0 임원 화면(회사 탭): 임명 → 월 결산 보고 → 맡기기 켬 → 해임 ----
+{ const xctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const xp = await xctx.newPage(); xp.on('pageerror', (e) => errors.push(String(e))); xp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const XG = (fn, a) => xp.evaluate(fn, a), xshot = (n) => process.argv[2] ? xp.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
+  await xp.goto(URL0); await xp.waitForSelector('#title:not([hidden])');
+  await xp.click('[data-act="titleNew"]'); await xp.fill('#t-co', '임원 시험'); await xp.click('[data-act="startNew"]'); await XG(() => window.__car.setSpeed(0));
+  await xp.click('#tabs button[data-tab="company"]'); await xp.click('#panel [data-act="cotab"][data-v="exec"]');
+  check('임원 화면: 자리 카드 6개(빈 자리 1, 잠긴 자리 5와 필요 본사 등급)', (await xp.locator('.exec-card').count()) === 6 && (await xp.locator('.exec-card.empty').count()) === 6 && (await xp.locator('.exec-sum').innerText()).includes('0/1석'));
+  await xp.click('.exec-card[data-role="research"] [data-act="execPick"]');
+  check('임명 목록: 관련 능력 순(엔지니어가 위)', (await xp.locator('.exec-card[data-role="research"] .exec-pick .opt').first().innerText()).includes('엔지니어'));
+  await xp.locator('.exec-card[data-role="research"] [data-act="execAppoint"]').first().click();
+  check('임명: 자리가 채워지고 나머지는 잠김(본사 2등급 안내)', (await xp.locator('.exec-card.filled[data-role="research"]').count()) === 1 && (await xp.locator('.exec-card.locked').count()) === 5 && (await xp.locator('.exec-card.locked').first().innerText()).includes('본사 2등급'));
+  await xshot('exec-1366x1024');
+  await xp.click('#panel [data-act="cotab"][data-v="staff"]');
+  check('직원 표: 임원은 직함(연구소장)으로', (await xp.locator('.srow.s-exec').innerText()).includes('연구소장'));
+  await XG(() => window.__car.tick(4));
+  const nrep = await XG(() => window.__car.game.state.execs.reports.length);
+  check('월 결산 → 임원 보고가 보고함에 쌓임(창은 뜨지 않음)', nrep > 0 && !(await xp.locator('#sheet .rep-card').isVisible()), `${nrep}건`);
+  await xp.click('#panel [data-act="cotab"][data-v="exec"]');
+  check('맡기기: 능력이 모자라면 스위치가 잠기고 이유 표시', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').isDisabled()) && (await xp.locator('.exec-card[data-role="research"] .why').innerText()).includes('이상이어야'));
+  await XG(() => { window.__car.game.state.execs.seats.research.staff.ability = 70; window.__car.render(); });
+  await xp.click('.exec-card[data-role="research"] [data-act="execDeleg"]');
+  check('맡기기 켬: 스위치 켜짐·상태 반영', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').getAttribute('aria-pressed')) === 'true' && await XG(() => window.__car.game.state.execs.delegations.research.includes('autoResearch')));
+  await xp.setViewportSize({ width: 1024, height: 768 }); await xp.waitForTimeout(200);
+  check('임원 화면(1024×768): 가로 넘침 없음, 버튼 44px 이상', await XG(() => { const p = document.getElementById('panel'); return p.scrollWidth <= p.clientWidth + 1 && [...document.querySelectorAll('.exec-card .btn')].every((b) => b.getBoundingClientRect().height >= 44); }));
+  await xshot('exec-1024x768');
+  await xp.click('.exec-card[data-role="research"] [data-act="execDismiss"]'); await xp.click('#ask-yes');
+  check('해임: 확인 창 → 원래 직무로 복귀, 빈 자리', (await xp.locator('.exec-card.empty').count()) === 6 && await XG(() => window.__car.game.state.staff.length === 4));
+  await xctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);

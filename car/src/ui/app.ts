@@ -6,7 +6,7 @@ import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
+import { STATS, type ExecRole, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook, distinctFaces } from '../render/variant';
@@ -28,7 +28,7 @@ type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: nu
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
 type RecTab = 'cars' | 'combo' | 'news';
-type CoTab = 'fin' | 'staff' | 'hq' | 'factory' | 'research';
+type CoTab = 'fin' | 'staff' | 'hq' | 'factory' | 'research' | 'exec';
 type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView };
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
 
@@ -38,6 +38,9 @@ const PAUSE_ITEMS = [['cands', '채용 후보가 왔을 때'], ['ready', '개발
 type PauseKey = typeof PAUSE_ITEMS[number][0];
 const OFFICE_GAP_MS = 1800; // 사무실 점수 연출 최소 간격(점수 글자가 떠 있는 시간)
 const MAX_TICKS_PER_FRAME = 4;
+const SKIP_SPEED = 8; // [다음 일까지] 진행 중 표시용 빠르기(빠르기 버튼 어느 것과도 같지 않게). 실제로는 프레임마다 tick 상한만큼
+const SKIP_MAX_WEEKS = 2 * 48; // [다음 일까지] 최대 진행: 2년
+type ExecReport = ReturnType<typeof Q.execReports>[number];
 const PICKUP_YAW = 0.75; // 픽업 무대·썸네일 기본 각도: 뒤 3/4(짐칸이 보이게)
 const DEBUG_KEY = 'car-company-debug';
 const ALL_TABS: [PlanTab, string][] = [['prev', '전 세대'], ['body', '차체'], ['look', '모양'], ['seg', '고객층'], ['power', '동력'], ['opt', '옵션'], ['dir', '개발 방향'], ['budget', '예산·기간']];
@@ -73,6 +76,7 @@ export function startApp(): void {
   let speed = 1, acc = 0, garageIdx = 0, planTab: PlanTab = 'body';
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
+  let execPick: ExecRole | null = null; // 임원 화면: 직원 임명 목록을 펼친 자리
   let coTab: CoTab = 'fin', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
   let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
@@ -101,7 +105,7 @@ export function startApp(): void {
   const sound = createSound();
   let skipping = false; // 1년 건너뛰기 동안은 효과음을 내지 않는다
   /** 효과음 한 곳. 아주 빠름에서는 매주·매달 반복음을 뺀다 */
-  const sfx = (n: Sfx) => { if (!skipping && !(speed >= 4 && (n === 'weekTick' || n === 'monthClose'))) sound.play(n); };
+  const sfx = (n: Sfx) => { if (!skipping && !(speed >= 4 && (n === 'weekTick' || n === 'monthClose'))) sound.play(n); }; // [다음 일까지]는 빠르기 SKIP_SPEED(8)라 아주 빠름 규칙을 따른다
   // 브라우저는 사용자 조작 안에서만 소리를 켤 수 있다(터치는 pointerup이 조작으로 인정되는 브라우저가 있어 둘 다)
   for (const ev of ['pointerdown', 'pointerup', 'keydown'] as const) document.addEventListener(ev, () => sound.unlock(), true);
   // 버튼 소리: 문서 전체 click 하나에서. 탭 전환·스위치·가격 −/+는 따로, 나머지 버튼은 tap
@@ -349,18 +353,23 @@ export function startApp(): void {
   let skipPause = false; // 개발자 메뉴 1년 건너뛰기: 자동 멈춤 무시
   let quietChoice = false; // 점검용 __car.tick: 사건 창을 띄우지 않는다(popups를 주면 띄움)
   let weekFresh = false; // 한 주에 여러 프로젝트의 주간 기록이 오면 모두 모은다
-  function tickOnce(): void {
-    if (!game) return;
+  let weekReports = 0; // 이번 주(월 결산)에 새로 온 임원 보고 수
+  function tickOnce(): GameEvent[] {
+    if (!game) return [];
     const ev = game.tick();
+    weekReports = ev.reduce((a, e) => a + (e.kind === 'execReport' ? e.count : 0), 0);
     logDev(); weekFresh = true; sfx('weekTick'); dirty = true;
     for (const e of ev) onEvent(e);
+    return ev;
   }
   function onEvent(e: GameEvent): void {
     const s = game!.state;
     switch (e.kind) {
+      case 'execReport': break; // 보고는 튀어나오지 않는다: 월 결산 알림 한 줄과 '할 일' 배지로만
+      case 'replacement': toast(e.text, '', '임원', 7000); break;
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
-        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
+        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}${weekReports ? ` · 임원 보고 ${weekReports}건` : ''}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
         // 큰 흑자 = 10억 이상이면서 최근 24개월 최고 이익인 달(늘 버는 후반에 매달 울리지 않게)
         sfx(L && L.profit >= 100000 && s.ledger.every((x) => x.profit <= L.profit) ? 'cashIn' : 'monthClose');
         void S.put('auto', S.makeSave(game!, uiSnap())); // 매월 자동 저장
@@ -411,7 +420,7 @@ export function startApp(): void {
       devLog.set(p.id, list.slice(0, 14)); devPrev.set(p.id, val);
     }
   }
-  function setSpeed(v: number): void { speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
+  function setSpeed(v: number): void { if (v !== SKIP_SPEED) skip = null; speed = v; acc = 0; sound.setTempo(v >= 4 ? 3 : v >= 2 ? 2 : v >= 1 ? 1 : 0); renderTop(); }
   /** 자동 멈춤(설정에서 항목별로 끔): 알림은 늘 띄우고, 켜져 있으면 시간을 멈춘다 */
   function autoPause(k: PauseKey, text: string, head: string, open?: { label: string; fn: () => void }): void {
     const stop = pauseOn[k] && speed > 0 && !skipPause;
@@ -427,15 +436,109 @@ export function startApp(): void {
     autoPause('cands', `${ROLE_NAME[fresh[0].role]} 후보 ${fresh.length}명이 왔습니다. ${wk}주 안에 채용하지 않으면 다른 회사로 갑니다.`, '채용 후보', screen === 'company' && coTab === 'staff' ? undefined : { label: '채용 화면', fn: () => { coTab = 'staff'; go('company'); } }); // 이미 채용 화면이면 바로 가기 버튼 없이
   }
 
+  // ---------- 0.7.0 할 일 목록 · 다음 일까지 ----------
+  let todoMemo: { g: Game; k: string; list: Q.TodoItem[] } | null = null;
+  /** 할 일 목록(한 주·명령마다 한 번 계산) */
+  const todos = (): Q.TodoItem[] => {
+    const s = game!.state, k = `${s.week}:${s.history.length}:${s.cash}:${s.candidates.length}:${s.projects.length}:${s.events.pending.length}:${s.staff.length}:${execUnread(s)}`;
+    if (todoMemo?.g !== game || todoMemo.k !== k) todoMemo = { g: game!, k, list: Q.todoItems(s) };
+    return todoMemo.list;
+  };
+  /** 다음 일까지: seen = 시작할 때와 진행 중에 이미 본 할 일 키(새 키가 생기면 멈춤) */
+  let skip: { seen: Set<string>; from: number } | null = null;
+  function startSkip(): void {
+    if (!game || game.state.status !== 'playing') return;
+    if (skip) { setSpeed(0); toast('진행을 멈췄습니다.', '', '다음 일까지', 3000, 'skip'); return; } // 진행 중 다시 누르면 중단
+    if (isHeld()) return;
+    skip = { seen: new Set(todos().map((t) => t.key)), from: game.state.week };
+    setSpeed(SKIP_SPEED);
+  }
+  function endSkip(text: string, open?: { label: string; fn: () => void }): void { setSpeed(0); if (text) toast(text, 'alert', '다음 일까지 · 멈춤', 9000, 'skip', open); }
+  /** 자동 멈춤을 꺼 둔 항목(채용 후보·출시 대기·결정할 사건)은 새로 생겨도 멈추지 않는다 */
+  const skipStops = (k: Q.TodoKind) => !(k === 'cands' || k === 'ready' || k === 'choice') || pauseOn[k];
+  /** 한 주 진행 뒤 멈춤 조건. 자동 멈춤(출시 대기·채용 후보)과 사건 창은 이미 시간을 멈춰 skip이 풀린 상태로 온다 */
+  function skipCheck(ev: GameEvent[]): void {
+    const s = game!.state, sk = skip!;
+    if (s.status !== 'playing') { setSpeed(0); return; }
+    if (ev.some((e) => e.kind === 'cashWarning')) { endSkip(''); return; } // 현금 경고 알림이 이미 떴다
+    if (weekReports) { endSkip(`임원 보고 ${weekReports}건이 왔습니다.`, { label: '보고 보기', fn: () => showTodo('reports') }); return; }
+    const list = todos(), fresh = list.find((t) => !sk.seen.has(t.key) && skipStops(t.kind));
+    for (const t of list) sk.seen.add(t.key);
+    if (fresh) { endSkip(`${fresh.title}.`, { label: '할 일 보기', fn: () => showTodo('todo') }); return; }
+    if (s.week - sk.from >= SKIP_MAX_WEEKS) endSkip('2년 동안 새로 할 일이 없어 멈췄습니다.');
+  }
+
+  // ----- 할 일·보고 창 -----
+  const execReports = Q.execReports, execUnread = Q.execUnread;
+  const hasExec = (s: Game['state']): boolean => Q.execInfo(s).used > 0;
+  const EXEC_ROLE = (r: ExecReport['role']) => Q.EXEC_TITLE[r].replace(/ 임원$/, ''); // 필터 칩: "인사", "연구소장"
+  const execTitle = (r: ExecReport['role']) => Q.EXEC_TITLE[r];
+  let todoTab: 'todo' | 'reports' = 'todo', repRole: ExecReport['role'] | '' = '', repFresh = new Set<number>(); // repFresh: 이번에 열기 전까지 읽지 않았던 보고(읽음 처리 뒤에도 표시)
+  const REP_STATUS: Record<NonNullable<ExecReport['replacement']>['status'], string> = { proposed: '승인을 기다립니다', approved: '승인함 · 곧 진행합니다', waiting: '예약됨 · 기다리는 중', done: '진행했습니다', cancelled: '취소했습니다', failed: '진행하지 못했습니다' };
+  function reportCard(r: ExecReport): string {
+    const rp = r.replacement, when = Q.monthLabel(monthOf(r.week));
+    const on = rp && (rp.status === 'approved' || rp.status === 'waiting'), wf = rp?.waitingFor ?? ''; // waitingFor: "「아리아」 개발이 끝나면", "현금이 늘면", "4주 뒤 다시 공고"
+    const st = rp ? `<p class="rep-st">${on && wf ? esc(wf.endsWith('면') ? `${wf} 진행합니다` : `예약됨 · ${wf}`) : REP_STATUS[rp.status]}${on ? ` · 능력 ${rp.minAbility} 이상 후보면 다시 묻지 않고 뽑습니다` : ''}</p>` : '';
+    const btns = [r.goto ? `<button class="btn" data-act="repGo" data-id="${r.id}">해당 화면으로</button>` : '',
+      rp?.status === 'proposed' ? `<button class="btn ink" data-act="repOk" data-id="${rp.id}">승인</button><button class="btn" data-act="repNo" data-id="${rp.id}">거절</button>` : '',
+      rp && (rp.status === 'approved' || rp.status === 'waiting') ? `<button class="btn danger" data-act="repCancel" data-id="${rp.id}">예약 취소</button>` : '',
+      `<button class="btn" data-act="repClose" data-id="${r.id}">이 보고 닫기</button>`].join('');
+    return `<div class="rep-card${r.auto ? ' auto' : ''}${repFresh.has(r.id) ? ' unread' : ''}" data-id="${r.id}"><div class="rep-h"><b>${esc(execTitle(r.role))} ${esc(r.execName)}</b><small>${esc(when)}${r.auto ? ' · 맡긴 일 기록' : ''}${repFresh.has(r.id) ? ' · 새 보고' : ''}</small></div>
+      <h3>${esc(r.title)}</h3><p>${esc(r.text)}</p>${r.facts.length ? `<ul class="rep-facts">${r.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}${st}<div class="row">${btns}</div></div>`;
+  }
+  function todoBody(): string {
+    const list = todos();
+    if (!list.length) return '<p class="todo-empty">지금 할 일이 없습니다. 시간을 진행하세요.</p>';
+    return `<div class="todo-list">${list.map((t) => `<button class="todo-it${t.urgent ? ' urgent' : ''}" data-act="todoGo" data-k="${esc(t.key)}" data-kind="${t.kind}"><span><b>${esc(t.title)}</b><small>${esc(t.detail)}</small></span><span aria-hidden="true">→</span></button>`).join('')}</div>`;
+  }
+  function reportsBody(): string {
+    const s = game!.state, all = execReports(s);
+    if (!hasExec(s) && !all.length) return '<div class="todo-empty rep-none"><p>임원을 두면 제안을 받을 수 있습니다.</p><button class="btn ink" data-act="todoGoCo" data-v="exec">임원 화면</button></div>';
+    const roles = [...new Set(all.map((r) => r.role))], list = all.filter((r) => !repRole || r.role === repRole);
+    const chips = roles.length > 1 ? `<div class="seg rep-roles" role="tablist" aria-label="임원별">${[['', '전체'] as const, ...roles.map((r) => [r, EXEC_ROLE(r)] as const)].map(([k, n]) => `<button role="tab" data-act="repRole" data-v="${k}" aria-selected="${repRole === k}">${n}</button>`).join('')}</div>` : '';
+    return chips + (list.length ? `<div class="rep-list">${list.map(reportCard).join('')}</div>` : '<p class="todo-empty">아직 받은 보고가 없습니다. 임원은 월 결산 때 보고합니다.</p>');
+  }
+  /** 할 일·보고 창. 보고 탭을 열면 읽음 처리(이번에 새로 온 것은 창을 닫을 때까지 '새 보고'로 표시) */
+  function showTodo(t: 'todo' | 'reports' = todoTab): void {
+    if (!game) return;
+    const s = game.state;
+    if (t === 'reports' && todoTab !== 'reports') repFresh = new Set(execReports(s).filter((r) => r.unread).map((r) => r.id));
+    todoTab = t;
+    if (t === 'reports' && execUnread(s) > 0) game.command({ type: 'markReportsRead' });
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    const n = todos().length, un = execUnread(s);
+    sheetBody.innerHTML = `<div class="todo-sheet"><div class="eyebrow"><i></i>${esc(game.dateLabel)}</div><div class="seg todo-tabs" role="tablist" aria-label="할 일과 보고"><button role="tab" data-act="todoTab" data-v="todo" aria-selected="${t === 'todo'}">할 일 ${n}</button><button role="tab" data-act="todoTab" data-v="reports" aria-selected="${t === 'reports'}">보고${un ? ` ${un}` : ''}</button></div>
+      ${t === 'todo' ? todoBody() : reportsBody()}<div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  /** 할 일·보고의 바로 가기 */
+  function goTarget(t: { tab: string; sub?: string; id?: number }): void {
+    if (!game) return;
+    const s = game.state; sheet.hidden = true; todoTab = 'todo';
+    switch (t.tab) {
+      case 'garage': { const i = sellingGens(s).findIndex((x) => x.id === t.id); if (i >= 0) garageIdx = i; go('garage'); return; }
+      case 'dev':
+        if (t.sub === 'launch' && t.id !== undefined && Q.projectById(s, t.id)) { openLaunch(t.id); return; }
+        if (t.sub === 'plan') { void act('plan', document.createElement('i')); return; }
+        if (t.id !== undefined && Q.projectById(s, t.id)) devSel = t.id;
+        go(devScreen()); return;
+      case 'company': coTab = (t.sub ?? 'fin') as CoTab; go('company'); return;
+      case 'records': go('records'); return;
+      case 'choice': showChoice(); return;
+      case 'reports': showTodo('reports'); return;
+      default: go(screen);
+    }
+  }
+
   let last = performance.now(), frames = 0, fps = 0, fpsT = last;
   function frame(now: number): void {
     requestAnimationFrame(frame);
     const dt = Math.min(250, now - last); last = now;
     frames++; if (now - fpsT >= 500) { fps = (frames * 1000) / (now - fpsT); frames = 0; fpsT = now; renderDebug(); }
-    if (isHeld() || speed === 0) { acc = 0; return; }
-    acc += dt * speed;
+    if (isHeld() || speed === 0) { acc = 0; if (skip) setSpeed(0); return; } // 창이 뜨면(선택 사건 등) [다음 일까지]도 끝
+    acc = skip ? WEEK_MS * MAX_TICKS_PER_FRAME : acc + dt * speed; // 다음 일까지: 프레임마다 tick 상한만큼(화면 갱신은 유지)
     let n = 0;
-    while (acc >= WEEK_MS && n < MAX_TICKS_PER_FRAME) { acc -= WEEK_MS; tickOnce(); n++; if (isHeld()) { acc = 0; break; } }
+    while (acc >= WEEK_MS && n < MAX_TICKS_PER_FRAME) { acc -= WEEK_MS; const ev = tickOnce(); n++; if (skip) skipCheck(ev); if (isHeld() || !speed) { acc = 0; break; } }
     if (n) render();
   }
   requestAnimationFrame(frame);
@@ -482,6 +585,9 @@ export function startApp(): void {
     chip.title = full; chip.setAttribute('aria-label', `시대 사건: ${full}. 눌러서 효과 보기`);
     const pd = $('#pend'); pd.hidden = !pc; put(pd, `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4M12 17v.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><b>${pc}</b><span class="pd-t">결정 대기</span>`, true);
     pd.setAttribute('aria-label', `결정 대기 ${pc}건 보기`);
+    { const T = todos(), tb = $('#todobtn'); put($('#todo-n'), String(T.length)); tb.classList.toggle('urgent', T.some((x) => x.urgent)); tb.classList.toggle('none', !T.length);
+      const un = execUnread(s); tb.classList.toggle('has-rep', un > 0); tb.setAttribute('aria-label', `할 일 ${T.length}건${un ? `, 읽지 않은 임원 보고 ${un}건` : ''} 보기`); }
+    { const sb = $('#skipbtn'); sb.classList.toggle('on', !!skip); sb.setAttribute('aria-pressed', String(!!skip)); put(sb, skip ? '진행 중 · 멈추기' : '다음 일까지'); }
     const tab: Tab = deciding() ? 'dev' : (screen as Tab);
     for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
     { const dv = document.querySelector<HTMLElement>('#tabs button[data-tab="dev"]')!, on = !!(draft || lift); dv.classList.toggle('has-draft', on); if (on) dv.title = '기획 중인 차가 있습니다'; else dv.removeAttribute('title'); }
@@ -1068,7 +1174,7 @@ export function startApp(): void {
   }
 
   // ----- 회사(9장): 안쪽 탭 재무 / 직원 / 본사 / 공장 -----
-  const CO_TABS: [CoTab, string][] = [['fin', '재무'], ['staff', '직원'], ['hq', '본사'], ['factory', '공장'], ['research', '연구']];
+  const CO_TABS: [CoTab, string][] = [['fin', '재무'], ['staff', '직원'], ['exec', '임원'], ['hq', '본사'], ['factory', '공장'], ['research', '연구']];
   const ROLE_ORDER: Role[] = ['designer', 'engineer', 'tester', 'sales'];
   const condWord = (c: number) => (c < config.staff.condition.low ? '지침' : c < config.staff.condition.mid ? '보통' : '좋음');
   const growWord = (gap: number) => (gap >= 25 ? '성장 여지 큼' : gap >= 15 ? '성장 여지 보통' : '성장 여지 작음');
@@ -1077,7 +1183,7 @@ export function startApp(): void {
   const cmpRow = (label: string, a: string, b: string, cost = false) => `<tr><td>${label}</td><td class="r">${a}</td><td class="r"><b class="${a === b ? '' : cost ? 'neg' : 'pos'}">${b}</b></td></tr>`;
   function companyView(): string {
     const tabs = `<div class="seg cotabs" role="tablist" aria-label="회사">${CO_TABS.map(([k, l]) => `<button role="tab" data-act="cotab" data-v="${k}" aria-selected="${coTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (coTab === 'staff' ? staffTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'research' ? researchTab() : finTab());
+    return tabs + (coTab === 'exec' ? execTab() : coTab === 'staff' ? staffTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'research' ? researchTab() : finTab());
   }
 
   /** 경쟁사가 강한 차급: 점유 점수가 높은 순 최대 3개 + "외 n"(초반에 모두 같으면 "모든 차급 고르게") */
@@ -1123,11 +1229,13 @@ export function startApp(): void {
       const g = rows.filter((x) => x.role === r);
       return g.length ? `<p class="lbl grp">${ROLE_NAME[r]} ${g.length}명</p>${g.map((x) => `<div class="srow-w"><button class="s-pick" data-act="staffPick" data-id="${x.id}" aria-pressed="${staffPick.has(x.id)}" aria-label="${esc(x.name)} 고르기"></button><button class="srow" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><span class="s-name"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]}</small></span><span class="s-abil">${abil(x)}</span><span class="s-pay">${money(x.salary)}</span><span class="s-cond">${cond(x.condition)}</span><span class="s-do s-${x.status}">${doing(x)}</span></button></div>`).join('')}` : '';
     }).join('');
+    const ex = Q.execInfo(s).roles.filter((r) => r.holder); // 0.7.0 임원은 직함으로(누르면 임원 화면)
+    const execRows = ex.length ? `<p class="lbl grp">임원 ${ex.length}명</p>${ex.map((r) => `<div class="srow-w"><span class="s-pick" aria-hidden="true"></span><button class="srow s-exec" data-act="cotab" data-v="exec"><span class="s-name"><b>${esc(r.holder!.name)}</b><small>${esc(r.title)}</small></span><span class="s-abil">임원 능력 <b>${r.holder!.skill}</b></span><span class="s-pay">${money(r.holder!.pay)}</span><span class="s-cond"></span><span class="s-do">${r.holder!.hired ? '외부 임원' : `${ROLE_NAME[r.holder!.staffRole]} 출신`}</span></button></div>`).join('')}` : '';
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
     for (const id of staffPick) if (!rows.some((x) => x.id === id)) staffPick.delete(id); // 해고·퇴사한 직원은 뺀다
     const nPick = staffPick.size, bulk = `<div class="row bulk"><button class="btn" data-act="pickTrainable">교육 가능한 직원 모두 고르기</button><button class="btn ink" data-act="trainPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 교육 보내기</button><button class="btn" data-act="restPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 2주 쉬기</button>${nPick ? '<button class="btn" data-act="pickNone">고르기 해제</button>' : ''}</div>`;
-    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>${rows.length ? bulk : ''}
-      <div class="srow-w head" aria-hidden="true"><span class="s-pick"></span><div class="srow head"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
+    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명${h.execs ? `(임원 ${h.execs}명 자리를 뺀 정원)` : ''} · 월급 합계 ${money(pay)}/월</small></h3>${rows.length ? bulk : ''}
+      <div class="srow-w head" aria-hidden="true"><span class="s-pick"></span><div class="srow head"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div></div>${execRows}${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
       <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다. 왼쪽 네모를 눌러 여러 명을 고르면 한 번에 교육·휴식을 보낼 수 있습니다.</p></div>`;
     const x = rows.find((y) => y.id === staffSel);
     let card2 = '';
@@ -1154,6 +1262,36 @@ export function startApp(): void {
     const fullBox = `<div class="warnbox hire-full">${esc(h.reason ?? '')}</div><p class="hint" style="margin-top:8px">본사를 키우면 더 뽑을 수 있습니다.</p><button class="btn ink" data-act="cotab" data-v="hq" style="width:100%;margin-top:8px">본사 보기</button>`;
     const card3 = `<div class="card hire-card"><h3>채용 <small class="hint">정원 <b class="cap-n">${h.staffCount}/${h.capacity}</b>명</small></h3>${h.candidates.length ? cands + (h.full ? fullBox : '') : h.full ? fullBox : post}</div>`;
     return `<div class="cols co-staff">${card1}<div class="colstack">${card2}${card3}</div></div>`;
+  }
+
+  // ----- 임원(0.7.0) -----
+  const EXEC_DESC: Record<Q.ExecInfo['roles'][number]['role'], string> = {
+    hr: '해고·교육·휴식·채용을 권하고, 교체 고용을 제안합니다.', product: '페이스리프트·풀체인지 적기와 단종을 권합니다.',
+    finance: '현금 부족을 미리 알리고 대출 상환·가격 조정을 권합니다.', production: '공장 증설·생산 라인·생산 배분을 권합니다.',
+    research: '규제 대비 연구와 다음 연구를 권합니다.', market: '무엇을 만들지(차급·고객층·예상 판매)와 광고 수준을 권합니다.',
+  };
+  const TIER_WORD = ['', '뭉뚱그려 말함', '대상을 짚어 말함', '수치까지 말함'];
+  function execTab(): string {
+    const s = game!.state, e = Q.execInfo(s), hq = Q.hqInfo(s).current;
+    const sum = `<div class="card exec-sum"><p class="lbl">임원</p><h2>임원 자리 ${e.used}/${e.seats}석</h2>
+      <p class="hint" style="margin-top:6px">임원은 월 결산 때 분야별로 제안을 보고함에 올립니다(임원마다 한 달 최대 ${config.exec.perExec}건). 화면에 튀어나오지 않으니 상단의 할 일 버튼에서 보고를 확인하세요. 임원도 정원(${hq.staffCap}명) 안에서 자리를 차지합니다.${e.used >= e.seats && e.nextSeatHq ? ` 본사 ${e.nextSeatHq}등급이 되면 자리가 늘어납니다.` : ''}</p>
+      <p class="note">임원 능력${ib('term:임원 능력')}이 높을수록 제안이 구체적입니다${ib('term:제안의 구체성')}. 능력 ${e.delegateSkill} 이상이면 일부 일을 맡길 수 있습니다(맡긴 일도 보고함에 기록됩니다). 해고·가격·출시 같은 큰 결정은 맡기지 않습니다.</p></div>`;
+    const card = (r: Q.ExecInfo['roles'][number]) => {
+      const h = r.holder, head = `<p class="lbl">${esc(r.title)}</p>`, desc = `<p class="hint">${esc(EXEC_DESC[r.role])}</p>`;
+      if (h) {
+        const del = r.delegations.length ? `<p class="lbl" style="margin-top:12px">맡기기</p>${r.delegations.map((d) => `<div class="toggle" style="margin-top:6px"><span>${esc(d.label)}</span><button class="btn" data-act="execDeleg" data-role="${r.role}" data-k="${d.key}" data-v="${d.on ? '0' : '1'}" aria-pressed="${d.on}" ${d.available ? '' : 'disabled'}>${d.on ? '켜짐' : '꺼짐'}</button></div>${d.whyNot ? `<p class="note why">${esc(d.whyNot)}</p>` : ''}`).join('')}` : '<p class="note">이 자리는 제안만 합니다(맡길 일이 없습니다).</p>';
+        return `<div class="card exec-card filled" data-role="${r.role}">${head}<h2>${esc(h.name)}<small>${h.hired ? '외부 임원' : `${ROLE_NAME[h.staffRole]} 출신`}</small></h2>${desc}
+          <div class="kpis" style="margin-top:8px">${kpi(`임원 능력${ib('term:임원 능력')}`, String(h.skill))}${kpi(`제안${ib('term:제안의 구체성')}`, TIER_WORD[h.tier])}${kpi('월급', money(h.pay))}</div>${del}
+          <button class="btn danger" data-act="execDismiss" data-role="${r.role}" style="width:100%;margin-top:12px">해임${h.hired ? ` · 퇴직금 ${money(h.pay * config.staff.severanceMonths)}` : ' · 원래 직무로 복귀'}</button></div>`;
+      }
+      if (!r.canFill) return `<div class="card exec-card locked" data-role="${r.role}">${head}<h2>잠긴 자리</h2>${desc}<p class="note">임원 자리 ${e.seats}석이 모두 찼습니다.${e.nextSeatHq ? ` 본사 ${e.nextSeatHq}등급(${esc(config.hq.levels[e.nextSeatHq - 1].name)})부터 자리가 늘어납니다.` : ' 다른 임원을 해임하면 이 자리를 채울 수 있습니다.'}</p></div>`;
+      const pick = execPick === r.role ? `<div class="exec-pick">${r.internal.slice(0, 8).map((x) => `<button class="opt" data-act="execAppoint" data-role="${r.role}" data-id="${x.staffId}"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]} · 임원 능력 ${x.skill} · ${TIER_WORD[Q.execTier(x.skill)]}</small>${x.busyWith ? `<small class="neg">${esc(x.busyWith)} · 임명하면 빠집니다</small>` : ''}</button>`).join('') || '<p class="hint">임명할 직원이 없습니다.</p>'}</div>` : '';
+      const cands = r.candidates.length ? `<div class="cands">${r.candidates.map((c) => `<div class="cand"><b>${esc(c.name)}</b><small>임원 능력 <b>${c.skill}</b> · ${TIER_WORD[c.tier]}</small><small>월급 ${money(c.pay)} · ${c.weeksLeft}주 남음</small><button class="btn ink" data-act="execHire" data-role="${r.role}" data-id="${c.id}">채용</button></div>`).join('')}</div>` : '';
+      return `<div class="card exec-card empty" data-role="${r.role}">${head}<h2>빈 자리</h2>${desc}
+        <div class="row" style="margin-top:8px"><button class="btn ink" data-act="execPick" data-v="${r.role}" aria-pressed="${execPick === r.role}">직원 임명</button>${r.candidates.length ? '' : `<button class="btn" data-act="execPost" data-role="${r.role}">공고 내기 · ${money(e.postCost)}</button>`}</div>
+        ${pick}${cands}<p class="note">임명한 직원은 개발·연구에서 빠지고 월 수당 ${money(config.exec.allowance)}이 붙습니다. 외부 임원은 바로 쓸 수 있지만 월급이 ${config.exec.hiredPayMult}배입니다.</p></div>`;
+    };
+    return `<div class="exec">${sum}<div class="exec-grid">${e.roles.map(card).join('')}</div></div>`;
   }
 
   function hqTab(): string {
@@ -1567,6 +1705,18 @@ export function startApp(): void {
         return;
       }
       case 'cotab': coTab = v as CoTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      // ---- 임원(0.7.0) ----
+      case 'execPick': execPick = execPick === v ? null : v as ExecRole; render(); return;
+      case 'execAppoint': { if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)), role = el.dataset.role as ExecRole; if (x && run(game.command({ type: 'appointExec', role, staffId: x.id }))) { execPick = null; toast(`${x.name}${josa(x.name, '을/를')} ${Q.EXEC_TITLE[role]}${josa(Q.EXEC_TITLE[role], '으로/로')} 임명했습니다.`); render(); } return; }
+      case 'execPost': if (game && run(game.command({ type: 'postExecJob', role: el.dataset.role as ExecRole }))) { toast('임원 공고를 냈습니다. 후보 3명이 왔습니다.'); render(); } return;
+      case 'execHire': { if (!game) return; const role = el.dataset.role as ExecRole, c = game.state.execs?.candidates.find((x) => x.id === Number(el.dataset.id)); if (c && run(game.command({ type: 'hireExec', role, candidateId: c.id }))) { toast(`${c.name}${josa(c.name, '을/를')} ${Q.EXEC_TITLE[role]}${josa(Q.EXEC_TITLE[role], '으로/로')} 뽑았습니다.`); render(); } return; }
+      case 'execDeleg': if (game && run(game.command({ type: 'setDelegation', role: el.dataset.role as ExecRole, key: el.dataset.k!, on: v === '1' }))) render(); return;
+      case 'execDismiss': {
+        if (!game) return; const role = el.dataset.role as ExecRole, h = Q.execInfo(game.state).roles.find((r) => r.role === role)?.holder; if (!h) return;
+        if (!(await ask(`${h.name}${josa(h.name, '을/를')} ${Q.EXEC_TITLE[role]}에서 해임할까요?\n${h.hired ? `외부 임원이라 회사를 떠납니다. 퇴직금 ${money(h.pay * config.staff.severanceMonths)}이 나갑니다.` : `원래 직무(${ROLE_NAME[h.staffRole]})로 돌아갑니다.`} 맡긴 일은 모두 꺼집니다.`, '해임', true))) return;
+        if (run(game.command({ type: 'dismissExec', role }))) { toast(`${h.name}${josa(h.name, '을/를')} 해임했습니다.`); render(); }
+        return;
+      }
       case 'goCo': coTab = v as CoTab; go('company'); return;
       case 'devSel': devSel = Number(el.dataset.id); go('dev'); return;
       case 'devHome': go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로
@@ -1671,7 +1821,19 @@ export function startApp(): void {
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); void showMenu(); return;
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
       case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
-      case 'closeSheet': sheet.hidden = true; render(); return;
+      case 'closeSheet': sheet.hidden = true; todoTab = 'todo'; render(); return;
+      case 'todoTab': showTodo(v as 'todo' | 'reports'); return;
+      case 'todoGo': { const t = game && todos().find((x) => x.key === el.dataset.k); if (t) goTarget(t.goto); else if (game) showTodo('todo'); return; }
+      case 'todoGoCo': goTarget({ tab: 'company', sub: v }); return;
+      case 'repRole': repRole = v as ExecReport['role'] | ''; showTodo('reports'); return;
+      case 'repGo': { const r = game && execReports(game.state).find((x) => x.id === Number(el.dataset.id)); if (r?.goto) goTarget(r.goto); return; }
+      case 'repClose': case 'repOk': case 'repNo': case 'repCancel': {
+        if (!game) return;
+        const type: 'dismissReport' | 'approveReplacement' | 'rejectReplacement' | 'cancelReplacement' = a === 'repClose' ? 'dismissReport' : a === 'repOk' ? 'approveReplacement' : a === 'repNo' ? 'rejectReplacement' : 'cancelReplacement';
+        if (a === 'repCancel' && !(await ask('교체 고용 예약을 취소할까요?', '예약 취소', true))) return;
+        if (run(game.command({ type, id: Number(el.dataset.id) }))) { if (a === 'repOk') toast('교체 고용을 승인했습니다. 조건이 맞으면 진행합니다.'); showTodo('reports'); }
+        return;
+      }
       case 'logoSheet': showLogoSheet(); return;
       case 'devCheat': {
         if (!game) return; const r = game.devCheat(v as typeof DEV_CHEATS[number][0]);
@@ -1751,6 +1913,8 @@ export function startApp(): void {
   { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 550) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
+  $('#todobtn').addEventListener('click', () => { if (game) showTodo(execUnread(game.state) && !todos().length ? 'reports' : 'todo'); });
+  $('#skipbtn').addEventListener('click', () => startSkip());
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('#ask').hidden) $('#ask-no').click();
@@ -1768,6 +1932,7 @@ export function startApp(): void {
     get tip() { return tip.hidden ? null : { key: tip.dataset.key, hover: tipHover, text: tip.innerText }; },
     setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
+    get skip() { return !!skip; }, todos: () => (game ? todos() : []),
   };
 
   makeStage();
