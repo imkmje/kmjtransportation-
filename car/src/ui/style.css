@@ -732,3 +732,11 @@ body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자
 .rep-facts{margin:0 0 6px;padding-left:18px;font-size:12.5px;color:var(--ink2)}
 .rep-st{font-weight:800;color:var(--accent2)}
 .rep-card .row{flex-wrap:wrap;gap:6px}
+/* 0.7.0 임원 화면 */
+.exec-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px;margin-top:12px;align-items:start}
+.exec-card.locked{background:var(--soft)}
+.exec-card.locked h2,.exec-card.empty h2{color:var(--ink2)}
+.exec-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:8px;margin-top:10px}
+.exec-pick .opt{min-height:0}
+.exec-card .toggle .btn{min-width:72px}
+.srow.s-exec .s-abil b{margin-left:4px}

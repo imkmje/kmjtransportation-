@@ -305,7 +305,7 @@ function marketIdeas(s: CarState): Idea[] {
     const bn = bodyById(best.body).name, sn = segmentById(best.seg).name, main = segmentById(best.idea.mainSegment).name, i = best.idea;
     const fit = i.known ? `전에 「${i.known.carName}」${J(i.known.carName, '으로/로')} 이 조합을 내 봤을 때 평론 ${i.known.reviewAvg.toFixed(1)}이었습니다(궁합 ${i.known.mark}).` : (COMPAT[best.body]?.[best.seg] ?? 1) >= 1 ? '아직 내 보지 않은 조합이지만 잘 맞을 것으로 보입니다.' : '';
     const rival = i.weakRival ? `경쟁사 ${i.weakRival}${J(i.weakRival, '이/가')} 약합니다` : '경쟁사들이 고르게 버팁니다';
-    out.push({ kind: 'build', key: `${best.body}:${best.seg}`, goto: { tab: 'plan' }, facts: [`${bn}: 손님이 가장 많은 고객층 ${main}`, `기준가 ${i.price.toLocaleString()}만원에 내면 예상 월 판매 ${i.sales}대`, i.weakRival ? `가장 약한 경쟁사 ${i.weakRival}` : '경쟁사 강약이 고름'],
+    out.push({ kind: 'build', key: `${best.body}:${best.seg}`, goto: { tab: 'dev', sub: 'plan' }, facts: [`${bn}: 손님이 가장 많은 고객층 ${main}`, `기준가 ${i.price.toLocaleString()}만원에 내면 예상 월 판매 ${i.sales}대`, i.weakRival ? `가장 약한 경쟁사 ${i.weakRival}` : '경쟁사 강약이 고름'],
       text: ['수요는 큰데 우리 차가 없는 차급이 있습니다. 새 차종을 검토해 보시죠.', `${bn}${J(bn, '을/를')} ${sn}용으로 내 보는 건 어떨까요. 이 차급은 수요가 큰데 우리 차가 없습니다.`,
         `${bn}${J(bn, '을/를')} ${sn}용으로 내 보는 건 어떨까요. 이 차급은 ${main} 손님이 가장 많고 ${rival}. 기준가에 내면 월 ${i.sales}대 안팎이 예상됩니다.${fit ? ` ${fit}` : ''}`] });
   }

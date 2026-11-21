@@ -6,7 +6,7 @@ import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
+import { STATS, type ExecRole, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook, distinctFaces } from '../render/variant';
@@ -28,7 +28,7 @@ type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: nu
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
 type RecTab = 'cars' | 'combo' | 'news';
-type CoTab = 'fin' | 'staff' | 'hq' | 'factory' | 'research';
+type CoTab = 'fin' | 'staff' | 'hq' | 'factory' | 'research' | 'exec';
 type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView };
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
 
@@ -76,6 +76,7 @@ export function startApp(): void {
   let speed = 1, acc = 0, garageIdx = 0, planTab: PlanTab = 'body';
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
+  let execPick: ExecRole | null = null; // 임원 화면: 직원 임명 목록을 펼친 자리
   let coTab: CoTab = 'fin', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
   let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
@@ -1173,7 +1174,7 @@ export function startApp(): void {
   }
 
   // ----- 회사(9장): 안쪽 탭 재무 / 직원 / 본사 / 공장 -----
-  const CO_TABS: [CoTab, string][] = [['fin', '재무'], ['staff', '직원'], ['hq', '본사'], ['factory', '공장'], ['research', '연구']];
+  const CO_TABS: [CoTab, string][] = [['fin', '재무'], ['staff', '직원'], ['exec', '임원'], ['hq', '본사'], ['factory', '공장'], ['research', '연구']];
   const ROLE_ORDER: Role[] = ['designer', 'engineer', 'tester', 'sales'];
   const condWord = (c: number) => (c < config.staff.condition.low ? '지침' : c < config.staff.condition.mid ? '보통' : '좋음');
   const growWord = (gap: number) => (gap >= 25 ? '성장 여지 큼' : gap >= 15 ? '성장 여지 보통' : '성장 여지 작음');
@@ -1182,7 +1183,7 @@ export function startApp(): void {
   const cmpRow = (label: string, a: string, b: string, cost = false) => `<tr><td>${label}</td><td class="r">${a}</td><td class="r"><b class="${a === b ? '' : cost ? 'neg' : 'pos'}">${b}</b></td></tr>`;
   function companyView(): string {
     const tabs = `<div class="seg cotabs" role="tablist" aria-label="회사">${CO_TABS.map(([k, l]) => `<button role="tab" data-act="cotab" data-v="${k}" aria-selected="${coTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (coTab === 'staff' ? staffTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'research' ? researchTab() : finTab());
+    return tabs + (coTab === 'exec' ? execTab() : coTab === 'staff' ? staffTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'research' ? researchTab() : finTab());
   }
 
   /** 경쟁사가 강한 차급: 점유 점수가 높은 순 최대 3개 + "외 n"(초반에 모두 같으면 "모든 차급 고르게") */
@@ -1228,11 +1229,13 @@ export function startApp(): void {
       const g = rows.filter((x) => x.role === r);
       return g.length ? `<p class="lbl grp">${ROLE_NAME[r]} ${g.length}명</p>${g.map((x) => `<div class="srow-w"><button class="s-pick" data-act="staffPick" data-id="${x.id}" aria-pressed="${staffPick.has(x.id)}" aria-label="${esc(x.name)} 고르기"></button><button class="srow" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><span class="s-name"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]}</small></span><span class="s-abil">${abil(x)}</span><span class="s-pay">${money(x.salary)}</span><span class="s-cond">${cond(x.condition)}</span><span class="s-do s-${x.status}">${doing(x)}</span></button></div>`).join('')}` : '';
     }).join('');
+    const ex = Q.execInfo(s).roles.filter((r) => r.holder); // 0.7.0 임원은 직함으로(누르면 임원 화면)
+    const execRows = ex.length ? `<p class="lbl grp">임원 ${ex.length}명</p>${ex.map((r) => `<div class="srow-w"><span class="s-pick" aria-hidden="true"></span><button class="srow s-exec" data-act="cotab" data-v="exec"><span class="s-name"><b>${esc(r.holder!.name)}</b><small>${esc(r.title)}</small></span><span class="s-abil">임원 능력 <b>${r.holder!.skill}</b></span><span class="s-pay">${money(r.holder!.pay)}</span><span class="s-cond"></span><span class="s-do">${r.holder!.hired ? '외부 임원' : `${ROLE_NAME[r.holder!.staffRole]} 출신`}</span></button></div>`).join('')}` : '';
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
     for (const id of staffPick) if (!rows.some((x) => x.id === id)) staffPick.delete(id); // 해고·퇴사한 직원은 뺀다
     const nPick = staffPick.size, bulk = `<div class="row bulk"><button class="btn" data-act="pickTrainable">교육 가능한 직원 모두 고르기</button><button class="btn ink" data-act="trainPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 교육 보내기</button><button class="btn" data-act="restPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 2주 쉬기</button>${nPick ? '<button class="btn" data-act="pickNone">고르기 해제</button>' : ''}</div>`;
-    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>${rows.length ? bulk : ''}
-      <div class="srow-w head" aria-hidden="true"><span class="s-pick"></span><div class="srow head"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
+    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명${h.execs ? `(임원 ${h.execs}명 자리를 뺀 정원)` : ''} · 월급 합계 ${money(pay)}/월</small></h3>${rows.length ? bulk : ''}
+      <div class="srow-w head" aria-hidden="true"><span class="s-pick"></span><div class="srow head"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div></div>${execRows}${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
       <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다. 왼쪽 네모를 눌러 여러 명을 고르면 한 번에 교육·휴식을 보낼 수 있습니다.</p></div>`;
     const x = rows.find((y) => y.id === staffSel);
     let card2 = '';
@@ -1259,6 +1262,36 @@ export function startApp(): void {
     const fullBox = `<div class="warnbox hire-full">${esc(h.reason ?? '')}</div><p class="hint" style="margin-top:8px">본사를 키우면 더 뽑을 수 있습니다.</p><button class="btn ink" data-act="cotab" data-v="hq" style="width:100%;margin-top:8px">본사 보기</button>`;
     const card3 = `<div class="card hire-card"><h3>채용 <small class="hint">정원 <b class="cap-n">${h.staffCount}/${h.capacity}</b>명</small></h3>${h.candidates.length ? cands + (h.full ? fullBox : '') : h.full ? fullBox : post}</div>`;
     return `<div class="cols co-staff">${card1}<div class="colstack">${card2}${card3}</div></div>`;
+  }
+
+  // ----- 임원(0.7.0) -----
+  const EXEC_DESC: Record<Q.ExecInfo['roles'][number]['role'], string> = {
+    hr: '해고·교육·휴식·채용을 권하고, 교체 고용을 제안합니다.', product: '페이스리프트·풀체인지 적기와 단종을 권합니다.',
+    finance: '현금 부족을 미리 알리고 대출 상환·가격 조정을 권합니다.', production: '공장 증설·생산 라인·생산 배분을 권합니다.',
+    research: '규제 대비 연구와 다음 연구를 권합니다.', market: '무엇을 만들지(차급·고객층·예상 판매)와 광고 수준을 권합니다.',
+  };
+  const TIER_WORD = ['', '뭉뚱그려 말함', '대상을 짚어 말함', '수치까지 말함'];
+  function execTab(): string {
+    const s = game!.state, e = Q.execInfo(s), hq = Q.hqInfo(s).current;
+    const sum = `<div class="card exec-sum"><p class="lbl">임원</p><h2>임원 자리 ${e.used}/${e.seats}석</h2>
+      <p class="hint" style="margin-top:6px">임원은 월 결산 때 분야별로 제안을 보고함에 올립니다(임원마다 한 달 최대 ${config.exec.perExec}건). 화면에 튀어나오지 않으니 상단의 할 일 버튼에서 보고를 확인하세요. 임원도 정원(${hq.staffCap}명) 안에서 자리를 차지합니다.${e.used >= e.seats && e.nextSeatHq ? ` 본사 ${e.nextSeatHq}등급이 되면 자리가 늘어납니다.` : ''}</p>
+      <p class="note">임원 능력${ib('term:임원 능력')}이 높을수록 제안이 구체적입니다${ib('term:제안의 구체성')}. 능력 ${e.delegateSkill} 이상이면 일부 일을 맡길 수 있습니다(맡긴 일도 보고함에 기록됩니다). 해고·가격·출시 같은 큰 결정은 맡기지 않습니다.</p></div>`;
+    const card = (r: Q.ExecInfo['roles'][number]) => {
+      const h = r.holder, head = `<p class="lbl">${esc(r.title)}</p>`, desc = `<p class="hint">${esc(EXEC_DESC[r.role])}</p>`;
+      if (h) {
+        const del = r.delegations.length ? `<p class="lbl" style="margin-top:12px">맡기기</p>${r.delegations.map((d) => `<div class="toggle" style="margin-top:6px"><span>${esc(d.label)}</span><button class="btn" data-act="execDeleg" data-role="${r.role}" data-k="${d.key}" data-v="${d.on ? '0' : '1'}" aria-pressed="${d.on}" ${d.available ? '' : 'disabled'}>${d.on ? '켜짐' : '꺼짐'}</button></div>${d.whyNot ? `<p class="note why">${esc(d.whyNot)}</p>` : ''}`).join('')}` : '<p class="note">이 자리는 제안만 합니다(맡길 일이 없습니다).</p>';
+        return `<div class="card exec-card filled" data-role="${r.role}">${head}<h2>${esc(h.name)}<small>${h.hired ? '외부 임원' : `${ROLE_NAME[h.staffRole]} 출신`}</small></h2>${desc}
+          <div class="kpis" style="margin-top:8px">${kpi(`임원 능력${ib('term:임원 능력')}`, String(h.skill))}${kpi(`제안${ib('term:제안의 구체성')}`, TIER_WORD[h.tier])}${kpi('월급', money(h.pay))}</div>${del}
+          <button class="btn danger" data-act="execDismiss" data-role="${r.role}" style="width:100%;margin-top:12px">해임${h.hired ? ` · 퇴직금 ${money(h.pay * config.staff.severanceMonths)}` : ' · 원래 직무로 복귀'}</button></div>`;
+      }
+      if (!r.canFill) return `<div class="card exec-card locked" data-role="${r.role}">${head}<h2>잠긴 자리</h2>${desc}<p class="note">임원 자리 ${e.seats}석이 모두 찼습니다.${e.nextSeatHq ? ` 본사 ${e.nextSeatHq}등급(${esc(config.hq.levels[e.nextSeatHq - 1].name)})부터 자리가 늘어납니다.` : ' 다른 임원을 해임하면 이 자리를 채울 수 있습니다.'}</p></div>`;
+      const pick = execPick === r.role ? `<div class="exec-pick">${r.internal.slice(0, 8).map((x) => `<button class="opt" data-act="execAppoint" data-role="${r.role}" data-id="${x.staffId}"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]} · 임원 능력 ${x.skill} · ${TIER_WORD[Q.execTier(x.skill)]}</small>${x.busyWith ? `<small class="neg">${esc(x.busyWith)} · 임명하면 빠집니다</small>` : ''}</button>`).join('') || '<p class="hint">임명할 직원이 없습니다.</p>'}</div>` : '';
+      const cands = r.candidates.length ? `<div class="cands">${r.candidates.map((c) => `<div class="cand"><b>${esc(c.name)}</b><small>임원 능력 <b>${c.skill}</b> · ${TIER_WORD[c.tier]}</small><small>월급 ${money(c.pay)} · ${c.weeksLeft}주 남음</small><button class="btn ink" data-act="execHire" data-role="${r.role}" data-id="${c.id}">채용</button></div>`).join('')}</div>` : '';
+      return `<div class="card exec-card empty" data-role="${r.role}">${head}<h2>빈 자리</h2>${desc}
+        <div class="row" style="margin-top:8px"><button class="btn ink" data-act="execPick" data-v="${r.role}" aria-pressed="${execPick === r.role}">직원 임명</button>${r.candidates.length ? '' : `<button class="btn" data-act="execPost" data-role="${r.role}">공고 내기 · ${money(e.postCost)}</button>`}</div>
+        ${pick}${cands}<p class="note">임명한 직원은 개발·연구에서 빠지고 월 수당 ${money(config.exec.allowance)}이 붙습니다. 외부 임원은 바로 쓸 수 있지만 월급이 ${config.exec.hiredPayMult}배입니다.</p></div>`;
+    };
+    return `<div class="exec">${sum}<div class="exec-grid">${e.roles.map(card).join('')}</div></div>`;
   }
 
   function hqTab(): string {
@@ -1672,6 +1705,18 @@ export function startApp(): void {
         return;
       }
       case 'cotab': coTab = v as CoTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      // ---- 임원(0.7.0) ----
+      case 'execPick': execPick = execPick === v ? null : v as ExecRole; render(); return;
+      case 'execAppoint': { if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)), role = el.dataset.role as ExecRole; if (x && run(game.command({ type: 'appointExec', role, staffId: x.id }))) { execPick = null; toast(`${x.name}${josa(x.name, '을/를')} ${Q.EXEC_TITLE[role]}${josa(Q.EXEC_TITLE[role], '으로/로')} 임명했습니다.`); render(); } return; }
+      case 'execPost': if (game && run(game.command({ type: 'postExecJob', role: el.dataset.role as ExecRole }))) { toast('임원 공고를 냈습니다. 후보 3명이 왔습니다.'); render(); } return;
+      case 'execHire': { if (!game) return; const role = el.dataset.role as ExecRole, c = game.state.execs?.candidates.find((x) => x.id === Number(el.dataset.id)); if (c && run(game.command({ type: 'hireExec', role, candidateId: c.id }))) { toast(`${c.name}${josa(c.name, '을/를')} ${Q.EXEC_TITLE[role]}${josa(Q.EXEC_TITLE[role], '으로/로')} 뽑았습니다.`); render(); } return; }
+      case 'execDeleg': if (game && run(game.command({ type: 'setDelegation', role: el.dataset.role as ExecRole, key: el.dataset.k!, on: v === '1' }))) render(); return;
+      case 'execDismiss': {
+        if (!game) return; const role = el.dataset.role as ExecRole, h = Q.execInfo(game.state).roles.find((r) => r.role === role)?.holder; if (!h) return;
+        if (!(await ask(`${h.name}${josa(h.name, '을/를')} ${Q.EXEC_TITLE[role]}에서 해임할까요?\n${h.hired ? `외부 임원이라 회사를 떠납니다. 퇴직금 ${money(h.pay * config.staff.severanceMonths)}이 나갑니다.` : `원래 직무(${ROLE_NAME[h.staffRole]})로 돌아갑니다.`} 맡긴 일은 모두 꺼집니다.`, '해임', true))) return;
+        if (run(game.command({ type: 'dismissExec', role }))) { toast(`${h.name}${josa(h.name, '을/를')} 해임했습니다.`); render(); }
+        return;
+      }
       case 'goCo': coTab = v as CoTab; go('company'); return;
       case 'devSel': devSel = Number(el.dataset.id); go('dev'); return;
       case 'devHome': go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로

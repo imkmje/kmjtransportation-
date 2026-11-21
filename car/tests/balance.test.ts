@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { gouger, idle, newNameOnly, noExpand, noFacelift, noResearch, novice, runBot, steady, type Bot } from '../src/sim/bots';
+import { gouger, idle, newNameOnly, noExpand, noFacelift, noResearch, novice, runBot, steady, steadyExec, type Bot } from '../src/sim/bots';
 import { eraTimeline } from '../src/sim/events';
 import { Game, allGens, sellingGens } from '../src/sim/game';
 import { capacityOf } from '../src/sim/company';
@@ -218,5 +218,29 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
       console.log(`${id}: 직전 ${before}판 → 끝 ${after}판`);
       expect(before - after).toBeLessThanOrEqual(3); // 20판의 15% = 3판
     }
+  });
+});
+
+describe('0.7.0 임원 봇·60년 생존', () => {
+  const run = (bot: () => Bot, d: 'easy' | 'normal', years: number) => SEEDS.map((seed) => {
+    const g = Game.create({ seed, difficulty: d }), b = bot(), cash: number[] = [];
+    for (let w = 1; w <= years * 48 && g.state.status === 'playing'; w++) { b.step(g); g.tick(); if (w % 480 === 0) cash.push(g.state.cash); }
+    return { g, alive: g.state.status === 'playing', worth: g.state.status === 'playing' ? snapOf(g).worth : 0, cash, hi: allGens(g.state).map(launchAvgGrade) };
+  });
+  it('임원 봇(steadyExec)은 신중보다 약간 유리: 40년 자산 중앙값 +5~25%, 출시 등급 9 초과 10% 미만(쉬움·보통)', () => {
+    for (const d of ['easy', 'normal'] as const) {
+      const a = run(() => steady(), d, 40), b = run(() => steadyExec(), d, 40);
+      const wa = median(a.map((r) => r.worth)), wb = median(b.map((r) => r.worth)), hi = b.flatMap((r) => r.hi), hiShare = hi.filter((x) => x > 9).length / hi.length;
+      console.log(`${d} 40년: 신중 생존 ${a.filter((r) => r.alive).length}/20 자산 ${eok(wa)}억, 임원 생존 ${b.filter((r) => r.alive).length}/20 자산 ${eok(wb)}억(${((wb / wa - 1) * 100).toFixed(1)}%), 임원 봇 출시 등급 9 초과 ${(hiShare * 100).toFixed(1)}%`);
+      expect(b.filter((r) => r.alive).length).toBeGreaterThanOrEqual(a.filter((r) => r.alive).length);
+      expect(wb / wa).toBeGreaterThanOrEqual(1.05); expect(wb / wa).toBeLessThanOrEqual(1.25);
+      expect(hiShare).toBeLessThan(0.1);
+    }
+  });
+  it('보통 신중 60년 생존 18/20 이상(0.7.0 시장 포화 상한 6% → 3.5%), 40년 현금 중앙값 2조 미만', () => {
+    const rs = run(() => steady(), 'normal', 60), c40 = median(rs.map((r) => r.cash[3] ?? 0));
+    console.log(`보통 신중 60년 생존 ${rs.filter((r) => r.alive).length}/20, 40년 현금 중앙값 ${eok(c40)}억`);
+    expect(rs.filter((r) => r.alive).length).toBeGreaterThanOrEqual(18);
+    expect(c40).toBeLessThan(200000000); // 만원: 2조
   });
 });

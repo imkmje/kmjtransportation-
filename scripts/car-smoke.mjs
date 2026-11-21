@@ -1124,7 +1124,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await EG(() => { const g = window.__car.game; g.state.cash = 1e8; g.state.negMonths = 0; g.command({ type: 'appointExec', role: 'hr', staffId: g.state.staff.find((x) => x.projectId === null).id }); window.__car.render(); });
   const sk = await EG(() => window.__car.todos().map((t) => t.key));
   for (let i = 0; i < 5 && !(await EG(() => window.__car.game.state.execs.reports.length)); i++) { await closeAny(); await ep.click('#skipbtn'); await ep.waitForFunction(() => !window.__car.skip, null, { timeout: 60000 }); }
-  const tt = await ep.locator('#toasts').innerText(), reps = await EG(() => window.__car.game.state.execs.reports.filter((r) => r.unread).length);
+  const tt = await ep.locator('#toasts').textContent(), reps = await EG(() => window.__car.game.state.execs.reports.filter((r) => r.unread).length);
   check('임원 보고: 월 결산에 보고가 오면 [다음 일까지]가 멈추고 결산 알림에 "임원 보고 N건"만(보고 창은 뜨지 않음)', reps > 0 && tt.includes(`임원 보고 ${reps}건`) && (await ep.locator('#sheet .rep-card').count()) === 0, `${reps}건, 시작 할 일 ${sk.length}개`);
   check('임원 보고: 할 일에 읽지 않은 보고 항목', await EG(() => window.__car.todos().some((t) => t.kind === 'reports')));
   await closeAny(); await ep.click('#todobtn'); await ep.click('[data-act="todoTab"][data-v="reports"]');
@@ -1133,6 +1133,36 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const c0 = await ep.locator('.rep-card').count(); await ep.locator('.rep-card [data-act="repClose"]').first().click();
   check('[이 보고 닫기] → 카드 하나 줄어듦', (await ep.locator('.rep-card').count()) === c0 - 1);
   await ectx.close(); }
+
+// ---- 0.7.0 임원 화면(회사 탭): 임명 → 월 결산 보고 → 맡기기 켬 → 해임 ----
+{ const xctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const xp = await xctx.newPage(); xp.on('pageerror', (e) => errors.push(String(e))); xp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const XG = (fn, a) => xp.evaluate(fn, a), xshot = (n) => process.argv[2] ? xp.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
+  await xp.goto(URL0); await xp.waitForSelector('#title:not([hidden])');
+  await xp.click('[data-act="titleNew"]'); await xp.fill('#t-co', '임원 시험'); await xp.click('[data-act="startNew"]'); await XG(() => window.__car.setSpeed(0));
+  await xp.click('#tabs button[data-tab="company"]'); await xp.click('#panel [data-act="cotab"][data-v="exec"]');
+  check('임원 화면: 자리 카드 6개(빈 자리 1, 잠긴 자리 5와 필요 본사 등급)', (await xp.locator('.exec-card').count()) === 6 && (await xp.locator('.exec-card.empty').count()) === 6 && (await xp.locator('.exec-sum').innerText()).includes('0/1석'));
+  await xp.click('.exec-card[data-role="research"] [data-act="execPick"]');
+  check('임명 목록: 관련 능력 순(엔지니어가 위)', (await xp.locator('.exec-card[data-role="research"] .exec-pick .opt').first().innerText()).includes('엔지니어'));
+  await xp.locator('.exec-card[data-role="research"] [data-act="execAppoint"]').first().click();
+  check('임명: 자리가 채워지고 나머지는 잠김(본사 2등급 안내)', (await xp.locator('.exec-card.filled[data-role="research"]').count()) === 1 && (await xp.locator('.exec-card.locked').count()) === 5 && (await xp.locator('.exec-card.locked').first().innerText()).includes('본사 2등급'));
+  await xshot('exec-1366x1024');
+  await xp.click('#panel [data-act="cotab"][data-v="staff"]');
+  check('직원 표: 임원은 직함(연구소장)으로', (await xp.locator('.srow.s-exec').innerText()).includes('연구소장'));
+  await XG(() => window.__car.tick(4));
+  const nrep = await XG(() => window.__car.game.state.execs.reports.length);
+  check('월 결산 → 임원 보고가 보고함에 쌓임(창은 뜨지 않음)', nrep > 0 && !(await xp.locator('#sheet .rep-card').isVisible()), `${nrep}건`);
+  await xp.click('#panel [data-act="cotab"][data-v="exec"]');
+  check('맡기기: 능력이 모자라면 스위치가 잠기고 이유 표시', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').isDisabled()) && (await xp.locator('.exec-card[data-role="research"] .why').innerText()).includes('이상이어야'));
+  await XG(() => { window.__car.game.state.execs.seats.research.staff.ability = 70; window.__car.render(); });
+  await xp.click('.exec-card[data-role="research"] [data-act="execDeleg"]');
+  check('맡기기 켬: 스위치 켜짐·상태 반영', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').getAttribute('aria-pressed')) === 'true' && await XG(() => window.__car.game.state.execs.delegations.research.includes('autoResearch')));
+  await xp.setViewportSize({ width: 1024, height: 768 }); await xp.waitForTimeout(200);
+  check('임원 화면(1024×768): 가로 넘침 없음, 버튼 44px 이상', await XG(() => { const p = document.getElementById('panel'); return p.scrollWidth <= p.clientWidth + 1 && [...document.querySelectorAll('.exec-card .btn')].every((b) => b.getBoundingClientRect().height >= 44); }));
+  await xshot('exec-1024x768');
+  await xp.click('.exec-card[data-role="research"] [data-act="execDismiss"]'); await xp.click('#ask-yes');
+  check('해임: 확인 창 → 원래 직무로 복귀, 빈 자리', (await xp.locator('.exec-card.empty').count()) === 6 && await XG(() => window.__car.game.state.staff.length === 4));
+  await xctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);
