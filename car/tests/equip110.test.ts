@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game, allGens, SAVE_VERSION } from '../src/sim/game';
 import { equipChanges, equipInfo, equipOf, expectEffect, expectation, optPerCar, optPrice, recommendedEquip, takeRate } from '../src/sim/equip';
-import { monthlyDemand } from '../src/sim/market';
+import { monthlyDemand, toSaleCar } from '../src/sim/market';
 import { planPreview, salesFactors } from '../src/sim/queries';
 import { BODIES, OPTIONS } from '../src/data';
 import { config } from '../src/config';
@@ -101,5 +101,43 @@ describe('판매 요인·임원 제안(1.1.0)', () => {
     for (let i = 0; i < 8; i++) g.tick();
     const gen = allGens(g.state)[0], f = salesFactors(g.state, gen.id)!.factors.find((x) => x.key === 'equip')!;
     expect(f.impact).toBeLessThan(-0.1); expect(f.detail).toContain('기대되는');
+  });
+});
+
+describe('옛 저장의 출시된 차는 장비 기대 면제(1.1.0)', () => {
+  it('형식 4 저장을 열어 12개월: 판매 중인 옛 판은 장비 기대 효과가 없고(수요가 기대 효과를 끈 계산과 같다), 판매 요인·조회가 옛 구성이라고 알린다', () => {
+    const g = Game.fromJSON(JSON.parse(readFileSync('car/tests/fixtures/save-v4-suv.json', 'utf8'))), s = g.state;
+    const on = () => allGens(s).filter((x) => x.status === 'onSale');
+    expect(on().length).toBeGreaterThan(0);
+    for (const x of allGens(s)) for (const e of x.editions) expect(e.equipLegacy).toBe(true);
+    const lacking = on().filter((x) => expectEffect(equipOf(x.editions.at(-1)!), x.body, 2003).missing.length > 0);
+    expect(lacking.length).toBeGreaterThan(0); // 새 규칙이면 감점을 받을 차가 있다
+    for (let mth = 0; mth < 12; mth++) {
+      for (let w = 0; w < 4; w++) g.tick();
+      const m = Math.floor(s.week / 4), cars = on().map((x) => toSaleCar(x, m));
+      cars.forEach((c, i) => { const others = cars.filter((_, j) => j !== i); expect(monthlyDemand(s, c, others, m / 12 + 1970)).toBeCloseTo(monthlyDemand(s, c, others, m / 12 + 1970, { noExpect: true }), 9); });
+    }
+    const x = on()[0], f = salesFactors(s, x.id)!;
+    expect(f.equipLegacy).toBe(true); expect(f.factors.find((y) => y.key === 'equip')!.impact).toBeCloseTo(0, 9);
+    expect(equipInfo(s, { ...x, equip: equipOf(x.editions.at(-1)!), equipLegacy: true }).totals).toMatchObject({ legacy: true, penalty: 0, missingExpected: [] });
+  });
+  it('옛 판을 페이스리프트하면 새 판은 새 규칙(legacy 아님)', () => {
+    const g = Game.fromJSON(JSON.parse(readFileSync('car/tests/fixtures/save-v4-suv.json', 'utf8'))), s = g.state; s.cash = 1e10;
+    for (const q of [...s.projects]) ok(g.command({ type: 'cancelProject', projectId: q.id }));
+    const x = allGens(s).find((y) => y.status === 'onSale' && !y.editions.some((e) => e.kind === 'facelift') && g.command({ type: 'startFacelift', generationId: y.id, options: [], equip: recommendedEquip(s, y.body, y.segment, y.powertrain) }).ok)!;
+    expect(x).toBeTruthy();
+    const p = s.projects.find((q) => q.kind === 'facelift')!;
+    while (!(p.phase === 'test' && p.testWeeks >= config.dev.minTestWeeks)) g.tick();
+    ok(g.command({ type: 'launch', projectId: p.id, price: x.editions.at(-1)!.price, marketing: x.marketing, color: 'red', wheels: 0 }));
+    expect(x.editions.at(-1)!.kind).toBe('facelift'); expect(x.editions.at(-1)!.equipLegacy).toBeUndefined();
+  });
+  it('setProjectEquip: 설계 단계에서만 비용 없이 장비 구성을 바꾼다', () => {
+    const g = Game.create({ difficulty: 'normal', seed: 3 }); g.state.week = 48 * 15; grant(g, 'el_aircon');
+    ok(g.command({ type: 'startProject', ...SPEC, options: [] }));
+    const p = g.state.projects[0], cash = g.state.cash;
+    ok(g.command({ type: 'setProjectEquip', projectId: p.id, equip: { radio: 'std', aircon: 'opt' } }));
+    expect(p.equip).toEqual({ radio: 'std', aircon: 'opt' }); expect(p.options).toEqual(['radio']); expect(g.state.cash).toBe(cash);
+    while (p.phase === 'design') g.tick();
+    expect(g.command({ type: 'setProjectEquip', projectId: p.id, equip: {} }).ok).toBe(false);
   });
 });

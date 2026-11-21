@@ -98,10 +98,11 @@ export function equipChanges(s: CarState, prev: Equip, body: string, segment: st
   return out;
 }
 
+export const LEGACY_TEXT = '이 차는 옛 구성입니다. 다음 페이스리프트부터 장비 기대가 적용됩니다.';
 const EXPECT_TEXT: Record<Expectation, string> = { rare: '아직 드문 장비', common: '흔해지는 중인 장비', expected: '이 차급에서 기대되는 장비' };
 const effectText = (id: string, w: number): string => { const o = optionById(id), p = (v: number) => Math.round(v * w * 10) / 10; return [o.U && `실용 +${p(o.U)}`, o.D && `디자인 +${p(o.D)}`, o.Q && `품질 +${p(o.Q)}`].filter(Boolean).join(', '); };
 /** 장비 고르기 화면용: 장비마다 기대·원가·값·선택 사양 요금·선택률·효과, 합계(기본 장비 원가·값, 선택 사양 대당 이익, 차별 기준가, 빠진 기대 장비, 감점·가점) */
-export function equipInfo(s: CarState, spec: { body: string; segment: string; powertrain: string; equip?: Equip; options?: string[] }, year?: number) {
+export function equipInfo(s: CarState, spec: { body: string; segment: string; powertrain: string; equip?: Equip; options?: string[]; equipLegacy?: boolean }, year?: number) {
   const y = yearNow(s, year), have = new Set(optionsAt(s).map((o) => o.id)), req = new Set(requiredOptions(s));
   const e = equipOf({ options: spec.options ?? [], equip: spec.equip }, s);
   const items = OPTIONS.map((o) => {
@@ -112,11 +113,12 @@ export function equipInfo(s: CarState, spec: { body: string; segment: string; po
       effect: { std: effectText(o.id, 1), opt: effectText(o.id, C().partBase + C().partPerRate * r) },
     };
   });
-  const std = stdOf(e), fx = expectEffect(e, spec.body, y), op = optPerCar(e, spec.body, spec.segment, y);
+  const legacy = !!spec.equipLegacy, std = stdOf(e), fx0 = expectEffect(e, spec.body, y), fx = legacy ? { ...fx0, mult: 1, missing: [] } : fx0, op = optPerCar(e, spec.body, spec.segment, y); // legacy: 옛 저장에서 올라온 출시된 판(기대 효과 없음)
   const stdValue = std.filter((id) => !req.has(id)).reduce((a, id) => a + optionValue(id, spec.segment, y), 0);
   return {
     items,
     totals: { stdCost: std.reduce((a, id) => a + optionById(id).cost, 0), stdValue, optProfitPerCar: op.rev - op.cost, basePrice: basePriceOf(s, spec.body, spec.powertrain) + stdValue,
-      missingExpected: fx.missing.map((id) => optionById(id).name), penalty: 1 - Math.min(1, fx.mult), bonus: Math.max(0, fx.mult - 1) },
+      missingExpected: fx.missing.map((id) => optionById(id).name), penalty: 1 - Math.min(1, fx.mult), bonus: Math.max(0, fx.mult - 1),
+      legacy, legacyText: legacy ? LEGACY_TEXT : null },
   };
 }

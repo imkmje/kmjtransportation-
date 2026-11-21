@@ -324,8 +324,15 @@ function marketIdeas(s: CarState): Idea[] {
         `${bn}${J(bn, '을/를')} ${sn}용으로 내 보는 건 어떨까요. 이 차급은 ${main} 손님이 가장 많고 ${rival}. 기준가에 내면 월 ${i.sales}대 안팎이 예상됩니다.${fit ? ` ${fit}` : ''}${recLine(s, best.body, best.seg)}`] });
   }
   for (const g of sellingGens(s).filter((x) => x.status === 'onSale')) { // 1.1.0: 이 차급에서 기대되는 장비가 됐는데 지금 차에 없거나 선택 사양으로만 있으면(페이스리프트로)
-    const fx = expectEffect(equipOf(currentEdition(g)), g.body, yearOf(s.week)), lack = [...fx.missing, ...fx.optOnly];
+    const ed = currentEdition(g), fx = expectEffect(equipOf(ed), g.body, yearOf(s.week)), lack = [...fx.missing, ...fx.optOnly];
     if (!lack.length) continue;
+    if (ed.equipLegacy) { // 옛 저장의 출시된 판: 감점이 없으므로 안내만 한 번
+      if ((s.execs?.reports ?? []).some((r) => r.kind === 'expectEquip' && r.key === `${g.id}:legacy`)) continue;
+      const n0 = gName(s, g);
+      out.push({ kind: 'expectEquip', key: `${g.id}:legacy`, goto: { tab: 'garage', id: g.id }, facts: [`「${n0}」 옛 구성(장비 기대 면제)`, `요즘 이 차급에서 기대되는 장비: ${lack.map((id) => optionById(id).name).join('·')}`],
+        text: ['옛 구성으로 팔고 있는 차가 있습니다.', `「${n0}」 페이스리프트 때 추천 구성을 반영하세요.`, `「${n0}」${J(n0, '은/는')} 옛 구성이라 지금은 장비 기대 감점이 없습니다. 페이스리프트 때 추천 구성을 반영하세요.`] });
+      continue;
+    }
     const n = gName(s, g), names = lack.map((id) => optionById(id).name).join('·'), how = fx.missing.length ? '지금 차에는 없습니다' : '지금 차에는 선택 사양으로만 있습니다';
     out.push({ kind: 'expectEquip', key: `${g.id}:${lack.join(',')}`, goto: { tab: 'garage', id: g.id }, facts: [`「${n}」 ${bodyById(g.body).name} 차급에서 기대되는 장비: ${names}(${how})`, `기대 장비가 빠진 만큼 판매가 약 ${pct(1 - fx.mult)} 줄고 있습니다`],
       text: ['요즘 손님들이 당연하게 여기는 장비가 빠진 차가 있습니다.', `「${n}」에 요즘 기대되는 장비가 빠져 있습니다. 페이스리프트로 넣으시죠.`, `이 차급에서 ${names}${J(names, '이/가')} 기대되는 장비가 됐습니다(${how}). 「${n}」 페이스리프트로 기본 장비로 넣으면 판매가 약 ${pct(1 - fx.mult)} 회복됩니다.`] });

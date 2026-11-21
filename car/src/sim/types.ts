@@ -110,7 +110,7 @@ export interface Project extends ProjectSpec {
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */
 export interface Edition {
   id: number; kind: 'initial' | 'facelift'; launchWeek: number;
-  tier: number; level: number; options: string[]; stats: Stats; equip?: Equip; // options: 기본 장비(의무 장비 포함), equip(1.1.0): 선택 사양까지 든 구성(없으면 options가 모두 기본 장비)
+  tier: number; level: number; options: string[]; stats: Stats; equip?: Equip; equipLegacy?: boolean; // equipLegacy(1.1.0): 형식 4에서 올라온 출시된 판. 시대의 기대 감점·가점을 받지 않는다. options: 기본 장비(의무 장비 포함), equip(1.1.0): 선택 사양까지 든 구성(없으면 options가 모두 기본 장비)
   // tier: 동력 등급 1~3, level: 실제 동력 단계. stats: 출시 시 확정된 원점수(결함 감점 포함)
   defects: number; // 출시 때 남은 결함(리콜 확률), 리콜 뒤 0
   price: number; color: string; wheels: 0 | 1 | 2;
@@ -252,6 +252,7 @@ export interface YearLog { rep: Record<string, number>; cars: Record<string, num
 export type Command =
   // team: 배치할 직원 ID(생략하면 쉬고 있는 개발 직무 전원). 시드를 빼면 lookCandidates의 첫 후보
   | ({ type: 'startProject'; chassisSeed?: number; faceSeed?: number; team?: number[] } & ProjectSpec)
+  | { type: 'setProjectEquip'; projectId: number; equip: Equip } // 1.1.0 설계 단계 프로젝트의 장비 구성 바꾸기(비용 없음)
   | { type: 'startFacelift'; generationId: number; options: string[]; equip?: Equip; tier?: number; faceSeed?: number; team?: number[] }
   | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }

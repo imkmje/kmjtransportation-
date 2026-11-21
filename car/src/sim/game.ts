@@ -6,7 +6,7 @@ import { specError, stepProject, withRequired } from './dev';
 import { allocate, factoryBuildMonths, hqUpkeep, capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, repEffect, salesAwarenessBonus, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
-import { equipOf, expectEffect, optPerCar, optWeights, syncOptions } from './equip';
+import { equipOf, expectEffect, optPerCar, optWeights, stdOf, syncOptions } from './equip';
 import { carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
 import { addNews, choiceMoney, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
@@ -359,6 +359,15 @@ export class Game {
         const team = this.teamFor(cmd.team), err = this.teamError() ?? specError(s, spec) ?? seedError(cmd.chassisSeed) ?? seedError(cmd.faceSeed) ?? (typeof team === 'string' ? team : null);
         if (err) return fail(err);
         this.addProject('fullchange', n.id, spec, cmd.chassisSeed ?? lookCandidates(s, n.id, 'chassis')[0], cmd.faceSeed ?? lookCandidates(s, n.id, 'face', 'nextGen')[0], team as Staff[]);
+        return OK;
+      }
+      case 'setProjectEquip': { // 1.1.0: 설계 단계에서만, 비용 없이
+        const p = s.projects.find((x) => x.id === cmd.projectId);
+        if (!p || p.kind === 'fix') return fail('없는 개발 프로젝트입니다.');
+        if (p.phase !== 'design') return fail('장비 구성은 설계 단계에서만 바꿀 수 있습니다.');
+        const spec = syncOptions({ ...p, options: [...p.options], equip: { ...cmd.equip } }), err = specError(s, { ...spec, designWeeks: config.dev.designWeeks[0] });
+        if (err) return fail(err);
+        p.equip = equipOf(spec, s); p.options = withRequired(s, stdOf(p.equip));
         return OK;
       }
       case 'cancelProject': {
@@ -835,7 +844,7 @@ function migrateV3(st: CarState): void {
 /** 저장 형식 4 → 5(1.1.0): 판·프로젝트의 옵션 목록을 모두 기본 장비로 */
 function migrateV4(st: CarState): void {
   const std = (o: string[]) => Object.fromEntries(o.map((id) => [id, 'std' as const]));
-  for (const n of st.nameplates) for (const g of n.generations) for (const e of g.editions) e.equip ??= std(e.options);
+  for (const n of st.nameplates) for (const g of n.generations) for (const e of g.editions) { e.equip ??= std(e.options); e.equipLegacy = true; } // 옛 규칙(옵션이 적자·칸 2~4개)으로 낸 차라 기대 감점을 면제
   for (const p of st.projects) p.equip ??= std(p.options);
   st.saveVersion = 5;
 }
