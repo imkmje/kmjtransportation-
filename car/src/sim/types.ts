@@ -70,7 +70,11 @@ export interface Staff {
   trainings: number[]; // 교육을 시작한 주(연 2회 제한·교육 중 판정). 마지막 값 + 4주 전까지 교육 중
   restUntil: number | null; // 이 주 전까지 강제 휴식(산출 0, 회복)
   lab: boolean; // 전담 연구원(10장, 본사 4등급부터): 프로젝트에 배치되지 않고 연구 점수 ×1.5
+  hist?: StaffHist; // 0.10.0 성장 기록(없으면 예전 저장: 다음 월 결산부터 쌓는다)
 }
+/** 직원 성장 기록(0.10.0). join·joinAbility: 입사 주·입사 때 능력(예전 저장은 null, since부터 기록), years: 연도 → 그해 12월 결산 때 능력,
+ *  cars: 참여해 출시한 차(세대 ID, 프로젝트 종류), execs: 임원 경력(to null = 지금 임원) */
+export interface StaffHist { join: number | null; joinAbility: number | null; since: number; years: Record<string, number>; cars: { gen: number; kind: ProjectKind }[]; execs: { role: ExecRole; from: number; to: number | null }[] }
 /** 채용 후보(공고 1회에 3명, 4주 뒤 사라짐). salary = 요구 월급(= 250 + 능력 × 12) */
 export interface Candidate { id: number; name: string; role: Role; ability: number; potential: number; salary: number; expiresWeek: number }
 
@@ -82,7 +86,7 @@ export interface ProjectSpec {
   options: string[]; direction: Stats; budget: Budget; designWeeks: number;
 }
 /** 프로젝트 종류(8장): 새 차종 / 페이스리프트 / 풀체인지 */
-export type ProjectKind = 'new' | 'facelift' | 'fullchange';
+export type ProjectKind = 'new' | 'facelift' | 'fullchange' | 'fix'; // fix: 0.10.0 긴급 개선(targetId = 세대 ID, 설계 없이 시험만, 끝나면 저절로 반영)
 export interface Project extends ProjectSpec {
   id: number; startWeek: number;
   level: number; // 실제 동력 단계(개발을 시작할 때 tier와 연구 단계로 정해 고정)
@@ -134,7 +138,12 @@ export interface Generation {
   recalls: number;
   pricePolicy?: PricePolicy | null; // 0.8.0 자동 가격(없거나 null = 수동)
   plan?: GenPlan; // 0.8.0 출시 때의 기획 값(풀체인지가 물려받는다). 예전 저장에는 없다
+  pnl?: GenPnl; // 0.10.0 손익 누적(없으면 예전 저장: 다음 결산 때 판매 기록으로 추정해 만든다)
+  fixed?: { week: number; cost: number }; // 0.10.0 긴급 개선을 마친 주와 든 돈(세대당 1회)
+  clearance?: { startMonth: number; lastMonth: number; price: number }; // 0.10.0 가격 인하 판매: lastMonth 결산 뒤 자동 단종
 }
+/** 세대 손익 누적(0.10.0): 매출·원가·광고비·리콜비, 개발비(처음·페이스리프트·의무 장비·긴급 개선), 월별 이익(sales와 같은 길이). est: 예전 저장에서 추정한 값이 섞임 */
+export interface GenPnl { rev: number; cogs: number; mk: number; recall: number; dev: { base: number; lift: number; retro: number; fix: number }; months: number[]; est?: true }
 /** 자동 가격(0.8.0): 시장 기준가의 pct% 유지 / 매달 최고 이익 가격. 월 결산 직전에 적용 */
 export type PricePolicy = { kind: 'base'; pct: number } | { kind: 'best' };
 /** 세대 기획 값(0.8.0): 개발 방향·예산·설계 기간, 출시 때 쓸 수 있던 옵션(풀체인지에서 "새로 가능" 판단용) */
@@ -152,7 +161,10 @@ export interface LedgerEntry {
   upkeepHq?: number; // 0.5.1: upkeep 중 본사 몫(공장 몫 = upkeep − upkeepHq). 예전 장부에는 없다
   oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
+  cars?: LedgerCar[]; execPay?: number; research?: number; // 0.9.0 월 결산 창용(예전 장부에는 없다): 차종별 한 줄, salaries 중 임원 몫, oneOff 중 연구 시작 비용
 }
+/** 0.9.0 장부의 차종별 한 줄(세대 ID). 이익 = 매출 − 원가 − 광고 − 리콜 */
+export interface LedgerCar { id: number; sold: number; revenue: number; cogs: number; marketing: number; recall: number }
 
 /** 연구 상태(10장). done: 완료한 기술 ID(반복 기술은 여러 번), active: 진행 중(시작 순), early: 등장 연도보다 먼저 완료해 "세계 최초"를 아직 쓰지 않은 기술 */
 export interface ResearchState {
@@ -219,6 +231,7 @@ export interface CarState {
   ledger: LedgerEntry[]; // 최근 24개월
   pendingDev: number; // 이번 달에 쌓인 개발비(월말 정산)
   pendingOneOff: number; // 이번 달 일회성 지출(이미 현금에서 나감, 장부 기록용)
+  pendingResearch?: number; // 0.9.0 이번 달 연구 시작 비용(pendingOneOff에 들어 있음, 장부의 research 칸용)
   nextId: number;
   research: ResearchState; // 10장
   events: EventsState; // 11장 무작위 사건·뉴스(고정 사건은 시드와 날짜로 계산)
@@ -243,6 +256,8 @@ export type Command =
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
   | { type: 'setMarketing'; generationId: number; marketing: number }
   | { type: 'setPricePolicy'; generationId: number; policy: PricePolicy | null } // 0.8.0 자동 가격(수동 setPrice는 정책을 끈다)
+  | { type: 'quickFix'; generationId: number; team?: number[] } // 0.10.0 긴급 개선(테스터·엔지니어, 생략하면 쉬는 테스터·엔지니어 전원)
+  | { type: 'clearance'; generationId: number } // 0.10.0 가격 인하 판매(정한 기간 뒤 자동 단종)
   | { type: 'retrofit'; generationId: number } // 0.4.2: 판매 중인 차에 지금 의무 장비를 추가(일시 비용 + 원가 상승, 바로 반영)
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }

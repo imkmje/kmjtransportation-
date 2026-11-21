@@ -10,6 +10,7 @@ import { capacityOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDev
 import { Game, allGens, linesUsed, sellingGens } from './game';
 import { REGION, basePriceOf, cellMonthly, currentEdition } from './market';
 import { planPreview } from './queries';
+import { rescueOptions } from './insight';
 import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, yearOf } from './time';
@@ -36,12 +37,14 @@ export interface SteadyOptions {
   expandRatio: number; // 공장 증설: 지난달 주문이 한도의 이 배수 이상
   borrowShare: number; // 현금이 음수가 되면 대출 한도의 이 비율까지 빌린다(0이면 안 빌림)
   priceMult: number; // 출시 가격 = 기준가 × 이 값
+  best: boolean; // 0.10.0: 판매 중인 차마다 자동 가격 '최고 이익 매달'을 켠다
+  rescue: boolean; // 0.10.0: 수습 대상(혹평·판매 부진)인 차에 긴급 개선, 후속 풀체인지를 개발 중인 혹평 차는 가격 인하 판매
 }
 const STEADY: SteadyOptions = {
   budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 28, // 0.4.2: 시험 속도가 약 2.3배 느려져 12 → 28주
    faceliftMonths: 36, changeMonths: 78, successor: 'fullchange', // 0.4.2: 3년 리프트, 6.5년 풀체인지(8.4 의도한 흐름, 개발이 약 1년이 되어 30·60 → 36·78)
   manage: true, expand: true, gouge: false, research: true,
-  sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrowShare: 0, priceMult: 1,
+  sloppy: false, faceliftShare: 1, manageEvery: 1, expandRatio: config.bots.expandRatio, borrowShare: 0, priceMult: 1, best: false, rescue: false,
 };
 const B = config.bots;
 
@@ -60,6 +63,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       const turn = monthOf(g.state.week) % o.manageEvery === 0; // 서툰 플레이는 가끔만 챙긴다
       if (turn) hireBest(g);
       if (o.research && turn) research(g, o.sloppy);
+      if (o.rescue) rescue(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -108,6 +112,24 @@ function manageExecs(g: Game): void {
   for (const r of s.execs?.replacements ?? []) if (r.status === 'proposed') g.command({ type: 'approveReplacement', id: r.id });
 }
 
+/** 최고 이익 가격 정책을 쓰는 신중(0.10.0 균형 기준선 측정용) */
+export const steadyBest = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ best: true, ...opts }), name: 'steadyBest' });
+/** 최고 이익 가격 + 임원을 쓰는 신중(0.10.0 균형 기준선 측정용) */
+export const steadyBestExec = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steadyExec({ best: true, ...opts }), name: 'steadyBestExec' });
+/** 수습 수단을 쓰는 신중(0.10.0 균형 점검) */
+export const steadyRescue = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ rescue: true, ...opts }), name: 'steadyRescue' });
+/** 수습: 평론이 혹평 쪽(rescue.reviewMax 이하)인 차에 긴급 개선(현금이 비용 + 여유분 이상, 개발팀이 비어 있을 때). 혹평 차의 후속 풀체인지를 개발 중이면 가격 인하 판매 */
+function rescue(g: Game): void {
+  const s = g.state, reserve = fixedCost(s) * B.reserveMonths;
+  for (const x of sellingGens(s).filter((y) => y.status === 'onSale')) {
+    const r = rescueOptions(s, x.id);
+    if (!r || r.target || x.reviewAvg > config.rescue.reviewMax) continue; // 혹평(평론 reviewMax 이하) 차에만
+    if (r.fix.ok && s.cash >= r.fix.cost + reserve) { g.command({ type: 'quickFix', generationId: x.id }); continue; }
+    const np = s.nameplates.find((n) => n.generations.includes(x))!;
+    if (r.clearance.ok && x.reviewAvg <= config.rescue.reviewMax && s.projects.some((p) => p.kind === 'fullchange' && p.targetId === np.id)) g.command({ type: 'clearance', generationId: x.id });
+  }
+}
+
 const RANDOM_DEFAULT = (eventId: string): number => RANDOM_EVENTS_BY_ID.get(eventId)!.defaultChoice;
 const RANDOM_EVENTS_BY_ID = new Map(RANDOM_EVENTS.map((d) => [d.id, d]));
 
@@ -152,6 +174,7 @@ const fixedCost = (s: CarState) => monthlyFixed(s); // 직원·임원 월급 + �
 function monthly(g: Game, o: SteadyOptions): void {
   const s = g.state, reserve = fixedCost(s) * B.reserveMonths;
   const gens = sellingGens(s).filter((x) => x.status === 'onSale');
+  if (o.best) for (const x of gens) if (!x.pricePolicy && !x.clearance) g.command({ type: 'setPricePolicy', generationId: x.id, policy: { kind: 'best' } });
   if (o.gouge) for (const x of gens) {
     const ed = currentEdition(x), base = basePriceOf(s, x.body);
     const price = x.lostSales >= 1 ? Math.min(base * config.price.max, ed.price * (1 + B.gougeStep)) : Math.max(base, ed.price * (1 - B.gougeStep));
@@ -216,6 +239,7 @@ function pickTeam(s: CarState): number[] {
 function launchReady(g: Game, o: SteadyOptions): void {
   const s = g.state, m = monthOf(s.week);
   for (const p of [...s.projects].sort((a, b) => a.id - b.id)) {
+    if (p.kind === 'fix') continue; // 긴급 개선은 저절로 끝난다
     if (!(p.phase === 'test' && p.testWeeks >= config.dev.minTestWeeks && (p.defectEst <= o.launchDefects || p.testWeeks >= o.maxTestWeeks))) continue;
     const launch = (price: number) => g.command({ type: 'launch', projectId: p.id, price, marketing: o.marketing, color: '#c8102e', wheels: 0 });
     if (p.kind === 'facelift') { // 가격은 그대로(기준가보다 비싸면 가격 매력이 빠르게 떨어진다). 의무 장비로 시장 기준가가 올랐으면 거기까지 올린다(0.4.2)

@@ -48,7 +48,13 @@ export const faceliftWeekCost = (genDevCost: number): number =>
 export const fullChangeCostMult = (sameBody: boolean): number => (sameBody ? config.lifecycle.fullChange.sameBodyCost : config.lifecycle.fullChange.newBodyCost);
 const genById = (state: CarState, id: number | null) => state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id);
 const latestGenOf = (state: CarState, nameplateId: number | null) => state.nameplates.find((n) => n.id === nameplateId)?.generations.at(-1);
+/** 0.10.0 긴급 개선의 주간 비용 = max(세대 개발비 × costShare ÷ 주 수, 이 팀의 보통 시험 한 주 비용 × testCostMult) */
+export const fixWeekCost = (state: CarState, genDevCost: number, team: Staff[]): number => {
+  const R = config.rescue;
+  return Math.max((genDevCost * R.costShare) / R.fixWeeks, devCostPerWeek(team, 'normal', diffOf(state).prototypeMult) * R.testCostMult);
+};
 export function weeklyDevCost(state: CarState, p: Project): number {
+  if (p.kind === 'fix') return fixWeekCost(state, genById(state, p.targetId)?.devCost ?? 0, staffOn(state, p));
   if (p.kind === 'facelift') return faceliftWeekCost(genById(state, p.targetId)?.devCost ?? 0);
   const base = devCostPerWeek(staffOn(state, p), p.budget, diffOf(state).prototypeMult);
   return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
@@ -113,7 +119,7 @@ export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
   const cost = weeklyDevCost(state, p);
   p.spent += cost; state.pendingDev += cost;
   p.defectEst = p.defects > 0 ? Math.round(p.defects * (1 + rng.range(-d.estError, d.estError))) : 0;
-  if (p.phase === 'test' && p.defects <= 0 && p.testWeeks >= d.minTestWeeks) { // 결함을 다 잡으면 출시 대기: 더 시험해도 얻는 것이 없으므로 직원을 풀고 비용을 멈춘다
+  if (p.kind !== 'fix' && p.phase === 'test' && p.defects <= 0 && p.testWeeks >= d.minTestWeeks) { // 결함을 다 잡으면 출시 대기: 더 시험해도 얻는 것이 없으므로 직원을 풀고 비용을 멈춘다
     p.waiting = true; log.waitingNow = true; p.crew = team.map((x) => x.id);
     for (const x of team) x.projectId = null;
   }

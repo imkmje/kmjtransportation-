@@ -379,3 +379,6 @@ export { execInfo, execReports, execUnread, marketIdea, profitAlloc, recommendTe
 // ---------- 0.8.0 연 보고서·되돌리기 ----------
 export { yearReport, reportYears, type YearReport, type YearCarRow, type YearMoney } from './report';
 export { undoInfo } from './game';
+
+// ---------- 0.10.0 정보와 수습 수단 ----------
+export { modelPnL, nameplatePnL, salesFactors, staffHistory, staffBrief, decadeReview, decadeYears, rescueOptions, fixError, clearError, type ModelPnL, type NameplatePnL, type SalesFactor, type SalesFactors, type FactorKey, type StaffHistory, type DecadeReview, type RescueOptions } from './insight';

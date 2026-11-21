@@ -12,6 +12,8 @@ import { REGION, awarenessTarget, basePriceOf, currentEdition, monthlyDemand, to
 import { advice, comboNotes, factoryInfo, faceliftPreview, generationUnitProfit, lifeBar, planPreview, priceForecast } from './queries';
 import { ptCostAdd, regulatedTechs, researchInfo, researchSlots, unlockedBodies } from './research';
 import { mean } from './reviews';
+import { noteExec, startHist } from './history';
+import { staffBrief } from './insight';
 import type { Rng } from './rng';
 import { monthLabel, monthOf, monthTime, yearOf } from './time';
 import type { CarState, Command, CommandResult, ExecGoto, ExecRole, ExecState, GameEvent, Generation, Replacement, Role, Staff } from './types';
@@ -175,7 +177,7 @@ function hrIdeas(s: CarState): Idea[] {
   const canReplace = !openReplacement(s) && s.cash > fixed * X.replace.cashMonths;
   for (const x of weak) {
     const avg = Math.round(roleAvg(s, x)!), sk = SKILL_KO[x.role], min = replaceMin(s, x);
-    const facts = [`${x.name}: ${ROLE_KO[x.role]}, ${sk} ${x.ability}(성장 한계 ${x.potential})`, `같은 직무 평균 ${avg}`, `월급 ${won(salaryOf(x.ability))}, 내보내면 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}`];
+    const facts = [`${x.name}: ${ROLE_KO[x.role]}, ${sk} ${x.ability}(성장 한계 ${x.potential})`, `${x.name}: ${staffBrief(s, x)}`, `같은 직무 평균 ${avg}`, `월급 ${won(salaryOf(x.ability))}, 내보내면 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}`];
     if (canReplace && min !== null && !((s.execs?.rejected[x.id] ?? -1) > s.week) && !recentReplace(s, x.role)) {
       out.push({ kind: 'replace', key: String(x.id), goto: staffGoto(x.id), facts: [...facts, `기준: ${sk} ${min} 이상(${min + X.replace.capGain}을 넘는 후보는 오지 않음), 공고비 ${won(config.staff.hire.postCost[replaceTier(s, min) - 1])}`],
         text: ['더 성장하기 어려운 직원 한 명을 더 나은 사람으로 바꾸는 것을 제안합니다. 승인하시면 알맞은 때에 공고를 내 교체하겠습니다.',
@@ -354,14 +356,14 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       s.execs ??= emptyExecs();
       x.projectId = null; x.lab = false; // 현업에서 빠진다
       s.staff = s.staff.filter((y) => y !== x);
-      s.execs.seats[cmd.role] = { staff: x, hired: false, since: s.week };
+      s.execs.seats[cmd.role] = { staff: x, hired: false, since: s.week }; noteExec(x, cmd.role, s.week, true);
       for (const r of s.execs.replacements) if (r.staffId === x.id && (r.status === 'proposed' || r.status === 'approved' || r.status === 'waiting')) { r.status = 'cancelled'; r.waitingFor = null; }
       return OK;
     }
     case 'dismissExec': {
       const err = roleErr(cmd.role); if (err) return fail(err);
       const seat = s.execs?.seats[cmd.role]; if (!seat) return fail('비어 있는 자리입니다.');
-      delete s.execs!.seats[cmd.role]; s.execs!.delegations[cmd.role] = [];
+      delete s.execs!.seats[cmd.role]; s.execs!.delegations[cmd.role] = []; noteExec(seat.staff, cmd.role, s.week, false);
       if (seat.hired) c.spend(severanceOf(execPayOf(s, seat.staff, true))); // 외부 임원은 회사를 떠난다(퇴직금)
       else { seat.staff.projectId = null; seat.staff.lab = false; s.staff.push(seat.staff); s.staff.sort((a, b) => a.id - b.id); } // 원래 직무로 복귀
       return OK;
@@ -384,7 +386,8 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       const cd = s.execs?.candidates.find((x) => x.id === cmd.candidateId && x.role === cmd.role); if (!cd) return fail('없는 후보입니다.');
       const e = s.execs!;
       e.candidates = e.candidates.filter((x) => x.role !== cmd.role);
-      e.seats[cmd.role] = { staff: { id: cd.id, name: cd.name, role: EXEC_BASE_ROLE[cmd.role], ability: cd.skill, potential: cd.skill, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, hired: true, since: s.week };
+      e.seats[cmd.role] = { staff: startHist({ id: cd.id, name: cd.name, role: EXEC_BASE_ROLE[cmd.role], ability: cd.skill, potential: cd.skill, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week), hired: true, since: s.week };
+      noteExec(e.seats[cmd.role]!.staff, cmd.role, s.week, true);
       return OK;
     }
     case 'setDelegation': {
@@ -460,7 +463,7 @@ function runReplacement(c: ExecCtx, rp: Replacement, ev: GameEvent[]): void {
     const id = s.nextId++, name = c.newName();
     c.spend(severanceOf(salaryOf(x.ability)));
     s.staff = s.staff.filter((y) => y !== x);
-    s.staff.push({ id, name, role: x.role, ability: best.ability, potential: best.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false });
+    s.staff.push(startHist({ id, name, role: x.role, ability: best.ability, potential: best.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week));
     rp.nextWeek = s.week;
     return end('done', 'replaceDone', `${x.name} → ${name}(${sk} ${best.ability}). 공고비 ${won(cost)}, 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}.`);
   }
