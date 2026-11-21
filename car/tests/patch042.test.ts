@@ -158,3 +158,16 @@ describe('규제 의무 장비(0.4.2)', () => {
     expect(g.command({ type: 'retrofit', generationId: gen.id })).toEqual({ ok: false, reason: '추가할 의무 장비가 없습니다.' });
   });
 });
+
+describe('페이스리프트 옵션과 의무 장비(0.6.0 버그)', () => {
+  it('미리보기 능력치에 의무 장비가 들어간다(옵션 목록에 없어도 출시 때처럼 자동 포함)', () => {
+    const g = Game.create({ difficulty: 'normal', seed: 1 }), start = eraTimeline(1).find((x) => x.def.id === 'safety')!.start;
+    g.state.cash = 1e9; g.state.week = (start - 30) * 4;
+    ok(g.command({ type: 'startProject', ...SPEC })); g.devCheat('finishDev');
+    ok(g.command({ type: 'launch', projectId: g.state.projects[0].id, price: 1200, marketing: 1, color: 'red', wheels: 0 }));
+    const gen = allGens(g.state)[0];
+    g.state.week = (start + 40) * 4; grant(g, 'bd_airbag');
+    const a = faceliftPreview(g.state, gen.id, { options: [] })!, b = faceliftPreview(g.state, gen.id, { options: ['abs', 'airbag'] })!;
+    expect(a.grades).toEqual(b.grades); expect(a.profitAfter).toBeCloseTo(b.profitAfter, 6);
+  });
+});

@@ -75,7 +75,7 @@ describe('등장 연도(자료)와 연구 해금(4단계부터)', () => {
   it('차체: 소형 세단 1970, 해치백 1974, 중형 세단 1978', () => {
     expect(bodiesAt(1970).map((b) => b.id)).toEqual(['sedanS']);
     expect(bodiesAt(1974).map((b) => b.id)).toEqual(['sedanS', 'hatch']);
-    expect(bodiesAt(1978).map((b) => b.id)).toEqual(['sedanS', 'hatch', 'sedanM']);
+    expect(bodiesAt(1978).map((b) => b.id)).toEqual(['sedanS', 'sedanM', 'hatch']); // 0.6.0: 세단을 크기 순으로 묶어 둔다
   });
   it('옵션: 라디오 1970, 에어컨 1975, 파워 스티어링 1980', () => {
     expect(optionsAt(1974).map((o) => o.id)).toEqual(['radio']);

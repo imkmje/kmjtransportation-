@@ -338,6 +338,13 @@ button.srow{border:1.5px solid transparent}
 button.srow:hover{background:var(--soft)}
 button.srow[aria-pressed="true"]{border-color:var(--ink);background:var(--soft)}
 .srow.head{min-height:0;padding:0 10px 4px;font-size:11px;font-weight:800;color:var(--ink3)}
+/* 일괄 교육·휴식: 행 왼쪽 고르기 칸(터치 44px) */
+.srow-w{display:flex;align-items:center;gap:4px}.srow-w>.srow{flex:1;min-width:0}
+.s-pick{flex:none;width:44px;height:44px;padding:0;border:0;background:transparent;display:grid;place-items:center}
+button.s-pick::before{content:"";width:22px;height:22px;border:2px solid var(--ink3);border-radius:6px;box-sizing:border-box}
+button.s-pick[aria-pressed="true"]::before{content:"✓";border-color:var(--ink);background:var(--ink);color:var(--card);font-weight:900;font-size:14px;line-height:18px;text-align:center}
+.srow-w.head .s-pick{height:0}
+.bulk{flex-wrap:wrap;gap:8px;margin:6px 0 10px}.bulk .btn{min-height:44px}
 .lbl.grp{margin:10px 0 2px}
 .s-name b{display:block;font-size:14px}.s-name small{color:var(--ink3);font-size:11px;font-weight:700}
 .s-abil{display:flex;align-items:center;gap:6px;min-width:0}

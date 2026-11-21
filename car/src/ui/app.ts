@@ -74,6 +74,7 @@ export function startApp(): void {
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
   let coTab: CoTab = 'fin', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
+  let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
   let devSel: number | null = null; // 개발 탭에서 고른 프로젝트(동시 개발)
   let officeSent = -Infinity; // 마지막으로 점수·결함 연출을 보낸 시각
@@ -820,6 +821,13 @@ export function startApp(): void {
       ${soon.map((o) => lockedOpt('option', o.id, `${ib(`opt:${o.id}`, o.name)}<b>${esc(o.name)}</b>${req.has(o.id) ? '<small class="reqtag">규제 의무 장비: 연구해야 개발할 수 있음</small>' : ''}<small>${eff(o)}</small>`)).join('')}</div>
       <p class="note">옵션은 고르지 않아도 됩니다. 흐린 옵션은 연구로 엽니다.${locked.length > soon.length ? ` 그 밖에 ${locked.length - soon.length}개 옵션은 시대가 흐르면 연구할 수 있습니다.` : ''}${(Q.hqInfo(s).next?.optionSlots ?? 0) > max ? ' 본사를 키우면 옵션 칸이 늘어납니다.' : ''}</p>`;
   }
+  /** 옵션 누르기(기획·페이스리프트 공용): 고른 것은 빼고, 빈 칸이 있으면 넣는다. 의무 장비는 칸을 세지 않는다(11.3, optTiles의 표시와 같은 셈). 칸이 차면 이유를 알린다 */
+  function toggleOpt(list: string[], v: string): string[] {
+    if (list.includes(v)) return list.filter((x) => x !== v);
+    const s = game!.state, req = Q.activeEvents(s).requiredOptions, max = Q.optionSlots(s);
+    if (list.filter((x) => !req.includes(x)).length < max) return [...list, v];
+    err(`옵션 칸 ${max}개가 다 찼습니다. 다른 옵션을 빼고 고르세요.`); return list;
+  }
   /** 연구 기술의 상태(연구 화면과 같은 판단: sim researchInfo) */
   const techStatus = () => new Map(Q.researchInfo(game!.state).fields.flatMap((f) => f.techs.map((t) => [t.id, t.status] as const)));
   /** 아직 연구 안 한 차체·옵션·동력 칸: 흐리게 + "연구 필요: ○○", 누르면 그 기술의 연구 화면으로 */
@@ -1113,12 +1121,14 @@ export function startApp(): void {
     const cond = (c: number) => { const w = condWord(c); return `<span class="cbar c${w === '좋음' ? 0 : w === '보통' ? 1 : 2}"><u style="width:${Math.round(c * 100)}%"></u></span>${w}`; };
     const list = ROLE_ORDER.map((r) => {
       const g = rows.filter((x) => x.role === r);
-      return g.length ? `<p class="lbl grp">${ROLE_NAME[r]} ${g.length}명</p>${g.map((x) => `<button class="srow" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><span class="s-name"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]}</small></span><span class="s-abil">${abil(x)}</span><span class="s-pay">${money(x.salary)}</span><span class="s-cond">${cond(x.condition)}</span><span class="s-do s-${x.status}">${doing(x)}</span></button>`).join('')}` : '';
+      return g.length ? `<p class="lbl grp">${ROLE_NAME[r]} ${g.length}명</p>${g.map((x) => `<div class="srow-w"><button class="s-pick" data-act="staffPick" data-id="${x.id}" aria-pressed="${staffPick.has(x.id)}" aria-label="${esc(x.name)} 고르기"></button><button class="srow" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><span class="s-name"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]}</small></span><span class="s-abil">${abil(x)}</span><span class="s-pay">${money(x.salary)}</span><span class="s-cond">${cond(x.condition)}</span><span class="s-do s-${x.status}">${doing(x)}</span></button></div>`).join('')}` : '';
     }).join('');
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
-    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>
-      <div class="srow head" aria-hidden="true"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
-      <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다.</p></div>`;
+    for (const id of staffPick) if (!rows.some((x) => x.id === id)) staffPick.delete(id); // 해고·퇴사한 직원은 뺀다
+    const nPick = staffPick.size, bulk = `<div class="row bulk"><button class="btn" data-act="pickTrainable">교육 가능한 직원 모두 고르기</button><button class="btn ink" data-act="trainPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 교육 보내기</button><button class="btn" data-act="restPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 2주 쉬기</button>${nPick ? '<button class="btn" data-act="pickNone">고르기 해제</button>' : ''}</div>`;
+    const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>${rows.length ? bulk : ''}
+      <div class="srow-w head" aria-hidden="true"><span class="s-pick"></span><div class="srow head"><span>이름</span><span>능력(점선 = 성장 한계)</span><span>월급</span><span>컨디션</span><span>지금 하는 일</span></div></div>${list || '<p class="hint" style="margin:8px 10px">직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.</p>'}
+      <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다. 왼쪽 네모를 눌러 여러 명을 고르면 한 번에 교육·휴식을 보낼 수 있습니다.</p></div>`;
     const x = rows.find((y) => y.id === staffSel);
     let card2 = '';
     if (x) {
@@ -1347,7 +1357,7 @@ export function startApp(): void {
   function adopt(g: Game, extra: S.UiExtra): void {
     game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
     restorePlan(extra.plan); garageIdx = 0; gameOverShown = false; officeEvents.length = 0; thumbs.clear();
-    coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = '';
+    coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false;
     logDev(); // 주간 기록은 화면 메모리에만 있어 불러오면 비므로, 지금 상태 한 줄로 시작한다
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
@@ -1457,7 +1467,7 @@ export function startApp(): void {
         go('lift'); return;
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
-      case 'liftOpt': if (lift && s) { lift.options = lift.options.includes(v) ? lift.options.filter((x) => x !== v) : [...lift.options, v].slice(0, Q.optionSlots(s)); render(); } return;
+      case 'liftOpt': if (lift) { lift.options = toggleOpt(lift.options, v); render(); } return;
       case 'teamPick': case 'liftTeam': { const o = a === 'teamPick' ? draft : lift, id = Number(el.dataset.id); if (o) { o.team = o.team.includes(id) ? o.team.filter((x) => x !== id) : [...o.team, id]; render(); } return; }
       case 'startLift': {
         if (!game || !lift) return; const L = lift, g = Q.generationById(game.state, L.genId);
@@ -1473,7 +1483,7 @@ export function startApp(): void {
         if (k === 'powertrain') draft.tier = Math.min(draft.tier, powertrainById(v).tiers.length);
         render(); return;
       }
-      case 'opt': if (!draft || !s) return; draft.options = draft.options.includes(v) ? draft.options.filter((x) => x !== v) : [...draft.options, v].slice(0, Q.optionSlots(s)); render(); return;
+      case 'opt': if (!draft) return; draft.options = toggleOpt(draft.options, v); render(); return;
       case 'dir': { if (!draft) return; const k = el.dataset.k as Stat, n = draft.direction[k] + Number(v); if (n < 0 || n > config.dev.dirMax || (Number(v) > 0 && dirLeft(draft) <= 0)) return; draft.direction[k] = n; render(); return; }
       case 'cancelPlan': draft = null; lift = null; draftNote = ''; go('garage'); return;
       case 'startDev': {
@@ -1576,6 +1586,29 @@ export function startApp(): void {
         return;
       }
       case 'rest': { if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)); if (x && run(game.command({ type: 'rest', staffId: x.id, weeks: Number(v) }))) { toast(`${x.name}에게 ${v}주 휴식을 줬습니다.`); render(); } return; }
+      case 'staffPick': { const id = Number(el.dataset.id); if (!staffPick.delete(id)) staffPick.add(id); render(); return; }
+      case 'pickNone': staffPick.clear(); render(); return;
+      case 'pickTrainable': {
+        if (!game) return; const ids = Q.staffInfo(game.state).filter((x) => x.canTrain).map((x) => x.id);
+        if (!ids.length) return err('지금 교육을 보낼 수 있는 직원이 없습니다.');
+        staffPick = new Set(ids); render(); return;
+      }
+      case 'trainPicked': { // 기존 train 명령을 ID 순으로 차례로. 현금은 앞사람 교육비를 빼며 따진다
+        if (!game) return; const T = config.staff.train, rows = Q.staffInfo(game.state).filter((x) => staffPick.has(x.id));
+        let cash = game.state.cash; const ok: Q.StaffRow[] = [], no: string[] = [];
+        for (const x of rows) { const why = x.trainReason ?? (cash < x.trainCost ? '현금이 모자랍니다.' : null); if (why) no.push(`${x.name}: ${why}`); else { ok.push(x); cash -= x.trainCost; } }
+        const noText = no.length ? `\n\n교육할 수 없는 ${no.length}명(보내지 않음)\n${no.join('\n')}` : '';
+        if (!ok.length) return err(`고른 직원 중 교육을 보낼 수 있는 사람이 없습니다. ${no.join(' / ')}`);
+        const busy = ok.filter((x) => x.status === 'working').length, cost = ok.reduce((a, x) => a + x.trainCost, 0);
+        if (!(await ask(`${ok.length}명을 교육 보낼까요?\n총 비용 ${money(cost)}, ${T.weeks}주 동안 일하지 않습니다(능력 +${T.gainMin}~${T.gainMax}).${busy ? `\n개발 중인 직원 ${busy}명이 교육받는 동안 그 개발이 느려집니다.` : ''}${noText}`, '교육 보내기'))) return;
+        let n = 0; for (const x of ok) if (run(game.command({ type: 'train', staffId: x.id }))) n++;
+        staffPick.clear(); toast(`${n}명을 교육 보냈습니다. ${T.weeks}주 동안 일하지 않습니다.`); render(); return;
+      }
+      case 'restPicked': { // 기존 rest 명령(2주)을 차례로. 교육 중인 직원은 쉴 수 없다
+        if (!game) return; const rows = Q.staffInfo(game.state).filter((x) => staffPick.has(x.id)), skip = rows.filter((x) => x.status === 'training');
+        let n = 0; for (const x of rows) if (x.status !== 'training' && run(game.command({ type: 'rest', staffId: x.id, weeks: 2 }))) n++;
+        staffPick.clear(); if (n) toast(`${n}명에게 2주 휴식을 줬습니다.${skip.length ? ` 교육 중인 ${skip.length}명은 쉴 수 없어 뺐습니다.` : ''}`); else err('교육 중인 직원은 쉴 수 없습니다.'); render(); return;
+      }
       case 'assign': if (game && run(game.command({ type: 'assign', staffId: Number(el.dataset.id), projectId: v === '' ? null : v === 'lab' ? 'lab' : Number(v) }))) render(); return;
       case 'fire': {
         if (!game) return; const x = Q.staffInfo(game.state).find((y) => y.id === Number(el.dataset.id)); if (!x) return;

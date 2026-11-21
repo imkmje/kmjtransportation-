@@ -727,7 +727,7 @@ check('연구 완료 뒤 카드 ✓ 완료', (await page.locator('.tc.done[data-
 // 기획: 연구한 차체만 열림, 나머지는 흐리게 "연구 필요"
 await page.click('#tabs button[data-tab="garage"]'); await planNew();
 check('기획 차체: 연구한 해치백이 열림', (await page.locator('[data-act="pick"][data-k="body"][data-v="hatch"]').count()) === 1);
-check('기획 차체 10종: 미해금은 흐리게 "연구 필요: ○○"', (await page.locator('.opt[data-k="body"], .opt.locked[data-lock^="body:"]').count()) === 10 && (await page.locator('.opt.locked[data-lock="body:sedanM"]').innerText()).includes('연구 필요: 중형 세단 차체'));
+check('기획 차체 12종(0.6.0 SUV 소·중·대): 미해금은 흐리게 "연구 필요: ○○"', (await page.locator('.opt[data-k="body"], .opt.locked[data-lock^="body:"]').count()) === 12 && (await page.locator('.opt.locked[data-lock="body:sedanM"]').innerText()).includes('연구 필요: 중형 세단 차체'));
 await page.waitForTimeout(400); await shot('plan-bodies');
 await page.locator('.opt.locked[data-lock="body:sedanM"]').click();
 check('흐린 차체를 누르면 연구 화면의 그 기술 상세로', (await S4(() => window.__car.screen)) === 'company' && (await page.locator('.tech-sheet[data-tech="bd_sedanM"]').count()) === 1);
@@ -814,6 +814,13 @@ const eng = await S4(() => window.__car.game.state.staff.find((x) => x.role === 
 await page.locator(`.srow[data-id="${eng}"]`).click();
 await act('assign', `[data-id="${eng}"][data-v="lab"]`);
 check('본사 4등급: [전담 연구원으로] → 전담 연구원', (await S4((id) => window.__car.game.state.staff.find((x) => x.id === id).lab, eng)) && (await page.locator(`.srow[data-id="${eng}"]`).innerText()).includes('전담 연구원'));
+// 일괄 교육(0.6.0): 두 명을 골라 한 번에 교육 → 둘 다 교육 중
+{ const two = await S4(() => { const s = window.__car.game.state; s.cash = Math.max(s.cash, 1e6); const xs = s.staff.slice(0, 2); for (const x of xs) { x.trainings = []; x.restUntil = null; x.ability = Math.min(x.ability, x.potential - 3); } window.__car.render(); return xs.map((x) => x.id); });
+  const box = await page.locator(`.s-pick[data-id="${two[0]}"]`).boundingBox();
+  for (const id of two) await page.locator(`.s-pick[data-id="${id}"]`).click();
+  await act('trainPicked'); const askT = await page.locator('#ask-text').innerText(); await page.click('#ask-yes');
+  check('일괄 교육: 두 명을 골라 교육 보내기 → 둘 다 교육 중, 확인 창에 인원·총 비용', await S4((ids) => { const s = window.__car.game.state; return ids.every((id) => s.staff.find((x) => x.id === id).trainings.includes(s.week)); }, two) && /2명을 교육 보낼까요\?\n총 비용/.test(askT) && (await page.locator(`.srow[data-id="${two[0]}"]`).innerText()).includes('교육 중'), askT.replace(/\n/g, ' | '));
+  check('일괄 교육 고르기 칸: 터치 44px 이상', box.width >= 44 && box.height >= 44, `${box.width}×${box.height}`); }
 // 1990년쯤 연구 화면
 await S4(() => { const s = window.__car.game.state; s.week = 20 * 48; s.research.done.push('bd_sedanM', 'pr_line', 'pr_qc', 'bd_sedanL', 'el_leather'); window.__car.render(); });
 await act('cotab', '[data-v="research"]'); await page.waitForTimeout(200);
@@ -850,10 +857,26 @@ const rfId = Number(await page.locator('[data-act="retrofit"]').getAttribute('da
 check('판매 중 차: [의무 장비 넣기]가 열림(비용·대당 원가 안내)', (await page.locator('[data-act="retrofit"]').isEnabled()) && /ABS·에어백.*대당 원가 \+\d+만원/.test(await page.locator('.retrofit').innerText()));
 await act('retrofit');
 check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 사라짐', await S4((id) => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), o = g.editions.at(-1).options; return o.includes('abs') && o.includes('airbag'); }, rfId) && (await page.locator('[data-act="retrofit"]').count()) === 0);
-// 새 차체 5종 3D
-await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
+// 페이스리프트·풀체인지 옵션 추가(0.6.0 버그): 판 옵션에 의무 장비가 들어 있어도 빈 칸만큼 새 옵션을 고를 수 있다(본사 4등급 칸 4개 중 2개 사용 + 의무 장비 2개)
+{ const want = await S4((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), ed = g.editions.at(-1);
+    g.launchMonth = Math.min(g.launchMonth, Math.floor(s.week / 4) - 40); ed.options = ['radio', 'leather', 'abs', 'airbag']; for (const t of ['el_radio', 'el_aircon', 'el_leather']) if (!s.research.done.includes(t)) s.research.done.push(t); c.render(); return 'aircon'; }, rfId);
+  await page.locator(`[data-act="goLift"][data-id="${rfId}"]`).click();
+  const tile = page.locator(`.opt[data-act="liftOpt"][data-v="${want}"]`), pv0 = await page.locator('.lift-est').innerText();
+  await tile.click();
+  check('페이스리프트(의무 장비 있는 차): 빈 칸에 새 옵션 추가됨', (await tile.getAttribute('aria-pressed')) === 'true' && await S4((w) => window.__car.lift.options.includes(w), want), JSON.stringify(await S4(() => window.__car.lift.options)));
+  check('페이스리프트 옵션 추가가 예상(등급·이익)에 반영', pv0 !== (await page.locator('.lift-est').innerText()));
+  await act('cancelPlan');
+  const np = await S4((id) => window.__car.game.state.nameplates.find((n) => n.generations.some((g) => g.id === id)).id, rfId);
+  await page.locator(`[data-act="goFull"][data-id="${np}"]`).click(); await act('ptab', '[data-v="opt"]');
+  await page.locator(`.opt[data-act="opt"][data-v="${want}"]`).click();
+  check('풀체인지(의무 장비 있는 차): 빈 칸에 새 옵션 추가됨', await S4((w) => window.__car.draft.options.includes(w), want), JSON.stringify(await S4(() => window.__car.draft.options)));
+  await act('cancelPlan'); }
+// 새 차체 7종 3D(0.6.0 소형·대형 SUV 포함)
+await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_suvS', 'bd_suvL', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
 await planNew();
-for (const b of ['sedanL', 'minivan', 'kei', 'pickup', 'sports']) {
+{ const order = await page.locator('[data-k="body"]').evaluateAll((els) => els.map((e) => e.dataset.v).join(','));
+  check('차체 줄: 세단·SUV가 크기 순으로 묶임', order.includes('sedanS,sedanM,sedanL') && order.includes('suvS,suv,suvL'), order); }
+for (const b of ['sedanL', 'minivan', 'kei', 'suvS', 'suvL', 'pickup', 'sports']) {
   await act('pick', `[data-k="body"][data-v="${b}"]`); await page.waitForTimeout(700);
   check(`새 차체 ${b}: 기획 화면 3D에 그려짐`, (await S4(() => window.__car.look)).includes(`"bodyId":"${b}"`) && (await S4(() => window.__car.stage?.empty)) === false);
   await shot(`body-${b}`);
