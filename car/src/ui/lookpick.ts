@@ -10,7 +10,7 @@ import {
 type Kind = 'face' | 'chassis';
 type Thumb = (l: CarLook, yaw?: number, w?: number, h?: number) => string;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-const SIDE = 0, FRONT = -Math.PI / 2, FRONT34 = -1.05;
+const SIDE = 0, FRONT = -Math.PI / 2, FRONT34 = -1.25;
 
 /** 화면 상태(쪽 번호·직접 고르기 조건). 기획 대상(key)이 바뀌면 처음으로 */
 const st = { key: '', page: { face: 0, chassis: 0 }, want: { face: {} as Want, chassis: {} as Want }, miss: { face: '', chassis: '' }, open: { face: false, chassis: false } };
@@ -40,9 +40,9 @@ function pickerHtml(kind: Kind, c: LookCtx, cur: number): string {
   const l = { ...c.base, [kind === 'face' ? 'faceSeed' : 'chassisSeed']: cur }, now = (kind === 'face' ? faceParts(l) : chassisParts(l)) as unknown as Record<string, unknown>;
   const ch = (kind === 'face' ? faceChoices(c.base) : chassisChoices(c.base)) as Record<string, { v: string; label: string; ok: boolean }[]>, keys = kind === 'face' ? FACE_PARTS : CHASSIS_PARTS, want = st.want[kind] as Record<string, string | undefined>;
   const rows = keys.map((k) => `<div class="pick-row"><span class="pick-k">${PART_NAME[k]}</span><div class="pick-chips">
-    <button class="chip" data-act="lookWant" data-t="${kind}" data-k="${k}" data-v="" aria-pressed="${want[k] == null}">상관없음</button>
-    ${ch[k].map((o) => `<button class="chip${String(now[k]) === o.v ? ' now' : ''}" data-act="lookWant" data-t="${kind}" data-k="${k}" data-v="${o.v}" aria-pressed="${want[k] === o.v}" ${o.ok ? '' : 'disabled title="이 시대·차체에서는 고를 수 없습니다"'}>${esc(o.label)}</button>`).join('')}</div></div>`).join('');
-  return `<details class="pick" data-t="${kind}" ${st.open[kind] ? 'open' : ''}><summary>직접 고르기 · ${kind === 'face' ? '얼굴 부품' : '옆모습·장식'}</summary>${rows}
+    <button class="lchip" data-act="lookWant" data-t="${kind}" data-k="${k}" data-v="" aria-pressed="${want[k] == null}">상관없음</button>
+    ${ch[k].map((o) => `<button class="lchip${String(now[k]) === o.v ? ' now' : ''}" data-act="lookWant" data-t="${kind}" data-k="${k}" data-v="${o.v}" aria-pressed="${want[k] === o.v}" ${o.ok ? '' : 'disabled title="이 시대·차체에서는 고를 수 없습니다"'}>${esc(o.label)}</button>`).join('')}</div></div>`).join('');
+  return `<details class="lpick" data-t="${kind}" ${st.open[kind] ? 'open' : ''}><summary>직접 고르기 · ${kind === 'face' ? '얼굴 부품' : '옆모습·장식'}</summary>${rows}
     <p class="note pick-miss">${st.miss[kind] ? esc(st.miss[kind]) : '부품을 고르면 조건에 맞는 모양을 찾아 바로 보여 줍니다. 밑줄은 지금 모양의 부품입니다.'}</p></details>`;
 }
 
@@ -67,4 +67,4 @@ export function compareHtml(before: CarLook, after: CarLook, thumb: Thumb, withC
     <p class="look-diff"><b>달라진 점</b> ${esc(faceChange(before, after))}${withChassis ? ` · ${esc(chassisChange(before, after))}` : ''}</p>`;
 }
 // 직접 고르기를 펼치고 접은 상태를 다시 그려도 유지(toggle은 버블링하지 않아 캡처로 듣는다)
-if (typeof document !== 'undefined') document.addEventListener('toggle', (e) => { const d = e.target; if (d instanceof HTMLDetailsElement && d.classList.contains('pick')) onToggle(d.dataset.t as Kind, d.open); }, true);
+if (typeof document !== 'undefined') document.addEventListener('toggle', (e) => { const d = e.target; if (d instanceof HTMLDetailsElement && d.classList.contains("lpick")) onToggle(d.dataset.t as Kind, d.open); }, true);
