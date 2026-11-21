@@ -352,7 +352,7 @@ describe('공장(9.3)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     s.cash = 1e10; // 1.0.0: 6·7등급까지 건설비 합이 10조를 넘는다
     const L = config.factory.levels;
-    for (let lv = 1; lv < L.length; lv++) { // 0.11.0: 7등급까지
+    for (let lv = 1; lv < L.length; lv++) { // 1.0.0: 7등급까지
       expect([capacityOf(s), linesOf(s), costMultOf(s)]).toEqual([L[lv - 1].capacity, L[lv - 1].lines, L[lv - 1].costMult]);
       const cash = s.cash, m0 = monthOf(s.week);
       ok(g.command({ type: 'expandFactory' }));
@@ -362,7 +362,7 @@ describe('공장(9.3)', () => {
       expect(factoryInfo(s).building).toEqual({ level: lv + 1, monthsLeft: factoryBuildMonths(lv + 1) });
       let done = false;
       while (!done) { done = g.tick().some((e) => e.kind === 'company' && e.text.includes('증설을 마쳤습니다')); if (!done) expect(s.factory.level).toBe(lv); }
-      expect(monthOf(s.week)).toBe(m0 + factoryBuildMonths(lv + 1)); // 공사 개월째 달 초부터 새 등급(1~5등급 6개월, 0.11.0: 6·7등급 9·12개월)
+      expect(monthOf(s.week)).toBe(m0 + factoryBuildMonths(lv + 1)); // 공사 개월째 달 초부터 새 등급(1~5등급 6개월, 1.0.0: 6·7등급 9·12개월)
       expect(s.factory).toEqual({ level: lv + 1, build: null });
     }
     expect([capacityOf(s), linesOf(s)]).toEqual([50000, 14]);

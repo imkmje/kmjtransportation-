@@ -19,7 +19,7 @@ export function eraStart(seed: number, i: number): number {
   return (d.year + shift - config.time.startYear) * MPY + (d.month - 1);
 }
 export interface EraSpan { def: EraEventDef; index: number; start: number; end: number | null } // end: 끝나는 달(이 달부터 효과 없음), null = 영구
-const eraCache = new Map<number, EraSpan[]>(); // 0.11.0 성능: 시드별 결과를 재사용(같은 값, 호출자는 고치지 않는다)
+const eraCache = new Map<number, EraSpan[]>(); // 1.0.0 성능: 시드별 결과를 재사용(같은 값, 호출자는 고치지 않는다)
 export const eraTimeline = (seed: number): EraSpan[] => {
   let t = eraCache.get(seed);
   if (!t) { if (eraCache.size > 64) eraCache.clear(); t = ERA_EVENTS.map((def, index) => { const start = eraStart(seed, index); return { def, index, start, end: def.months === null ? null : start + def.months }; }); eraCache.set(seed, t); }

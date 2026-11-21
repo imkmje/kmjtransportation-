@@ -154,7 +154,7 @@ describe('3D 차 모양', { timeout: 60000 }, () => {
   });
 });
 
-describe('사무실·시대 분위기(0.13.0)', () => {
+describe('사무실·시대 분위기(1.0.0)', () => {
   it('본사 등급마다 임원 자리 수는 설정과 같고, 방은 등급이 오를수록 넓어지며, 모든 책상·서는 곳에서 탕비 공간까지 걸어갈 수 있다', () => {
     let lastArea = 0;
     for (const lv of [1, 2, 3, 4, 5] as const) {
@@ -175,7 +175,7 @@ describe('사무실·시대 분위기(0.13.0)', () => {
   });
 });
 
-describe('외관 후보·직접 고르기(0.13.0)', () => {
+describe('외관 후보·직접 고르기(1.0.0)', () => {
   it('후보 6개는 서로, 그리고 지금 얼굴과 부품 3개 이상 다르다(차체 12종 × 시대 6, 2020년대 전기차는 2개). 다음 묶음은 결정론적으로 이어진다', () => {
     for (const bodyId of BODIES) for (const era of ERAS) for (const powertrain of ['gas', 'ev'] as const) {
       const cur = look({ bodyId, era, powertrain, chassisSeed: 5, faceSeed: 9 }), s0 = 1000 + era + bodyId.length;

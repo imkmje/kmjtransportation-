@@ -1,4 +1,4 @@
-/* 외관 고르기(0.13.0): 후보 2×3, 다른 후보 보기, 직접 고르기 칩, 전작과 나란히 */
+/* 외관 고르기(1.0.0): 후보 2×3, 다른 후보 보기, 직접 고르기 칩, 전작과 나란히 */
 .looks6{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .looks6 .opt{min-width:0}
 .looks6 .opt img,.looks6 .opt svg{width:100%;height:auto;display:block}

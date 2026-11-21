@@ -3,7 +3,7 @@ export const config = {
   time: { startYear: 1970, weeksPerMonth: 4, monthsPerYear: 12 }, // 4장: 1 tick = 1주, 4주 = 1개월, 48주 = 1년
   start: { cash: 300000, reputation: 10, roles: ['designer', 'engineer', 'engineer', 'tester'] as const, abilityMin: 25, abilityMax: 35, potentialMin: 50, potentialMax: 75 }, // 현금 30억(설계자 결정 2026-11-20, 9.4의 15억에서 변경), 평판 10, 직원 4명(능력 25~35)
   reputation: { // 9.5
-    min: 0, // 0.11.0: 위쪽 상한(100) 없앰(사용자 지시). 효과는 soft를 넘으면 로그로 완만해진다(repEffect: soft × (1 + softStep × log2(평판 / soft)), 100 → 200의 추가 효과가 0 → 100의 1/3)
+    min: 0, // 1.0.0: 위쪽 상한(100) 없앰(사용자 지시). 효과는 soft를 넘으면 로그로 완만해진다(repEffect: soft × (1 + softStep × log2(평판 / soft)), 100 → 200의 추가 효과가 0 → 100의 1/3)
     soft: 100, softStep: 1 / 3,
     // 0.4.2: 평판을 올릴 길이 명차(+4)뿐이라 리콜(−5)에 깎여 30년 뒤 중앙값이 0이었다(본사 3등급 조건 30에 닿지 못함). 두 가지를 더한다(시상식은 아직 없음)
     launchBase: 5, launchPer: 1, // 신차·풀체인지 출시: 평론 평균이 5 넘으면 평판 += (평균 − 5) × 1, 5 미만은 0(0.5.1, 혹평만 감점. 명차·혹평 가감과 별도)
@@ -56,7 +56,7 @@ export const config = {
     overpriceExp: 6, overpriceHardAt: 1.08, overpriceHardExp: 20, // 기준가보다 비싸게 팔면 가격 매력 × (기준가/판매가)^6 × (기준가 × 1.08/판매가)^20(108% 넘는 부분만, 가격 올리기 봇이 유리해지지 않게). 0.5.0: 지수 20 하나였을 때 108%만 받아도 판매가 1/20로 줄었다(자르기 뒤에 곱한다)
     erosion: { fromYear: 1995, perYear: 0.004, max: 0.035 }, // 0.5.1 시장 포화: 1995년부터 시장 기준가가 해마다 0.4%씩 낮아져 최대 3.5%(후반 현금 폭발 억제, 원가는 그대로).
     // 0.7.0: 최대 6% → 3.5%. 대당 이익이 판매가의 약 9%라 6%를 깎으면 2010년 전후 공장 5등급 유지비를 못 넘어 보통 신중 봇 60년 생존이 6/20이었다(3.5%면 18/20). 2003년까지는 같은 값
-    // 0.11.0 시대별 원가 상승: 1975년 0 → 1995년 +4%(원가 배수에 곱한다). 옵션 값을 기준가에 넣어(optionValue) 봇이 값싼 옵션으로 대당 이익을 깎지 않게 되자 1990년대 이익률이 약 4%p 올라서, 그만큼 되돌린다
+    // 1.0.0 시대별 원가 상승: 1975년 0 → 1995년 +4%(원가 배수에 곱한다). 옵션 값을 기준가에 넣어(optionValue) 봇이 값싼 옵션으로 대당 이익을 깎지 않게 되자 1990년대 이익률이 약 4%p 올라서, 그만큼 되돌린다
     costEra: { from: 1975, to: 1995, max: 0.07 },
     primaryBoost: 1.25, // 주 고객층 인지도 +25%
     logistics: 0, // 국내 물류비(대당)
@@ -83,14 +83,14 @@ export const config = {
       { capacity: 3000, lines: 3, cost: 3200000, upkeep: 150000, costMult: 0.98 },
       { capacity: 8000, lines: 5, cost: 25000000, upkeep: 340000, costMult: 0.97 },
       { capacity: 20000, lines: 8, cost: 90000000, upkeep: 850000, costMult: 0.96 },
-      // 0.11.0 사용자 지적 "공장 유지비가 너무 비쌈": 3~5등급 유지비 22/110/260억 → 15/40/105억(한도의 70%를 채우면 매출의 약 3%). 중후반 돈은 개발비의 시대 상승(dev.devEra)으로 조인다.
-      // 0.11.0 6·7등급(사용자 요청 "2만 대 넘게 팔린다"): 한도 1.6배씩, 월 유지비는 한도 1대당 약 52만원으로 5등급과 같게(규모가 커져도 대당 고정비가 낮아지지 않게), 원가 배수 그대로, 공사가 길다.
+      // 1.0.0 사용자 지적 "공장 유지비가 너무 비쌈": 3~5등급 유지비 22/110/260억 → 15/40/105억(한도의 70%를 채우면 매출의 약 3%). 중후반 돈은 개발비의 시대 상승(dev.devEra)으로 조인다.
+      // 1.0.0 6·7등급(사용자 요청 "2만 대 넘게 팔린다"): 한도 1.6배씩, 월 유지비는 한도 1대당 약 52만원으로 5등급과 같게(규모가 커져도 대당 고정비가 낮아지지 않게), 원가 배수 그대로, 공사가 길다.
       // 국내 시장 전체가 월 약 5만 대라 7등급(5만 대)에서 멈춘다
       { capacity: 32000, lines: 11, cost: 200000000, upkeep: 1360000, costMult: 0.96, buildMonths: 9 },
       { capacity: 50000, lines: 14, cost: 320000000, upkeep: 2130000, costMult: 0.96, buildMonths: 12 },
     ],
     buildMonths: 6, // 증설 공사 6개월
-    bigLevel: 4, // 0.11.0: 이 등급부터 난이도의 bigUpkeepMult로 유지비를 곱한다
+    bigLevel: 4, // 1.0.0: 이 등급부터 난이도의 bigUpkeepMult로 유지비를 곱한다
   },
   hq: { // 9.2 본사. upkeep은 1등급 값(화면 호환용)
     upkeep: 500,
@@ -107,7 +107,7 @@ export const config = {
     hire: {
       postCost: [500, 2000, 10000], // 공고 1~3등급 비용
       abilityMin: [15, 30, 50], abilityMax: [35, 55, 80], // 등급별 후보 능력 범위
-      repBonusDiv: 20, // 평판 보너스: 능력 + 평판 효과/20(평판 100에서 +5, 0.11.0: 상한 대신 평판 효과가 완만해진다)
+      repBonusDiv: 20, // 평판 보너스: 능력 + 평판 효과/20(평판 100에서 +5, 1.0.0: 상한 대신 평판 효과가 완만해진다)
       potentialMin: 5, potentialMax: 20, // 잠재력 = 능력 + 5~20(최대 100, 설계 결정 c)
       tier3Rep: 40, // 3등급 공고는 평판 40 이상
       candidates: 3, expireWeeks: 4,
@@ -142,7 +142,7 @@ export const config = {
       dCap: 0.1, // 디자이너 점수는 D에만, 상한은 그 세대 원래 D의 +10%(설계서 +15% → 허용 8~15% 안)
       refresh: 0.025, // 0.4.2: 디자인 밖의 능력치(성능·연비·실용·품질)도 × 1.06(연식 변경 개선). 기준 상승으로 해마다 등급이 낮아지는 만큼을 약 1.3년 되돌린다(리프트 이익이 너무 작아서)
       defectKeep: 0.5, defectRate: 1 / 3, // 남은 결함 × 0.5로 시작, 새 결함은 1/3 속도
-      lifeKeep: 0.3, lateMonths: 60, lateLifeKeep: 0.8, // 수명 나이를 30%로(세대 나이 60개월 이후면 80%로). 0.11.0: 0.6 → 0.3(출시 36개월 리프트가 '수요가 정점의 25%가 되는 때'를 12~29개월 → 24~41개월 늦추도록, 경쟁 차 고정 측정. 회수 4~8개월·세대 순이익 +26~35%로 0.4.2 범위 안)
+      lifeKeep: 0.3, lateMonths: 60, lateLifeKeep: 0.8, // 수명 나이를 30%로(세대 나이 60개월 이후면 80%로). 1.0.0: 0.6 → 0.3(출시 36개월 리프트가 '수요가 정점의 25%가 되는 때'를 12~29개월 → 24~41개월 늦추도록, 경쟁 차 고정 측정. 회수 4~8개월·세대 순이익 +26~35%로 0.4.2 범위 안)
       awareness: 0.06, switchMonthMult: 0.7, // 인지도 +0.06(설계서 +0.1 → 허용 0.04~0.10 안), 전환 달 생산 −30%
     },
     fullChange: {
@@ -159,7 +159,7 @@ export const config = {
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
     reserveMonths: 6, // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
     expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, expandFill: 0.75, fillFrom: 5, expandLoan: 0.7, // expandLoan(1.0.0): 증설비가 모자라면 대출 한도의 70%까지 빌린다
-    // fillFrom(0.11.0): 이 등급부터 expandFill 조건(전에는 마지막 등급만). expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
+    // fillFrom(1.0.0): 이 등급부터 expandFill 조건(전에는 마지막 등급만). expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
     hqCashMult: 6, // 본사 승급: 현금이 승급비 × 6 + 여유분 이상일 때
     tier2Cash: 500000, tier3Cash: 5000000, // 채용 공고 등급: 현금 50억 이상 2등급, 500억 이상 3등급
     salesShare: 0.2, // 정원 중 영업 직원 비율
@@ -170,7 +170,7 @@ export const config = {
     execCashMonths: 12, // 0.7.0 임원 봇: 지난 1년 흑자이고 현금이 고정비 12개월 치 이상일 때만 임원 자리를 채운다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
     clumsy: { priceMult: 1.1, changeMonths: 120, testWeeks: 5 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년, 시험 5주(0.4.2 시간 척도 전의 최소 2주와 같은 양)
-    ptLookYears: 2, ptAwareness: 0.6, // 0.11.0 동력 고르기: 출시 약 2년 뒤 시장, 인지도 0.6으로 어림
+    ptLookYears: 2, ptAwareness: 0.6, // 1.0.0 동력 고르기: 출시 약 2년 뒤 시장, 인지도 0.6으로 어림
     novice: { launchDefects: 10, changeMonths: 96, manageEvery: 6, expandRatio: 2, cheapShare: 0.1 }, // 0.4.1 서툰 플레이 봇: 화면 결함 10개쯤에서 출시, 풀체인지 8년(0.4.2: 7.5 → 8년, 신중이 6.5년이 되어), 6개월마다 채용·교육·연구(현금의 10% 이하인 기술만), 주문이 한도의 2배를 넘어야 증설
   },
   research: { // 10장 연구
@@ -198,7 +198,7 @@ export const config = {
   // 0.4.1 난이도(설계자 결정): 새 게임에서 고른다(인자를 빼면 easy). 예전 저장은 normal로 본다. 공식은 그대로, 아래 값을 읽는 자리에서 바꾼다.
   // cash: 시작 현금, loanBase: 대출 기본 한도, bankruptcyMonths: 파산 유예, rivalMult: 경쟁 차 A 배수, upkeepMult: 본사·공장 유지비 배수,
   // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수, repLossMult: 평판 감점 배수(혹평·리콜·단종, 0.5.1),
-  // bigUpkeepMult(0.11.0): 공장 4등급 이상의 유지비 배수(upkeepMult 대신). 쉬움은 초반(공장 1~3등급) 유지비 절반을 그대로 두고 4등급부터 0.75배(쉬움의 중반 이후 돈이 보통의 2.5배를 넘지 않게)
+  // bigUpkeepMult(1.0.0): 공장 4등급 이상의 유지비 배수(upkeepMult 대신). 쉬움은 초반(공장 1~3등급) 유지비 절반을 그대로 두고 4등급부터 0.75배(쉬움의 중반 이후 돈이 보통의 2.5배를 넘지 않게)
   difficulty: {
     easy: { name: '쉬움', desc: '자금이 넉넉하고 경쟁이 약합니다. 처음 하는 분께 권합니다.', cash: 500000, loanBase: 500000, bankruptcyMonths: 24, rivalMult: 0.8, upkeepMult: 0.5, prototypeMult: 0.7, recallMult: 0.6, manyDefects: 20, bailouts: 2, repLossMult: 0.5, bigUpkeepMult: 0.75 },
     normal: { name: '보통', desc: '설계한 기본 균형입니다. 경영 게임에 익숙한 분께 맞습니다.', cash: 300000, loanBase: 300000, bankruptcyMonths: 12, rivalMult: 1, upkeepMult: 1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 1, repLossMult: 1, bigUpkeepMult: 1 },
@@ -210,7 +210,7 @@ export const config = {
     seatAllowance: [0, 0, 5000, 7000, 9000, 10000], // 0.8.0: 임원이 n명일 때 임원마다 더 붙는 수당(월). 2명까지(본사 1~2등급)는 0, 3명부터 누진. 임원이 정원 밖이 되어 균형을 여기와 replace(기준·폭·간격)로 맞춘다
     hiredPayMult: 1.6, // 외부에서 뽑은 임원의 월급 = 직원 월급 공식(능력) × 1.6
     postCost: 3000, candidates: 3, expireWeeks: 4, // 임원 공고비, 후보 수, 후보가 기다리는 주
-    hireSkillMin: 45, hireSkillMax: 70, repBonusDiv: 10, // 외부 후보 능력 = 45~70 + 평판 효과/10(평판 100에서 +10, 0.11.0: 상한 대신 평판 효과가 완만해진다)
+    hireSkillMin: 45, hireSkillMax: 70, repBonusDiv: 10, // 외부 후보 능력 = 45~70 + 평판 효과/10(평판 100에서 +10, 1.0.0: 상한 대신 평판 효과가 완만해진다)
     match: 0.75, // 직원을 임명할 때 관련 직무가 아니면 임원 능력 = 직원 능력 × 0.75(관련 직무는 아래 related 배수)
     related: { hr: { sales: 1, tester: 0.85 }, product: { designer: 1, tester: 0.85 }, finance: { sales: 1 }, production: { tester: 1, engineer: 0.9 }, research: { engineer: 1 }, market: { sales: 1, designer: 0.9 } } as Record<string, Record<string, number>>,
     tiers: [40, 60], // 임원 능력 40 미만: 뭉뚱그린 말(1단계), 60 미만: 대상만 짚음(2단계), 60 이상: 수치까지(3단계)
@@ -225,7 +225,7 @@ export const config = {
   },
   devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
-  optionValue: { good: 1.05, bad: 0.8, fitMin: 0.2 }, // 0.11.0 옵션 값 = 원가 × good(그 옵션의 능력치에 대한 고객층 가중치 평균 ≥ fitMin) / bad(아니면). 차별 기준가에 더한다
+  optionValue: { good: 1.05, bad: 0.8, fitMin: 0.2 }, // 1.0.0 옵션 값 = 원가 × good(그 옵션의 능력치에 대한 고객층 가중치 평균 ≥ fitMin) / bad(아니면). 차별 기준가에 더한다
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
   pricePolicy: { pctMin: 80, pctMax: 120, pctChoices: [95, 100, 105] }, // 0.8.0 자동 가격: 기준가 유지 비율(%) 허용 범위와 화면 선택지

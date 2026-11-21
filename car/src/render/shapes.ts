@@ -61,7 +61,7 @@ export const ERA: Record<Era, EraStyle> = {
   // 높은 허리선·짧은 오버행·큰 바퀴, 쐐기
   2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .12, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .02, tuck: .065, chin: .06, sh: 1, len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .04 },
   // 매끈한 면, 짧은 앞 오버행(전기차는 휠베이스 더 길고 보닛 짧게: variant.chassisOf)
-  // 0.13.0 2030년대: 더 둥근 앞뒤(포드형), 높은 허리선·큰 휠, 긴 휠베이스
+  // 1.0.0 2030년대: 더 둥근 앞뒤(포드형), 높은 허리선·큰 휠, 긴 휠베이스
   2030: { re: .24, rpF: .68, rpR: .5, rc: .13, rb: .08, taper: .06, smooth: 3, wedge: .04, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .024, tuck: .07, chin: .09, sh: 1, len: 1.01, roofD: .02, beltD: .1, wbK: 1.08, wrD: .05 },
   2020: { re: .2, rpF: .58, rpR: .44, rc: .11, rb: .07, taper: .05, smooth: 3, wedge: .06, faceW: 1, classic: false, tumble: .32, crown: .05, bow: .032, tuck: .07, chin: .08, sh: 1, len: 1, roofD: 0, beltD: .08, wbK: 1.06, wrD: .03 },
 };
@@ -90,7 +90,7 @@ export const MIN_OVERHANG = .28; // 바퀴 아치 바깥 ~ 차 끝 최소(차체
 export const MIN_TRUNK = .45; // 트렁크 있는 차의 뒤 끝 ~ 뒤 유리 아래 끝 최소(이보다 짧으면 트렁크 없는 차처럼 보인다)
 
 // 얼굴 선택지(faceSeed). 시대마다 고를 수 있는 모양이 다르다. 같은 항목을 두 번 넣으면 그만큼 자주 뽑힌다.
-// 0.13.0 2030년대 부품: pixel(픽셀 램프), split(위 주간등 + 아래 본등 분리), panel(빛나는 그릴 패널), 후미등 pixel, 휠 cover(휠 커버)
+// 1.0.0 2030년대 부품: pixel(픽셀 램프), split(위 주간등 + 아래 본등 분리), panel(빛나는 그릴 패널), 후미등 pixel, 휠 cover(휠 커버)
 export type LampKind = 'round' | 'twin' | 'rect' | 'oval' | 'vertical' | 'swept' | 'slim' | 'popup' | 'projector' | 'pixel' | 'split';
 export type GrilleKind = 'rect' | 'hex' | 'twin' | 'bars' | 'none' | 'mesh' | 'vertical' | 'kidney' | 'wide' | 'panel';
 export type IntakeKind = 'wide' | 'three' | 'slim' | 'none' | 'fog';

@@ -1,4 +1,4 @@
-// 0.12.0 화면 정리: 재무(연도별·차종별 표와 그래프), 회사 요약 칸. 상태는 읽기만 한다(HTML 문자열을 돌려주고, 조작은 data-act 버튼으로 app.ts가 처리)
+// 1.0.0 화면 정리: 재무(연도별·차종별 표와 그래프), 회사 요약 칸. 상태는 읽기만 한다(HTML 문자열을 돌려주고, 조작은 data-act 버튼으로 app.ts가 처리)
 import { config } from '../config';
 import * as Q from '../sim/queries';
 import { yearOf } from '../sim/time';

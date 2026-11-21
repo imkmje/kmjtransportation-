@@ -1,4 +1,4 @@
-// 0.12.0 명예의 전당: 각 항목이 실제 최댓값(최솟값)과 같다
+// 1.0.0 명예의 전당: 각 항목이 실제 최댓값(최솟값)과 같다
 import { describe, expect, it } from 'vitest';
 import { Game, allGens } from '../src/sim/game';
 import { hallOfFame } from '../src/sim/hall';

@@ -7,7 +7,7 @@ import { STATS, type CarState, type Stats } from './types';
 export const zeroStats = (): Stats => ({ P: 0, E: 0, U: 0, D: 0, Q: 0 });
 
 /** 5.1 기준(연도) = 100 × 구간별 상승률의 곱 */
-const stdCache = new Map<number, number>(); // 0.11.0 성능: 판매 계산마다 불려 거듭제곱이 가장 비쌌다
+const stdCache = new Map<number, number>(); // 1.0.0 성능: 판매 계산마다 불려 거듭제곱이 가장 비쌌다
 export function standard(year: number): number {
   const c = stdCache.get(year);
   if (c !== undefined) return c;

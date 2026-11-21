@@ -1,7 +1,7 @@
 /* 카 컴퍼니 화면. 기준: docs/car/demo/car-studio.html(밝은 스튜디오, 잉크색 버튼, 주황 강조). 밝은 테마 하나.
    한 화면 앱: 본문은 스크롤하지 않고 패널 안에서만 스크롤한다. 큰 태블릿 가로 화면 기준, 폭 900px 미만이면 위아래로 쌓는다. */
 :root{
-  /* 0.12.0 색 토큰. 회색 단계: --ink(본문) > --ink2(보조 글) > --ink3(작은 설명, 흰 바탕 5.6:1·배경 4.7:1) > --off(꺼진 칸) > --line > --soft > --card.
+  /* 1.0.0 색 토큰. 회색 단계: --ink(본문) > --ink2(보조 글) > --ink3(작은 설명, 흰 바탕 5.6:1·배경 4.7:1) > --off(꺼진 칸) > --line > --soft > --card.
      의미 색: 강조 주황(--accent, 글자·작은 버튼은 --accent2), 이익 초록(--pos), 손실 빨강(--neg), 올림 파랑(--up), 경고 노랑(--caution 채움, 글자는 --warn).
      *-bg·*-ink·*-line: 옅은 바탕 칸(배지·안내 상자)의 바탕·글자·테두리(글자 대비 5.6:1 이상). 시대별 테마는 이 이름들을 덮어쓰면 된다 */
   --bg:#e7eaee; --stage1:#ffffff; --stage2:#dfe4ea; --stage3:#c9d0d9;
@@ -953,7 +953,7 @@ details.fold>summary span{white-space:normal;display:-webkit-box;-webkit-line-cl
 @media (min-width:1181px) and (max-width:1300px){.sk-l{display:none}.sk-s{display:inline}.speeds button{padding:0 6px}}
 @media (min-width:900px) and (max-width:1400px){.ev-n{display:none}.pill.evchip::before{content:"사건";white-space:nowrap}} /* 사건 이름은 칩을 눌러 보는 창·title에 */
 
-/* ---------- 0.12.0 화면 정리: 대비(작은 흰 글자는 진한 주황 바탕, 큰 주 버튼은 큰 글자 3:1), 그래프 색은 토큰으로 ---------- */
+/* ---------- 1.0.0 화면 정리: 대비(작은 흰 글자는 진한 주황 바탕, 큰 주 버튼은 큰 글자 3:1), 그래프 색은 토큰으로 ---------- */
 .go{font-size:19px} /* 흰 글자 + 주황 바탕 3.1:1 → 큰 글자(굵게 18.7px 이상) 기준을 맞춘다 */
 .go:disabled{font-size:14px}
 .toast .open,.pill.pend,.skipbtn.on,.tc.active .tc-h em,.lv5 li.on b{background:var(--accent2)}
@@ -1026,18 +1026,18 @@ button.co-box:hover{border-color:var(--ink)}
   #main.wide .ofc-s{display:none} /* 좁으면 띠의 능력치 줄은 아래 진행 카드에 */
   .dsteps li{font-size:12px}.dsteps li b{font-size:12.5px}
 }
-/* 0.12.0 고객층에 맞게 자동 배치 */
+/* 1.0.0 고객층에 맞게 자동 배치 */
 .auto-team{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 10px}
 .auto-team .btn{flex:0 0 auto}
 .auto-team .chk{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}
 .auto-team .chk input{width:20px;height:20px}
 .auto-note{margin:0 0 10px;font-weight:600}.auto-note ul{margin:4px 0 2px 18px;padding:0}.auto-note small{display:block;font-size:12px;opacity:.85}
-/* 0.12.0 긴 금액(1조 1,714억 등): KPI 칸에서 말줄임 대신 글자를 줄이고 두 줄까지 */
+/* 1.0.0 긴 금액(1조 1,714억 등): KPI 칸에서 말줄임 대신 글자를 줄이고 두 줄까지 */
 .kpis .kpi b.long,.kpi b.long{white-space:normal;overflow:visible;text-overflow:clip;font-size:clamp(16px,1.5vw,20px);line-height:1.2;word-break:keep-all}
 .kpis .kpi b.long span{font-size:11px}
 .pnl-card .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
 .co-box>b{white-space:normal;word-break:keep-all}
-/* 0.12.0 할 일 서랍: 오른쪽에서 나오는 옆 창(게임은 계속 보이고 시간도 흐른다) */
+/* 1.0.0 할 일 서랍: 오른쪽에서 나오는 옆 창(게임은 계속 보이고 시간도 흐른다) */
 .drawer{position:fixed;z-index:35;top:0;right:0;bottom:0;width:min(420px,calc(100vw - 96px));background:var(--bg);border-left:1px solid var(--line);box-shadow:-18px 0 40px -24px #1c263366;display:flex;flex-direction:column;padding:max(12px,env(safe-area-inset-top,0px)) 14px max(12px,env(safe-area-inset-bottom,0px));animation:drawer-in .25s cubic-bezier(.2,.8,.2,1);font-size:14px}
 @keyframes drawer-in{from{transform:translateX(40px);opacity:0}}
 @media (prefers-reduced-motion:reduce){.drawer{animation:none}}
@@ -1072,7 +1072,7 @@ button.co-box:hover{border-color:var(--ink)}
 .todo-hid{margin-top:10px;font-size:13px}
 .todo-empty.small{padding:8px 4px;font-size:14px}
 #toasts{z-index:50}
-/* 0.12.0 기록: 차종 계보 정렬·필터, 명예의 전당 */
+/* 1.0.0 기록: 차종 계보 정렬·필터, 명예의 전당 */
 .lin-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px}
 .lin-bar .seg{margin:0;flex:1 1 460px}.lin-bar .s-chips{margin:0}
 .rectabs{max-width:600px}

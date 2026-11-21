@@ -39,29 +39,29 @@ export const priceAppeal = (basePrice: number, attract: number, price: number, e
   * Math.min(1, basePrice / price) ** config.market.overpriceExp * Math.min(1, (basePrice * config.market.overpriceHardAt) / price) ** config.market.overpriceHardExp;
 
 /** 시장 기준가(0.4.2) = 차체 기준가 + 지금 규제 의무 장비의 원가. 모든 회사가 의무 장비를 넣으므로 시장 가격이 그만큼 오른다(가격 매력·가성비 평론·봇 가격에 쓴다) */
-/** 0.11.0: powertrain을 주면 그 동력의 시장 가산(powertrains.json premium, 연도 표 보간)을 곱한다. 하이브리드·전기차는 원가가 비싼 만큼 시장 가격도 높다(없으면 기준가에 팔 때 적자) */
+/** 1.0.0: powertrain을 주면 그 동력의 시장 가산(powertrains.json premium, 연도 표 보간)을 곱한다. 하이브리드·전기차는 원가가 비싼 만큼 시장 가격도 높다(없으면 기준가에 팔 때 적자) */
 export const basePriceOf = (s: CarState, body: string, powertrain?: string): number => bodyById(body).basePrice * priceErosion(Math.floor(s.week / config.time.weeksPerMonth)) * (1 + ptPremium(powertrain, s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear)) + requiredOptions(s).reduce((a, o) => a + optionById(o).cost, 0);
-/** 0.11.0 옵션 하나를 손님이 쳐 주는 값 = 옵션 원가 × (1 + 시대 원가 상승) × (그 옵션이 올리는 능력치(실용·디자인·품질)에 대한 이 고객층의 가중치 평균이 fitMin 이상이면 good, 아니면 bad).
+/** 1.0.0 옵션 하나를 손님이 쳐 주는 값 = 옵션 원가 × (1 + 시대 원가 상승) × (그 옵션이 올리는 능력치(실용·디자인·품질)에 대한 이 고객층의 가중치 평균이 fitMin 이상이면 good, 아니면 bad).
  *  맞는 장비를 맞는 손님에게 넣으면 원가보다 조금 더 받고, 아무 장비나 넣으면 손해(전에는 옵션 값이 기준가에 없어 넣을수록 대당 이익이 줄었다) */
 export function optionValue(id: string, segment: string, year = config.time.startYear): number {
   const o = optionById(id), w = SEGMENTS.find((x) => x.id === segment)?.w, tot = o.U + o.D + o.Q, V = config.optionValue;
   const fit = w && tot > 0 ? (o.U * w.U + o.D * w.D + o.Q * w.Q) / tot : 0;
   return o.cost * (1 + eraCostAdd(year)) * (fit >= V.fitMin ? V.good : V.bad); // 시대 원가 상승(eraCostAdd)만큼 값도 오른다(공장 원가 배수 ≤ 1이므로 맞는 옵션은 대당 이익을 줄이지 않는다)
 }
-/** 0.11.0 차별 기준가 = 차급 기준가(basePriceOf: 동력 가산·의무 장비 포함) + 단 옵션(의무 장비 제외)의 값. 가격 매력·가성비 평론·최고 이익 가격·자동 가격 % 기준·화면 '기준가'가 같이 쓴다 */
+/** 1.0.0 차별 기준가 = 차급 기준가(basePriceOf: 동력 가산·의무 장비 포함) + 단 옵션(의무 장비 제외)의 값. 가격 매력·가성비 평론·최고 이익 가격·자동 가격 % 기준·화면 '기준가'가 같이 쓴다 */
 export function carBasePrice(s: CarState, car: { body: string; segment: string; powertrain?: string; options?: string[] }): number {
   const req = requiredOptions(s);
   return basePriceOf(s, car.body, car.powertrain) + (car.options ?? []).reduce((a, o) => a + (req.includes(o) ? 0 : optionValue(o, car.segment, s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear)), 0);
 }
 /** 판매 중인 세대의 차별 기준가(지금 판의 옵션) */
 export const genBasePrice = (s: CarState, g: Generation): number => carBasePrice(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, options: currentEdition(g).options });
-/** 동력의 시장 가격 가산(0.11.0). t: 소수 연도 */
+/** 동력의 시장 가격 가산(1.0.0). t: 소수 연도 */
 export const ptPremium = (powertrain: string | undefined, t: number): number => { const p = powertrain ? powertrainById(powertrain).premium : undefined; return p ? interp(p.years, p.values, t) : 0; };
 /** 0.5.1 시장 포화(가격 경쟁): fromYear부터 시장 기준가가 해마다 perYear씩 낮아진다(최대 max). month: 월 번호 */
 export const priceErosion = (month: number): number => { const e = config.market.erosion, y = config.time.startYear + month / config.time.monthsPerYear; return 1 - Math.min(e.max, Math.max(0, (y - e.fromYear) * e.perYear)); };
 
 /** 판매 계산에 필요한 차 한 대의 요약(출시 전 미리보기에도 쓴다). powertrain: 동력 종류(유행·사건 수요 배수, 없으면 배수 1) */
-export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number; powertrain?: string; options?: string[] } // options(0.11.0): 단 옵션(차별 기준가에 쓴다)
+export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number; powertrain?: string; options?: string[] } // options(1.0.0): 단 옵션(차별 기준가에 쓴다)
 
 /** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림). fleetMult: 영업 직원의 법인·택시 매력 배수(9.1).
  *  w·trend: 사건이 바꾼 고객층 가중치와 유행 계수(생략하면 자료값·1) */
@@ -83,10 +83,10 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
   const size = cellMonthly(car.body, year) * (n.body[car.body] ?? 1) * marketMult(n), mix = MARKET[REGION].mix[car.body] ?? {};
   const e = config.market.shareExp, fm = salesFleetMult(state), rm = diffOf(state).rivalMult; // rm: 난이도의 경쟁 차 A 배수
   const tr = (c: SaleCar) => trendOf(c.body, year, n) * (c.powertrain ? trendOf(c.powertrain, year, n) : 1);
-  const trMine = tr(car), bp = new Map<SaleCar, number>(), baseOf = (c: SaleCar) => { let v = bp.get(c); if (v === undefined) bp.set(c, (v = carBasePrice(state, c))); return v; }; // 0.11.0 차별 기준가(성능: 고객층마다 다시 구하지 않는다)
+  const trMine = tr(car), bp = new Map<SaleCar, number>(), baseOf = (c: SaleCar) => { let v = bp.get(c); if (v === undefined) bp.set(c, (v = carBasePrice(state, c))); return v; }; // 1.0.0 차별 기준가(성능: 고객층마다 다시 구하지 않는다)
   let total = 0, rivals = 0;
   const resp = alt.rivalA === undefined ? rivalResponse(state, car.body, year) : 1;
-  for (const r of state.rivals) rivals += ((alt.rivalA ?? (r.cells[car.body] ?? 0) * resp + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e; // 경쟁 차는 고객층과 무관(0.11.0 성능: 한 번만)
+  for (const r of state.rivals) rivals += ((alt.rivalA ?? (r.cells[car.body] ?? 0) * resp + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e; // 경쟁 차는 고객층과 무관(1.0.0 성능: 한 번만)
   for (const seg of SEGMENTS) {
     const w = (mix[seg.id] ?? 0) * (n.seg[seg.id] ?? 1);
     if (w <= 0) continue;

@@ -41,7 +41,7 @@ export interface SteadyOptions {
   best: boolean; // 0.10.0: 판매 중인 차마다 자동 가격 '최고 이익 매달'을 켠다
   rescue: boolean; // 0.10.0: 수습 대상(혹평·판매 부진)인 차에 긴급 개선, 후속 풀체인지를 개발 중인 혹평 차는 가격 인하 판매
   ptPick: 'auto' | 'gasoline' | 'newest';
-  optPick: 'fit' | 'none' | 'misfit'; // 0.11.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 0.11.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
+  optPick: 'fit' | 'none' | 'misfit'; // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
 const STEADY: SteadyOptions = {
   budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 28, // 0.4.2: 시험 속도가 약 2.3배 느려져 12 → 28주
@@ -140,7 +140,7 @@ const RANDOM_EVENTS_BY_ID = new Map(RANDOM_EVENTS.map((d) => [d.id, d]));
 const techRank = (s: CarState, id: string): number => {
   const e = TECHS.find((t) => t.id === id)!.effects, req = regulatedOptions(s, true);
   const leadsToReq = TECHS.some((t) => t.pre.includes(id) && t.effects.some((x) => x.type === 'option' && req.includes(x.id)));
-  return e.some((x) => x.type === 'body' || (x.type === 'option' && req.includes(x.id))) || leadsToReq ? 0 : e.some((x) => x.type === 'ptLevel' || x.type === 'powertrain' || x.type === 'evCostCut') ? 1 : e.some((x) => x.type === 'option') ? 2 : 3; // 0.11.0: 동력 단계·하이브리드·전기·배터리도 가솔린 단계와 같은 순위(전에는 가솔린만)
+  return e.some((x) => x.type === 'body' || (x.type === 'option' && req.includes(x.id))) || leadsToReq ? 0 : e.some((x) => x.type === 'ptLevel' || x.type === 'powertrain' || x.type === 'evCostCut') ? 1 : e.some((x) => x.type === 'option') ? 2 : 3; // 1.0.0: 동력 단계·하이브리드·전기·배터리도 가솔린 단계와 같은 순위(전에는 가솔린만)
 };
 /** 예고·시행된 규제의 의무 장비를 여는 기술(과 선행)을 현금이 되는 대로 시작한다 */
 function researchRequired(g: Game): void {
@@ -160,7 +160,7 @@ const regulatedOptions = (s: CarState, early = false): string[] => {
   const m = monthOf(s.week) + (early ? config.events.warnMonths : 0);
   return eraTimeline(s.seed).filter((sp) => m >= sp.start).flatMap((sp) => sp.def.effects.flatMap((e) => (e.type === 'regulation' && e.region === REGION ? e.options ?? [] : [])));
 };
-/** 옵션 고르기: 쓸 수 있는 규제 옵션 먼저, 나머지 칸은 optPick에 따라 — fit: 이 고객층이 쳐 주는 값이 원가보다 큰 옵션(0.11.0 차별 기준가, 최신 먼저),
+/** 옵션 고르기: 쓸 수 있는 규제 옵션 먼저, 나머지 칸은 optPick에 따라 — fit: 이 고객층이 쳐 주는 값이 원가보다 큰 옵션(1.0.0 차별 기준가, 최신 먼저),
  *  none: 넣지 않음, misfit: 값이 원가보다 작은(안 맞는) 옵션(측정용). keep을 주면 그 옵션을 남기고 규제 옵션만 끼워 넣는다 */
 function pickOptions(s: CarState, segment: string, pick: SteadyOptions['optPick'], keep?: string[]): string[] {
   const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), force = requiredOptions(s);
@@ -184,13 +184,13 @@ function monthly(g: Game, o: SteadyOptions): void {
   }
   if (!o.manage || monthOf(s.week) % o.manageEvery !== 0) return;
   // 주문이 밀린 지 3개월: 지난 3개월 모두 한도까지 팔았고(장부 판매 ≥ 한도의 97%), 지난달 주문이 한도의 1.3배 이상
-  // 0.11.0: 최고 이익 가격을 쓰면 값을 올려 주문을 한도에 맞추므로, 증설 판단은 기준가에 팔 때의 주문으로 한다(전에는 값을 올린 뒤의 주문이라 공장을 늦게 키워 기준가 판매 봇보다 뒤졌다)
+  // 1.0.0: 최고 이익 가격을 쓰면 값을 올려 주문을 한도에 맞추므로, 증설 판단은 기준가에 팔 때의 주문으로 한다(전에는 값을 올린 뒤의 주문이라 공장을 늦게 키워 기준가 판매 봇보다 뒤졌다)
   const m = monthOf(s.week), cars = gens.map((x) => toSaleCar(x, m));
   const cap = capacityOf(s), demand = gens.reduce((a, x, i) => a + (o.best && x.pricePolicy ? monthlyDemand(s, { ...cars[i], price: genBasePrice(s, x) }, cars.filter((_, j) => j !== i), monthTime(m)) : x.lastDemand), 0), last = s.ledger.slice(-B.expandMonths);
   const backlogged = demand >= cap * o.expandRatio && last.length === B.expandMonths && last.every((e) => e.sold >= cap * B.boundShare);
   if (o.expand) {
     const nf = config.factory.levels[s.factory.level];
-    const top = s.factory.level + 1 >= B.fillFrom; // 0.11.0: 5등급부터(전에는 마지막 등급만). 0.4.2: 마지막 등급(월 유지비 240억)은 그 한도의 75%를 채울 주문이 있을 때만(봇이 증설 뒤 유지비에 무너졌다)
+    const top = s.factory.level + 1 >= B.fillFrom; // 1.0.0: 5등급부터(전에는 마지막 등급만). 0.4.2: 마지막 등급(월 유지비 240억)은 그 한도의 75%를 채울 주문이 있을 때만(봇이 증설 뒤 유지비에 무너졌다)
     const want = backlogged && nf && (!top || demand >= nf.capacity * B.expandFill) && !factoryExpandError(s);
     // 1.0.0: 모자라는 건설비는 대출 한도의 expandLoan까지 빌린다(주문이 밀린 채 몇 년씩 현금을 모으지 않게). 남는 현금으로 갚는다
     const room = Math.max(0, loanLimit(s) * B.expandLoan - s.loan.balance);
@@ -313,7 +313,7 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   else g.command({ type: 'startProject', name: '', ...pick.t, team: pick.team });
 }
 
-/** 0.11.0 동력 고르기: 쓸 수 있는 동력마다 이 팀이 만들 차(미리보기 능력치)를 시장 기준가에 팔 때 출시 약 2년 뒤의 월 이익(수요 × 대당 이익, 생산 한도 ÷ 차종 수까지)을 어림해 가장 큰 것.
+/** 1.0.0 동력 고르기: 쓸 수 있는 동력마다 이 팀이 만들 차(미리보기 능력치)를 시장 기준가에 팔 때 출시 약 2년 뒤의 월 이익(수요 × 대당 이익, 생산 한도 ÷ 차종 수까지)을 어림해 가장 큰 것.
  *  같으면 자료 순서(가솔린 먼저). 전에는 늘 가솔린이라 2020년 무렵부터 이익이 줄었다 */
 function bestPowertrain(s: CarState, body: string, segment: string, options: string[], others: Generation[], team: number[]): string {
   const m = monthOf(s.week), t = monthTime(m) + B.ptLookYears, staff = s.staff.filter((x) => team.includes(x.id)), cap = capacityOf(s) / Math.max(1, others.length + 1);

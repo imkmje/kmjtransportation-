@@ -1,4 +1,4 @@
-// 0.12.0 고객층에 맞는 개발팀 자동 배치(Q.bestTeam)
+// 1.0.0 고객층에 맞는 개발팀 자동 배치(Q.bestTeam)
 import { describe, expect, it } from 'vitest';
 import { Game } from '../src/sim/game';
 import { bestTeam, planPreview } from '../src/sim/queries';

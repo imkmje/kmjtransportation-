@@ -7,7 +7,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const PORT = Number(process.env.CAR_SMOKE_PORT) || 4191;
 const server = await preview({ preview: { port: PORT, strictPort: true }, ...(process.env.CAR_SMOKE_DIST ? { build: { outDir: process.env.CAR_SMOKE_DIST } } : {}) });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-// 0.13.0 출시 공개 장면(약 5초)은 기본으로 끄고(기기 저장소 car-company-reveal = '0'), 공개 장면 점검에서만 켠다
+// 1.0.0 출시 공개 장면(약 5초)은 기본으로 끄고(기기 저장소 car-company-reveal = '0'), 공개 장면 점검에서만 켠다
 { const nc = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await nc(o); await c.addInitScript(() => { try { if (localStorage.getItem('car-company-reveal') === null) localStorage.setItem('car-company-reveal', '0'); } catch { /* 저장 불가 */ } }); return c; }; }
 const ctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
 const page = await ctx.newPage();
@@ -189,7 +189,7 @@ await G(() => { localStorage.setItem('car-company-reveal', '1'); window.__reveal
 await act('doLaunch');
 await page.click('#ask-yes');
 await page.waitForSelector('#sheet:not([hidden])');
-// ---- 0.13.0 출시 공개 장면: 어두운 무대·실루엣 → 스포트라이트 → 이름 글자, 시간 멈춤, 건너뛰기로 평론 창 ----
+// ---- 1.0.0 출시 공개 장면: 어두운 무대·실루엣 → 스포트라이트 → 이름 글자, 시간 멈춤, 건너뛰기로 평론 창 ----
 { const wk0 = await G(() => window.__car.game.state.week);
   check('출시 공개 장면이 뜸(무대 캔버스가 장면 안으로 옮겨짐)', (await page.locator('#sheet .rvl').isVisible()) && (await page.locator('#sheet .rvl canvas').count()) === 1);
   await page.waitForSelector('#sheet .rvl[data-phase="title"]', { timeout: 20000 });
@@ -248,7 +248,7 @@ check('확인하면 가격 1500만원·정책 수동', await G(() => { const g =
 
 // ---- 회사·기록 ----
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭(0.12.0): 안쪽 탭 5개(요약·직원·임원·본사·공장), 처음은 요약', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '요약,직원,임원,본사,공장' && (await page.locator('#panel [data-act="cotab"][data-v="sum"]').getAttribute('aria-selected')) === 'true');
+check('회사 탭(1.0.0): 안쪽 탭 5개(요약·직원·임원·본사·공장), 처음은 요약', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '요약,직원,임원,본사,공장' && (await page.locator('#panel [data-act="cotab"][data-v="sum"]').getAttribute('aria-selected')) === 'true');
 await page.click('#tabs button[data-tab="fin"]');
 const ctext = await page.locator('#panel').innerText();
 check('재무 화면(큰 메뉴): 재무·지난달 표·경쟁사', (await G(() => window.__car.screen)) === 'fin' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
@@ -420,7 +420,7 @@ await act('pickNew');
 await act('ptab', '[data-v="look"]');
 await page.waitForTimeout(300);
 const looks = await G(() => [...document.querySelectorAll('.opt.look')].map((b) => ({ k: b.dataset.k, v: Number(b.dataset.v), t: b.querySelector('small')?.textContent ?? '', img: !!b.querySelector('img,svg') })));
-check('모양 단계(0.13.0): 옆모습 후보 6개 + 얼굴 후보 6개, 썸네일과 한 줄 설명', looks.filter((x) => x.k === 'chassisSeed').length === 6 && looks.filter((x) => x.k === 'faceSeed').length === 6 && looks.every((x) => x.img && x.t.length > 2), looks.map((x) => x.t).join(' / '));
+check('모양 단계(1.0.0): 옆모습 후보 6개 + 얼굴 후보 6개, 썸네일과 한 줄 설명', looks.filter((x) => x.k === 'chassisSeed').length === 6 && looks.filter((x) => x.k === 'faceSeed').length === 6 && looks.every((x) => x.img && x.t.length > 2), looks.map((x) => x.t).join(' / '));
 const pickC = looks.filter((x) => x.k === 'chassisSeed')[1].v, pickF = looks.filter((x) => x.k === 'faceSeed')[2].v;
 await act('pick', `[data-k="chassisSeed"][data-v="${pickC}"]`); await act('pick', `[data-k="faceSeed"][data-v="${pickF}"]`);
 await page.waitForTimeout(600);
@@ -458,7 +458,7 @@ check('18개월 뒤 차고 [페이스리프트]가 열림', await page.locator('
 // 0.4.2 수명: 출시 30개월까지 100% 유지 뒤 매달 줄어든다. 30개월이 지난 뒤에 리프트해야 수명 회복을 볼 수 있다
 await G(() => { const c = window.__car, s = c.game.state, g = s.nameplates[0].generations[0]; while (Math.floor(s.week / 4) - g.launchMonth < 31) c.tick(1); c.render(); });
 await act('goLift');
-check('페이스리프트 화면(0.13.0): 지금 얼굴과 새 얼굴 나란히 + 새 얼굴 후보 6개', (await G(() => window.__car.screen)) === 'lift' && (await page.locator('.faces .look-cmp .cmp-col').count()) === 2 && (await page.locator('.opt.face img, .opt.face svg').count()) === 6 && (await page.locator('.look-diff').innerText()).includes('달라진 점'));
+check('페이스리프트 화면(1.0.0): 지금 얼굴과 새 얼굴 나란히 + 새 얼굴 후보 6개', (await G(() => window.__car.screen)) === 'lift' && (await page.locator('.faces .look-cmp .cmp-col').count()) === 2 && (await page.locator('.opt.face img, .opt.face svg').count()) === 6 && (await page.locator('.look-diff').innerText()).includes('달라진 점'));
 const ltext = await page.locator('#panel').innerText();
 check('페이스리프트 예상: 비용·기간·디자인·수명 전후·인지도 전후', ['비용', '기간', '디자인', '수명', '인지도', '바꾼 뒤'].every((t) => ltext.includes(t)));
 check('동력 단계는 낮출 수 없음', await G(() => { const g = window.__car.game.state.nameplates[0].generations[0], t = g.editions[0].tier; return [...document.querySelectorAll('[data-act="liftPick"][data-k="tier"]')].every((b) => b.disabled === Number(b.dataset.v) < t); }));
@@ -466,11 +466,11 @@ const faceImgs = await G(() => [document.querySelector('.faces .cmp-col img')?.s
 { const d = []; for (let i = 0; i < faceImgs.length; i++) for (let j = i + 1; j < faceImgs.length; j++) d.push(await imgDiff(faceImgs[i], faceImgs[j]));
   check('페이스리프트 후보: 지금 얼굴과 후보 6개의 그림이 서로 다름', faceImgs.length === 7 && d.every((x) => x > 0.3), `최소 ${Math.min(...d).toFixed(2)}`); }
 check('페이스리프트 후보: 얼굴 설명이 서로 겹치지 않음', await G(() => { const t = [...document.querySelectorAll('.opt.face small')].map((x) => x.textContent); return t.length === 6 && new Set(t).size === 6; }));
-// 0.13.0 [다른 후보 보기] → 다른 6개(결정론), [처음 후보] → 처음 6개
+// 1.0.0 [다른 후보 보기] → 다른 6개(결정론), [처음 후보] → 처음 6개
 { const seeds = () => G(() => [...document.querySelectorAll('.opt.face')].map((b) => b.dataset.v).join());
   const p0 = await seeds(); await act('lookPage', '[data-t="face"][data-v="next"]'); const p1 = await seeds(); await act('lookPage', '[data-t="face"][data-v="first"]'); const p0b = await seeds();
   check('페이스리프트 [다른 후보 보기]: 다른 6개, [처음 후보]로 같은 6개', p1.split(',').length === 6 && p1.split(',').every((x) => !p0.split(',').includes(x)) && p0b === p0); }
-// 0.13.0 직접 고르기: 전조등 칩을 누르면 그 전조등의 얼굴을 찾아 미리보기·달라진 점에 반영
+// 1.0.0 직접 고르기: 전조등 칩을 누르면 그 전조등의 얼굴을 찾아 미리보기·달라진 점에 반영
 await page.locator('details.lpick[data-t="face"] summary').click();
 const lampChip = page.locator('details.lpick[data-t="face"] [data-act="lookWant"][data-k="lamp"]:not([disabled]):not(.now):not([data-v=""])').first();
 const lampWant = await lampChip.getAttribute('data-v'), lampLabel = (await lampChip.innerText()).trim();
@@ -536,7 +536,7 @@ const otherBody = await G(() => [...document.querySelectorAll('[data-act="pick"]
 const sameBody = await G(() => document.querySelector('[data-act="pick"][data-k="body"][aria-pressed="true"]')?.dataset.v);
 if (otherBody) { await act('pick', `[data-k="body"][data-v="${otherBody}"]`); check('차체를 바꾸면 "이름값이 절반만" 경고', (await page.locator('.body-warn').innerText()).includes('절반만')); await act('pick', `[data-k="body"][data-v="${sameBody}"]`); }
 await act('ptab', '[data-v="look"]');
-check('풀체인지 모양(0.13.0): 전작과 새 모양 나란히(정면·옆) + 달라진 점, 후보 6+6, 기본 색은 전작과 다른 새 색', (await page.locator('.look-cmp .cmp-col').count()) === 2 && (await page.locator('.look-cmp img').count()) === 4 && (await page.locator('.look-diff').innerText()).includes('달라진 점') && (await page.locator('[data-act="pick"][data-k="faceSeed"]').count()) === 6
+check('풀체인지 모양(1.0.0): 전작과 새 모양 나란히(정면·옆) + 달라진 점, 후보 6+6, 기본 색은 전작과 다른 새 색', (await page.locator('.look-cmp .cmp-col').count()) === 2 && (await page.locator('.look-cmp img').count()) === 4 && (await page.locator('.look-diff').innerText()).includes('달라진 점') && (await page.locator('[data-act="pick"][data-k="faceSeed"]').count()) === 6
   && (await G(() => { const c = window.__car, g = c.game.state.nameplates[0].generations.at(-1); return c.draft.color !== g.editions.at(-1).color && c.draft.chassisSeed !== g.chassisSeed; })));
 await shot('fullchange-look');
 const fcC = Number(await page.locator('[data-act="pick"][data-k="chassisSeed"]').nth(1).getAttribute('data-v')), fcF = Number(await page.locator('[data-act="pick"][data-k="faceSeed"]').nth(2).getAttribute('data-v'));
@@ -1028,11 +1028,11 @@ await openMenu(); await act('settings'); await act('setTab', '[data-v="view"]');
 check('메뉴 → 회사 로고 바꾸기: 상단바 로고가 바로 바뀜', (await page.locator('#mylogo').innerHTML()) !== myLg0 && (await G(() => window.__car.ui.logo.mark)) === 'star');
 await shot('logo-sheet');
 await act('closeSheet');
-// ---- 설정: 자동 멈춤 항목별 켬/끔(기기 저장소). 0.12.0 메뉴 → 설정 화면(시간 묶음) ----
+// ---- 설정: 자동 멈춤 항목별 켬/끔(기기 저장소). 1.0.0 메뉴 → 설정 화면(시간 묶음) ----
 await openMenu();
-check('0.12.0 메뉴: 저장·불러오기·내보내기·설정·되돌리기·처음 화면만(설정 항목은 설정 화면으로)', (await page.locator('#sheet [data-act="settings"]').count()) === 1 && (await page.locator('#sheet [data-act="autoPause"], #sheet [data-act="snd"], #sheet [data-act="debug"], #sheet [data-act="saveEvery"]').count()) === 0 && (await page.locator('#sheet [data-act="undo"], #sheet [data-act="home"], #sheet [data-act="export"]').count()) === 3);
+check('1.0.0 메뉴: 저장·불러오기·내보내기·설정·되돌리기·처음 화면만(설정 항목은 설정 화면으로)', (await page.locator('#sheet [data-act="settings"]').count()) === 1 && (await page.locator('#sheet [data-act="autoPause"], #sheet [data-act="snd"], #sheet [data-act="debug"], #sheet [data-act="saveEvery"]').count()) === 0 && (await page.locator('#sheet [data-act="undo"], #sheet [data-act="home"], #sheet [data-act="export"]').count()) === 3);
 await act('settings'); await act('setTab', '[data-v="time"]');
-check('0.12.0 설정 화면: 묶음 5개(시간·알림·소리·저장·화면)', (await page.locator('#sheet [data-act="setTab"]').allInnerTexts()).join() === '시간,알림,소리,저장,화면');
+check('1.0.0 설정 화면: 묶음 5개(시간·알림·소리·저장·화면)', (await page.locator('#sheet [data-act="setTab"]').allInnerTexts()).join() === '시간,알림,소리,저장,화면');
 check('설정 시간: 자동 멈춤 4항목(후보·출시 대기·결정 사건·연 보고서), 기본 켬', (await page.locator('#sheet [data-act="autoPause"]').count()) === 4 && (await page.locator('#sheet [data-act="autoPause"][aria-pressed="true"]').count()) === 4);
 await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act="autoPause"][data-v="cands"][aria-pressed="false"]').waitFor({ timeout: 3000 }).catch(() => {});
 check('자동 멈춤 끄기: 버튼 꺼짐·기기 저장소에 저장', (await page.locator('#sheet [data-act="autoPause"][data-v="cands"]').getAttribute('aria-pressed')) === 'false' && (await G(() => JSON.parse(localStorage.getItem('car-company-autopause')).cands)) === false);
@@ -1157,9 +1157,9 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
   await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '할일 시험'); await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
   const n0 = await EG(() => window.__car.todos().length), nb = await EG(() => window.__car.todos().filter((t) => t.urgent || !['exec', 'team', 'research', 'hire'].includes(t.kind)).length);
-  check('할 일 버튼: 상단바에 있고 배지 = 급한 일 + 지금 할 수 있는 일(0.12.0 참고 제외), 높이 44px 이상', n0 > 0 && (await ep.locator('#todo-n').innerText()) === String(nb) && (await ep.locator('#todobtn').boundingBox()).height >= 44, `${nb}/${n0}건`);
+  check('할 일 버튼: 상단바에 있고 배지 = 급한 일 + 지금 할 수 있는 일(1.0.0 참고 제외), 높이 44px 이상', n0 > 0 && (await ep.locator('#todo-n').innerText()) === String(nb) && (await ep.locator('#todobtn').boundingBox()).height >= 44, `${nb}/${n0}건`);
   await ep.click('#todobtn'); await ep.waitForSelector('#drawer:not([hidden]) .todo-it', { state: 'attached' });
-  check('0.12.0 할 일은 오른쪽 서랍(시간은 멈추지 않음), 참고는 접혀 있음', (await ep.locator('#sheet').isHidden()) && !(await EG(() => window.__car.held())) && (await ep.locator('#drawer details.todo-ref:not([open])').count()) === 1);
+  check('1.0.0 할 일은 오른쪽 서랍(시간은 멈추지 않음), 참고는 접혀 있음', (await ep.locator('#sheet').isHidden()) && !(await EG(() => window.__car.held())) && (await ep.locator('#drawer details.todo-ref:not([open])').count()) === 1);
   await ep.click('#drawer details.todo-ref > summary');
   check('할 일 창: 항목 수 = 배지, 새 게임에는 개발팀·정원 여유 항목', (await ep.locator('.todo-it').count()) === n0 && (await ep.locator('.todo-it[data-kind="team"]').count()) === 1 && (await ep.locator('.todo-it[data-kind="hire"]').count()) === 1, (await ep.locator('.todo-list').innerText()).replace(/\n/g, ' / ').slice(0, 160));
   await eshot('todo-1366x1024');
@@ -1506,101 +1506,101 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await GG(() => { const s = window.__car.game.state; s.cash = 1e6; s.reputation = 50; window.__car.render(); }); }
   await gp.setViewportSize({ width: 1024, height: 768 }); await GG(() => window.__car.render());
   check('0.9.0 1024×768: 본문·패널 가로 넘침 없음(표·상세·재무·연구)', await (async () => { const r = []; for (const t of ['garage', 'fin', 'research']) { await gp.click(`#tabs button[data-tab="${t}"]`); await gp.waitForTimeout(100); r.push(await GG(() => { const p = document.getElementById('panel'); return Math.max(document.documentElement.scrollWidth - innerWidth, p.scrollWidth - p.clientWidth); })); } return r.every((x) => x <= 0); })());
-  // ---- 0.12.0 화면 정리 ----
+  // ---- 1.0.0 화면 정리 ----
   const M2 = process.argv[3] ? `${process.argv[3]}/m2` : '';
   const mshot = async (n) => { if (M2) { const { mkdirSync } = await import('node:fs'); mkdirSync(M2, { recursive: true }); await gp.screenshot({ path: `${M2}/${n}.png` }); } };
   await gp.setViewportSize({ width: 1180, height: 820 }); await gp.waitForTimeout(200); await GG(() => { window.__car.setSpeed(0); document.getElementById('toasts').innerHTML = ''; });
   // L4 1180×820: 차 상세 두 칸(가격·성적 카드가 스크롤 없이), 상단 바 넘침 없음
   await gp.click('#tabs button[data-tab="garage"]'); await gp.locator('.gtable [data-act="gopen"]').first().click(); await gp.waitForTimeout(300);
   const fit2 = await GG(() => { const p = document.getElementById('panel').getBoundingClientRect(), a = document.querySelector('#panel .price-card').getBoundingClientRect(), b = document.querySelector('#panel .perf-card').getBoundingClientRect(), top = document.getElementById('top'); return { ok: a.top >= p.top && b.top >= p.top && a.top + 160 <= p.bottom && b.top + 160 <= p.bottom && document.getElementById('panel').scrollTop === 0, topOver: top.scrollWidth > top.clientWidth + 1 }; });
-  check('0.12.0 1180×820 차 상세: 패널 두 칸에 가격 카드와 성적 카드가 스크롤 없이 함께, 상단 바 넘침 없음', fit2.ok && !fit2.topOver, JSON.stringify(fit2));
+  check('1.0.0 1180×820 차 상세: 패널 두 칸에 가격 카드와 성적 카드가 스크롤 없이 함께, 상단 바 넘침 없음', fit2.ok && !fit2.topOver, JSON.stringify(fit2));
   await mshot('garage-detail-1180x820');
   // U4 차고 표에서 여러 대 한 번에: 모두 고르기 → 자동 가격(최고 이익) → 확인 창(대상·바꿀 수 없는 차와 이유) → 적용 → 한 번에 되돌리기
   await gp.click('#ov [data-act="gsum"]'); await gp.locator('[data-act="cmpClear"]').first().click().catch(() => {});
   await GG(() => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.status === 'onSale'); for (const x of s.nameplates.flatMap((n) => n.generations)) delete x.pricePolicy; g.clearance = { startMonth: 0, lastMonth: 9999, price: g.editions.at(-1).price }; window.__car.render(); });
   const nSell = await gp.locator('.gtable [data-act="gopen"]').count();
   await gp.click('[data-act="cmpAll"]');
-  check('0.12.0 차고 표 [모두 고르기]: 판매 중인 차 모두(비교와 같은 네모), [한 번에 바꾸기] 켜짐', (await gp.locator('.gtable [data-act="cmpPick"][aria-pressed="true"]').count()) === nSell && (await gp.locator('[data-act="bulkOpen"]').isEnabled()));
+  check('1.0.0 차고 표 [모두 고르기]: 판매 중인 차 모두(비교와 같은 네모), [한 번에 바꾸기] 켜짐', (await gp.locator('.gtable [data-act="cmpPick"][aria-pressed="true"]').count()) === nSell && (await gp.locator('[data-act="bulkOpen"]').isEnabled()));
   await gp.click('[data-act="bulkOpen"]'); await gp.click('#sheet [data-act="bulkPick"][data-k="policy"][data-v="best"]');
-  check('0.12.0 일괄 창: 차마다 지금 가격·광고·바뀌는 것, 가격 인하 판매 중인 차는 "바꿀 수 없음"', (await gp.locator('#sheet .bulk-t tr').count()) === nSell + 1 && (await gp.locator('#sheet .bulk-t').innerText()).includes('바꿀 수 없음'));
+  check('1.0.0 일괄 창: 차마다 지금 가격·광고·바뀌는 것, 가격 인하 판매 중인 차는 "바꿀 수 없음"', (await gp.locator('#sheet .bulk-t tr').count()) === nSell + 1 && (await gp.locator('#sheet .bulk-t').innerText()).includes('바꿀 수 없음'));
   await mshot('bulk-1180x820');
   await gp.click('#sheet [data-act="bulkApply"]');
   const askT = await gp.locator('#ask-text').innerText();
-  check('0.12.0 일괄 확인 창: 대상과 변경 내용, 적용 불가 차와 이유', askT.includes('최고 이익 가격 유지') && askT.includes('바꿀 수 없는 1대') && askT.includes('가격 인하 판매 중'), askT.replace(/\n/g, ' / '));
+  check('1.0.0 일괄 확인 창: 대상과 변경 내용, 적용 불가 차와 이유', askT.includes('최고 이익 가격 유지') && askT.includes('바꿀 수 없는 1대') && askT.includes('가격 인하 판매 중'), askT.replace(/\n/g, ' / '));
   await mshot('bulk-confirm-1180x820');
   await gp.click('#ask-yes'); await gp.waitForTimeout(200);
   const pol = () => GG(() => window.__car.game.state.nameplates.flatMap((n) => n.generations).filter((g) => g.status === 'onSale').map((g) => g.pricePolicy?.kind ?? '-').join());
   const p1 = await pol();
-  check('0.12.0 일괄 적용: 바꿀 수 있는 차만 최고 이익 가격', p1.split(',').filter((x) => x === 'best').length === nSell - 1, p1);
+  check('1.0.0 일괄 적용: 바꿀 수 있는 차만 최고 이익 가격', p1.split(',').filter((x) => x === 'best').length === nSell - 1, p1);
   await gp.locator('#toasts [data-undo]').first().click();
-  check('0.12.0 일괄 적용을 [되돌리기] 한 번으로 모두 되돌림', (await pol()).split(',').every((x) => x === '-'), await pol());
+  check('1.0.0 일괄 적용을 [되돌리기] 한 번으로 모두 되돌림', (await pol()).split(',').every((x) => x === '-'), await pol());
   await GG(() => { for (const g of window.__car.game.state.nameplates.flatMap((n) => n.generations)) delete g.clearance; document.getElementById('toasts').innerHTML = ''; window.__car.render(); });
   // U3 설정 화면 · U2 알림 종류 켜고 끄기, 묶기, 기록함
   await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('0.12.0 설정 알림: 종류 11개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet [data-act="noteCat"]').count()) === 11 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
+  check('1.0.0 설정 알림: 종류 11개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet [data-act="noteCat"]').count()) === 11 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
   await mshot('settings-note-1180x820');
   await gp.click('#sheet [data-act="noteCat"][data-v="rep"]');
-  check('0.12.0 알림 종류 끄기(평판 변화) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).rep)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="rep"]').getAttribute('aria-pressed')) === 'false');
+  check('1.0.0 알림 종류 끄기(평판 변화) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).rep)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="rep"]').getAttribute('aria-pressed')) === 'false');
   await gp.click('#sheet [data-act="closeSheet"]');
   await GG(() => window.__car.toast('점검 평판 변화', '', '평판', 5000, '', undefined, 'rep'));
-  check('0.12.0 꺼 둔 종류는 띄우지 않음', (await gp.locator('#toasts .toast', { hasText: '점검 평판 변화' }).count()) === 0);
+  check('1.0.0 꺼 둔 종류는 띄우지 않음', (await gp.locator('#toasts .toast', { hasText: '점검 평판 변화' }).count()) === 0);
   await GG(() => { localStorage.removeItem('car-company-notify'); });
   await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="noteCat"][data-v="rep"]'); await gp.click('#sheet [data-act="closeSheet"]');
   await GG(() => { for (let i = 1; i <= 3; i++) window.__car.toast(`평판 묶음 ${i}`, '', '평판', 5000, '', undefined, 'rep'); });
   const grp = await GG(() => [...document.querySelectorAll('#toasts .toast[data-cat="rep"]:not(.out)')].map((x) => x.innerText));
-  check('0.12.0 같은 종류가 연달아 오면 묶음("평판 변화 3건", 마지막 내용)', grp.length === 1 && grp[0].includes('평판 변화 3건') && grp[0].includes('평판 묶음 3'), JSON.stringify(grp));
+  check('1.0.0 같은 종류가 연달아 오면 묶음("평판 변화 3건", 마지막 내용)', grp.length === 1 && grp[0].includes('평판 변화 3건') && grp[0].includes('평판 묶음 3'), JSON.stringify(grp));
   // 월 결산 알림: 다음 달에는 같은 자리에서 내용만 바뀜(새로 만들지 않음, 등장 움직임 한 번)
   await GG(() => { document.getElementById('toasts').innerHTML = ''; window.__car.tick(4, true); });
   await GG(() => { const t = [...document.querySelectorAll('#toasts .toast')].find((x) => x.innerText.includes('결산')); if (t) t.dataset.probe = '1'; window.__car.tick(4, true); });
   const same = await GG(() => { const t = [...document.querySelectorAll('#toasts .toast')].filter((x) => x.innerText.includes('결산')); return { n: t.length, probe: t[0]?.dataset.probe ?? '', seen: t[0]?.classList.contains('seen') ?? false }; });
-  check('0.12.0 월 결산 알림은 다음 달에 같은 자리에서 바뀜(다시 등장하지 않음)', same.n === 1 && same.probe === '1' && same.seen, JSON.stringify(same));
+  check('1.0.0 월 결산 알림은 다음 달에 같은 자리에서 바뀜(다시 등장하지 않음)', same.n === 1 && same.probe === '1' && same.seen, JSON.stringify(same));
   { if (await gp.locator('#toasts .more').isVisible()) await gp.click('#toasts .more');
     // 알림은 6초 뒤 닫힌다. 느린 소프트웨어 렌더에서 그 전에 못 누르면(이미 닫히는 중) 흔들림이 아니라 시간 초과로 보고 건너뛴다
     const t0 = Date.now(), mt = gp.locator('#toasts .toast:not(.out)', { hasText: '결산' });
     if (await mt.count()) { let e = null; await mt.locator('.open').click({ timeout: 5000 }).catch((x) => { e = x; });
       const gone = e && !(await gp.locator('#toasts .toast:not(.out)', { hasText: '결산' }).count());
-      check('0.12.0 월 결산 [펼쳐 보기] 클릭이 바로 됨(안정 대기 5초 안)', gone || ((await gp.locator('#sheet .mon').isVisible()) && Date.now() - t0 < 5000), gone ? '알림이 6초가 지나 닫혀 확인 못 함(느린 렌더)' : `${Date.now() - t0}ms`); }
+      check('1.0.0 월 결산 [펼쳐 보기] 클릭이 바로 됨(안정 대기 5초 안)', gone || ((await gp.locator('#sheet .mon').isVisible()) && Date.now() - t0 < 5000), gone ? '알림이 6초가 지나 닫혀 확인 못 함(느린 렌더)' : `${Date.now() - t0}ms`); }
     else console.log('WARN 월 결산 알림이 이미 닫혀(6초) 클릭 확인을 건너뜀'); }
   await gclose();
   await gp.click('#todobtn'); await gp.click('#drawer [data-act="todoTab"][data-v="notes"]');
   const nN = await gp.locator('#drawer .note-it').count(), nTxt = await gp.locator('#drawer .note-list').innerText();
-  check('0.12.0 할 일 창 세 번째 탭 "알림": 지난 알림 기록(날짜·종류), 꺼 둔 종류도 남음', nN >= 4 && nTxt.includes('월 결산') && nTxt.includes('점검 평판 변화') && /\d{4}년 \d+월/.test(nTxt), `${nN}건`);
+  check('1.0.0 할 일 창 세 번째 탭 "알림": 지난 알림 기록(날짜·종류), 꺼 둔 종류도 남음', nN >= 4 && nTxt.includes('월 결산') && nTxt.includes('점검 평판 변화') && /\d{4}년 \d+월/.test(nTxt), `${nN}건`);
   await mshot('notes-1180x820');
   await gp.locator('#drawer .note-it[data-act="noteGo"]', { hasText: '결산' }).first().click();
-  check('0.12.0 기록함 항목 누르기 → 그 화면(월 결산 창)', await gp.locator('#sheet .mon').isVisible());
+  check('1.0.0 기록함 항목 누르기 → 그 화면(월 결산 창)', await gp.locator('#sheet .mon').isVisible());
   await gclose();
-  // 평판 ⓘ: 지금 효과 목록과 다음 문턱(0.11.0 Q.reputationInfo)
+  // 평판 ⓘ: 지금 효과 목록과 다음 문턱(1.0.0 Q.reputationInfo)
   await gp.click('#top [data-info="term:평판"]');
-  { const t = await GG(() => window.__car.tip?.text ?? ''); check('0.12.0 상단 평판 ⓘ: 지금 효과 목록과 다음 문턱', t.includes('지금 효과') && t.includes('인지도') && t.includes('채용 후보'), t.replace(/\n/g, ' ').slice(0, 120)); }
+  { const t = await GG(() => window.__car.tip?.text ?? ''); check('1.0.0 상단 평판 ⓘ: 지금 효과 목록과 다음 문턱', t.includes('지금 효과') && t.includes('인지도') && t.includes('채용 후보'), t.replace(/\n/g, ' ').slice(0, 120)); }
   await gp.click('#tabs button[data-tab="company"]');
   // L2 회사 요약
   await gp.click('#tabs button[data-tab="company"]'); await gp.click('#panel [data-act="cotab"][data-v="sum"]');
   const coT = await gp.locator('#panel .co-sum').innerText();
-  check('0.12.0 회사 요약: 직원·임원·본사·공장·월 고정비 칸', (await gp.locator('#panel .co-sum .co-box').count()) === 5 && ['직원', '임원', '본사', '공장', '월 고정비', '가동률', '생산 라인'].every((w) => coT.includes(w)));
+  check('1.0.0 회사 요약: 직원·임원·본사·공장·월 고정비 칸', (await gp.locator('#panel .co-sum .co-box').count()) === 5 && ['직원', '임원', '본사', '공장', '월 고정비', '가동률', '생산 라인'].every((w) => coT.includes(w)));
   await mshot('company-sum-1180x820');
   await gp.click('#panel .co-box[data-v="factory"]');
-  check('0.12.0 회사 요약 칸 누르기 → 그 안쪽 탭(공장)', (await gp.locator('#panel [data-act="cotab"][data-v="factory"]').getAttribute('aria-selected')) === 'true');
+  check('1.0.0 회사 요약 칸 누르기 → 그 안쪽 탭(공장)', (await gp.locator('#panel [data-act="cotab"][data-v="factory"]').getAttribute('aria-selected')) === 'true');
   // L3 재무: 기간 선택, 표, 그래프 3개, 대출 카드
   await gp.click('#tabs button[data-tab="fin"]');
   const ft = await gp.locator('#panel .fin-t tr').first().innerText();
-  check('0.12.0 재무(1년): 달마다 표(매출·원가·판매관리·개발·이익·현금)와 그래프 3개, 대출·구제 금융 카드', (await gp.locator('#panel .fin-t tr').count()) >= 2 && (await gp.locator('#panel .fin-chart').count()) === 3 && ['매출', '원가', '판매관리', '개발', '이익', '현금'].every((w) => ft.includes(w)) && (await gp.locator('#panel .fin-loan [data-act="borrow"]').count()) === 3);
+  check('1.0.0 재무(1년): 달마다 표(매출·원가·판매관리·개발·이익·현금)와 그래프 3개, 대출·구제 금융 카드', (await gp.locator('#panel .fin-t tr').count()) >= 2 && (await gp.locator('#panel .fin-chart').count()) === 3 && ['매출', '원가', '판매관리', '개발', '이익', '현금'].every((w) => ft.includes(w)) && (await gp.locator('#panel .fin-loan [data-act="borrow"]').count()) === 3);
   await mshot('fin-1y-1180x820');
   await gp.click('[data-act="finRange"][data-v="all"]');
   const yrs = await GG(() => { const s = window.__car.game.state, y = s.ledger.at(-1)?.year; return window.__car.Q.reportYears(s).length + (y !== undefined && !window.__car.Q.reportYears(s).includes(y) ? 1 : 0); });
-  check('0.12.0 재무(전체): 해마다 한 줄', (await gp.locator('#panel .fin-t tr').count()) === yrs + 1, `${await gp.locator('#panel .fin-t tr').count()} / ${yrs + 1}`);
+  check('1.0.0 재무(전체): 해마다 한 줄', (await gp.locator('#panel .fin-t tr').count()) === yrs + 1, `${await gp.locator('#panel .fin-t tr').count()} / ${yrs + 1}`);
   await mshot('fin-all-1180x820');
   // L1 개발: 프로젝트 두 개면 띠의 ‹ ›로 넘김, 1024에서 카드 수치가 말줄임되지 않음
   await GG(() => { const g = window.__car.game, s = g.state, p = s.projects[0], team = s.staff.filter((x) => x.projectId === p.id && x.role !== 'sales').slice(0, 2); for (const x of team) g.command({ type: 'assign', staffId: x.id, projectId: null });
     g.command({ type: 'startProject', name: '바다', body: 'sedanS', segment: 'family', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 20, team: team.map((x) => x.id) }); window.__car.render(); });
   await gp.click('#tabs button[data-tab="dev"]'); await gp.waitForTimeout(300);
   const nP = await GG(() => window.__car.game.state.projects.length);
-  if (nP >= 2) { const a = await gp.locator('#ov .ofc-t b').innerText(); await gp.click('#ov [data-act="devStep"][data-v="1"]'); check('0.12.0 개발: 동시 개발이면 위쪽 띠의 › 로 다음 프로젝트', (await gp.locator('#ov .ofc-t b').innerText()) !== a); }
-  else check('0.12.0 개발: 동시 개발 준비(프로젝트 2개)', false, `${nP}개`);
+  if (nP >= 2) { const a = await gp.locator('#ov .ofc-t b').innerText(); await gp.click('#ov [data-act="devStep"][data-v="1"]'); check('1.0.0 개발: 동시 개발이면 위쪽 띠의 › 로 다음 프로젝트', (await gp.locator('#ov .ofc-t b').innerText()) !== a); }
+  else check('1.0.0 개발: 동시 개발 준비(프로젝트 2개)', false, `${nP}개`);
   await mshot('dev-1180x820');
   await gp.setViewportSize({ width: 1024, height: 768 }); await gp.waitForTimeout(300);
-  check('0.12.0 개발(1024×768): 카드 수치·제목이 말줄임·넘침 없음', await GG(() => [...document.querySelectorAll('#panel .kpi b, #panel .card h2, #panel .dsteps li')].every((b) => b.scrollWidth <= b.clientWidth + 1)));
+  check('1.0.0 개발(1024×768): 카드 수치·제목이 말줄임·넘침 없음', await GG(() => [...document.querySelectorAll('#panel .kpi b, #panel .card h2, #panel .dsteps li')].every((b) => b.scrollWidth <= b.clientWidth + 1)));
   await mshot('dev-1024x768');
-  // 0.12.0 고객층에 맞게 자동 배치: [자동 배치] → Q.bestTeam 결과가 팀에 반영, 요약(매력 전→후·개발비·기간), 엔지니어 1명은 연구에
+  // 1.0.0 고객층에 맞게 자동 배치: [자동 배치] → Q.bestTeam 결과가 팀에 반영, 요약(매력 전→후·개발비·기간), 엔지니어 1명은 연구에
   await gp.setViewportSize({ width: 1180, height: 820 }); await gclose();
   await GG(() => { const s = window.__car.game.state, b = s.staff[0]; s.hqLevel = 5; const roles = ['designer', 'engineer', 'tester', 'designer', 'engineer', 'tester', 'engineer'];
     roles.forEach((r, i) => s.staff.push({ ...b, id: 8800 + i, name: `자동${i}`, role: r, ability: 35 + i * 7, projectId: null, trainings: [], restUntil: null, lab: false })); window.__car.render(); });
@@ -1610,12 +1610,12 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await gp.click('[data-act="autoTeam"]');
   const at = await GG(() => { const c = window.__car, d = c.draft, r = c.Q.bestTeam(c.game.state, d, { keepEngineer: true }); return { got: [...d.team].sort((a, b) => a - b).join(), want: r.team.join(), reserved: r.reserved, n: r.team.length, idle: c.game.state.staff.filter((x) => x.projectId === null && x.role !== 'sales' && !x.lab).length }; });
   const an = await gp.locator('#panel .auto-note').innerText().catch(() => '');
-  check('0.12.0 [고객층에 맞게 자동 배치] → bestTeam 팀이 기획에 반영, 요약(매력 전→후·개발비·기간), 엔지니어 1명은 연구에 남김', at.got === at.want && at.n > 0 && at.reserved !== null && !at.got.split(',').includes(String(at.reserved)) && /고객층 매력 [\d.]+ → [\d.]+/.test(an) && an.includes('개발비') && an.includes('엔지니어'), JSON.stringify(at));
+  check('1.0.0 [고객층에 맞게 자동 배치] → bestTeam 팀이 기획에 반영, 요약(매력 전→후·개발비·기간), 엔지니어 1명은 연구에 남김', at.got === at.want && at.n > 0 && at.reserved !== null && !at.got.split(',').includes(String(at.reserved)) && /고객층 매력 [\d.]+ → [\d.]+/.test(an) && an.includes('개발비') && an.includes('엔지니어'), JSON.stringify(at));
   await mshot('auto-team-1180x820');
   await gp.locator('#panel .pick[aria-pressed="true"]').first().click();
-  check('0.12.0 자동 배치 뒤 손으로 고치면 그대로 반영(요약은 사라짐)', (await GG(() => window.__car.draft.team.length)) === at.n - 1 && (await gp.locator('#panel .auto-note').count()) === 0);
+  check('1.0.0 자동 배치 뒤 손으로 고치면 그대로 반영(요약은 사라짐)', (await GG(() => window.__car.draft.team.length)) === at.n - 1 && (await gp.locator('#panel .auto-note').count()) === 0);
   await gp.click('[data-act="cancelPlan"]');
-  // 0.12.0 창 바깥 누르기: 할 일·설정·월 결산·비교 창은 닫히고, 결정할 사건 창은 안 닫히고, 확인 창은 취소로
+  // 1.0.0 창 바깥 누르기: 할 일·설정·월 결산·비교 창은 닫히고, 결정할 사건 창은 안 닫히고, 확인 창은 취소로
   const outside = async () => { await gp.mouse.click(6, 816); await gp.waitForTimeout(150); };
   const open = async (name, fn) => { await fn(); await gp.waitForSelector('#sheet:not([hidden])'); await outside(); return [name, await gp.locator('#sheet').isHidden()]; };
   const R = [];
@@ -1626,16 +1626,16 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await gp.click('#tabs button[data-tab="garage"]'); await gp.locator('[data-act="cmpClear"]').first().click().catch(() => {});
   await gp.locator('.gtable [data-act="cmpPick"]').nth(0).click(); await gp.locator('.gtable [data-act="cmpPick"]').nth(1).click();
   R.push(await open('비교', () => gp.click('[data-act="cmpOpen"]')));
-  check('0.12.0 창 바깥을 누르면 닫힘(할 일·설정·월 결산·비교)', R.every(([, h]) => h), JSON.stringify(R));
+  check('1.0.0 창 바깥을 누르면 닫힘(할 일·설정·월 결산·비교)', R.every(([, h]) => h), JSON.stringify(R));
   await GG(() => { const c = window.__car, s = c.game.state; s.events.pending.push({ id: s.nextId++, eventId: 'motorshow', text: '점검용 결정', week: s.week, deadline: s.week + 8, genId: null, fx: null }); c.render(); });
   await gp.click('#pend'); await gp.waitForSelector('#sheet .choice-sheet'); await outside();
-  check('0.12.0 결정할 사건 창은 바깥을 눌러도 닫히지 않음', await gp.locator('#sheet .choice-sheet').isVisible());
+  check('1.0.0 결정할 사건 창은 바깥을 눌러도 닫히지 않음', await gp.locator('#sheet .choice-sheet').isVisible());
   await gp.click('#sheet [data-act="later"]');
   const gid = await GG(() => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.status === 'onSale').id);
   await gp.locator(`.gtable [data-act="gopen"][data-id="${gid}"]`).click(); await gp.click('[data-act="discontinue"]'); await gp.waitForSelector('#ask:not([hidden])');
   await gp.mouse.click(6, 816); await gp.waitForTimeout(150);
-  check('0.12.0 확인 창(단종) 바깥 누르기 = 취소(창 닫힘, 단종 안 됨)', (await gp.locator('#ask').isHidden()) && (await GG((id) => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id).status, gid)) === 'onSale');
-  // ---- 0.12.0 추가: 조 단위 금액 KPI, 할 일 서랍(나중에·다시 알리지 않기), 계보 정렬, 명예의 전당 ----
+  check('1.0.0 확인 창(단종) 바깥 누르기 = 취소(창 닫힘, 단종 안 됨)', (await gp.locator('#ask').isHidden()) && (await GG((id) => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id).status, gid)) === 'onSale');
+  // ---- 1.0.0 추가: 조 단위 금액 KPI, 할 일 서랍(나중에·다시 알리지 않기), 계보 정렬, 명예의 전당 ----
   await gclose(); await GG(() => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.status === 'onSale');
     g.profit = 117140000; if (g.pnl) g.pnl.rev = 234560000; s.cash = 123450000; const L = s.ledger.at(-1); L.revenue = 123450000; L.profit = -123450000; L.cash = 123450000; window.__car.render(); });
   const clipped = (root) => GG((q) => [...document.querySelectorAll(`${q} .kpi b, ${q} .co-box > b`)].filter((b) => b.offsetParent && (b.scrollWidth > b.clientWidth + 1 || getComputedStyle(b).textOverflow === 'ellipsis' && b.scrollWidth > b.clientWidth)).map((b) => b.innerText), root);
@@ -1652,40 +1652,40 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await GG(() => window.__car.showMonth(window.__car.game.state.ledger.length - 1)); const a4 = await clipped('#sheet'); await gclose();
     longRes[w] = [...a1, ...a2, ...a3, ...a4];
   }
-  check('0.12.0 조 단위 금액(1조 1,714억·−1조 2,345억)이 KPI 칸에서 말줄임·넘침 없음(차 손익·성적·재무·회사 요약·월 결산, 세 해상도)', Object.values(longRes).every((x) => !x.length), JSON.stringify(longRes));
+  check('1.0.0 조 단위 금액(1조 1,714억·−1조 2,345억)이 KPI 칸에서 말줄임·넘침 없음(차 손익·성적·재무·회사 요약·월 결산, 세 해상도)', Object.values(longRes).every((x) => !x.length), JSON.stringify(longRes));
   await GG(() => { const s = window.__car.game.state; s.cash = 1e6; window.__car.render(); });
   // 할 일 서랍: 나중에(이번 달 숨김), 다시 알리지 않기(설정에서 되돌림), 1024에서 화면을 다 덮지 않음, 항목 56px·글자 14px
   await gp.setViewportSize({ width: 1024, height: 768 }); await gp.waitForTimeout(150);
   await gp.click('#todobtn'); await gp.waitForSelector('#drawer:not([hidden])');
   const dw = await GG(() => { const d = document.getElementById('drawer').getBoundingClientRect(), it = [...document.querySelectorAll('#drawer .todo-it')].filter((x) => x.offsetParent); return { w: d.width, left: d.left, minH: Math.min(...it.map((x) => x.getBoundingClientRect().height)), fs: Math.min(...it.map((x) => parseFloat(getComputedStyle(x.querySelector('b')).fontSize))) }; });
-  check('0.12.0 할 일 서랍(1024×768): 오른쪽 380~420px, 게임 화면이 옆에 보임, 항목 56px·글자 14px 이상', dw.w >= 380 && dw.w <= 421 && dw.left >= 500 && dw.minH >= 56 && dw.fs >= 14, JSON.stringify(dw));
+  check('1.0.0 할 일 서랍(1024×768): 오른쪽 380~420px, 게임 화면이 옆에 보임, 항목 56px·글자 14px 이상', dw.w >= 380 && dw.w <= 421 && dw.left >= 500 && dw.minH >= 56 && dw.fs >= 14, JSON.stringify(dw));
   if (M2) for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); await gp.screenshot({ path: `${M2}/todo-drawer-${w}x${h}.png` }); }
   await gp.locator('#drawer details.todo-ref > summary').click().catch(() => {}); // 참고도 펼쳐서
   const tFirst = await gp.locator('#drawer .todo-row:has([data-act="todoLater"]) .todo-it').first().getAttribute('data-k');
   await gp.locator(`#drawer [data-act="todoLater"][data-k="${tFirst}"]`).click();
-  check('0.12.0 할 일 [나중에] → 이번 달 동안 숨김', (await gp.locator(`#drawer .todo-it[data-k="${tFirst}"]`).count()) === 0, tFirst);
+  check('1.0.0 할 일 [나중에] → 이번 달 동안 숨김', (await gp.locator(`#drawer .todo-it[data-k="${tFirst}"]`).count()) === 0, tFirst);
   const mk2 = await gp.locator('#drawer [data-act="todoMute"]').first().getAttribute('data-v');
   await gp.locator('#drawer [data-act="todoMute"]').first().click();
-  check('0.12.0 할 일 [다시 알리지 않기] → 그 종류 사라짐·기기 저장소', (await gp.locator(`#drawer .todo-it[data-kind="${mk2}"]`).count()) === 0 && (await GG(() => JSON.parse(localStorage.getItem('car-company-todomute')))).includes(mk2));
+  check('1.0.0 할 일 [다시 알리지 않기] → 그 종류 사라짐·기기 저장소', (await gp.locator(`#drawer .todo-it[data-kind="${mk2}"]`).count()) === 0 && (await GG(() => JSON.parse(localStorage.getItem('car-company-todomute')))).includes(mk2));
   await gp.click('#drawer [data-act="drawerClose"]'); await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
   await gp.click(`#sheet [data-act="todoUnmute"][data-v="${mk2}"]`);
-  check('0.12.0 설정 → 알림에서 다시 알리기', !(await GG(() => JSON.parse(localStorage.getItem('car-company-todomute')))).includes(mk2)); await gclose();
+  check('1.0.0 설정 → 알림에서 다시 알리기', !(await GG(() => JSON.parse(localStorage.getItem('car-company-todomute')))).includes(mk2)); await gclose();
   // 차종 계보 정렬·필터, 명예의 전당
   await gp.setViewportSize({ width: 1180, height: 820 }); await gp.click('#tabs button[data-tab="records"]'); await gp.click('[data-act="rectab"][data-v="cars"]');
   await gp.click('[data-act="linSort"][data-v="sold"]');
   const order = await GG(() => [...document.querySelectorAll('.lineage-card')].map((x) => Number(x.dataset.np)));
   const want2 = await GG(() => [...window.__car.game.state.nameplates].filter((n) => n.generations.length).sort((a, b) => b.generations.reduce((x, g) => x + g.totalSold, 0) - a.generations.reduce((x, g) => x + g.totalSold, 0) || a.id - b.id).map((n) => n.id));
-  check('0.12.0 차종 계보 정렬(많이 팔린 순)·기기에 기억', order.join() === want2.join() && (await GG(() => JSON.parse(localStorage.getItem('car-company-lineage')).sort)) === 'sold', `${order} / ${want2}`);
+  check('1.0.0 차종 계보 정렬(많이 팔린 순)·기기에 기억', order.join() === want2.join() && (await GG(() => JSON.parse(localStorage.getItem('car-company-lineage')).sort)) === 'sold', `${order} / ${want2}`);
   if (M2) await gp.screenshot({ path: `${M2}/lineage-sort-1180x820.png` });
   await gp.click('[data-act="linFilter"][data-v="off"]');
-  check('0.12.0 차종 계보 필터(단종): 판매 중인 차종이 없음', await GG(() => [...document.querySelectorAll('.lineage-card')].every((x) => window.__car.game.state.nameplates.find((n) => n.id === Number(x.dataset.np)).generations.every((g) => g.status === 'discontinued'))));
+  check('1.0.0 차종 계보 필터(단종): 판매 중인 차종이 없음', await GG(() => [...document.querySelectorAll('.lineage-card')].every((x) => window.__car.game.state.nameplates.find((n) => n.id === Number(x.dataset.np)).generations.every((g) => g.status === 'discontinued'))));
   await gp.click('[data-act="linFilter"][data-v=""]');
   await gp.click('[data-act="rectab"][data-v="hall"]');
   const hall = await GG(() => ({ n: document.querySelectorAll('.hall > .hall-grid > .hall-it').length, want: window.__car.Q.hallOfFame(window.__car.game.state).cars.length, t: document.querySelector('.hall')?.innerText ?? '' }));
-  check('0.12.0 명예의 전당: 차 기록 카드(가장 많이 팔린 차·가장 비싼 차 등)와 회사 기록', hall.n === hall.want && hall.t.includes('가장 많이 팔린 차') && (await gp.locator('.hall-co').innerText()).includes('누적 판매'), `${hall.n}/${hall.want}`);
+  check('1.0.0 명예의 전당: 차 기록 카드(가장 많이 팔린 차·가장 비싼 차 등)와 회사 기록', hall.n === hall.want && hall.t.includes('가장 많이 팔린 차') && (await gp.locator('.hall-co').innerText()).includes('누적 판매'), `${hall.n}/${hall.want}`);
   if (M2) for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); await gp.screenshot({ path: `${M2}/hall-${w}x${h}.png` }); }
   const hid = await gp.locator('.hall-it').first().getAttribute('data-v'); await gp.locator('.hall-it').first().click();
-  check('0.12.0 명예의 전당 항목 누르기 → 그 차종 계보', (await gp.locator(`.lineage-card[data-np="${hid}"]`).count()) === 1 && (await gp.locator('[data-act="rectab"][data-v="cars"]').getAttribute('aria-selected')) === 'true');
+  check('1.0.0 명예의 전당 항목 누르기 → 그 차종 계보', (await gp.locator(`.lineage-card[data-np="${hid}"]`).count()) === 1 && (await gp.locator('[data-act="rectab"][data-v="cars"]').getAttribute('aria-selected')) === 'true');
   await gctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));

@@ -364,7 +364,7 @@ export function bestPrice(s: CarState, generationId: number): BestPrice | null {
   const g = generationById(s, generationId);
   if (!g) return null;
   const e = currentEdition(g), uc = unitCost(g.body, g.powertrain, e.tier, e.options, costMultOf(s), ptCostAdd(s, g.powertrain)), mk = config.awareness.marketingCost[g.marketing];
-  const m = monthOf(s.week), car = toSaleCar(g, m), cap = capacityOf(s), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m)); // priceForecast와 같은 계산(0.11.0 성능: 다른 차는 한 번만)
+  const m = monthOf(s.week), car = toSaleCar(g, m), cap = capacityOf(s), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m)); // priceForecast와 같은 계산(1.0.0 성능: 다른 차는 한 번만)
   return scanPrices(g.body, genBasePrice(s, g), (price) => { const sales = Math.round(Math.min(cap, monthlyDemand(s, { ...car, price }, others, t))); return { sales, profit: sales * (price - uc) - mk }; }, uc, mk);
 }
 /** 출시 전 프로젝트의 최고 이익 가격(출시 3개월째 수요, salesForecast의 가운데 값·생산 한도) */
@@ -395,7 +395,7 @@ export { undoInfo } from './game';
 // ---------- 0.10.0 정보와 수습 수단 ----------
 export { modelPnL, nameplatePnL, salesFactors, staffHistory, staffBrief, decadeReview, decadeYears, rescueOptions, fixError, clearError, type ModelPnL, type NameplatePnL, type SalesFactor, type SalesFactors, type FactorKey, type StaffHistory, type DecadeReview, type RescueOptions } from './insight';
 
-// ---------- 0.11.0 평판 ----------
+// ---------- 1.0.0 평판 ----------
 export { repEffect, factoryBuildMonths } from './company';
 import { repEffect } from './company';
 /** 평판 효과가 eff가 되는 평판(repEffect의 역함수) */
@@ -406,7 +406,7 @@ export interface ReputationInfo {
   effects: { key: 'awareness' | 'hire' | 'exec' | 'tier3' | 'hq'; label: string; text: string }[]; // 지금 평판이 주는 효과
   next: { rep: number; text: string } | null; // 다음 문턱(가장 가까운 것)
 }
-/** 0.11.0 평판의 효과 목록과 다음 문턱(화면 ⓘ용). 평판은 위쪽 상한이 없고, 100을 넘으면 효과가 로그로 완만해진다 */
+/** 1.0.0 평판의 효과 목록과 다음 문턱(화면 ⓘ용). 평판은 위쪽 상한이 없고, 100을 넘으면 효과가 로그로 완만해진다 */
 export function reputationInfo(s: CarState): ReputationInfo {
   const rep = s.reputation, eff = repEffect(rep), H = config.staff.hire, X = config.exec, hq = config.hq.levels[s.hqLevel];
   const hire = Math.floor(eff / H.repBonusDiv), ex = Math.floor(eff / X.repBonusDiv);
@@ -426,7 +426,7 @@ export function reputationInfo(s: CarState): ReputationInfo {
   return { value: rep, effect: eff, soft: rep > config.reputation.soft, effects, next: next && { rep: Math.ceil(next.rep), text: next.text } };
 }
 
-// ---------- 0.12.0 고객층에 맞는 개발팀 자동 배치(화면용 순수 조회) ----------
+// ---------- 1.0.0 고객층에 맞는 개발팀 자동 배치(화면용 순수 조회) ----------
 /** shortcut: 멈춤 기준(매력 증가 최소값)은 화면 추천용 상수라 여기 둔다. 밸런스에서 조정할 일이 생기면 config.dev로 옮길 것 */
 const BEST_TEAM_MIN_GAIN = 0.1;
 export interface BestTeam { team: number[]; segmentScore: number; grade: number; cost: number; weeks: number; reserved: number | null; reason: string[] }

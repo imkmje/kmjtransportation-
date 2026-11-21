@@ -1,4 +1,4 @@
-// 0.12.0 명예의 전당: 우리 회사 역대 기록(순수 조회, 상태를 바꾸지 않는다). 기록이 없는 옛 저장은 계산할 수 있는 항목만
+// 1.0.0 명예의 전당: 우리 회사 역대 기록(순수 조회, 상태를 바꾸지 않는다). 기록이 없는 옛 저장은 계산할 수 있는 항목만
 import { config } from '../config';
 import { avgGrade } from './cars';
 import { allGens } from './game';

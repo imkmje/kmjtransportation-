@@ -33,7 +33,7 @@ type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: nu
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
 type RecTab = 'cars' | 'hall' | 'combo' | 'news' | 'years';
-type CoTab = 'sum' | 'staff' | 'hq' | 'factory' | 'exec'; // 0.12.0 첫 화면 'sum'(요약 칸)
+type CoTab = 'sum' | 'staff' | 'hq' | 'factory' | 'exec'; // 1.0.0 첫 화면 'sum'(요약 칸)
 type GSort = 'name' | 'launch' | 'price' | 'sold' | 'unit' | 'profit' | 'life' | 'review'; // 0.9.0 차고 요약 표 정렬
 type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView; keys?: string }; // keys: 0.9.0 무대 아래 핵심 수치 띠
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
@@ -54,7 +54,7 @@ type StaffSort = typeof STAFF_SORTS[number];
 const STAFF_FILTERS = [['', '전체'], ['designer', '디자이너'], ['engineer', '엔지니어'], ['tester', '테스터'], ['sales', '영업'], ['idle', '쉬는 중'], ['working', '개발 중'], ['trainable', '교육 가능'], ['tired', '지친 직원'], ['exec', '임원']] as const;
 type StaffFilter = typeof STAFF_FILTERS[number][0];
 type PauseKey = typeof PAUSE_ITEMS[number][0];
-// 0.12.0 알림 종류(기기 저장소): [키, 설정 화면 이름, 'fixed'면 끌 수 없음, 알림·기록함에 쓰는 짧은 이름]
+// 1.0.0 알림 종류(기기 저장소): [키, 설정 화면 이름, 'fixed'면 끌 수 없음, 알림·기록함에 쓰는 짧은 이름]
 const NOTE_KEY = 'car-company-notify';
 const NOTE_CATS = [['month', '월 결산(임원 보고 수 포함)', '', '월 결산'], ['rep', '평판 변화', '', '평판 변화'], ['event', '시대 사건·뉴스(규제는 늘 띄움)', '', '사건'],
   ['research', '연구 완료', '', '연구 완료'], ['dev', '개발 진행(설계 끝 등)', '', '개발'], ['company', '회사 소식(공장 완공·임원 교체·단종·조언)', '', '회사'],
@@ -161,7 +161,7 @@ export function startApp(): void {
   const TOAST_MAX = 2; // 한 번에 보이는 알림 수. 넘으면 오래된 보통 알림부터 닫는다(중요한 알림은 "+N"으로 접어 둔다)
   /** 키로 띄운 알림을 닫는다(그 알림이 가리키던 일을 이미 한 경우) */
   const dropToast = (key: string) => { const t = keyed.get(key); if (t?.isConnected) closers.get(t)?.(); };
-  // ----- 0.12.0 알림 종류: 켜고 끄기(경고·결정 대기·시간을 멈춘 자동 멈춤은 늘 띄움), 기록함(최근 100건), 같은 종류 묶기 -----
+  // ----- 1.0.0 알림 종류: 켜고 끄기(경고·결정 대기·시간을 멈춘 자동 멈춤은 늘 띄움), 기록함(최근 100건), 같은 종류 묶기 -----
   type NoteCat = typeof NOTE_CATS[number][0];
   const noteSet = ((): Record<string, boolean> => { // 기본 모두 켬. 깨진 값은 켬
     let o: Record<string, unknown> = {}; try { o = JSON.parse(localStorage.getItem(NOTE_KEY) ?? '{}') ?? {}; } catch { /* 저장 불가 */ }
@@ -174,7 +174,7 @@ export function startApp(): void {
   let noteLog: NoteLog[] = [], noteId = 0, noteSeen = 0; // noteSeen: 기록함을 마지막으로 연 때의 id
   const toastTimers = new WeakMap<HTMLElement, number>();
   /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 그 자리에서 내용만 바꾼다(월 결산처럼 자주 오는 것). 12초 이상 두는 알림(자동 멈춤·현금 경고·결정 대기·리콜·규제)은 중요한 알림.
-   *  cat(0.12.0): 알림 종류. 주면 기록함에 남고, 꺼 둔 종류는 띄우지 않으며, 같은 종류가 떠 있는 동안 또 오면 "평판 변화 3건"으로 묶는다 */
+   *  cat(1.0.0): 알림 종류. 주면 기록함에 남고, 꺼 둔 종류는 띄우지 않으며, 같은 종류가 떠 있는 동안 또 오면 "평판 변화 3건"으로 묶는다 */
   function toast(text: string, kind: '' | 'alert' | 'bad' = '', head = '', ms = kind ? 9000 : 4000, key = '', open?: { label: string; fn: () => void }, cat?: NoteCat): void {
     if (cat && game && cat !== 'act') { noteLog.unshift({ id: ++noteId, week: game.state.week, cat, head: head || catName(cat), text, open }); if (noteLog.length > 100) noteLog.length = 100; }
     if (cat && !noteOn(cat)) return;
@@ -212,7 +212,7 @@ export function startApp(): void {
   function foldToasts(): void {
     const box = $('#toasts'), list = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')];
     const keep = box.classList.contains('open') ? 99 : TOAST_MAX, n = list.length - keep;
-    // 0.12.0 접을 때는 버튼 없는 알림부터(오래된 순). 월 결산처럼 [펼쳐 보기]가 있는 알림이 새 알림 둘에 밀려 "+N" 속에 숨던 일(점검의 '안정 대기 30초 초과' 원인)을 줄인다
+    // 1.0.0 접을 때는 버튼 없는 알림부터(오래된 순). 월 결산처럼 [펼쳐 보기]가 있는 알림이 새 알림 둘에 밀려 "+N" 속에 숨던 일(점검의 '안정 대기 30초 초과' 원인)을 줄인다
     const fold = new Set([...list.filter((t) => !t.querySelector('.open')), ...list.filter((t) => t.querySelector('.open'))].slice(0, Math.max(0, n)));
     list.forEach((t) => t.classList.toggle('folded', fold.has(t)));
     let more = box.querySelector<HTMLElement>('.more');
@@ -271,7 +271,7 @@ export function startApp(): void {
       const base = infoOf(key);
       if (t) return { title: t.name, text: base ? `${base.text} (${t.year}년 기술)` : `${t.desc} 효과: ${t.effects}. ${t.year}년 기술.` };
     }
-    if (key === 'term:평판' && game) { // 0.12.0 평판 ⓘ: 지금 평판의 효과 목록과 다음 문턱(평판에는 위 상한이 없다)
+    if (key === 'term:평판' && game) { // 1.0.0 평판 ⓘ: 지금 평판의 효과 목록과 다음 문턱(평판에는 위 상한이 없다)
       const base = infoOf(key), R = Q.reputationInfo(game.state);
       return { title: `평판 ${Math.round(R.value)}`, text: `${base ? `${base.text} ` : ''}지금 효과: ${R.effects.map((e) => `${e.label} ${e.text}`).join(' · ')}.${R.soft ? ` 100을 넘어 효과가 완만하게 늘어납니다(효과 ${Math.round(R.effect)}).` : ''}${R.next ? ` 다음 문턱: 평판 ${R.next.rep} — ${R.next.text}.` : ''}` };
     }
@@ -623,7 +623,7 @@ export function startApp(): void {
   }
   function endSkip(text: string, open?: { label: string; fn: () => void }): void { setSpeed(0); if (text) toast(text, 'alert', '다음 일까지 · 멈춤', 9000, 'skip', open); }
   /** 자동 멈춤을 꺼 둔 항목(채용 후보·출시 대기·결정할 사건)은 새로 생겨도 멈추지 않는다 */
-  const skipStops = (k: Q.TodoKind) => !todoMute.has(k) && (!(k === 'cands' || k === 'ready' || k === 'choice') || pauseOn[k]); // 0.12.0 '다시 알리지 않기'한 종류에서는 멈추지 않는다
+  const skipStops = (k: Q.TodoKind) => !todoMute.has(k) && (!(k === 'cands' || k === 'ready' || k === 'choice') || pauseOn[k]); // 1.0.0 '다시 알리지 않기'한 종류에서는 멈추지 않는다
   /** 한 주 진행 뒤 멈춤 조건. 자동 멈춤(출시 대기·채용 후보)과 사건 창은 이미 시간을 멈춰 skip이 풀린 상태로 온다 */
   function skipCheck(ev: GameEvent[]): void {
     const s = game!.state, sk = skip!;
@@ -654,7 +654,7 @@ export function startApp(): void {
     return `<div class="rep-card${r.auto ? ' auto' : ''}${repFresh.has(r.id) ? ' unread' : ''}" data-id="${r.id}"><div class="rep-h"><b>${esc(execTitle(r.role))} ${esc(r.execName)}</b><small>${esc(when)}${r.auto ? ' · 맡긴 일 기록' : ''}${repFresh.has(r.id) ? ' · 새 보고' : ''}</small></div>
       <h3>${esc(r.title)}</h3><p>${esc(r.text)}</p>${r.facts.length ? `<ul class="rep-facts">${r.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}${st}<div class="row">${btns}</div></div>`;
   }
-  // ----- 0.12.0 할 일 서랍: 급한 일 / 지금 할 수 있는 일 / 참고(접힘), '나중에'(다음 달까지 숨김), '다시 알리지 않기'(종류별, 설정 → 알림에서 되돌림) -----
+  // ----- 1.0.0 할 일 서랍: 급한 일 / 지금 할 수 있는 일 / 참고(접힘), '나중에'(다음 달까지 숨김), '다시 알리지 않기'(종류별, 설정 → 알림에서 되돌림) -----
   const TODO_MUTE_KEY = 'car-company-todomute';
   const todoMute = new Set<string>((() => { try { const a = JSON.parse(localStorage.getItem(TODO_MUTE_KEY) ?? '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : []; } catch { return []; } })());
   const todoSnooze = new Map<string, number>(); // 항목 키 → 이 달(포함)까지 숨김. 화면 메모리에만(불러오면 다시 보인다)
@@ -686,7 +686,7 @@ export function startApp(): void {
     return chips + (list.length ? `<div class="rep-list">${list.map(reportCard).join('')}</div>` : '<p class="todo-empty">아직 받은 보고가 없습니다. 임원은 월 결산 때 보고합니다.</p>');
   }
   /** 할 일·보고 창. 보고 탭을 열면 읽음 처리(이번에 새로 온 것은 창을 닫을 때까지 '새 보고'로 표시) */
-  /** 0.12.0 지난 알림 기록함(최근 100건): 날짜·종류, 누르면 그 알림의 화면으로 */
+  /** 1.0.0 지난 알림 기록함(최근 100건): 날짜·종류, 누르면 그 알림의 화면으로 */
   function notesBody(): string {
     if (!noteLog.length) return '<p class="todo-empty">아직 지난 알림이 없습니다. 월 결산·평판 변화·사건 같은 알림이 여기 쌓입니다.</p>';
     const row = (x: NoteLog) => { const go = !!x.open, tag = `<span class="chip n-${x.cat}">${esc(catName(x.cat))}</span>`, body = `<span class="nt-t"><b>${esc(x.head)}</b><small>${esc(x.text)}</small></span>`;
@@ -708,7 +708,7 @@ export function startApp(): void {
     drawer.hidden = false; drawerHtml = t === 'todo' ? todoBody() : ''; const bd = drawer.querySelector<HTMLElement>('.drawer-body'); if (bd) bd.scrollTop = y;
     renderTop();
   }
-  /** 0.12.0 오른쪽 서랍(할 일·보고·알림): 시간은 멈추지 않는다. 바깥을 누르거나 항목으로 이동하면 닫힌다 */
+  /** 1.0.0 오른쪽 서랍(할 일·보고·알림): 시간은 멈추지 않는다. 바깥을 누르거나 항목으로 이동하면 닫힌다 */
   const drawer = document.createElement('aside');
   drawer.id = 'drawer'; drawer.className = 'drawer'; drawer.hidden = true; drawer.setAttribute('aria-label', '할 일·보고·알림');
   document.body.append(drawer);
@@ -918,9 +918,9 @@ export function startApp(): void {
     return lookOf({ body: g.body, powertrain: g.powertrain, tier: e.tier, color: e.color, wheels: e.wheels, year: genYear(g), chassisSeed: g.chassisSeed, faceSeed: e.faceSeed });
   };
   /** 페이스리프트 얼굴 후보: 지금 얼굴·서로와 앞모습이 겹치지 않게 고른 시드 3개 */
-  /** 0.13.0 페이스리프트 얼굴 후보의 기준: 지금 모습, sim 후보 첫 시드에서 이어지는 시드 줄, 지금 얼굴은 피함 */
+  /** 1.0.0 페이스리프트 얼굴 후보의 기준: 지금 모습, sim 후보 첫 시드에서 이어지는 시드 줄, 지금 얼굴은 피함 */
   const liftCtx = (g: Generation): LP.LookCtx => { const cur = genLook(g), np = Q.nameplateOf(game!.state, g.id)!; return { base: cur, s0: Q.lookCandidates(game!.state, np.id, 'face', 'facelift')[0], avoid: [cur] }; };
-  /** 0.13.0 기획 외관 후보의 기준(풀체인지면 전작 차대·얼굴은 피함) */
+  /** 1.0.0 기획 외관 후보의 기준(풀체인지면 전작 차대·얼굴은 피함) */
   const planCtx = (d: Draft, kind: 'face' | 'chassis', base: CarLook): LP.LookCtx => {
     const s = game!.state, prev = d.nameplateId ? s.nameplates.find((x) => x.id === d.nameplateId)?.generations.at(-1) : undefined;
     const avoid = prev ? [kind === 'face' ? { ...base, faceSeed: currentEdition(prev).faceSeed } : { ...base, chassisSeed: prev.chassisSeed }] : [];
@@ -1001,7 +1001,7 @@ export function startApp(): void {
         <span class="g-num">${qty(g.sales.at(-1) ?? 0)}대</span><span class="g-num g-opt ${up >= 0 ? 'pos' : 'neg'}">${money(up, true)}</span><span class="g-num ${mp >= 0 ? 'pos' : 'neg'}">${money(mp, true)}</span>
         ${lifeMini(Q.lifeBar(s, g))}<span class="g-num g-opt">${score(g.reviewAvg)}${g.masterpiece ? '<small>명차</small>' : ''}</span><span class="g-st">${genBadges(g)}</span></button></div>`;
     };
-    // 0.12.0 같은 네모로 비교(2~4대)와 여러 대 한 번에 바꾸기(자동 가격·광고)
+    // 1.0.0 같은 네모로 비교(2~4대)와 여러 대 한 번에 바꾸기(자동 가격·광고)
     const n = cmpSel.size, every = n === L.length, bar = `<div class="cmp-bar"><span>고른 차 <small>표 왼쪽 네모로 고릅니다 · 비교는 2~4대</small></span><b>${n}대 고름</b>
       <button class="btn" data-act="${every ? 'cmpClear' : 'cmpAll'}">${every ? '고르기 해제' : `모두 고르기(${L.length}대)`}</button>${n && !every ? '<button class="btn" data-act="cmpClear">해제</button>' : ''}
       <button class="btn" data-act="cmpOpen" ${n >= 2 && n <= 4 ? '' : 'disabled'}>비교 보기</button><button class="btn ink" data-act="bulkOpen" ${n ? '' : 'disabled'}>한 번에 바꾸기</button></div>`;
@@ -1033,7 +1033,7 @@ export function startApp(): void {
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
   }
-  /** 0.12.0 고른 차 여러 대에 자동 가격 또는 광고를 한 번에(한 번에 한 종류: 되돌리기가 한 번에 되도록) */
+  /** 1.0.0 고른 차 여러 대에 자동 가격 또는 광고를 한 번에(한 번에 한 종류: 되돌리기가 한 번에 되도록) */
   let bulk: { kind: 'policy' | 'mk'; v: string } | null = null;
   const bulkPolicy = (v: string): PricePolicy | null => (v === 'best' ? { kind: 'best' } : v.startsWith('base:') ? { kind: 'base', pct: Number(v.slice(5)) } : null);
   /** 고른 차마다: 바꿀 수 있는지, 이유, 지금 값 → 바꿀 값 */
@@ -1222,8 +1222,8 @@ export function startApp(): void {
     const seeds = { nameplateId: npId, chassisSeed: Q.lookCandidates(s, npId, 'chassis')[0], faceSeed: Q.lookCandidates(s, npId, 'face', 'nextGen')[0], team: idleDev().map((x) => x.id) };
     if (n && prev) { // 0.8.0 전작 그대로: 고객층·동력·옵션에 개발 방향·예산·설계 기간까지(예전 저장의 세대는 기본값). 쓸 수 없게 된 값은 fixDraft가 맞춘다
       const e = currentEdition(prev), opts = new Set(Q.optionsAt(s).map((o) => o.id)), pl = prev.plan, req = new Set(Q.requiredOptions(s));
-      const d: Draft = { name: n.name, body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: e.options.filter((o) => opts.has(o) && !req.has(o)), direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: PAINT[(Math.max(0, PAINT.findIndex((p) => p[1] === e.color)) + 3) % PAINT.length][1], mode: 'sum', ...seeds }; // 0.13.0 풀체인지는 새 색을 제안
-      // 0.13.0 풀체인지 기본 모양: 전작과 충분히 다른 첫 후보(옆모습·얼굴)
+      const d: Draft = { name: n.name, body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: e.options.filter((o) => opts.has(o) && !req.has(o)), direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: PAINT[(Math.max(0, PAINT.findIndex((p) => p[1] === e.color)) + 3) % PAINT.length][1], mode: 'sum', ...seeds }; // 1.0.0 풀체인지는 새 색을 제안
+      // 1.0.0 풀체인지 기본 모양: 전작과 충분히 다른 첫 후보(옆모습·얼굴)
       const base = lookOf({ body: d.body, powertrain: d.powertrain, tier: d.tier, color: d.color, wheels: 1, year: yearOf(s.week), chassisSeed: d.chassisSeed, faceSeed: d.faceSeed });
       d.chassisSeed = LP.firstDistinct('chassis', planCtx(d, 'chassis', base)); d.faceSeed = LP.firstDistinct('face', planCtx(d, 'face', { ...base, chassisSeed: d.chassisSeed }));
       return d;
@@ -1236,7 +1236,7 @@ export function startApp(): void {
   /** 팀으로 고를 수 있는 직원: 프로젝트에 배치되지 않은 개발 직무(교육·휴식 중이면 그동안 일하지 않음) */
   const idleDev = () => { const lab = new Set(game!.state.staff.filter((x) => x.lab).map((x) => x.id)); return Q.staffInfo(game!.state).filter((x) => x.projectId === null && x.role !== 'sales' && !lab.has(x.id)); }; // 전담 연구원은 개발에 넣지 않는다
   /** 팀 고르기(기획 마지막 단계·페이스리프트). 고를 수 없게 된 직원은 빼고 돌려준다 */
-  // 0.12.0 고객층에 맞는 자동 배치: 선택(엔지니어 1명 연구에 남기기·다른 개발 중인 직원 포함)과 마지막 결과 요약(팀이 그대로일 때만 보인다)
+  // 1.0.0 고객층에 맞는 자동 배치: 선택(엔지니어 1명 연구에 남기기·다른 개발 중인 직원 포함)과 마지막 결과 요약(팀이 그대로일 때만 보인다)
   const teamOpt = { keepEng: true, busy: false };
   let autoNote: { act: string; team: string; html: string } | null = null;
   /** 고를 수 있는 직원: 쉬는 개발 직원 + (선택) 다른 개발 중인 직원. 전담 연구원은 넣지 않는다 */
@@ -1306,7 +1306,7 @@ export function startApp(): void {
       <p class="lbl" style="margin-top:14px">색상(출시 때 바꿀 수 있음)</p>${paints('pick', d.color)}`;
     }
     else if (planTab === 'look') {
-      // 0.13.0 후보 6개 + 다른 후보 보기 + 직접 고르기, 풀체인지는 전작과 나란히
+      // 1.0.0 후보 6개 + 다른 후보 보기 + 직접 고르기, 풀체인지는 전작과 나란히
       LP.lookKey(`plan:${d.nameplateId}:${d.body}`);
       const cmp = full && prev ? `<p class="lbl">${prev.number}세대 → 새 세대</p>${LP.compareHtml({ ...genLook(prev), color: look.color }, look, thumb, true, [`${prev.number}세대`, `${prev.number + 1}세대(고른 모양)`])}` : '';
       body = `${cmp}<p class="lbl"${cmp ? ' style="margin-top:14px"' : ''}>옆모습(차대) 후보</p>${LP.candHtml('chassis', planCtx(d, 'chassis', look), d.chassisSeed, thumb, 'pick')}
@@ -1470,7 +1470,7 @@ export function startApp(): void {
     LP.lookKey(`lift:${g.id}`);
     const dBefore = Q.grades(e.stats, yearOf(s.week + pv.designWeeks + pv.minTestWeeks)).D, pt = powertrainById(g.powertrain), ok = elig(pv.eligibility);
     const ovh = ovTop('페이스리프트 기획 · 지금 모습', `${esc(np.name)}<small>${editionName(g)}</small>`, specLine(g.body, g.powertrain, e.tier, g.segment)) + ovHint;
-    // 0.13.0 지금 얼굴과 고른 새 얼굴을 나란히(달라진 부품 한 줄) + 후보 6개·다른 후보 보기·직접 고르기
+    // 1.0.0 지금 얼굴과 고른 새 얼굴을 나란히(달라진 부품 한 줄) + 후보 6개·다른 후보 보기·직접 고르기
     const card1 = `<div class="card">${noteBox()}<p class="lbl">1. 새 얼굴 고르기</p><div class="faces lift-cmp">${LP.compareHtml(cur, { ...cur, faceSeed: L.faceSeed }, thumb, false, ['지금 얼굴', '새 얼굴'])}</div>
       ${LP.candHtml('face', liftCtx(g), L.faceSeed, thumb, 'liftPick', 'face')}
       <p class="note">차대(옆모습·차체 크기)는 그대로 두고 앞뒤 모습만 바꿉니다.</p></div>`;
@@ -1518,7 +1518,7 @@ export function startApp(): void {
     const chips = s.projects.length >= 2 || free ? `<div class="pchips"><span class="lbl">개발팀 ${s.projects.length}/${teams}</span>${s.projects.length >= 2 ? s.projects.map((x) => `<button class="pchip" data-act="devSel" data-id="${x.id}" aria-pressed="${x.id === p.id}"><b>${esc(x.name)}</b><small>${phaseText(x)}</small></button>`).join('') : ''}${free ? '<button class="btn ink" data-act="plan">+ 신차 기획</button>' : ''}</div>` : '';
     const pv = devGrades(p)!, minT = config.dev.minTestWeeks, ready = p.kind !== 'fix' && p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p, s);
     const phase = phaseText(p);
-    const pi = s.projects.indexOf(p), nav = s.projects.length >= 2 ? `<div class="ofc-nav" role="group" aria-label="프로젝트 넘기기"><button class="btn" data-act="devStep" data-v="-1" aria-label="이전 프로젝트">‹</button><span>${pi + 1}/${s.projects.length}</span><button class="btn" data-act="devStep" data-v="1" aria-label="다음 프로젝트">›</button></div>` : ''; // 0.12.0 동시 개발: 띠에서도 넘긴다
+    const pi = s.projects.indexOf(p), nav = s.projects.length >= 2 ? `<div class="ofc-nav" role="group" aria-label="프로젝트 넘기기"><button class="btn" data-act="devStep" data-v="-1" aria-label="이전 프로젝트">‹</button><span>${pi + 1}/${s.projects.length}</span><button class="btn" data-act="devStep" data-v="1" aria-label="다음 프로젝트">›</button></div>` : ''; // 1.0.0 동시 개발: 띠에서도 넘긴다
     const ovh = `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>${kindLabel(p)} · ${phase}</div><b>${esc(p.name)}</b><span class="ofc-s">${STATS.map((k) => `${STAT_NAME[k]} ${score(pv.grades[k])}`).join(' · ')} · 결함 약 ${num(p.defectEst)}개</span></div>${nav}<div class="ofc-g"><small>지금 등급${ib('term:지금 등급')}</small><b>${score(pv.avg)}</b></div></div>`;
     const pct = p.phase === 'design' ? (p.weeksDone / p.designWeeks) * 100 : 100;
     const log = devLog.get(p.id) ?? [];
@@ -1709,7 +1709,7 @@ export function startApp(): void {
     if (!e.length || top.length === e.length) return '모든 차급 고르게';
     return `${top.slice(0, 3).map(([b]) => bodyById(b).name).join('·')}${top.length > 3 ? ` 외 ${top.length - 3}` : ''} 강함`;
   };
-  let finRange: V.FinRange = '1y'; // 0.12.0 재무 기간(1년=달마다 / 5년 / 전체)
+  let finRange: V.FinRange = '1y'; // 1.0.0 재무 기간(1년=달마다 / 5년 / 전체)
   function finTab(): string {
     const s = game!.state, L = s.ledger.at(-1), limit = Q.loanLimit(s), rate = Q.loanRate(s), led = s.ledger;
     const hqUp = Q.hqInfo(s).current.upkeep, fUp = Q.factoryInfo(s).current.upkeep, y = yearOf(s.week), ys = led.filter((e) => e.year === y), ytd = ys.reduce((a, e) => a + e.profit, 0);
@@ -1922,7 +1922,7 @@ export function startApp(): void {
     let o: Record<string, unknown> = {}; try { o = JSON.parse(localStorage.getItem(LIN_KEY) ?? '{}') ?? {}; } catch { /* 저장 불가 */ }
     return { sort: LIN_SORTS.some(([k]) => k === o.sort) ? o.sort as typeof LIN_SORTS[number][0] : 'launch', filter: o.filter === 'on' || o.filter === 'off' ? o.filter : '' };
   })();
-  /** 0.12.0 명예의 전당: 우리 회사 역대 기록(누르면 그 차종 계보로). 불명예는 접어 둔다 */
+  /** 1.0.0 명예의 전당: 우리 회사 역대 기록(누르면 그 차종 계보로). 불명예는 접어 둔다 */
   function hallTab(): string {
     const s = game!.state, h = Q.hallOfFame(s);
     if (h.empty) return '<div class="card hall"><h3>명예의 전당</h3><p class="hint">아직 낸 차가 없습니다. 차를 출시하면 가장 많이 팔린 차, 가장 비싼 차 같은 기록이 여기 쌓입니다.</p></div>';
@@ -1963,7 +1963,7 @@ export function startApp(): void {
     const s = game!.state, gens = allGens(s);
     if (!gens.length) return `<div class="card"><div class="rec-co">${myLogo(36)}<b>${esc(s.companyName)}</b></div><h3>기록</h3><p class="hint">아직 낸 차가 없습니다. 차를 출시하면 그 순간의 사진과 평론, 판매 기록이 여기 남습니다.</p></div>`;
     const total = gens.reduce((a, g) => a + g.totalSold, 0);
-    // 0.12.0 정렬·필터(기기에 기억): 출시 순(첫 세대)·많이 팔린 순·이익(개발비 뺀) 큰 순·평론(가장 좋은 세대) 높은 순·판매 기간 긴 순
+    // 1.0.0 정렬·필터(기기에 기억): 출시 순(첫 세대)·많이 팔린 순·이익(개발비 뺀) 큰 순·평론(가장 좋은 세대) 높은 순·판매 기간 긴 순
     const onSale = (n: typeof s.nameplates[number]) => n.generations.some((g) => g.status !== 'discontinued');
     const val = (n: typeof s.nameplates[number]): number => linView.sort === 'sold' ? n.generations.reduce((a, g) => a + g.totalSold, 0) : linView.sort === 'profit' ? Q.nameplatePnL(s, n.id)?.net ?? 0
       : linView.sort === 'review' ? Math.max(...n.generations.map((g) => g.reviewAvg)) : linView.sort === 'long' ? n.generations.reduce((a, g) => a + g.sales.length, 0) : -n.generations[0].launchMonth;
@@ -2093,7 +2093,7 @@ export function startApp(): void {
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
     sheet.hidden = false; renderTop();
   }
-  // ---------- 0.12.0 설정 화면: 시간(자동 멈춤)·알림(종류별)·소리·저장(자동 저장)·화면(로고·디버그). 값은 예전과 같은 기기 저장소 키 ----------
+  // ---------- 1.0.0 설정 화면: 시간(자동 멈춤)·알림(종류별)·소리·저장(자동 저장)·화면(로고·디버그). 값은 예전과 같은 기기 저장소 키 ----------
   const SET_TABS = [['time', '시간'], ['note', '알림'], ['sound', '소리'], ['save', '저장'], ['view', '화면']] as const;
   type SetTab = typeof SET_TABS[number][0];
   let setTab: SetTab = 'time';
@@ -2244,8 +2244,8 @@ export function startApp(): void {
         if (run(game.command({ type: 'setPricePolicy', generationId: id, policy }))) { garagePrice.delete(id); toast(policy ? `자동 가격을 켰습니다. ${policyText(policy)}` : '자동 가격을 껐습니다. 가격은 직접 바꿀 때만 바뀝니다.'); render(); }
         return;
       }
-      case 'lookPage': LP.onPage(el.dataset.t as 'face' | 'chassis', v); render(); return; // 0.13.0 외관 후보 다음 묶음
-      case 'lookWant': { // 0.13.0 직접 고르기: 조건에 맞는 시드를 찾아 바로 반영
+      case 'lookPage': LP.onPage(el.dataset.t as 'face' | 'chassis', v); render(); return; // 1.0.0 외관 후보 다음 묶음
+      case 'lookWant': { // 1.0.0 직접 고르기: 조건에 맞는 시드를 찾아 바로 반영
         const t = el.dataset.t as 'face' | 'chassis', key = t === 'face' ? 'faceSeed' : 'chassisSeed';
         if (screen === 'lift' && lift) { const g = Q.generationById(game!.state, lift.genId); if (g) lift.faceSeed = LP.onWant('face', el.dataset.k!, v, liftCtx(g)); }
         else if (draft) { const base = lookOf({ body: draft.body, powertrain: draft.powertrain, tier: draft.tier, color: draft.color, wheels: 1, year: yearOf(game!.state.week), chassisSeed: draft.chassisSeed, faceSeed: draft.faceSeed }); draft[key] = LP.onWant(t, el.dataset.k!, v, planCtx(draft, t, base)); }
@@ -2592,7 +2592,7 @@ export function startApp(): void {
   document.addEventListener('pointercancel', () => { dragging = false; });
   document.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
-    if (t.dataset.topt === 'keepEng' || t.dataset.topt === 'busy') { teamOpt[t.dataset.topt] = t.checked; lastPanel = ''; render(); return; } // 0.12.0 자동 배치 선택
+    if (t.dataset.topt === 'keepEng' || t.dataset.topt === 'busy') { teamOpt[t.dataset.topt] = t.checked; lastPanel = ''; render(); return; } // 1.0.0 자동 배치 선택
     if (t.classList.contains('px-r')) render(); // 놓으면 패널 전체를 다시 그린다(예상 평론 등)
     else if (t.classList.contains('alloc-r') && game) { // 직접 배분: 놓을 때 적용. 합이 100%를 넘으면 sim의 이유를 그대로 보여 준다
       const r = game.command({ type: 'setAllocation', generationId: Number(t.dataset.gen), share: Number(t.value) / 100 });
@@ -2615,7 +2615,7 @@ export function startApp(): void {
     else if (sheet.hidden && !drawer.hidden) closeDrawer();
     else if (!sheet.hidden) { const close = sheetBody.querySelector<HTMLElement>('[data-act="closeReview"],[data-act="closeSheet"],[data-act="later"]'); close?.click(); }
   });
-  // 0.12.0 창 바깥(어두운 영역)을 누르면 닫기: 누르기 시작과 뗀 곳이 모두 바깥일 때만(창 안에서 시작한 끌기·스크롤은 닫지 않음).
+  // 1.0.0 창 바깥(어두운 영역)을 누르면 닫기: 누르기 시작과 뗀 곳이 모두 바깥일 때만(창 안에서 시작한 끌기·스크롤은 닫지 않음).
   // 확인 창은 [아니요](취소)와 같게. 결정할 사건 창·출시 공개 장면·내용이 있는 입력 칸이 있는 창은 닫지 않는다. 닫기는 창의 닫기 버튼을 누른 것과 같은 경로
   let downOn: EventTarget | null = null;
   document.addEventListener('pointerdown', (e) => { downOn = e.target; }, true);

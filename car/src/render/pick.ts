@@ -1,4 +1,4 @@
-// 외관 후보 고르기(0.13.0): 시드만으로 모양이 정해지는 구조(chassisSeed·faceSeed)는 그대로 두고,
+// 외관 후보 고르기(1.0.0): 시드만으로 모양이 정해지는 구조(chassisSeed·faceSeed)는 그대로 두고,
 // 기준 시드에서 결정론적으로 이어지는 시드 줄을 훑어 '서로 충분히 다른' 후보와 '조건에 맞는' 시드를 찾는다. 순수 함수(DOM·three 없음).
 import type { CarLook } from './look';
 import { BODY, ERA_FACE, eraOf, type GrilleKind, type IntakeKind, type LampKind, type TailKind, type WheelKind } from './shapes';

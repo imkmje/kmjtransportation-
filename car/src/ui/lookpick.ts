@@ -1,4 +1,4 @@
-// 외관 고르기 화면 조각(0.13.0): 후보 6개(2×3) + [다른 후보 보기] + 직접 고르기 + 전작과 나란히 비교.
+// 외관 고르기 화면 조각(1.0.0): 후보 6개(2×3) + [다른 후보 보기] + 직접 고르기 + 전작과 나란히 비교.
 // 모양은 여전히 시드 두 개(chassisSeed·faceSeed)로만 정해진다. 후보·탐색은 render/pick.ts(순수 함수).
 import './lookpick.css';
 import type { CarLook } from '../render/look';

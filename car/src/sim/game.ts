@@ -159,7 +159,7 @@ export class Game {
   /** 평판 변화: 감점(d < 0)은 난이도 감점 배수(repLossMult)를 곱한다(구제 금융 제외). 바뀐 만큼 이유와 함께 평판 이벤트를 쌓아 tick·명령 결과로 내보낸다(0.5.1) */
   private addRep(d: number, reason: string, scaleLoss = true): void {
     const s = this.state, before = s.reputation, dd = d < 0 && scaleLoss ? d * diffOf(s).repLossMult : d;
-    s.reputation = Math.max(config.reputation.min, before + dd); // 0.11.0: 위쪽 상한 없음
+    s.reputation = Math.max(config.reputation.min, before + dd); // 1.0.0: 위쪽 상한 없음
     const delta = s.reputation - before;
     if (delta) { const r = this.yearLog().rep; r[reason] = (r[reason] ?? 0) + delta; } // 연 보고서: 이유별 합
     if (Math.abs(delta) >= 0.05) this.repEvents.push({ kind: 'reputation', delta, reason, text: `평판 ${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)}(${reason})` });

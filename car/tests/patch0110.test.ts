@@ -14,7 +14,7 @@ import { monthOf, monthTime } from '../src/sim/time';
 import { config } from '../src/config';
 import { SPEC, launched, ok, toMonthEnd } from './util';
 
-describe('평판 상한 없앰(0.11.0)', () => {
+describe('평판 상한 없앰(1.0.0)', () => {
   it('평판은 100을 넘는다. 효과는 100까지 그대로, 100 → 200의 추가 효과가 0 → 100의 1/3', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.state.reputation = 98; ok(g.devCheat('reputation')); expect(g.state.reputation).toBe(108);
@@ -47,7 +47,7 @@ describe('평판 상한 없앰(0.11.0)', () => {
   });
 });
 
-describe('동력 시장 가산(0.11.0)', () => {
+describe('동력 시장 가산(1.0.0)', () => {
   it('하이브리드·전기차의 시장 기준가는 원가가 비싼 만큼 높고(전기는 해마다 줄어듦), 가솔린은 그대로', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     s.week = (2015 - 1970) * 48;
@@ -59,7 +59,7 @@ describe('동력 시장 가산(0.11.0)', () => {
   });
 });
 
-describe('페이스리프트 수명(0.11.0)', () => {
+describe('페이스리프트 수명(1.0.0)', () => {
   /** 1970년 첫 차(결함 0, 공장 2등급)를 160개월 팔며 liftAt개월에 페이스리프트. 경쟁 차를 고정(A 0.5)한 수요로 '정점의 25%'가 되는 달을 잰다(경쟁사 새 모델의 흔들림을 뺀다) */
   function run(seed: number, liftAt?: number, total = 160) {
     const g = Game.create({ seed, difficulty: 'normal' }); g.state.cash = 1e9; g.state.factory.level = 2;
@@ -80,7 +80,7 @@ describe('페이스리프트 수명(0.11.0)', () => {
     }
     return { dem, g, gen };
   }
-  it('출시 36개월 리프트가 수요가 정점의 25%가 되는 때를 24~36개월(중앙값) 늦춘다(0.11.0: 수명 되돌림 60% → 30%)', () => {
+  it('출시 36개월 리프트가 수요가 정점의 25%가 되는 때를 24~36개월(중앙값) 늦춘다(1.0.0: 수명 되돌림 60% → 30%)', () => {
     const ext = [1, 2, 3, 4].map((seed) => {
       const b = run(seed).dem, a = run(seed, 36).dem, peak = Math.max(...b.slice(0, 40)), q = (x: number[]) => x.findIndex((v, j) => j > 10 && v < peak * 0.25);
       return q(a) - q(b);
@@ -98,7 +98,7 @@ describe('페이스리프트 수명(0.11.0)', () => {
   });
 });
 
-describe('옵션 값(0.11.0, 사용자 보고 "옵션을 넣을수록 적자")', () => {
+describe('옵션 값(1.0.0, 사용자 보고 "옵션을 넣을수록 적자")', () => {
   it('차별 기준가 = 차급 기준가(동력·의무 장비 포함) + 의무 장비가 아닌 옵션의 값', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     s.week = (1996 - 1970) * 48; // 안전 규제(ABS·에어백) 시행 뒤
@@ -125,7 +125,7 @@ describe('옵션 값(0.11.0, 사용자 보고 "옵션을 넣을수록 적자")',
   });
 });
 
-describe('공장 6·7등급(0.11.0, 사용자 요청 "2만 대 넘게 팔린다")', () => {
+describe('공장 6·7등급(1.0.0, 사용자 요청 "2만 대 넘게 팔린다")', () => {
   it('등급마다 한도·라인이 늘고, 한도 1대당 월 유지비가 줄지 않으며, 공사 기간이 길어진다', () => {
     const L = config.factory.levels;
     expect(L.length).toBe(7);
