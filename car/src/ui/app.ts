@@ -323,7 +323,7 @@ export function startApp(): void {
     const band = document.querySelector<HTMLElement>('#ov .ofc');
     $('#office').style.setProperty('--office-top-inset', `${band ? Math.round(band.getBoundingClientRect().height) : 0}px`);
   }
-  addEventListener('resize', () => { if (officeOn) setOfficeInset(); placeToasts(); }); // 사무실의 크기 감시(ResizeObserver)보다 먼저 돈다
+  addEventListener('resize', () => { if (officeOn) setOfficeInset(); placeToasts(); if (game && title.hidden && (screen === 'garage' || screen === 'launch')) { lastPanel = ''; render(); } }); // 사무실의 크기 감시(ResizeObserver)보다 먼저 돈다
   function officeView(p?: Project): OfficeView {
     const s = game!.state;
     return {
@@ -722,7 +722,7 @@ export function startApp(): void {
     pd.setAttribute('aria-label', `결정 대기 ${pc}건 보기`);
     { const T = todos(), tb = $('#todobtn'); put($('#todo-n'), String(T.length)); tb.classList.toggle('urgent', T.some((x) => x.urgent)); tb.classList.toggle('none', !T.length);
       const un = execUnread(s); tb.classList.toggle('has-rep', un > 0); tb.setAttribute('aria-label', `할 일 ${T.length}건${un ? `, 읽지 않은 임원 보고 ${un}건` : ''} 보기`); }
-    { const sb = $('#skipbtn'); sb.classList.toggle('on', !!skip); sb.setAttribute('aria-pressed', String(!!skip)); put(sb, skip ? '진행 중 · 멈추기' : '다음 일까지'); }
+    { const sb = $('#skipbtn'); sb.classList.toggle('on', !!skip); sb.setAttribute('aria-pressed', String(!!skip)); put(sb, skip ? '<span class="sk-l">진행 중 · </span>멈추기' : '<span class="sk-l">다음 일까지</span><span class="sk-s" aria-hidden="true">다음 일</span>', true); sb.setAttribute('aria-label', skip ? '진행 중, 멈추기' : '다음 일까지'); } // 0.9.0 좁은 상단 바에서는 짧게
     const tab: Tab = deciding() ? 'dev' : (screen as Tab);
     for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
     { const dv = document.querySelector<HTMLElement>('#tabs button[data-tab="dev"]')!, on = !!(draft || lift); dv.classList.toggle('has-draft', on); if (on) dv.title = '기획 중인 차가 있습니다'; else dv.removeAttribute('title'); }
@@ -817,6 +817,8 @@ export function startApp(): void {
   const foldOpen = new Set<string>();
   const fold = (k: string, label: string, sum: string, body: string) => body ? `<details class="fold" data-fold="${k}"${foldOpen.has(k) ? ' open' : ''}><summary><p class="lbl">${label}</p><span>${sum}</span></summary>${body}</details>` : '';
   document.addEventListener('toggle', (e) => { const d = e.target as HTMLElement; if (d.matches?.('details.fold')) { if ((d as HTMLDetailsElement).open) foldOpen.add(d.dataset.fold!); else foldOpen.delete(d.dataset.fold!); lastPanel = ''; } }, true);
+  /** 무대 아래에 카드 하나를 더 둘 만큼 키 큰 가로 화면인가(아이패드 1366×1024) */
+  const tallStage = () => innerWidth >= 900 && innerHeight >= 900;
   const unitSmall = (v: string) => v.replace(/(만원|억)$/, '<span>$1</span>');
   const paints = (act: string, cur: string) => `<div class="paints">${PAINT.map(([n, c]) => `<button class="paint" data-act="${act}" data-k="color" data-v="${c}" aria-pressed="${cur === c}"><i style="background:${c}"></i>${n}</button>`).join('')}</div>`;
   const nameOf = (g: Generation) => Q.nameplateOf(game!.state, g.id)?.name ?? '';
@@ -978,7 +980,9 @@ export function startApp(): void {
     const F = Q.salesFactors(s, g.id), P = Q.modelPnL(s, g.id);
     const fac = F ? fold('fac', '판매 요인', esc(F.summary ?? '판매를 크게 깎거나 올리는 요인이 없습니다'), I.factorsCard(s, g.id)) : '';
     const pnl = P ? fold('pnl', '이 차의 손익', `개발비 뺀 이익 <b class="${P.net >= 0 ? 'pos' : 'neg'}">${money(P.net, true)}</b>${P.recovered ? ' · 회수함' : ''}`, I.pnlCard(s, g.id)) : '';
-    return { ov: ovh, panel: card2 ? pcols(card2 + fac, card1 + pnl + card3 + devCard + planCard) : card1 + fac + pnl + card3 + devCard + planCard, look: genLook(g), keys };
+    // 키 큰 화면(1366×1024 등): 성적 카드(판매 그래프·조언)를 무대 아래로 옮겨 무대를 차에 맞는 비율로 줄이고 오른쪽 칸 스크롤을 줄인다
+    const t = tallStage(), c1 = t ? '' : card1;
+    return { ov: ovh, panel: card2 ? pcols(card2 + fac, c1 + pnl + card3 + devCard + planCard) : c1 + fac + pnl + card3 + devCard + planCard, look: genLook(g), keys: keys + (t ? `<div class="key-more">${card1}</div>` : '') };
   }
 
   // ----- 신차 기획 첫 화면(8.7) -----
@@ -1414,7 +1418,8 @@ export function startApp(): void {
       ${prev && prev.status === 'onSale' ? `<div class="warnbox prev-end" style="margin-top:10px">출시하면 ${prev.number}세대는 이번 달 말에 단종됩니다(재고 처분 1개월).</div>` : ''}
       ${free ? '' : `<div class="badbox" style="margin-top:10px">공장의 생산 라인 ${Q.linesOf(s)}개를 모두 쓰고 있습니다. 판매 중인 차를 단종하면 그달 말부터 라인이 빕니다. 공장을 증설하면 라인이 늘어납니다.</div><div class="row line-fix" style="margin-top:8px">${weakest() ? `<button class="btn" data-act="goWeak">가장 안 팔리는 「${esc(nameOf(weakest()!))}」 보기 · 단종</button>` : ''}<button class="btn" data-act="goCo" data-v="factory">공장 증설 보기</button></div>`}
       <div class="row" style="margin-top:12px"><button class="btn" data-act="devHome">← 개발 화면으로</button><button class="go" data-act="doLaunch" ${free && !reg ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div></div>`;
-    return { ov: ovh, panel: pcols(card1, card4 + card0 + card3 + card2), look, keys }; // 0.9.0 왼쪽: 가격, 오른쪽 위: 출시 요약·[출시하기](태블릿 가로에서 스크롤 없이), 그 아래 점검·평론·색
+    const t = tallStage(); // 키 큰 화면: 예상 평론 카드를 무대 아래로
+    return { ov: ovh, panel: pcols(card1, card4 + card0 + (t ? '' : card3) + card2), look, keys: keys + (t && card3 ? `<div class="key-more">${card3}</div>` : '') }; // 0.9.0 왼쪽: 가격, 오른쪽 위: 출시 요약·[출시하기](태블릿 가로에서 스크롤 없이), 그 아래 점검·평론·색
   }
 
   /** 판매 중인 차 가운데 지난달 판매가 가장 적은 차(라인 막힘 해결 바로 가기) */

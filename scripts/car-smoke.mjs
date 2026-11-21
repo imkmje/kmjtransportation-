@@ -88,7 +88,7 @@ await shot('garage-empty');
 await act('plan', '');
 check('차종이 없으면 [신차 기획]이 첫 화면 없이 바로 새 차종 기획으로', (await G(() => window.__car.screen)) === 'plan' && (await page.locator('.choice').count()) === 0);
 check('첫 게임의 첫 차: 단계별 기획이 기본, [한 화면 요약으로 보기] 버튼', (await G(() => window.__car.draft.mode)) === 'step' && (await G(() => window.__car.planTab)) === 'body' && (await page.locator('[data-act="planMode"][data-v="sum"]').count()) === 1);
-check('기획 화면: 결정 중 자동 멈춤', (await G(() => window.__car.screen)) === 'plan' && (await G(() => window.__car.held())) && (await page.locator('#held').isVisible()));
+check('기획 화면: 결정 중 자동 멈춤', (await G(() => window.__car.screen)) === 'plan' && (await G(() => window.__car.held())) && ((await page.locator('#held').isVisible()) || (await page.locator('#speeds.held').count()) === 1)); // 0.9.0 1400px 이하는 빠르기 테두리로 표시
 check('기획 첫 단계: [이전] 없음, [다음]만 있고 [개발 시작] 없음', (await page.locator('#panel [data-act="ptab"]:not([role])').allInnerTexts()).join() === '다음 →' && (await page.locator('[data-act="startDev"]').count()) === 0);
 check('새 차종 기획 단계에 "모양" 단계가 차체 다음', (await page.locator('#panel [role="tab"]').allInnerTexts()).map((t) => t.replace(/\s+/g, '')).slice(0, 3).join() === '1차체,2모양,3고객층');
 await page.fill('#pname', '미라지');
@@ -193,7 +193,7 @@ check('출시: 판매 중 차 1대, 가격 기준가·코발트·큰 휠', await
 await shot('review');
 await act('closeReview');
 await page.waitForTimeout(300);
-check('차고: 이름 아래 줄과 카드에 출시 연월', /^\d{4}년 \d+월 출시 · /.test(await page.locator('#ov .spec.when').innerText()) && /\d{4}년 \d+월 출시/.test(await page.locator('#panel .launch-when').innerText()), await page.locator('#ov .spec.when').innerText());
+check('차고: 이름 아래 줄과 카드에 출시 연월', /^\d{4}년 \d+월 출시 · /.test(await page.locator('#ov .spec.when').innerText()) && /\d{4}년 \d+월 출시/.test(await page.locator('#keys .launch-when, #panel .launch-when').innerText()), await page.locator('#ov .spec.when').innerText());
 check('출시 순간 3D 사진이 저장 데이터에 들어감', await G(() => Object.values(window.__car.ui.photos).some((x) => x.startsWith('data:image/jpeg'))));
 
 // ---- 판매 ----
@@ -202,7 +202,7 @@ const gen = await G(() => window.__car.game.state.nameplates[0].generations[0]);
 check('기준가로 출시: 석 달 안에 판매 발생', gen.totalSold > 0 && gen.sales.length >= 2, `누적 ${gen.totalSold}대, 달별 ${gen.sales.join(',')}`);
 await tick(4);
 const gtext = `${await page.locator('#keys').innerText()}\n${await page.locator('#panel').innerText()}`; // 0.9.0 핵심 수치는 무대 아래 띠
-check('차고 카드: 판매·누적·대당 이익·평론·수명·조언·단종 버튼', ['지난달 판매', '누적 판매', '대당 이익', '평론 평균', '수명'].every((t) => gtext.includes(t)) && (await page.locator('#panel .advice').count()) === 1 && (await page.locator('[data-act="discontinue"]').count()) === 1);
+check('차고 카드: 판매·누적·대당 이익·평론·수명·조언·단종 버튼', ['지난달 판매', '누적 판매', '대당 이익', '평론 평균', '수명'].every((t) => gtext.includes(t)) && (await page.locator('#keys .advice, #panel .advice').count()) === 1 && (await page.locator('[data-act="discontinue"]').count()) === 1);
 check('차고: 출시 직후 [페이스리프트][풀체인지]는 흐리게 + 이유·남은 개월', (await page.locator('[data-act="goLift"]').isDisabled()) && (await page.locator('[data-act="goFull"]').isDisabled()) && /페이스리프트: 출시 후 18개월이 지나야 합니다\. 앞으로 \d+개월/.test(gtext) && /풀체인지: 출시 후 36개월이 지나야 합니다\. 앞으로 \d+개월/.test(gtext));
 await page.$eval('#gprice', (el) => { el.value = '1500'; el.dispatchEvent(new Event('input', { bubbles: true })); });
 await act('setPrice');
@@ -833,7 +833,7 @@ check('선택: 대기 0, 결과 알림, 뉴스에 결과', (await S4(() => windo
 // 진행 중 사건 칩(1차 오일쇼크)
 await S4(() => { const c = window.__car; let i = 0; while (i++ < 600 && !document.getElementById('evchip').textContent.includes('오일쇼크')) c.tick(1); c.render(); });
 if (await page.locator('#sheet').isVisible()) await page.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click();
-check('상단바 사건 칩: 사건 이름(남은 기간·전체 문구는 title)', (await page.locator('#evchip').innerText()).startsWith('1차 오일쇼크') && (await page.locator('#evchip').getAttribute('title')).startsWith('1차 오일쇼크 · '), `${await page.locator('#evchip').innerText()} / ${await page.locator('#evchip').getAttribute('title')}`);
+check('상단바 사건 칩: 사건 이름(0.9.0: 1400px 이하는 "사건 · N개월"로 줄이고 이름·전체 문구는 title)', ((await page.locator('#evchip').innerText()).startsWith('1차 오일쇼크') || (await G(() => getComputedStyle(document.getElementById('evchip'), '::before').content)) === '"사건"') && (await page.locator('#evchip .ev-n').textContent()).startsWith('1차 오일쇼크') && (await page.locator('#evchip').getAttribute('title')).startsWith('1차 오일쇼크 · '), `${await page.locator('#evchip').innerText()} / ${await page.locator('#evchip').getAttribute('title')}`);
 await page.click('#evchip');
 check('사건 창: 효과(쉬운 말)·충전소 보급률·필수 옵션', (await page.locator('.events-sheet').innerText()).includes('연비') && (await page.locator('.events-sheet').innerText()).includes('충전 인프라') && (await page.locator('.events-sheet').innerText()).includes('꼭 필요한 옵션'));
 await page.waitForTimeout(600); await shot('events');
@@ -1450,6 +1450,23 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const fit = await GG(() => { const p = document.getElementById('panel').getBoundingClientRect(), a = document.querySelector('#panel .price-card').getBoundingClientRect(), b = document.querySelector('#panel .perf-card').getBoundingClientRect(), top = document.getElementById('top'); return { ok: a.top >= p.top && b.top >= p.top && a.top + 160 <= p.bottom && b.top + 160 <= p.bottom && document.getElementById('panel').scrollTop === 0, topOver: top.scrollWidth > top.clientWidth + 1 }; });
   check('0.9.0 1024×768 차 상세: 패널 두 칸에 가격 카드와 성적 카드가 스크롤 없이 함께, 상단 바 넘침 없음', fit.ok && !fit.topOver, JSON.stringify(fit));
   await gshot('garage-detail-1024x768');
+  // 상단 바 최악 조건(사건 칩·결정 대기·손익 칩·결정 중 표시를 모두 띄움): 각 요소가 화면 안, 서로 겹치지 않고 잘리지 않음
+  const topWorst = () => GG(() => (() => {
+  const s = window.__car.game.state; window.__car.setSpeed(0);
+  if (!s.ledger.length) s.ledger.push({ month: 0, year: 1970, monthOfYear: 1, revenue: 0, cogs: 0, salaries: 0, upkeep: 0, dev: 0, marketing: 0, interest: 0, recall: 0, oneOff: 0, profit: -123456, cash: 0, sold: 0 });
+  window.__car.render();
+  const ch = document.getElementById('evchip'); ch.hidden = false; ch.dataset.v = 'x'; ch.innerHTML = '<span class="ev-n">포티 소형 세단 히트작</span><span class="ev-m"> · 13개월 +1</span>';
+  const pd = document.getElementById('pend'); pd.hidden = false; pd.dataset.v = 'x'; pd.innerHTML = '<svg viewBox="0 0 24 24"></svg><b>2</b><span class="pd-t">결정 대기</span>';
+  document.getElementById('held').hidden = false;
+  const q = ['#mylogo', '#co', '#date', '#evchip', '#pend', '#todobtn', '#top .pill:has(#cash)', '#plchip', '#top .pill:has(#rep)', '#speeds', '#skipbtn', '#held', '#mutebtn', '#menubtn'];
+  const R = q.map((x) => { const e = document.querySelector(x); if (!e || e.hidden || getComputedStyle(e).display === 'none' || !e.getBoundingClientRect().width) return null; const r = e.getBoundingClientRect(); return { q: x, l: r.left, r: r.right, clip: getComputedStyle(e).overflow !== 'visible' && e.scrollWidth > e.clientWidth + 1 && x !== '#evchip' && x !== '#co' }; }).filter(Boolean);
+  const bad = [];
+  R.forEach((a, i) => { if (a.l < 0 || a.r > innerWidth) bad.push(`${a.q} 화면 밖`); if (a.clip) bad.push(`${a.q} 잘림`); const b = R[i + 1]; if (b && a.r > b.l + 0.5) bad.push(`${a.q}·${b.q} 겹침`); });
+  return { bad, h: document.getElementById('top').getBoundingClientRect().height };
+})());
+  const tw = {}; for (const [w, h] of [[1024, 768], [1180, 820], [1280, 800], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); tw[w] = await topWorst(); if (w === 1024) await gshot('topbar-worst-1024x768'); }
+  check('0.9.0 상단 바 최악 조건(1024·1180·1280·1366): 로고~메뉴가 화면 안, 겹침·잘림 없음, 한 줄', Object.values(tw).every((x) => !x.bad.length && x.h < 80), JSON.stringify(tw));
+  await gp.setViewportSize({ width: 1024, height: 768 }); await GG(() => window.__car.render());
   check('0.9.0 1024×768: 본문·패널 가로 넘침 없음(표·상세·재무·연구)', await (async () => { const r = []; for (const t of ['garage', 'fin', 'research']) { await gp.click(`#tabs button[data-tab="${t}"]`); await gp.waitForTimeout(100); r.push(await GG(() => { const p = document.getElementById('panel'); return Math.max(document.documentElement.scrollWidth - innerWidth, p.scrollWidth - p.clientWidth); })); } return r.every((x) => x <= 0); })());
   await gctx.close(); }
 

@@ -917,3 +917,27 @@ details.fold[open]>summary{border-radius:16px 16px 0 0;border-bottom:0}
 details.fold[open]>.card{border-radius:0 0 16px 16px;border-top:0;padding-top:4px}
 details.fold[open]>.card>.lbl:first-child{display:none}
 details.fold>summary span{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35}
+/* 0.9.0 상단 바 1024~1180(최악: 사건 칩·결정 대기·손익 칩이 모두 뜰 때): 빠르기는 ▶ 아이콘, '다음 일까지'는 '다음 일', 사건 칩은 '사건 · N개월'. 로고·할 일·현금·손익·빠르기·메뉴는 줄어들지 않는다 */
+.sp-i,.sk-s{display:none}
+#top>*{flex-shrink:0}#top>.sp{flex-shrink:1}#top .brand{flex-shrink:1}#top .pill.evchip{flex-shrink:1;min-width:0}
+@media (min-width:900px) and (max-width:1180px){
+  #top{padding-left:12px;padding-right:12px;gap:5px}
+  .sp-t,.sk-l{display:none}.sp-i,.sk-s{display:inline}
+  .sp-i{font-size:10px;letter-spacing:-2px}
+  .speeds button{min-width:44px;padding:0 6px}
+  .skipbtn{padding:0 10px}
+  .ev-n{display:none}.pill.evchip::before{content:"사건";white-space:nowrap}
+  .ev-m{overflow:hidden;text-overflow:ellipsis}
+  #top .brand{flex:none}
+  .pill{padding:7px 9px}
+  #menubtn{padding:0 12px}
+}
+/* 키 큰 화면: 무대 아래 칸에 성적(또는 예상 평론) 카드를 더 둔다 */
+#keys .key-more{grid-column:1/-1;min-width:0}
+#keys .key-more>.card{padding:12px 16px}
+#keys .key-more .mini{height:56px}
+#main.haskeys>#keys{max-height:52vh;overflow:auto}
+/* 1181~1400(1366 포함) 최악 조건: 로고는 줄지 않고, 회사 이름·사건 칩이 먼저 줄어든다. '결정 중' 글자는 빠르기 테두리로 대신 */
+@media (min-width:900px) and (max-width:1400px){#top .brand{flex:none}.brand span:last-child{max-width:130px}#held,.pd-t,.td-t{display:none}.ev-n{max-width:120px}}
+@media (min-width:1181px) and (max-width:1300px){.sk-l{display:none}.sk-s{display:inline}.speeds button{padding:0 6px}}
+@media (min-width:900px) and (max-width:1400px){.ev-n{display:none}.pill.evchip::before{content:"사건";white-space:nowrap}} /* 사건 이름은 칩을 눌러 보는 창·title에 */
