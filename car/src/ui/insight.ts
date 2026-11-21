@@ -46,8 +46,8 @@ export function factorsCard(s: CarState, generationId: number): string {
   if (!f) return '';
   const show = f.factors.filter((x) => Math.abs(x.impact) >= config.factors.minShow), mx = Math.max(0.01, ...show.map((x) => Math.min(1, Math.abs(x.impact))));
   const row = (x: Q.SalesFactor) => { const w = (Math.min(1, Math.abs(x.impact)) / mx) * 50, neg = x.impact < 0;
-    return `<div class="fac-row" data-key="${x.key}" style="margin-top:8px"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(x.name)}</b><b style="color:${neg ? 'var(--neg)' : '#1f5fd1'}">${sign(x.impact)}${Math.round(Math.abs(x.impact) * 100)}%</b></div>
-      <div style="position:relative;height:8px;background:var(--soft);border-radius:4px;margin:4px 0"><i style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--line)"></i><u style="position:absolute;top:0;bottom:0;${neg ? `right:50%` : 'left:50%'};width:${w.toFixed(1)}%;background:${neg ? 'var(--neg)' : '#1f5fd1'};border-radius:4px"></u></div>
+    return `<div class="fac-row ${neg ? 'down' : 'up'}" data-key="${x.key}"><div class="fac-h"><b>${esc(x.name)}</b><b class="fac-v">${sign(x.impact)}${Math.round(Math.abs(x.impact) * 100)}%</b></div>
+      <div class="fac-bar"><i></i><u style="width:${w.toFixed(1)}%"></u></div>
       <small class="hint">${esc(x.detail)}${x.fix ? ` · ${esc(x.fix)}` : ''}</small></div>`; };
   return `<div class="card factors-card"><p class="lbl">판매 요인 <small class="hint">이번 달 수요 약 ${num(f.demand)}대 · 기준 상태 대비</small></p>
     ${f.summary ? `<div class="warnbox fac-sum" style="margin-bottom:6px">${esc(f.summary)}</div>` : ''}

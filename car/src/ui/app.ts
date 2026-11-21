@@ -813,6 +813,10 @@ export function startApp(): void {
   const ovHint = '<div class="ov bl">끌어서 돌려 보기</div>';
   /** 0.9.0 넓어진 패널의 두 칸(좁으면 한 칸으로 쌓인다) */
   const pcols = (a: string, b: string) => `<div class="pcols"><div class="pcol">${a}</div><div class="pcol">${b}</div></div>`;
+  /** 접어 두는 카드(차고 상세의 판매 요인·손익). 펼친 것은 다시 그려도 펼친 채(foldOpen) */
+  const foldOpen = new Set<string>();
+  const fold = (k: string, label: string, sum: string, body: string) => body ? `<details class="fold" data-fold="${k}"${foldOpen.has(k) ? ' open' : ''}><summary><p class="lbl">${label}</p><span>${sum}</span></summary>${body}</details>` : '';
+  document.addEventListener('toggle', (e) => { const d = e.target as HTMLElement; if (d.matches?.('details.fold')) { if ((d as HTMLDetailsElement).open) foldOpen.add(d.dataset.fold!); else foldOpen.delete(d.dataset.fold!); lastPanel = ''; } }, true);
   const unitSmall = (v: string) => v.replace(/(만원|억)$/, '<span>$1</span>');
   const paints = (act: string, cur: string) => `<div class="paints">${PAINT.map(([n, c]) => `<button class="paint" data-act="${act}" data-k="color" data-v="${c}" aria-pressed="${cur === c}"><i style="background:${c}"></i>${n}</button>`).join('')}</div>`;
   const nameOf = (g: Generation) => Q.nameplateOf(game!.state, g.id)?.name ?? '';
@@ -874,7 +878,10 @@ export function startApp(): void {
   function genBadges(g: Generation): string {
     const s = game!.state, T = new Map(todos().map((t) => [t.key, t])), np = Q.nameplateOf(s, g.id), b: [string, string][] = [];
     if (g.status === 'ending') b.push(['이번 달 단종', 'bad']);
-    if (s.projects.some((p) => p.targetId === (p.kind === 'fullchange' ? np?.id : g.id) && p.kind !== 'new')) b.push(['개발 중', 'dev']);
+    if (s.projects.some((p) => p.targetId === (p.kind === 'fullchange' ? np?.id : g.id) && (p.kind === 'facelift' || p.kind === 'fullchange'))) b.push(['개발 중', 'dev']);
+    if (s.projects.some((p) => p.kind === 'fix' && p.targetId === g.id)) b.push(['개선 중', 'dev']);
+    if (g.clearance) b.push(['가격 인하 판매 중', 'warn']);
+    else { const R = Q.rescueOptions(s, g.id); if (R && R.target === null && (R.fix.ok || R.clearance.ok)) b.push(['수습 가능', 'bad']); } // 0.10.0 혹평·부진 차의 긴급 개선·가격 인하 판매
     if (T.has(`retrofit:${g.id}`)) b.push(['의무 장비 필요', 'bad']);
     if (T.has(`capacity:${g.id}`)) b.push(['생산 한도', 'warn']);
     if (T.has(`facelift:${g.id}`)) b.push(['페이스리프트 적기', 'on']);
@@ -967,9 +974,11 @@ export function startApp(): void {
       ${I.rescueBlock(s, g.id)}
       <hr><button class="btn danger" data-act="discontinue" data-id="${g.id}" ${ending ? 'disabled' : ''} style="width:100%">${ending ? '이번 달 말에 단종됩니다' : '단종하기'}</button></div>`;
     const planCard = s.projects.length < Q.devTeams(s) ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
-    // 0.9.0 넓어진 패널은 두 칸: 왼쪽 가격 카드, 오른쪽 성적·다음 단계(태블릿 가로에서 가격과 성적이 스크롤 없이 함께 보이게)
-    const right = card1 + I.factorsCard(s, g.id) + I.pnlCard(s, g.id) + card3 + devCard + planCard;
-    return { ov: ovh, panel: card2 ? pcols(card2, right) : right, look: genLook(g), keys };
+    // 0.9.0 넓어진 패널은 두 칸: 왼쪽 가격 카드 + 판매 요인(접힘), 오른쪽 성적 + 이 차의 손익(접힘)·다음 단계(태블릿 가로에서 가격과 성적이 스크롤 없이 함께 보이게)
+    const F = Q.salesFactors(s, g.id), P = Q.modelPnL(s, g.id);
+    const fac = F ? fold('fac', '판매 요인', esc(F.summary ?? '판매를 크게 깎거나 올리는 요인이 없습니다'), I.factorsCard(s, g.id)) : '';
+    const pnl = P ? fold('pnl', '이 차의 손익', `개발비 뺀 이익 <b class="${P.net >= 0 ? 'pos' : 'neg'}">${money(P.net, true)}</b>${P.recovered ? ' · 회수함' : ''}`, I.pnlCard(s, g.id)) : '';
+    return { ov: ovh, panel: card2 ? pcols(card2 + fac, card1 + pnl + card3 + devCard + planCard) : card1 + fac + pnl + card3 + devCard + planCard, look: genLook(g), keys };
   }
 
   // ----- 신차 기획 첫 화면(8.7) -----
@@ -1382,8 +1391,8 @@ export function startApp(): void {
     // 혹평 예고: 예상 평점이 혹평 기준 + 0.5 이하면(실제 평론은 ±0.7 안팎) "출시해도 좋습니다" 대신 붉은 경고
     const flopRisk = !!ex && ex.avg <= config.critics.flop + 0.5, rd = ex ? repDelta(ex.avg) : 0;
     // 0.9.0 출시 전 점검 수치는 무대 아래 띠(결함·리콜 위험·평판 변화·예상 평점), 패널에는 경고 글만
-    const keys = `<div class="key"><small>남은 결함${ib('term:결함')}</small><b>약 ${num(p.defectEst)}<span>개</span></b></div><div class="key"><small>예상 리콜 위험${ib('term:리콜')}</small><b class="${adv.level === 'many' ? 'neg' : ''}">연 ${Math.round(adv.recallYear * 100)}<span>%</span></b></div>
-      ${ex ? `<div class="key"><small>예상 평판 변화${ib('term:평판')}</small><b class="${rd < 0 ? 'neg' : rd > 0 ? 'pos' : ''}">${repWord(rd).replace('평판 ', '')}</b></div><div class="key key-rv">${ring(ex.avg)}<div><small>예상 평점${ib('term:예상 평점')}</small><b>${score(ex.avg)}</b></div></div>` : ''}`;
+    const keys = `<div class="key"><small>남은 결함${ib('term:결함')}</small><b>약 ${num(p.defectEst)}<span>개</span></b></div><div class="key"><small>리콜 위험(연)${ib('term:리콜')}</small><b class="${adv.level === 'many' ? 'neg' : ''}">연 ${Math.round(adv.recallYear * 100)}<span>%</span></b></div>
+      ${ex ? `<div class="key"><small>평판 변화${ib('term:평판')}</small><b class="${rd < 0 ? 'neg' : rd > 0 ? 'pos' : ''}">${repWord(rd).replace('평판 ', '')}</b></div><div class="key key-rv">${ring(ex.avg)}<div><small>예상 평점${ib('term:예상 평점')}</small><b>${score(ex.avg)}</b></div></div>` : ''}`;
     const card0 = `<div class="card launch-check"><p class="lbl">출시 전 점검</p>
       ${flopRisk ? `<div class="badbox flop-risk" style="margin-top:10px">예상 평점 ${score(ex!.avg)}점으로 혹평(${config.critics.flop}점 이하) 위험이 큽니다. 혹평이면 평판이 ${(Math.round(-config.critics.flopRep * diffOf(s).repLossMult * 10) / 10).toLocaleString('ko-KR')} 떨어지고 판매도 부진합니다. 가격을 낮추거나 개발을 더 하는 편이 낫습니다.</div>${adv.level === 'ok' ? '' : defectBox(adv)}` : defectBox(adv)}${reg ? `<div class="badbox reg-why" style="margin-top:10px">${esc(reg)}</div>` : ''}</div>`;
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림

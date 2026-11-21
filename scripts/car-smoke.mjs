@@ -1345,6 +1345,9 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     window.__car.tick(36); const p = g.state.projects[0]; g.command({ type: 'launch', projectId: p.id, price: 1300, marketing: 1, color: '#c8102e', wheels: 0 });
     window.__car.tick(24); });
   await iclose(); await toGarage(ip);
+  check('0.9.0 차고 상세: 판매 요인(왼쪽 칸)·이 차의 손익(오른쪽 칸)은 접혀 있고 한 줄 요약', (await ip.locator('.pcol:first-child details.fold[data-fold="fac"]:not([open]) > summary').count()) === 1 && (await ip.locator('.pcol:nth-child(2) details.fold[data-fold="pnl"]:not([open]) > summary').innerText()).includes('개발비 뺀 이익'));
+  await ip.click('details.fold[data-fold="pnl"] > summary'); await ip.click('details.fold[data-fold="fac"] > summary'); await IG(() => window.__car.tick(1));
+  check('0.9.0 접힘 카드: 펼친 상태가 다음 주에도 유지', (await ip.locator('details.fold[open]').count()) === 2);
   check('0.10.0 차고: 이 차의 손익 카드(누적 매출·개발비·월별 이익)', (await ip.locator('#panel .pnl-card').count()) === 1 && (await ip.locator('#panel .pnl-card').innerText()).includes('개발비 합') && (await ip.locator('#panel .pnl-card svg').count()) === 1);
   const facN = await ip.locator('#panel .factors-card .fac-row').count();
   check('0.10.0 차고: 판매 요인 카드(막대, 가격 요인 포함)', facN >= 1 && (await ip.locator('#panel .factors-card .fac-row[data-key="price"]').count()) === 1, `${facN}줄`);
@@ -1400,6 +1403,10 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await gp.click('#tabs button[data-tab="garage"]');
   const rows = await gp.locator('.gtable [data-act="gopen"]').count(), head = (await gp.locator('.gtable .gtr.head').innerText()).replace(/\s+/g, ' ');
   check('0.9.0 차고 첫 화면: 전 차종 표 3줄(썸네일·차종·출시·가격·판매·대당 이익·월 이익·수명·평론·상태), 개발 중·단종 구역', rows === 3 && ['차종', '출시', '가격', '지난달 판매', '대당 이익', '월 이익', '수명', '평론', '상태'].every((t) => head.includes(t)) && (await gp.locator('.gtable .g-th img, .gtable .g-th svg').count()) === 3 && (await gp.locator('.gsec [data-act="devSel"]').count()) === 1 && (await gp.locator('details.gone .gsr').count()) === 1 && !(await gp.locator('#stage').isVisible()), `${rows} ${head}`);
+  check('0.9.0 표 상태 배지: 수습 가능(긴급 개선·가격 인하 판매 조건)과 개수가 같음', await GG(() => { const c = window.__car, s = c.game.state, want = s.nameplates.flatMap((n) => n.generations).filter((g) => g.status === 'onSale' && !g.clearance && (() => { const R = c.Q.rescueOptions(s, g.id); return R && R.target === null && (R.fix.ok || R.clearance.ok); })()).length; return document.querySelectorAll('.gtable .gb').length >= 0 && [...document.querySelectorAll('.gtable .gb')].filter((b) => b.textContent === '수습 가능').length === want; }));
+  await GG(() => { const s = window.__car.game.state, g = s.nameplates[0].generations[0]; g.clearance = { startMonth: 0, lastMonth: 9999, price: g.editions.at(-1).price }; window.__car.render(); });
+  check('0.9.0 표 상태 배지: 가격 인하 판매 중', (await gp.locator('.gtable .gb', { hasText: '가격 인하 판매 중' }).count()) === 1);
+  await GG(() => { delete window.__car.game.state.nameplates[0].generations[0].clearance; window.__car.render(); });
   await gshot('garage-table-1366x1024');
   await gp.click('.gtable [data-act="gSort"][data-v="profit"]');
   const pr = await GG(() => [...document.querySelectorAll('.gtable [data-act="gopen"]')].map((b) => b.dataset.id).join());
