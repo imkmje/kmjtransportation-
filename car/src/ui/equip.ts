@@ -28,8 +28,8 @@ export const equipLive = (): boolean => typeof api.equipInfo === 'function';
 
 /** 옛 옵션 목록 → 장비 구성(모두 기본 장비). 옛 저장·프리셋·0.x 판 읽기용 */
 export const fromOptions = (opts: readonly string[]): Equip => Object.fromEntries(opts.map((o) => [o, 'std' as const]));
-/** 장비 구성 → 지금 sim이 받는 옵션 목록(넣은 장비 전부). shortcut: O1 연결 전에는 선택 사양도 기본 장비처럼 계산된다 */
-export const toOptions = (e: Equip): string[] => OPTIONS.filter((o) => e[o.id]).map((o) => o.id);
+/** 장비 구성 → sim이 받는 옵션 목록. shortcut: O1 규칙 연결 전에는 선택 사양도 기본 장비처럼 넣어 계산된다 */
+export const toOptions = (e: Equip): string[] => OPTIONS.filter((o) => (equipLive() ? e[o.id] === 'std' : e[o.id])).map((o) => o.id); // 규칙이 들어오면 O1과 같게 options = 기본 장비만(선택 사양은 equip으로 넘긴다)
 
 // ---------- 어림값(shim): O1 규칙이 오기 전 화면용. 등장 연도로 기대를 나누고, 값은 Q.optionValue ----------
 const techYear = new Map<string, number>();

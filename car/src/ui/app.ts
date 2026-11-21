@@ -1464,7 +1464,7 @@ export function startApp(): void {
   function liftView(): View {
     const s = game!.state, L = lift!, g = Q.generationById(s, L.genId)!, e = currentEdition(g), np = Q.nameplateOf(s, g.id)!;
     fixLift(L);
-    const pv = Q.faceliftPreview(s, g.id, { options: L.options, tier: L.tier })!, cur = genLook(g);
+    const pv = Q.faceliftPreview(s, g.id, { options: L.options, tier: L.tier, ...{ equip: eqOf(L) } })!, cur = genLook(g);
     LP.lookKey(`lift:${g.id}`);
     const dBefore = Q.grades(e.stats, yearOf(s.week + pv.designWeeks + pv.minTestWeeks)).D, pt = powertrainById(g.powertrain), ok = elig(pv.eligibility);
     const ovh = ovTop('페이스리프트 기획 · 지금 모습', `${esc(np.name)}<small>${editionName(g)}</small>`, specLine(g.body, g.powertrain, e.tier, g.segment)) + ovHint;
@@ -2191,7 +2191,7 @@ export function startApp(): void {
       case 'startLift': {
         if (!game || !lift) return; const L = lift, g = Q.generationById(game.state, L.genId);
         let r: CommandResult = { ok: false, reason: '없는 차입니다.' };
-        if (g) withMoved(L.team, () => (r = game!.command({ type: 'startFacelift', generationId: L.genId, options: L.options, tier: L.tier, faceSeed: L.faceSeed, team: L.team })).ok);
+        if (g) withMoved(L.team, () => (r = game!.command({ type: 'startFacelift', generationId: L.genId, options: L.options, tier: L.tier, faceSeed: L.faceSeed, team: L.team, ...{ equip: eqOf(L) } })).ok);
         if (!g || !run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1];
         ui.colors[p.id] = currentEdition(g).color; devPrev.set(p.id, 0); lift = null; devSel = p.id;
@@ -2273,7 +2273,7 @@ export function startApp(): void {
         if (dirLeft(draft) > 0) { planTab = 'dir'; lastPanel = ''; render(); panel.scrollTop = 0; return err(`개발 방향 점수가 ${dirLeft(draft)}점 남았습니다. ${config.dev.dirTotal}점을 모두 나눠야 합니다.`); }
         const { color, nameplateId, team, year: _y, ...spec } = draft; void _y;
         let r: CommandResult = { ok: false, reason: '' };
-        withMoved(team, () => { r = nameplateId ? game!.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team })
+        withMoved(team, () => { r = nameplateId ? game!.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team , ...{ equip: spec.equip }})
           : game!.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName(), team }); return r.ok; });
         if (!run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1] as Project;
