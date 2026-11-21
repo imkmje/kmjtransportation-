@@ -226,6 +226,13 @@ export const config = {
   devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
   optionValue: { good: 1.05, bad: 0.8, fitMin: 0.2 }, // 1.0.0 옵션 값 = 원가 × good(그 옵션의 능력치에 대한 고객층 가중치 평균 ≥ fitMin) / bad(아니면). 차별 기준가에 더한다
+  // 1.1.0 장비 구성(equip.ts). classPrice: 차급 경계(차체 기준가 2,000만 미만 소형, 4,500만 미만 중형, 그 위 대형·고급)
+  // take: 기대 단계별 선택 사양 선택률 기본값, takeFit/takeMisfit: 고객층 궁합 배수, takeBigRare: 대형의 드문 장비 배수, optMarkup: 선택 사양 요금 = 원가 × 배수,
+  // partBase·partPerRate: 선택 사양의 능력치 반영 = 0.3 + 0.5 × 선택률. missPen·optPen·freshBonus: 매력 배수(기대 장비 없음 −4.5%·선택 사양만 −1.5%·드문 장비를 기본으로 +2%, 최대 freshMax개), multMin: 하한.
+  // review*: 평론 가감(기대 장비 없음 −0.3, 선택 사양만 −0.1, 드문 기본 장비 +0.15, 합 −1.5~+0.5).
+  equip: { classPrice: [2000, 4500], take: { rare: 0.15, common: 0.4, expected: 0.75 }, takeFit: 1.3, takeMisfit: 0.5, takeBigRare: 1.5, takeMin: 0.03, takeMax: 0.9, optMarkup: 1.4,
+    partBase: 0.3, partPerRate: 0.5, missPen: 0.045, optPen: 0.015, freshBonus: 0.02, freshMax: 3, multMin: 0.6,
+    reviewMiss: 0.3, reviewOpt: 0.1, reviewFresh: 0.15, reviewMaxPen: 1.5, reviewMaxBonus: 0.5 },
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
   pricePolicy: { pctMin: 80, pctMax: 120, pctChoices: [95, 100, 105] }, // 0.8.0 자동 가격: 기준가 유지 비율(%) 허용 범위와 화면 선택지

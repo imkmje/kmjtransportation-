@@ -305,15 +305,12 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
     expect([20, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
   });
-  it('옵션 슬롯: 본사 1등급은 2개, 3등급이면 3개까지', () => {
+  it('1.1.0: 옵션 칸 수 제한이 없다(본사 1등급에서도 옵션 3개), 제한은 원가와 가격', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 });
     g.state.week = 48 * 10; // 1980년: 옵션 3개 연구
     grant(g, 'el_aircon', 'el_powerSteering');
-    const three = { ...SPEC, options: ['radio', 'aircon', 'powerSteering'] };
-    expect(reason(g.command({ type: 'startProject', ...three }))).toBe('옵션은 최대 2개까지 고를 수 있습니다(본사 등급을 올리면 늘어납니다).');
-    g.state.cash = 1e9; g.state.reputation = 30;
-    ok(g.command({ type: 'upgradeHQ' })); ok(g.command({ type: 'upgradeHQ' }));
-    ok(g.command({ type: 'startProject', ...three }));
+    ok(g.command({ type: 'startProject', ...SPEC, options: ['radio', 'aircon', 'powerSteering'] }));
+    expect(g.state.projects[0].options).toEqual(['radio', 'aircon', 'powerSteering']);
   });
   it('개발팀 수만큼 동시에 개발(페이스리프트도 팀 하나), 넘으면 거부', () => {
     const { g, gen } = launched(2);
@@ -481,7 +478,7 @@ describe('저장 형식 2 → 4', () => {
     const v2 = JSON.parse(readFileSync('car/tests/fixtures/save-v2.json', 'utf8'));
     expect(v2.saveVersion).toBe(2);
     const g = Game.fromJSON(v2), s = g.state;
-    expect(s.saveVersion).toBe(4);
+    expect(s.saveVersion).toBe(5);
     expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]); expect(s.pendingOneOff).toBe(0);
     for (const x of s.staff) { expect(x.potential).toBe(Math.max(60, x.ability)); expect(x.trainings).toEqual([]); expect(x.restUntil).toBeNull(); }
     for (const x of allGens(s)) { expect(x.allocShare).toBeNull(); expect(x.lostSales).toBe(0); }

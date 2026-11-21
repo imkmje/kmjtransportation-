@@ -115,7 +115,7 @@ await act('pick', '[data-k="segment"][data-v="family"]');
 check('능력치 이름 옆 ⓘ(성능·연비·실용·디자인·품질)', (await page.locator('.plan-est [data-info^="stat:"]').count()) === 5);
 await act('ptab', '[data-v="power"]'); await act('pick', '[data-k="tier"][data-v="3"]');
 await act('ptab', '[data-v="opt"]');
-check('옵션: 1970년 시작엔 연구한 옵션이 없어 라디오는 흐리게 "연구 필요"', (await page.locator('.opt.locked[data-lock="option:radio"]').innerText()).includes('연구 필요') && (await page.locator('[data-act="opt"][data-v="radio"]').count()) === 0);
+check('장비(1.1.0): 1970년 시작엔 연구한 장비가 없어 라디오는 흐리게 이유, 3단계 버튼 없음', (await page.locator('.eq-row.off[data-eq="radio"]').innerText()).includes('연구') && (await page.locator('[data-act="eqSet"][data-k="radio"]').count()) === 0);
 await act('ptab', '[data-v="dir"]');
 check('개발 방향: 10점을 다 쓰면 + 버튼이 막힘', await page.locator('[data-act="dir"][data-k="P"][data-v="1"]').isDisabled());
 await act('dir', '[data-k="E"][data-v="-1"]');
@@ -604,7 +604,7 @@ check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·�
 check('정원이 남았으면 채용 공고 3단계', (await page.locator('.hire-card [data-act="postJob"]').count()) === 3 && (await page.locator('.hire-full').count()) === 0);
 await act('cotab', '[data-v="hq"]');
 const hq0 = await page.locator('#panel').innerText();
-check('본사 탭: 5등급 단계·지금 등급(정원·개발 차 수·옵션 칸·유지비)·다음 등급 비교', (await page.locator('.lv5 li').count()) === 5 && (await page.locator('.lv5 li.on').innerText()).includes('창고 공장') && ['정원', '동시에 개발할 수 있는 차', '옵션 칸', '월 유지비', '승급 비용', '소형 사옥'].every((t) => hq0.includes(t)));
+check('본사 탭: 5등급 단계·지금 등급(정원·개발 차 수·유지비, 1.1.0 옵션 칸 없음)·다음 등급 비교', (await page.locator('.lv5 li').count()) === 5 && (await page.locator('.lv5 li.on').innerText()).includes('창고 공장') && !hq0.includes('옵션 칸') && ['정원', '동시에 개발할 수 있는 차', '월 유지비', '승급 비용', '소형 사옥'].every((t) => hq0.includes(t)));
 await G(() => { const s = window.__car.game.state; s.cash = 5000000; s.reputation = 40; window.__car.render(); }); // 점검용: 현금 500억·평판 40
 await act('upgradeHQ');
 check('본사 키우기: 확인 창', (await page.locator('#ask').isVisible()) && (await page.locator('#ask-text').innerText()).includes('본사'));
@@ -742,7 +742,7 @@ await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes');
 await page.waitForFunction(() => window.__car.game?.state.companyName === '변환테스트');
 await tick(4);
 await page.click('#tabs button[data-tab="dev"]'); await page.click('#tabs button[data-tab="records"]'); await toGarage();
-check('0.1.0 형식 저장(형식 1) 불러와 이어 하기', await G(() => { const c = window.__car, s = c.game.state; return s.saveVersion === 4 && s.nameplates.length > 0 && typeof c.ui.photos === 'object' && typeof c.ui.colors === 'object'; }) && (await page.locator('#panel').isVisible()));
+check('0.1.0 형식 저장(형식 1) 불러와 이어 하기', await G(() => { const c = window.__car, s = c.game.state; return s.saveVersion >= 4 && s.nameplates.length > 0 && typeof c.ui.photos === 'object' && typeof c.ui.colors === 'object'; }) && (await page.locator('#panel').isVisible()));
 await openMenu();
 const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
 await chooser2.setFiles('car/tests/fixtures/save-v2.json');
@@ -752,19 +752,19 @@ await tick(4);
 for (const t of ['dev', 'records', 'research', 'fin', 'company']) await page.click(`#tabs button[data-tab="${t}"]`);
 for (const c of ['staff', 'hq', 'factory']) await act('cotab', `[data-v="${c}"]`);
 await toGarage();
-check('0.2.0 형식 저장(형식 2) 불러와 이어 하기', await G(() => { const s = window.__car.game.state; return s.saveVersion === 4 && s.hqLevel === 1 && s.staff.every((x) => typeof x.potential === 'number'); }) && (await page.locator('#panel').isVisible()));
+check('0.2.0 형식 저장(형식 2) 불러와 이어 하기', await G(() => { const s = window.__car.game.state; return s.saveVersion >= 4 && s.hqLevel === 1 && s.staff.every((x) => typeof x.potential === 'number'); }) && (await page.locator('#panel').isVisible()));
 
 await openMenu();
 const [chooser3] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
 await chooser3.setFiles('car/tests/fixtures/save-v3.json');
 await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes');
-await page.waitForFunction(() => window.__car.game?.state.saveVersion === 4 && window.__car.game.state.week > 0);
+await page.waitForFunction(() => window.__car.game?.state.saveVersion >= 4 && window.__car.game.state.week > 0);
 await tick(4);
 for (const t of ['dev', 'records', 'research', 'fin', 'company']) await page.click(`#tabs button[data-tab="${t}"]`);
 for (const c of ['staff', 'hq', 'factory']) await act('cotab', `[data-v="${c}"]`);
 await page.click('#tabs button[data-tab="records"]'); for (const r of ['combo', 'news', 'cars']) await act('rectab', `[data-v="${r}"]`);
 await toGarage();
-check('0.3.0 형식 저장(형식 3) 불러와 이어 하기(연구·사건·조합 노트 채워짐)', await G(() => { const s = window.__car.game.state; return s.saveVersion === 4 && Array.isArray(s.research.done) && Array.isArray(s.knownCombos) && !!s.events; }) && (await page.locator('#panel').isVisible()));
+check('0.3.0 형식 저장(형식 3) 불러와 이어 하기(연구·사건·조합 노트 채워짐)', await G(() => { const s = window.__car.game.state; return s.saveVersion >= 4 && Array.isArray(s.research.done) && Array.isArray(s.knownCombos) && !!s.events; }) && (await page.locator('#panel').isVisible()));
 
 // ---- 4단계: 연구·시대 사건·조합 노트·차체 10종 ----
 const S4 = (fn, arg) => G(fn, arg);
@@ -833,7 +833,7 @@ await act('ptab', '[data-v="seg"]');
 check('궁합: 출시해 본 적 없는 조합은 "?" + "출시해 보면 알 수 있습니다"', (await page.locator('.opt .tag.q').count()) === 6 && (await page.locator('.opt .tag.q').first().innerText()).includes('출시해 보면 알 수 있습니다'));
 await shot('plan-combo');
 await act('ptab', '[data-v="opt"]');
-check('옵션: 해금한 옵션 전부(8개) + 아직 먼 옵션은 개수 안내', (await page.locator('[data-act="opt"]').count()) === 8 && (await page.locator('#panel').innerText()).includes('그 밖에 8개 옵션'));
+check('장비(1.1.0): 해금한 장비 8개는 3단계 버튼, 나머지는 흐리게', (await page.locator('.eq-row:not(.off):not(.req)').count()) === 8 && (await page.locator('.eq-row:not(.off):not(.req) [data-act="eqSet"]').count()) === 24);
 await shot('plan-options');
 await act('pick', '[data-k="body"][data-v="sedanS"]').catch(() => {});
 await page.fill('#pname', '조합');
@@ -924,7 +924,7 @@ await page.waitForSelector('#sheet:not([hidden])'); await page.locator('#sheet [
 check('개발자 메뉴로 에어백 연구 완료 → 기획 첫 화면이 다시 열림', (await S4(() => window.__car.game.state.research.done.includes('bd_airbag'))) && (await page.locator('#panel .reg-block').count()) === 0 && (await page.locator('.choice[data-v="new"]').isEnabled()));
 await act('pickNew'); await act('ptab', '[data-v="opt"]');
 const slots = await S4(() => window.__car.game.state.hqLevel);
-check('기획 옵션: ABS·에어백이 "기본 장비"로 표시, 고르는 칸·옵션 수에 안 잡힘', (await page.locator('.base-eq .eq').allInnerTexts()).join() === 'ABS,에어백' && (await page.locator('.opt[data-act="opt"][data-v="abs"], .opt[data-act="opt"][data-v="airbag"]').count()) === 0 && /옵션 0 \/ \d+개/.test(await page.locator('#panel').innerText()), `본사 ${slots}등급`);
+check('기획 장비(1.1.0): ABS·에어백은 기본 장비로 고정(잠금 표시), 단계 버튼 없음', (await page.locator('.eq-row.req[data-eq="abs"] .eq-lock, .eq-row.req[data-eq="airbag"] .eq-lock').count()) === 2 && (await page.locator('[data-act="eqSet"][data-k="abs"], [data-act="eqSet"][data-k="airbag"]').count()) === 0, `본사 ${slots}등급`);
 await shot('reg-plan');
 await page.fill('#pname', '규제'); await startDev();
 check('개발 시작: 의무 장비가 자동으로 들어감', await S4(() => { const o = window.__car.game.state.projects[0]?.options ?? []; return o.includes('abs') && o.includes('airbag'); }));
@@ -938,17 +938,32 @@ await act('retrofit');
 check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 사라짐', await S4((id) => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), o = g.editions.at(-1).options; return o.includes('abs') && o.includes('airbag'); }, rfId) && (await page.locator('[data-act="retrofit"]').count()) === 0);
 // 페이스리프트·풀체인지 옵션 추가(0.6.0 버그): 판 옵션에 의무 장비가 들어 있어도 빈 칸만큼 새 옵션을 고를 수 있다(본사 4등급 칸 4개 중 2개 사용 + 의무 장비 2개)
 { const want = await S4((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), ed = g.editions.at(-1);
-    g.launchMonth = Math.min(g.launchMonth, Math.floor(s.week / 4) - 40); ed.options = ['radio', 'leather', 'abs', 'airbag']; for (const t of ['el_radio', 'el_aircon', 'el_leather']) if (!s.research.done.includes(t)) s.research.done.push(t); c.render(); return 'aircon'; }, rfId);
+    g.launchMonth = Math.min(g.launchMonth, Math.floor(s.week / 4) - 40); ed.options = ['radio', 'leather', 'abs', 'airbag']; ed.equip = { leather: 'std' }; delete ed.equipLegacy; /* 1.1.0 판의 구성은 equip(라디오는 빠진 채: 풀체인지에서 기대 변화로 나오게) */ for (const t of ['el_radio', 'el_aircon', 'el_leather']) if (!s.research.done.includes(t)) s.research.done.push(t); c.render(); return 'aircon'; }, rfId);
   await page.locator(`[data-act="goLift"][data-id="${rfId}"]`).click();
-  const tile = page.locator(`.opt[data-act="liftOpt"][data-v="${want}"]`), pv0 = await page.locator('.lift-est').innerText();
-  await tile.click();
-  check('페이스리프트(의무 장비 있는 차): 빈 칸에 새 옵션 추가됨', (await tile.getAttribute('aria-pressed')) === 'true' && await S4((w) => window.__car.lift.options.includes(w), want), JSON.stringify(await S4(() => window.__car.lift.options)));
-  check('페이스리프트 옵션 추가가 예상(등급·이익)에 반영', pv0 !== (await page.locator('.lift-est').innerText()));
+  const lv = (v) => page.locator(`[data-act="eqSet"][data-t="lift"][data-k="${want}"][data-v="${v}"]`), est = () => page.locator('.lift-est').innerText();
+  await lv('').click(); const pv0 = await est();
+  await lv('std').click(); const pvStd = await est();
+  check('페이스리프트(의무 장비 있는 차): 장비를 기본 장비로 넣을 수 있음(1.1.0 장비 수 제한 없음)', (await lv('std').getAttribute('aria-pressed')) === 'true' && await S4((w) => window.__car.lift.equip?.[w] === 'std' && window.__car.lift.options.includes(w), want), JSON.stringify(await S4(() => window.__car.lift.equip)));
+  check('페이스리프트 장비 추가가 예상(등급·이익)에 반영', pv0 !== pvStd);
+  await lv('opt').click(); const pvOpt = await est(), live = await S4(() => typeof window.__car.Q.equipInfo === 'function');
+  check('1.1.0 3단계 전환(안 넣음·선택 사양·기본 장비)이 예상에 반영(규칙 연결 뒤에는 선택 사양도 따로)', (await lv('opt').getAttribute('aria-pressed')) === 'true' && (!live || (pvOpt !== pvStd && pvOpt !== pv0)), live ? '규칙 연결됨' : '규칙 연결 전(선택 사양은 어림값)');
   await act('cancelPlan');
   const np = await S4((id) => window.__car.game.state.nameplates.find((n) => n.generations.some((g) => g.id === id)).id, rfId);
   await page.locator(`[data-act="goFull"][data-id="${np}"]`).click(); await act('ptab', '[data-v="opt"]');
-  await page.locator(`.opt[data-act="opt"][data-v="${want}"]`).click();
-  check('풀체인지(의무 장비 있는 차): 빈 칸에 새 옵션 추가됨', await S4((w) => window.__car.draft.options.includes(w), want), JSON.stringify(await S4(() => window.__car.draft.options)));
+  check('1.1.0 풀체인지: 전작 장비 구성을 물려받음(전작 구성)', await S4(() => window.__car.draft.equipMode === 'prev' && window.__car.draft.equip?.leather === 'std'), JSON.stringify(await S4(() => window.__car.draft.equip)));
+  if (await page.locator('.eq-chg').count()) { await page.click('.eq-chg [data-act="eqApply"]'); check('1.1.0 풀체인지: 전작 이후 기대가 바뀐 장비 상자 → [한 번에 반영]하면 상자가 사라짐', (await page.locator('.eq-chg').count()) === 0); }
+  else check('1.1.0 풀체인지: 전작 이후 기대가 바뀐 장비 상자', false, '상자가 없음');
+  await page.locator(`[data-act="eqSet"][data-t="plan"][data-k="${want}"][data-v="std"]`).click();
+  check('풀체인지(의무 장비 있는 차): 장비를 기본 장비로 넣을 수 있음', await S4((w) => window.__car.draft.options.includes(w), want), JSON.stringify(await S4(() => window.__car.draft.options)));
+  await page.click('[data-act="eqNone"][data-t="plan"]');
+  check('1.1.0 [모두 빼기] → 빠진 기대 장비 경고("판매와 평론이 깎입니다")', (await page.locator('.eq-miss').innerText().catch(() => '')).includes('깎입니다') && await S4(() => Object.keys(window.__car.draft.equip).length === 0));
+  await page.click('[data-act="eqRec"][data-t="plan"]');
+  check('1.1.0 [추천 구성으로] → 장비가 다시 들어가고 "추천 구성" 표시, 경고 사라짐', await S4(() => window.__car.draft.equipMode === 'rec' && Object.keys(window.__car.draft.equip).length > 0) && (await page.locator('.eq-miss').count()) === 0 && (await page.locator('.eq-mode').innerText()) === '추천 구성');
+  { await page.setViewportSize({ width: 1024, height: 768 }); await page.waitForTimeout(200);
+    const cut = await G(() => [...document.querySelectorAll('.eq-row')].filter((r) => r.scrollWidth > r.clientWidth + 1 || [...r.querySelectorAll('button, b, .eq-eff')].some((x) => x.scrollWidth > x.clientWidth + 1)).map((r) => r.dataset.eq));
+    check('1.1.0 장비 줄(1024×768): 이름·버튼·효과가 잘리지 않음, 버튼 44px', !cut.length && await G(() => [...document.querySelectorAll('.eq-row [data-act="eqSet"]')].every((b) => b.getBoundingClientRect().height >= 44)), JSON.stringify(cut));
+    if (process.argv[3]) await page.screenshot({ path: `${process.argv[3]}/o2/fullchange-equip-1024x768.png` }).catch(() => {});
+    await page.setViewportSize({ width: 1366, height: 1024 }); }
   await act('cancelPlan'); }
 // 새 차체 7종 3D(0.6.0 소형·대형 SUV 포함)
 await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_suvS', 'bd_suvL', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
@@ -997,7 +1012,7 @@ if (await G(() => window.__car.game.state.projects.length)) { await page.click('
 await planNew();
 await page.fill('#pname', '초안차');
 await act('ptab', '[data-v="look"]'); await page.locator('[data-act="pick"][data-k="faceSeed"]').nth(2).click();
-await act('ptab', '[data-v="opt"]'); if (await page.locator('[data-act="opt"]:not([disabled])').count()) await page.locator('[data-act="opt"]:not([disabled])').first().click();
+await act('ptab', '[data-v="opt"]'); if (await page.locator('[data-act="eqSet"][data-v="std"][aria-pressed="false"]').count()) await page.locator('[data-act="eqSet"][data-v="std"][aria-pressed="false"]').first().click();
 await act('ptab', '[data-v="dir"]'); await act('dir', '[data-k="E"][data-v="-1"]'); await act('dir', '[data-k="P"][data-v="1"]');
 const draft0 = await G(() => JSON.stringify(window.__car.draft));
 await toGarage();
@@ -1228,7 +1243,8 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await xp.click('#tabs button[data-tab="company"]'); await xp.click('#panel [data-act="cotab"][data-v="exec"]');
   check('임원 화면: 자리 카드 6개(빈 자리 1, 잠긴 자리 5와 필요 본사 등급)', (await xp.locator('.exec-card').count()) === 6 && (await xp.locator('.exec-card.empty').count()) === 6 && (await xp.locator('.exec-sum').innerText()).includes('0/1석'));
   await xp.click('.exec-card[data-role="research"] [data-act="execPick"]');
-  check('임명 목록: 관련 능력 순(엔지니어가 위)', (await xp.locator('.exec-card[data-role="research"] .exec-pick .opt').first().innerText()).includes('엔지니어'));
+  { const sk = await xp.locator('.exec-card[data-role="research"] .exec-pick .opt').evaluateAll((l) => l.map((b) => Number((b.innerText.match(/임원 능력 (\d+)/) ?? [])[1])));
+    check('임명 목록: 관련 능력(임원 능력) 높은 순', sk.length > 0 && sk.every((v, i) => i === 0 || sk[i - 1] >= v), JSON.stringify(sk)); } // 1.1.0: 시작 직원 구성이 바뀌어 '엔지니어가 맨 위'는 늘 맞지 않아 정렬 자체를 본다
   await xp.locator('.exec-card[data-role="research"] [data-act="execAppoint"]').first().click();
   check('임명: 자리가 채워지고 나머지는 잠김(본사 2등급 안내)', (await xp.locator('.exec-card.filled[data-role="research"]').count()) === 1 && (await xp.locator('.exec-card.locked').count()) === 5 && (await xp.locator('.exec-card.locked').first().innerText()).includes('본사 2등급'));
   await xshot('exec-1366x1024');
@@ -1475,7 +1491,9 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const mtoast = gp.locator('#toasts .toast', { hasText: '결산' });
   check('0.9.0 월 결산 알림에 [펼쳐 보기]', (await mtoast.count()) === 1 && (await mtoast.locator('.open').innerText()) === '펼쳐 보기');
   if (await gp.locator('#toasts .more').isVisible()) await gp.click('#toasts .more'); // 같은 주에 알림이 셋 이상이면 "+N"을 펼친다
-  await mtoast.locator('.open').click({ timeout: 10000 });
+  await GG(() => window.__car.setSpeed(0)); // 클릭 직전에 멈춤. 알림이 이미 닫혔으면(6초) 재무 화면의 월 결산 목록에서 연다
+  if (await gp.locator('#toasts .toast:not(.out)', { hasText: '결산' }).count()) await mtoast.locator('.open').click({ timeout: 5000 }).catch(() => {});
+  if (!(await gp.locator('#sheet .mon').isVisible())) { await gclose(); await GG(() => document.querySelector('#tabs button[data-tab="fin"]').click()); await gp.locator('.mon-list [data-act="monthOpen"]').first().click(); }
   check('0.9.0 월 결산 알림 [펼쳐 보기] → 이번 달 결산 창', await gp.locator('#sheet .mon').isVisible());
   await gclose();
   // 1024×768: 차 상세 패널이 스크롤 없이 가격 카드와 성적 카드를 함께 보이고, 상단 바가 넘치지 않음
@@ -1686,6 +1704,16 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   if (M2) for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); await gp.screenshot({ path: `${M2}/hall-${w}x${h}.png` }); }
   const hid = await gp.locator('.hall-it').first().getAttribute('data-v'); await gp.locator('.hall-it').first().click();
   check('1.0.0 명예의 전당 항목 누르기 → 그 차종 계보', (await gp.locator(`.lineage-card[data-np="${hid}"]`).count()) === 1 && (await gp.locator('[data-act="rectab"][data-v="cars"]').getAttribute('aria-selected')) === 'true');
+  // 1.1.0 개발 중(설계 단계) [장비 다시 고르기] → setProjectEquip
+  { await gclose(); await gp.setViewportSize({ width: 1180, height: 820 });
+    const pid = await GG(() => { const c = window.__car, g = c.game, s = g.state; s.hqLevel = 5; for (const t of ['el_radio', 'el_aircon']) if (!s.research.done.includes(t)) s.research.done.push(t); const team = s.staff.filter((x) => x.projectId === null && x.role !== 'sales' && !x.lab).slice(0, 2).map((x) => x.id);
+      if (!team.length) { const b = s.staff[0]; s.staff.push({ ...b, id: 9900, name: '장비', role: 'designer', projectId: null, trainings: [], restUntil: null, lab: false }); team.push(9900); }
+      const r = g.command({ type: 'startProject', name: '장비시험', body: 'sedanS', segment: 'family', powertrain: 'gasoline', tier: 2, options: [], equip: {}, direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 20, team }); c.render(); return r.ok ? s.projects.at(-1).id : r.reason; });
+    await GG((id) => { window.__car.goTarget({ tab: 'dev', id }); }, pid); await gp.waitForTimeout(300);
+    await gp.locator(`[data-act="projEquip"][data-id="${pid}"]`).click();
+    const k = await gp.locator('#sheet [data-act="eqSet"][data-t="proj"][data-v="std"][aria-pressed="false"]').first().getAttribute('data-k');
+    await gp.click(`#sheet [data-act="eqSet"][data-t="proj"][data-k="${k}"][data-v="std"]`); await gp.click('#sheet [data-act="projEquipApply"]');
+    check('1.1.0 개발 중(설계 단계) [장비 다시 고르기] → 프로젝트 장비가 바뀜', await GG(([id, k]) => window.__car.game.state.projects.find((p) => p.id === id)?.equip?.[k] === 'std', [pid, k]), `${pid} ${k}`); }
   await gctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));

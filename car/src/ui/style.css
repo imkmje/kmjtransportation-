@@ -1087,3 +1087,21 @@ button.co-box:hover{border-color:var(--ink)}
 .hall-shame{margin-top:12px}.hall-shame>summary{cursor:pointer;min-height:44px;display:flex;align-items:center}.hall-shame>summary .lbl{margin:0}
 .hall-co td{font-size:14px}
 @media (max-width:1100px){.hall-it{grid-template-columns:72px minmax(0,1fr)}.hall-it .g-th img,.hall-it .g-th svg{width:72px;height:45px}.hall-v{grid-column:2;text-align:left}}
+/* 1.1.0 장비 고르기: 한 줄에 이름·기대 배지·3단계 버튼·효과 */
+.equip{display:flex;flex-direction:column;gap:10px}
+.eq-sum{position:sticky;top:0;z-index:2;background:var(--card);padding:6px 0 8px;border-bottom:1px solid var(--line)}
+.eq-sum .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+.eq-btns{margin-top:8px}.eq-btns .btn{flex:0 0 auto}.eq-mode{margin-left:auto;font-weight:800}
+.eq-miss{margin-top:8px}
+.eq-list{display:flex;flex-direction:column;gap:6px}
+.eq-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,1.3fr);gap:2px 12px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.eq-row.off{background:var(--soft);opacity:.75}.eq-row.req{border-color:var(--ink3)}
+.eq-h{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;min-width:0}.eq-h b{font-size:14px;font-weight:800}
+.eq-x{font-size:12px;font-weight:800;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.ex-expected{background:var(--accent-bg);color:var(--accent2)}.ex-common{background:var(--soft);color:var(--ink2)}.ex-rare{background:var(--up-bg);color:var(--up)}
+.eq-seg{margin:0}.eq-seg button{min-height:44px;font-size:13px}
+.eq-lock{font-size:13px;font-weight:800;color:var(--ink2);text-align:center}.eq-lock.off{color:var(--warn)}
+.eq-eff{grid-column:1/-1;margin:2px 0 0;font-size:12.5px;color:var(--ink2);line-height:1.4}
+.eq-chg ul{margin:6px 0 8px 18px;padding:0}.eq-chg li small{color:var(--ink2);font-weight:600}
+@media (max-width:1100px){.eq-row{grid-template-columns:minmax(0,1fr)}}
+.eq-legacy{font-weight:700;color:var(--ink2)}

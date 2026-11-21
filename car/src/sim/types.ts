@@ -9,7 +9,9 @@ export type Stats = Record<Stat, number>;
 export interface BodyDef { id: string; name: string; info: string; year: number; cost: number; basePrice: number; mult: Stats }
 /** startLevel: 해금 때의 동력 단계(5.3, 연구로 오른다). minCostAdd: 연구로 줄일 수 있는 원가 가산의 바닥(전기) */
 export interface PowertrainDef { id: string; name: string; info: string; year: number; split: { P: number; E: number }; costAdd: number; startLevel: number; minCostAdd?: number; premium?: { years: number[]; values: number[] }; tiers: { name: string; costAdd: number }[] }
-export interface OptionDef { id: string; name: string; info: string; year: number; U: number; D: number; Q: number; cost: number }
+export interface OptionDef { id: string; name: string; info: string; year: number; U: number; D: number; Q: number; cost: number; expect?: Record<'big' | 'mid' | 'small', [number, number]> } // expect(1.1.0): 차급별 [흔해지는 해, 기대되는 해](9999 = 그런 때가 오지 않음)
+export type EquipLevel = 'opt' | 'std'; // 1.1.0 선택 사양 / 기본 장비(없으면 안 넣음)
+export type Equip = Record<string, EquipLevel>;
 export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
 export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
@@ -84,6 +86,7 @@ export interface ProjectSpec {
   name: string; body: string; segment: string; powertrain: string;
   tier: number; // 동력 등급 1~3(보급형/표준/고급) = 연구한 최신 단계에서 −2/−1/0 단계(4단계부터)
   options: string[]; direction: Stats; budget: Budget; designWeeks: number;
+  equip?: Equip; // 1.1.0 장비 구성(안 넣음/선택 사양/기본 장비). 주면 options는 기본 장비 목록으로 맞춰진다(없으면 options가 모두 기본 장비)
 }
 /** 프로젝트 종류(8장): 새 차종 / 페이스리프트 / 풀체인지 */
 export type ProjectKind = 'new' | 'facelift' | 'fullchange' | 'fix'; // fix: 0.10.0 긴급 개선(targetId = 세대 ID, 설계 없이 시험만, 끝나면 저절로 반영)
@@ -107,7 +110,8 @@ export interface Project extends ProjectSpec {
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */
 export interface Edition {
   id: number; kind: 'initial' | 'facelift'; launchWeek: number;
-  tier: number; level: number; options: string[]; stats: Stats; // tier: 동력 등급 1~3, level: 실제 동력 단계. stats: 출시 시 확정된 원점수(결함 감점 포함)
+  tier: number; level: number; options: string[]; stats: Stats; equip?: Equip; equipLegacy?: boolean; // equipLegacy(1.1.0): 형식 4에서 올라온 출시된 판. 시대의 기대 감점·가점을 받지 않는다. options: 기본 장비(의무 장비 포함), equip(1.1.0): 선택 사양까지 든 구성(없으면 options가 모두 기본 장비)
+  // tier: 동력 등급 1~3, level: 실제 동력 단계. stats: 출시 시 확정된 원점수(결함 감점 포함)
   defects: number; // 출시 때 남은 결함(리콜 확률), 리콜 뒤 0
   price: number; color: string; wheels: 0 | 1 | 2;
   faceSeed: number; // 얼굴(전조등·그릴 등) 3D 시드
@@ -211,7 +215,7 @@ export interface ExecState {
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
-  saveVersion: 4;
+  saveVersion: 5;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -248,7 +252,8 @@ export interface YearLog { rep: Record<string, number>; cars: Record<string, num
 export type Command =
   // team: 배치할 직원 ID(생략하면 쉬고 있는 개발 직무 전원). 시드를 빼면 lookCandidates의 첫 후보
   | ({ type: 'startProject'; chassisSeed?: number; faceSeed?: number; team?: number[] } & ProjectSpec)
-  | { type: 'startFacelift'; generationId: number; options: string[]; tier?: number; faceSeed?: number; team?: number[] }
+  | { type: 'setProjectEquip'; projectId: number; equip: Equip } // 1.1.0 설계 단계 프로젝트의 장비 구성 바꾸기(비용 없음)
+  | { type: 'startFacelift'; generationId: number; options: string[]; equip?: Equip; tier?: number; faceSeed?: number; team?: number[] }
   | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }
   | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }

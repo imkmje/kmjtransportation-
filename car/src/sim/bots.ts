@@ -2,12 +2,13 @@
 import { config } from '../config';
 import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS } from '../data';
 import { bodiesAt, optionsAt, powertrainsAt, unitCost } from './cars';
-import { eraTimeline, optionTech, requiredOptions } from './events';
+import { eraTimeline, optionTech } from './events';
 import { ptCostAdd, researchCost, researchError } from './research';
+import { equipOf, recommendedEquip, stdOf } from './equip';
 import { specError, withRequired } from './dev';
 import { loanLimit } from './finance';
 import { hash01 } from './rng';
-import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, optionSlots, staffCap, trainCost, trainError } from './company';
+import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, staffCap, trainCost, trainError } from './company';
 import { Game, allGens, linesUsed, sellingGens } from './game';
 import { REGION, carBasePrice, genBasePrice, optionValue, cellMonthly, currentEdition, monthlyDemand, toSaleCar } from './market';
 import { planPreview } from './queries';
@@ -15,7 +16,7 @@ import { rescueOptions } from './insight';
 import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, monthTime, yearOf } from './time';
-import type { Budget, CarState, Difficulty, ExecRole, Generation, Role, Staff } from './types';
+import type { Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
 
 export interface Bot { name: string; step(g: Game): void }
 
@@ -160,14 +161,13 @@ const regulatedOptions = (s: CarState, early = false): string[] => {
   const m = monthOf(s.week) + (early ? config.events.warnMonths : 0);
   return eraTimeline(s.seed).filter((sp) => m >= sp.start).flatMap((sp) => sp.def.effects.flatMap((e) => (e.type === 'regulation' && e.region === REGION ? e.options ?? [] : [])));
 };
-/** 옵션 고르기: 쓸 수 있는 규제 옵션 먼저, 나머지 칸은 optPick에 따라 — fit: 이 고객층이 쳐 주는 값이 원가보다 큰 옵션(1.0.0 차별 기준가, 최신 먼저),
- *  none: 넣지 않음, misfit: 값이 원가보다 작은(안 맞는) 옵션(측정용). keep을 주면 그 옵션을 남기고 규제 옵션만 끼워 넣는다 */
-function pickOptions(s: CarState, segment: string, pick: SteadyOptions['optPick'], keep?: string[]): string[] {
-  const have = new Set(optionsAt(s).map((o) => o.id)), req = regulatedOptions(s).filter((o) => have.has(o)), force = requiredOptions(s);
-  const slots = optionSlots(s) - req.filter((o) => !force.includes(o)).length; // 시행된 의무 장비는 옵션 칸을 차지하지 않는다(0.4.2)
-  const cand = pick === 'none' ? [] : optionsAt(s).filter((o) => (optionValue(o.id, segment) > o.cost) === (pick === 'fit')).map((o) => o.id);
-  const rest = keep ? keep.filter((o) => !req.includes(o)) : cand.filter((o) => !req.includes(o)).reverse();
-  return [...req, ...rest.slice(0, Math.max(0, slots))];
+/** 장비 고르기(1.1.0): fit은 추천 구성(recommendedEquip), none은 넣지 않음, misfit은 값이 원가보다 작은(안 맞는) 장비를 기본 장비로(측정용).
+ *  어느 쪽이든 예고·시행된 규제 장비는 기본 장비. keep을 주면(페이스리프트, fit이 아닐 때) 그 구성에 규제 장비만 더한다 */
+function pickEquip(s: CarState, body: string, segment: string, powertrain: string, pick: SteadyOptions['optPick'], keep?: Equip): Equip {
+  const have = new Set(optionsAt(s).map((o) => o.id)), out: Equip = pick === 'fit' ? recommendedEquip(s, body, segment, powertrain) : keep ? { ...keep } : {};
+  if (pick === 'misfit' && !keep) for (const o of optionsAt(s)) if (optionValue(o.id, segment) <= o.cost) out[o.id] = 'std';
+  for (const o of regulatedOptions(s)) if (have.has(o)) out[o] = 'std';
+  return out;
 }
 
 const fixedCost = (s: CarState) => monthlyFixed(s); // 직원·임원 월급 + 유지비(임원이 없으면 0.7.0 전과 같다)
@@ -275,7 +275,8 @@ function startProjects(g: Game, o: SteadyOptions): void {
   const npOf = (x: Generation) => s.nameplates.find((n) => n.generations.includes(x))!;
   for (const x of onSale) {
     if (o.faceliftMonths !== Infinity && hash01(s.seed, 61, x.id) < o.faceliftShare && !x.editions.some((e) => e.kind === 'facelift') && age(x) >= o.faceliftMonths && changeAt(s, o, x) === o.changeMonths && age(x) < o.changeMonths - B.leadMonths && !targeted(x.id)) { // 약한 차는 리프트 없이 교체, 생산 한도에 묶인 차는 리프트를 미룬다(늘어난 주문을 팔 수 없으므로)
-      g.command({ type: 'startFacelift', generationId: x.id, options: pickOptions(s, x.segment, o.optPick, currentEdition(x).options), team: pickTeam(s) }); // 옵션은 그대로(가격을 안 올리므로 원가가 늘면 대당 이익이 준다), 규제 옵션만 넣는다
+      const equip = pickEquip(s, x.body, x.segment, x.powertrain, o.optPick, equipOf(currentEdition(x)));
+      g.command({ type: 'startFacelift', generationId: x.id, options: stdOf(equip), equip, team: pickTeam(s) }); // 1.1.0: 추천 구성으로 갱신(기대가 바뀐 장비), 아니면 그대로에 규제 장비만
       return;
     }
   }
@@ -296,9 +297,10 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   const body = bestBody(s, year, others);
   const mix = MARKET[REGION].mix[body], used = new Set(others.filter((x) => x.body === body).map((x) => x.segment));
   const segment = [...SEGMENTS].sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)) || COMPAT[body][b.id] * mix[b.id] - COMPAT[body][a.id] * mix[a.id])[0].id;
-  const options = pickOptions(s, segment, o.optPick), powertrain = o.ptPick === 'gasoline' ? 'gasoline' : o.ptPick === 'newest' ? powertrainsAt(s).filter((x) => !specError(s, { name: '', body, segment, powertrain: x.id, tier: 2, options, direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] })).at(-1)!.id : bestPowertrain(s, body, segment, options, others, team);
+  const options = stdOf(pickEquip(s, body, segment, 'gasoline', o.optPick)), powertrain = o.ptPick === 'gasoline' ? 'gasoline' : o.ptPick === 'newest' ? powertrainsAt(s).filter((x) => !specError(s, { name: '', body, segment, powertrain: x.id, tier: 2, options, direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] })).at(-1)!.id : bestPowertrain(s, body, segment, options, others, team);
+  const equip = pickEquip(s, body, segment, powertrain, o.optPick);
   const spec = {
-    body, segment, powertrain, tier: 2, options,
+    body, segment, powertrain, tier: 2, options: stdOf(equip), equip,
     direction: o.sloppy ? SLOPPY_DIRS[Math.floor(hash01(s.seed, 62, s.nextId) * SLOPPY_DIRS.length)] : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: o.budget, designWeeks: o.designWeeks,
   };
   // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다

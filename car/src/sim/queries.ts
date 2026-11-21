@@ -2,6 +2,7 @@
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById } from '../data';
 import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
+import { equipOf, optPerCar, optWeights, stdOf } from './equip';
 import { withRequired, devScale, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, linesUsed, sellingGens } from './game';
 import { factoryBuildMonths, factoryUpkeep, hqUpkeep, capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
@@ -14,7 +15,7 @@ import { regulationBlock, requiredOptions } from './events';
 export { difficultyInfo } from './difficulty';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
-import { STATS, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
+import { STATS, type Equip, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
 
 export const projectById = (s: CarState, id: number): Project | undefined => s.projects.find((p) => p.id === id);
 export const generationById = (s: CarState, id: number): Generation | undefined => allGens(s).find((g) => g.id === id);
@@ -23,11 +24,13 @@ export const nameplateOf = (s: CarState, genId: number) => s.nameplates.find((n)
 /** 세대의 현재 표시 등급(올해 기준, 해마다 낮아진다) */
 export const generationGrades = (s: CarState, g: Generation): Stats => grades(currentEdition(g).stats, yearOf(s.week));
 
+/** 1.1.0 스펙의 기본 장비 목록(equip이 있으면 거기서) */
+const stdOpts = (x: { options?: string[]; equip?: Equip }): string[] => (x.equip ? stdOf(x.equip) : x.options ?? []);
 /** 지금 출시하면 받을 능력치 원점수·표시 등급·평균 */
 export function projectPreview(s: CarState, projectId: number): { stats: Stats; grades: Stats; avg: number } | null {
   const p = projectById(s, projectId);
   if (!p) return null;
-  const stats = finalStats(p.body, p.powertrain, p.level, p.options, p.points, p.defects), y = yearOf(s.week);
+  const y = yearOf(s.week), stats = finalStats(p.body, p.powertrain, p.level, p.options, p.points, p.defects, optWeights(equipOf(p), p.body, p.segment, y));
   return { stats, grades: grades(stats, y), avg: avgGrade(stats, y) };
 }
 
@@ -73,7 +76,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
     for (const k of STATS) pts[k] = w[k] * spec.designWeeks * speed;
     const made = STATS.reduce((a, k) => a + pts[k], 0);
     const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint * cut - testCut(team) * d.minTestWeeks);
-    return finalStats(spec.body, spec.powertrain, level, withRequired(s, spec.options), pts, defects); // 의무 장비 포함(0.4.2)
+    return finalStats(spec.body, spec.powertrain, level, withRequired(s, stdOpts(spec)), pts, defects, optWeights(equipOf(spec), spec.body, spec.segment, y)); // 의무 장비 포함(0.4.2), 1.1.0 선택 사양은 일부
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
   const gr = grades(mid, y), fit = (seg: string) => STATS.reduce((a, k) => a + SEGMENTS.find((x) => x.id === seg)!.w[k] * gr[k], 0), mix = MARKET[REGION].mix[spec.body] ?? {};
@@ -99,7 +102,7 @@ function launchDemand(s: CarState, projectId: number, price: number, marketing: 
   const y = yearOf(s.week), m = monthOf(s.week);
   const others = sellingGens(s).filter((g) => g.status === 'onSale').map((g) => toSaleCar(g, m));
   const start = awarenessStart(s.reputation, ex.avg), target = Math.max(start, awarenessTarget(s.reputation, marketing, grade(pv.stats.Q, y)));
-  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain, options: withRequired(s, p.options) };
+  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain, options: withRequired(s, p.options), equip: equipOf(p, s) };
   const aw = target + (start - target) * (1 - config.awareness.rate) ** config.forecast.months;
   return monthlyDemand(s, { ...car, awareness: aw, life: 1 }, others, monthTime(m));
 }
@@ -148,33 +151,34 @@ export interface FaceliftPreview {
   tooEarly: boolean; // 출시 goodFromMonths(30)개월 전: 지금 하면 수명을 덜 되돌려 효과가 작다
   recommendedTeam: number[]; // 추천 팀: 쉬는 디자이너·테스터(엔지니어는 연구에 남긴다)
 }
-export function faceliftPreview(s: CarState, generationId: number, spec: { options: string[]; tier?: number }): FaceliftPreview | null {
+export function faceliftPreview(s: CarState, generationId: number, spec0: { options: string[]; equip?: Equip; tier?: number }): FaceliftPreview | null {
   const g = generationById(s, generationId);
   if (!g) return null;
+  const spec = { ...spec0, options: stdOpts(spec0) }; // 1.1.0: equip을 주면 기본 장비 목록으로
   const fl = config.lifecycle.facelift, d = config.dev, ed = currentEdition(g), tier = spec.tier ?? ed.tier, team = idleDevStaff(s);
   const m = monthOf(s.week), y = yearOf(s.week + fl.designWeeks + d.minTestWeeks);
   const dir: Stats = { P: 2, E: 2, U: 2, D: 2, Q: 2 }, mult = bodyById(g.body).mult;
   const dRaw = faceliftWeekByStaff(team, { budget: 'normal', direction: dir }, () => 1).reduce((a, w) => a + w.D, 0) * fl.designWeeks;
   const dCap = fl.dCap * g.editions[0].stats.D, dGain = Math.min(mult.D * dRaw, dCap);
   const defects = Math.max(0, ed.defects * fl.defectKeep + dRaw * d.defectPerPoint * fl.defectRate - testCut(team) * d.minTestWeeks);
-  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), withRequired(s, spec.options), g.points, defects)); // 출시 때처럼 의무 장비 포함
+  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), withRequired(s, spec.options), g.points, defects, optWeights(equipOf(spec), g.body, g.segment, yearOf(s.week)))); // 출시 때처럼 의무 장비 포함
   stats.D += dGain;
   const age = lifeAge(g, m), keep = m - g.launchMonth >= fl.lateMonths ? fl.lateLifeKeep : fl.lifeKeep;
   return {
     eligibility: faceliftEligibility(s, generationId), cost: faceliftWeekCost(g.devCost) * (fl.designWeeks + d.minTestWeeks), designWeeks: fl.designWeeks, minTestWeeks: d.minTestWeeks,
     grades: grades(stats, y), avg: avgGrade(stats, y), avgBefore: avgGrade(ed.stats, y), dGain, dCap,
     lifeBefore: lifeFactor(age), lifeAfter: lifeFactor(age * keep), awarenessBefore: g.awareness, awarenessAfter: Math.min(1, g.awareness + fl.awareness),
-    ...faceliftMoney(s, g, stats, spec.options, Math.max(tier, ed.tier), age * keep),
+    ...faceliftMoney(s, g, stats, spec.options, Math.max(tier, ed.tier), age * keep, equipOf(spec, s)),
     tooEarly: m - g.launchMonth < fl.goodFromMonths,
     recommendedTeam: s.staff.filter((x) => x.projectId === null && !x.lab && (x.role === 'designer' || x.role === 'tester')).map((x) => x.id).sort((a, b) => a - b),
   };
 }
 /** 리프트 전후 월 판매·월 이익 어림(지금 달, 같은 가격·광고). 판매는 이 차의 지난달 수요 대비 한도 몫으로 자른다 */
-function faceliftMoney(s: CarState, g: Generation, stats: Stats, options: string[], tier: number, lifeAgeAfter: number) {
+function faceliftMoney(s: CarState, g: Generation, stats: Stats, options: string[], tier: number, lifeAgeAfter: number, equip: Equip) {
   const m = monthOf(s.week), ed = currentEdition(g), fl = config.lifecycle.facelift, t = monthTime(m);
   const others = sellingGens(s).filter((x) => x !== g && x.status === 'onSale').map((x) => toSaleCar(x, m)), cur = toSaleCar(g, m);
   const cap = capacityOf(s) * (g.allocShare ?? 1), mk = config.awareness.marketingCost[g.marketing];
-  const before = Math.min(cap, monthlyDemand(s, cur, others, t)), after = Math.min(cap, monthlyDemand(s, { ...cur, stats, options: withRequired(s, options), awareness: Math.min(1, g.awareness + fl.awareness), life: lifeFactor(lifeAgeAfter) }, others, t));
+  const before = Math.min(cap, monthlyDemand(s, cur, others, t)), after = Math.min(cap, monthlyDemand(s, { ...cur, stats, options: withRequired(s, options), equip, awareness: Math.min(1, g.awareness + fl.awareness), life: lifeFactor(lifeAgeAfter) }, others, t));
   const unit = (opts: string[], tr: number) => ed.price - unitCost(g.body, g.powertrain, tr, opts, costMultOf(s), ptCostAdd(s, g.powertrain));
   const pb = before * unit(ed.options, ed.tier) - mk, pa = after * unit(withRequired(s, options), tier) - mk, cost = faceliftWeekCost(g.devCost) * (fl.designWeeks + config.dev.minTestWeeks);
   return { salesBefore: Math.round(before), salesAfter: Math.round(after), profitBefore: pb, profitAfter: pa, paybackMonths: pa > pb ? Math.ceil(cost / (pa - pb)) : null };
@@ -363,7 +367,7 @@ function scanPrices(body: string, base: number, f: (price: number) => { sales: n
 export function bestPrice(s: CarState, generationId: number): BestPrice | null {
   const g = generationById(s, generationId);
   if (!g) return null;
-  const e = currentEdition(g), uc = unitCost(g.body, g.powertrain, e.tier, e.options, costMultOf(s), ptCostAdd(s, g.powertrain)), mk = config.awareness.marketingCost[g.marketing];
+  const e = currentEdition(g), op = optPerCar(equipOf(e), g.body, g.segment, yearOf(s.week), costMultOf(s)), uc = unitCost(g.body, g.powertrain, e.tier, e.options, costMultOf(s), ptCostAdd(s, g.powertrain)) + op.cost - op.rev, mk = config.awareness.marketingCost[g.marketing]; // 1.1.0: 선택 사양의 대당 평균 이익은 원가에서 뺀다(가격과 무관)
   const m = monthOf(s.week), car = toSaleCar(g, m), cap = capacityOf(s), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m)); // priceForecast와 같은 계산(1.0.0 성능: 다른 차는 한 번만)
   return scanPrices(g.body, genBasePrice(s, g), (price) => { const sales = Math.round(Math.min(cap, monthlyDemand(s, { ...car, price }, others, t))); return { sales, profit: sales * (price - uc) - mk }; }, uc, mk);
 }
@@ -459,3 +463,6 @@ export function bestTeam(s: CarState, spec: ProjectSpec, opts: { includeBusy?: b
 import { josa as josaQ } from './josa';
 const STAT_KO: Record<string, string> = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' };
 export { hallOfFame, type HallOfFame, type HallCar, type HallRow } from './hall';
+
+// ---------- 1.1.0 장비 구성 ----------
+export { equipInfo, recommendedEquip, equipChanges, expectation, takeRate, optPrice, bodyClass, equipOf, type Expectation } from './equip';
