@@ -132,7 +132,13 @@ export interface Generation {
   devCost: number; // 이 세대 개발에 쓴 돈
   profit: number; // 누적 이익(판매가 − 원가 − 마케팅 − 리콜)
   recalls: number;
+  pricePolicy?: PricePolicy | null; // 0.8.0 자동 가격(없거나 null = 수동)
+  plan?: GenPlan; // 0.8.0 출시 때의 기획 값(풀체인지가 물려받는다). 예전 저장에는 없다
 }
+/** 자동 가격(0.8.0): 시장 기준가의 pct% 유지 / 매달 최고 이익 가격. 월 결산 직전에 적용 */
+export type PricePolicy = { kind: 'base'; pct: number } | { kind: 'best' };
+/** 세대 기획 값(0.8.0): 개발 방향·예산·설계 기간, 출시 때 쓸 수 있던 옵션(풀체인지에서 "새로 가능" 판단용) */
+export interface GenPlan { direction: Stats; budget: Budget; designWeeks: number; opts: string[] }
 /** 차종: 이름이 같은 세대들의 묶음 */
 export interface Nameplate { id: number; name: string; generations: Generation[] }
 
@@ -220,7 +226,10 @@ export interface CarState {
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
   execs?: ExecState; // 0.7.0 임원(처음 임원 명령을 쓸 때 생긴다. 없으면 임원 없음, 저장 형식은 그대로 4)
   devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
+  years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
+/** 한 해의 기록(0.8.0): 평판 이유별 합, 세대 ID별 이익, 연구 완료, 월 결산 합계(months개월), 연말(12월 결산) 현금·직원 수·임원 */
+export interface YearLog { rep: Record<string, number>; cars: Record<string, number>; research: string[]; revenue: number; profit: number; sold: number; months: number; cash?: number; staff?: number; execs?: string[] }
 
 // ---------- 명령 ----------
 export type Command =
@@ -233,6 +242,7 @@ export type Command =
   | { type: 'discontinue'; generationId: number }
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
   | { type: 'setMarketing'; generationId: number; marketing: number }
+  | { type: 'setPricePolicy'; generationId: number; policy: PricePolicy | null } // 0.8.0 자동 가격(수동 setPrice는 정책을 끈다)
   | { type: 'retrofit'; generationId: number } // 0.4.2: 판매 중인 차에 지금 의무 장비를 추가(일시 비용 + 원가 상승, 바로 반영)
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }

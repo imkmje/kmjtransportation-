@@ -213,5 +213,6 @@ export const config = {
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
+  pricePolicy: { pctMin: 80, pctMax: 120, pctChoices: [95, 100, 105] }, // 0.8.0 자동 가격: 기준가 유지 비율(%) 허용 범위와 화면 선택지
   todo: { candUrgentWeeks: 1, regUrgentMonths: 12 }, // 0.7.0 할 일 목록: 채용 후보가 이 주 이하로 남거나 규제 시행이 이 개월 이하로 남으면 급한 일
 };

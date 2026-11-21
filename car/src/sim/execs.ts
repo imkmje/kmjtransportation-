@@ -241,7 +241,7 @@ function financeIdeas(s: CarState): Idea[] {
   if (s.loan.balance > 0 && s.cash - s.loan.balance >= fixed * F.repayMonths)
     out.push({ kind: 'repay', key: 'loan', goto: fin, facts: [`대출 ${won(s.loan.balance)}, 월 이자 ${won(s.loan.balance * loanRate(s))}`, `갚고 남는 현금 ${won(s.cash - s.loan.balance)}(운영비 ${Math.floor((s.cash - s.loan.balance) / fixed)}개월 치)`],
       text: ['현금에 여유가 있습니다. 대출 상환을 검토해 보시죠.', '대출을 갚을 여유가 있습니다. 이자를 줄이시죠.', `대출 ${won(s.loan.balance)}${J(won(s.loan.balance), '을/를')} 모두 갚아도 운영비 ${F.repayMonths}개월 치 이상이 남습니다. 월 이자 ${won(s.loan.balance * loanRate(s))}${J(won(s.loan.balance * loanRate(s)), '을/를')} 줄일 수 있습니다.`] });
-  for (const g of sellingGens(s).filter((x) => x.status === 'onSale')) {
+  for (const g of sellingGens(s).filter((x) => x.status === 'onSale' && !x.pricePolicy)) { // 자동 가격을 켠 차는 가격 제안을 하지 않는다(0.8.0)
     const n = gName(s, g), ed = currentEdition(g), base = basePriceOf(s, g.body), top = base * config.market.overpriceHardAt, go: ExecGoto = { tab: 'garage', id: g.id }, sold = g.sales.at(-1) ?? 0, unit = generationUnitProfit(g, s);
     if (g.lostSales >= 1 && ed.price < top - 1) {
       const p = Math.round(Math.min(top, ed.price * 1.05)), f = priceForecast(s, g.id, p) ?? 0;
