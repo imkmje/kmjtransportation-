@@ -99,13 +99,10 @@ describe('봇과 개발', () => {
       expect(allGens(g.state)[0].body).toBe(body);
     }
   });
-  it('신중 봇(40년, 시드 5개)이 소형·대형 SUV를 낸다', () => {
-    const seen = new Set<string>();
-    for (let seed = 1; seed <= 5; seed++) {
-      const g = Game.create({ difficulty: 'normal', seed }), b = steady();
-      for (let w = 0; w < 40 * WPY && g.state.status === 'playing'; w++) { b.step(g); g.tick(); }
-      for (const x of allGens(g.state)) seen.add(x.body);
-    }
-    expect(seen.has('suvS')).toBe(true); expect(seen.has('suvL')).toBe(true);
+  it('신중 봇이 대형 SUV는 2000년대에, 소형 SUV는 수요가 커지는 2010년대에 낸다(시드 5, 2025년까지)', () => {
+    const g = Game.create({ difficulty: 'normal', seed: 5 }), b = steady();
+    for (let w = 0; w < 55 * WPY && g.state.status === 'playing'; w++) { b.step(g); g.tick(); }
+    const first = (body: string) => Math.min(...allGens(g.state).filter((x) => x.body === body).map((x) => 1970 + Math.floor(x.launchWeek / WPY)));
+    expect(first('suvL')).toBeLessThan(2012); expect(first('suvS')).toBeGreaterThanOrEqual(2010); expect(first('suvS')).toBeLessThan(2020);
   }, 120_000);
 });
