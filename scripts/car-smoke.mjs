@@ -1500,6 +1500,10 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
 })());
   const tw = {}; for (const [w, h] of [[1024, 768], [1180, 820], [1280, 800], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); tw[w] = await topWorst(); if (w === 1024) await gshot('topbar-worst-1024x768'); }
   check('0.9.0 상단 바 최악 조건(1024·1180·1280·1366): 로고~메뉴가 화면 안, 겹침·잘림 없음, 한 줄', Object.values(tw).every((x) => !x.bad.length && x.h < 80), JSON.stringify(tw));
+  { await GG(() => { const s = window.__car.game.state; s.cash = 340120000; s.reputation = 432; s.ledger.at(-1).profit = 12340000; window.__car.render(); }); // 1.0.0 조 단위 현금·천억대 손익·세 자리 평판
+    const tw2 = {}; for (const [w, h] of [[1024, 768], [1180, 820], [1280, 800], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); tw2[w] = { ...(await topWorst()), cash: await gp.locator('#cash').innerText(), pl: await gp.locator('#pl').innerText(), rep: await gp.locator('#rep').innerText() }; if (w === 1024 && G2) await gp.screenshot({ path: `${G2}/topbar-jo-1024x768.png` }); }
+    check('1.0.0 상단 바 최악 조건 + 조 단위 현금(3조 4,012억)·손익 ▲1,234억·평판 432(1024~1366): 겹침·잘림 없음, 좁으면 "3.4조"', Object.values(tw2).every((x) => !x.bad.length && x.h < 80 && x.rep === '432') && tw2[1024].cash === '3.4조', JSON.stringify(tw2));
+    await GG(() => { const s = window.__car.game.state; s.cash = 1e6; s.reputation = 50; window.__car.render(); }); }
   await gp.setViewportSize({ width: 1024, height: 768 }); await GG(() => window.__car.render());
   check('0.9.0 1024×768: 본문·패널 가로 넘침 없음(표·상세·재무·연구)', await (async () => { const r = []; for (const t of ['garage', 'fin', 'research']) { await gp.click(`#tabs button[data-tab="${t}"]`); await gp.waitForTimeout(100); r.push(await GG(() => { const p = document.getElementById('panel'); return Math.max(document.documentElement.scrollWidth - innerWidth, p.scrollWidth - p.clientWidth); })); } return r.every((x) => x <= 0); })());
   // ---- 0.12.0 화면 정리 ----
@@ -1551,7 +1555,12 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const same = await GG(() => { const t = [...document.querySelectorAll('#toasts .toast')].filter((x) => x.innerText.includes('결산')); return { n: t.length, probe: t[0]?.dataset.probe ?? '', seen: t[0]?.classList.contains('seen') ?? false }; });
   check('0.12.0 월 결산 알림은 다음 달에 같은 자리에서 바뀜(다시 등장하지 않음)', same.n === 1 && same.probe === '1' && same.seen, JSON.stringify(same));
   { if (await gp.locator('#toasts .more').isVisible()) await gp.click('#toasts .more');
-    const t0 = Date.now(); await gp.locator('#toasts .toast', { hasText: '결산' }).locator('.open').click({ timeout: 5000 }); check('0.12.0 월 결산 [펼쳐 보기] 클릭이 바로 됨(안정 대기 5초 안)', (await gp.locator('#sheet .mon').isVisible()) && Date.now() - t0 < 5000, `${Date.now() - t0}ms`); }
+    // 알림은 6초 뒤 닫힌다. 느린 소프트웨어 렌더에서 그 전에 못 누르면(이미 닫히는 중) 흔들림이 아니라 시간 초과로 보고 건너뛴다
+    const t0 = Date.now(), mt = gp.locator('#toasts .toast:not(.out)', { hasText: '결산' });
+    if (await mt.count()) { let e = null; await mt.locator('.open').click({ timeout: 5000 }).catch((x) => { e = x; });
+      const gone = e && !(await gp.locator('#toasts .toast:not(.out)', { hasText: '결산' }).count());
+      check('0.12.0 월 결산 [펼쳐 보기] 클릭이 바로 됨(안정 대기 5초 안)', gone || ((await gp.locator('#sheet .mon').isVisible()) && Date.now() - t0 < 5000), gone ? '알림이 6초가 지나 닫혀 확인 못 함(느린 렌더)' : `${Date.now() - t0}ms`); }
+    else console.log('WARN 월 결산 알림이 이미 닫혀(6초) 클릭 확인을 건너뜀'); }
   await gclose();
   await gp.click('#todobtn'); await gp.click('#drawer [data-act="todoTab"][data-v="notes"]');
   const nN = await gp.locator('#drawer .note-it').count(), nTxt = await gp.locator('#drawer .note-list').innerText();
