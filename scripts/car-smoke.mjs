@@ -53,6 +53,10 @@ await shot('title');
 await act('titleNew');
 await page.fill('#t-co', '테스트 모터스');
 // ---- 로고 만들기 ----
+await page.setViewportSize({ width: 1024, height: 768 }); await page.waitForTimeout(200);
+check('새 게임(1024×768): 이름·난이도·[회사 세우기]가 스크롤 없이 첫 화면에', await G(() => ['#t-co', '[data-act="diff"]', '[data-act="startNew"]'].every((q) => { const r = document.querySelector(q).getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })));
+await page.setViewportSize({ width: 1366, height: 1024 });
+await page.click('.logo-det summary');
 const lg0 = await page.locator('.lg-prev').innerHTML();
 check('로고 만들기: 처음은 기본 로고(둥근 사각·사선 줄무늬)', lg0.includes('#14171c') && lg0.includes('#ff5a1f') && (await page.locator('[data-act="lg"][data-k="shape"]').count()) >= 6 && (await page.locator('[data-act="lg"][data-k="mark"]').count()) >= 9);
 await act('lgRand');
@@ -208,6 +212,8 @@ const cash0 = await G(() => window.__car.game.state.cash);
 await act('borrow', '[data-v="10000"]');
 check('대출 1억 받기', (await G(() => window.__car.game.state.cash)) - cash0 === 10000 && (await G(() => window.__car.game.state.loan.balance)) === 10000);
 await act('repay', '[data-v="all"]');
+check('모두 갚기: 확인 창(금액·남는 현금)', (await page.locator('#ask').isVisible()) && (await page.locator('#ask-text').innerText()).includes('모두 갚을까요'));
+await page.click('#ask-yes');
 check('대출 모두 갚기', (await G(() => window.__car.game.state.loan.balance)) === 0);
 await shot('company');
 await page.click('#tabs button[data-tab="records"]');
@@ -255,7 +261,10 @@ check('두 번째 차 출시: 차종 2개, 첫 차는 단종', await G(() => { c
 
 // ---- 생산 라인이 없을 때 출시 막기 ----
 await planNew(); await startDev(); await untilReady(); await act('toLaunch');
-check('생산 라인이 없으면 출시 버튼이 막히고 이유 표시', (await page.locator('[data-act="doLaunch"]').isDisabled()) && (await page.locator('#panel').innerText()).includes('생산 라인이 모두 차 있습니다'));
+check('생산 라인이 없으면 출시 버튼이 막히고 이유 표시', (await page.locator('[data-act="doLaunch"]').isDisabled()) && (await page.locator('#panel').innerText()).includes('모두 쓰고 있습니다') && (await page.locator('.line-fix [data-act="goWeak"]').count()) === 1 && (await page.locator('.line-fix [data-act="goCo"][data-v="factory"]').count()) === 1);
+await act('goWeak');
+check('라인 막힘 → [가장 안 팔리는 차 보기]: 차고의 그 차, 단종 버튼', (await G(() => window.__car.screen)) === 'garage' && (await page.locator('[data-act="discontinue"]').count()) >= 1);
+await page.click('#tabs button[data-tab="dev"]'); await act('toLaunch');
 await page.click('#tabs button[data-tab="dev"]');
 await act('cancelDev'); await page.click('#ask-yes');
 check('개발 취소(확인 창)', (await G(() => window.__car.game.state.projects.length)) === 0);
@@ -302,7 +311,7 @@ check('두 번째 파산: 구제 금융 버튼 비활성 + 이유', (await page.
 // ---- 시험을 충분히 한 차(시드 1, 균등·12주·보통·표준 동력·기준가): 평론 4.0 이상, 6개월 뒤 월 30대 이상 ----
 await act('newGame');
 await page.fill('#t-co', '시험 모터스');
-await page.click('#title details summary');
+await page.click('#title details.seed-det summary');
 await page.fill('#t-seed', '1');
 await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]'); // 실제 시간은 멈추고 tick으로만 진행(시드 고정 측정)
@@ -314,7 +323,8 @@ await G(() => { const c = window.__car; let i = 0; while (i++ < 80) { const p = 
 check('결함 5개 이하: "출시해도 좋습니다"', (await page.locator('#panel .defect-adv[data-level="ok"]').innerText()).includes('출시해도 좋습니다'), `결함 약 ${await G(() => window.__car.game.state.projects[0].defectEst)}개, 시험 ${await G(() => window.__car.game.state.projects[0].testWeeks)}주`);
 // 저장 → 불러오기 뒤에도 기획 색 유지
 await openMenu(); await act('saveSlot', '[data-v="slot2"]'); await page.waitForTimeout(300); await act('closeSheet');
-await openMenu(); await act('loadSlot', '[data-v="slot2"]'); await page.click('#ask-yes'); await page.waitForTimeout(300);
+await openMenu(); await act('loadSlot', '[data-v="slot2"]'); await page.waitForTimeout(200);
+check('방금 저장했으면 불러오기 때 "사라집니다" 확인 창이 없음', !(await page.locator('#ask').isVisible())); await page.waitForTimeout(300);
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="dev"]');
 await act('toLaunch');
@@ -502,8 +512,8 @@ await shot('garage-cleared');
 // ---- 3단계: 회사(직원·본사·공장), 팀 고르기, 동시 개발 ----
 const S3 = (fn, arg) => G(fn, arg);
 const staffN = () => S3(() => window.__car.game.state.staff.length);
-await openMenu(); await act('home'); await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
-await act('titleNew'); await page.fill('#t-co', '삼단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '3'); await act('diff', '[data-v="normal"]'); await act('startNew');
+await openMenu(); await act('home'); await page.waitForTimeout(150); if (await page.locator('#ask').isVisible()) await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
+await act('titleNew'); await page.fill('#t-co', '삼단 모터스'); await page.click('#title details.seed-det summary'); await page.fill('#t-seed', '3'); await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300);
 const vb1 = await S3(() => document.querySelector('#office svg')?.getAttribute('viewBox') ?? '');
@@ -681,8 +691,8 @@ check('0.3.0 형식 저장(형식 3) 불러와 이어 하기(연구·사건·조
 const S4 = (fn, arg) => G(fn, arg);
 await openMenu();
 check('메뉴: 역사 사건·시장 수치는 게임에 맞게 어림한 것이라는 한 줄', (await page.locator('#sheet .help-line').innerText()).includes('어림한 것'));
-await act('home'); await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
-await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details summary'); await page.fill('#t-seed', '4'); await act('diff', '[data-v="normal"]'); await act('startNew');
+await act('home'); await page.waitForTimeout(150); if (await page.locator('#ask').isVisible()) await page.click('#ask-yes'); await page.waitForSelector('#title:not([hidden])');
+await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details.seed-det summary'); await page.fill('#t-seed', '4'); await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="company"]');
 check('회사 탭 안쪽 탭 5개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구');

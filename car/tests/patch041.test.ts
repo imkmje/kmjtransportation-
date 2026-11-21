@@ -148,10 +148,10 @@ describe('난이도 균형(0.4.1, 시드 20개)', () => {
     expect(alive(c10)).toBeGreaterThanOrEqual(14);
     for (const r of id) { expect(r.alive).toBe(false); expect(r.month).toBeLessThan(15 * 12); }
   });
-  it('어려움: steady 10년 생존 50~85%. novice 10년 현금 중앙값 쉬움 > 보통 > 어려움', () => {
+  it('어려움: steady 10년 생존 50% 이상(0.5.1). novice 10년 현금 중앙값 쉬움 > 보통 > 어려움', () => {
     const st = run(() => steady(), 'hard', 10), cash = (['easy', 'normal', 'hard'] as const).map((d) => median(run(() => novice(), d, 10).map((r) => r.cash)));
     console.log(`어려움 steady 10년 ${alive(st)}/20, novice 10년 현금 중앙값 쉬움 ${Math.round(cash[0] / 1e4)}억 / 보통 ${Math.round(cash[1] / 1e4)}억 / 어려움 ${Math.round(cash[2] / 1e4)}억`);
-    expect(alive(st)).toBeGreaterThanOrEqual(10); expect(alive(st)).toBeLessThanOrEqual(17);
+    expect(alive(st)).toBeGreaterThanOrEqual(10); expect(alive(st)).toBeLessThanOrEqual(20); // 0.5.1: 이익률을 올려 어려움도 10년 생존 19/20(상한 17 → 20)
     expect(cash[0]).toBeGreaterThan(cash[1]); expect(cash[1]).toBeGreaterThan(cash[2]);
   });
 });

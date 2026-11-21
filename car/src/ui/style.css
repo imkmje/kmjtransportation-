@@ -667,3 +667,25 @@ button.pill{min-height:44px;align-items:center} /* 상단바의 누르는 알약
 .ract.pri{border-left:3px solid var(--accent);padding-left:8px}
 .ract .row{margin-top:6px}
 .chip.bad{background:#fdecec;color:#8a1f1f}
+.evc .ev-cost{display:block;margin-top:4px;font-size:13px;font-weight:800}
+/* 0.5.1 기획: 위에 붙는 요약, 잠긴 차체 한 줄 */
+.plan-sum{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;background:var(--ink);color:#fff;border-radius:16px;padding:8px 10px 8px 14px;font-size:13px;font-weight:700;box-shadow:0 6px 16px -10px #000a;flex:none}
+.plan-sum b{font-size:17px;font-weight:900;margin-left:2px}
+.plan-sum .ib{border-color:#fff9;color:#fff9}
+.plan-sum .sum-best{margin-left:auto;min-height:44px;font-size:13px;padding:0 12px}
+#main.wide #panel>.plan-sum{grid-column:1/-1}
+.locked-row{display:flex;flex-wrap:wrap;gap:6px}
+.opt.lock-chip{min-height:44px;padding:6px 12px;flex-direction:column;justify-content:center;flex:0 1 auto}
+.opt.lock-chip b{font-size:13px}.opt.lock-chip small{font-size:12px}
+.opt .appeal{color:var(--ink);font-weight:700}.opt .appeal b{font-size:13px}
+.logo-det summary{display:flex;align-items:center;gap:10px;min-height:48px;font-weight:800;font-size:14px;cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 12px}
+.logo-det summary small{font-weight:600;color:var(--ink2);font-size:12px}
+.lg-mini{display:grid;place-items:center}
+.lg-bd{min-height:44px;padding-right:8px}.lg-bd input{width:22px;height:22px}
+/* 0.5.1: 작은 글씨 12px 이상(태블릿에서 읽히게) */
+.kpi small,.note,.tbl th,.pchip small,.ofc-g small,.ov.br small,.eyebrow,.seg button small,.opt small,.opt .tag,.lg-o small,.srow.head,.cap,.tc small,.tc em,.tc .yr,.lbl,.toast b,.s-name small,.btn small,.vsbase{font-size:12px}
+.lbl{letter-spacing:.08em}
+/* 0.5.1: 막힌 주 버튼은 '상태 표시'로 보이게(누를 수 있는 큰 버튼처럼 보이지 않게) */
+.go:disabled{background:transparent;color:var(--ink2);border:1.5px dashed var(--line);font-size:14px;font-weight:700;min-height:48px;transform:none}
+body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자 중간("있습니/다", "6,091/대")에서 꺾이지 않게 */
+.fc-hints ul{margin:4px 0 0;padding-left:18px}
