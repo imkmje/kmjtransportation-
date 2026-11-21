@@ -50,13 +50,22 @@ describe('선택 사양(1.1.0)', () => {
 });
 
 describe('추천 구성과 바뀐 기대(1.1.0)', () => {
-  it('추천: 의무·기대 장비는 기본 장비, 고객층이 중시하는 장비는 선택 사양, 기본 장비 원가는 기준가의 stdCap 이하', () => {
+  it('추천: 의무·기대 장비는 기본 장비, 고객층이 중시하는 장비는 선택 사양', () => {
     const g = at(2010), s = g.state, e = recommendedEquip(s, 'sedanM', 'family', 'gasoline');
     expect(e.abs).toBe('std'); expect(e.airbag).toBe('std'); expect(e.aircon).toBe('std');
     const info = equipInfo(s, { body: 'sedanM', segment: 'family', powertrain: 'gasoline', equip: e });
     expect(info.totals.missingExpected).toEqual([]);
-    expect(info.totals.stdCost).toBeLessThanOrEqual(2600 * config.equip.stdCap + 140); // 의무 장비 몫은 상한 밖
     expect(Object.values(e)).toContain('opt');
+  });
+  it('추천 구성을 따르면 빠진 기대 장비가 없고, equipChanges(추천)는 빈 목록(모든 차체 × 고객층 × 1970~2040년 10년 간격)', () => {
+    for (let y = 1970; y <= 2040; y += 10) {
+      const g = at(y), s = g.state;
+      for (const b of BODIES) for (const seg of ['youth', 'family', 'worker', 'rich', 'fleet', 'enthusiast']) {
+        const e = recommendedEquip(s, b.id, seg, 'gasoline');
+        expect(equipInfo(s, { body: b.id, segment: seg, powertrain: 'gasoline', equip: e }).totals.missingExpected, `${y} ${b.id} ${seg}`).toEqual([]);
+        expect(equipChanges(s, e, b.id, seg), `${y} ${b.id} ${seg}`).toEqual([]);
+      }
+    }
   });
   it('equipChanges: 전작에 없던 기대 장비는 기본 장비로 바꾸라고 알린다', () => {
     const g = at(2016), ch = equipChanges(g.state, { radio: 'std' }, 'sedanM', 'family');

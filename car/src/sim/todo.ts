@@ -8,12 +8,13 @@ import { faceliftEligibility, fullChangeEligibility, latestGen, retrofitInfo } f
 import { currentEdition } from './market';
 import { researchError, researchSlots } from './research';
 import { diffOf } from './difficulty';
-import { monthLabel } from './time';
+import { monthLabel, yearOf } from './time';
+import { equipOf, expectEffect } from './equip';
 import { josa } from './josa';
 import { faceliftPreview, advice } from './queries';
 import type { CarState } from './types';
 
-export type TodoKind = 'choice' | 'ready' | 'cands' | 'cash' | 'regulation' | 'reports' | 'exec' | 'retrofit' | 'capacity' | 'facelift' | 'fullchange' | 'team' | 'research' | 'tired' | 'hire';
+export type TodoKind = 'choice' | 'ready' | 'cands' | 'cash' | 'regulation' | 'reports' | 'exec' | 'retrofit' | 'capacity' | 'equip' | 'facelift' | 'fullchange' | 'team' | 'research' | 'tired' | 'hire';
 /** goto.tab: garage(id = 세대) · dev(sub 'launch' + id = 프로젝트, sub 'plan' = 신차 기획) · company(sub = 회사 안쪽 탭) · choice(id = 선택 사건) · reports(보고함) */
 export interface TodoGoto { tab: string; sub?: string; id?: number }
 export interface TodoItem { key: string; kind: TodoKind; title: string; detail: string; goto: TodoGoto; urgent: boolean }
@@ -22,7 +23,7 @@ export interface TodoItem { key: string; kind: TodoKind; title: string; detail: 
 export interface TodoExec { vacant: number; unread: number; lastUnread: number }
 const NO_EXEC: TodoExec = { vacant: 0, unread: 0, lastUnread: 0 };
 
-const ORDER: TodoKind[] = ['choice', 'ready', 'cands', 'cash', 'regulation', 'reports', 'exec', 'retrofit', 'capacity', 'facelift', 'fullchange', 'team', 'research', 'tired', 'hire'];
+const ORDER: TodoKind[] = ['choice', 'ready', 'cands', 'cash', 'regulation', 'reports', 'exec', 'retrofit', 'capacity', 'equip', 'facelift', 'fullchange', 'team', 'research', 'tired', 'hire'];
 const nameOfGen = (s: CarState, genId: number) => s.nameplates.find((n) => n.generations.some((g) => g.id === genId))?.name ?? '';
 
 export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
@@ -54,6 +55,8 @@ export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
     if (g.status !== 'onSale') continue;
     const name = nameOfGen(s, g.id), rf = retrofitInfo(s, g.id);
     if (rf.needed) { const list = rf.options.map((o) => optionById(o).name).join('·'); add(`retrofit:${g.id}`, 'retrofit', `「${name}」에 의무 장비 넣기`, `${list}${josa(list, '이/가')} 빠져 있습니다. 판매 중인 차에 바로 넣을 수 있습니다.`, { tab: 'garage', id: g.id }); }
+    { const ed = currentEdition(g), fx = expectEffect(equipOf(ed), g.body, yearOf(s.week)); // 1.1.0 장비 기대 미달(옛 구성 판은 면제)
+      if (!ed.equipLegacy && fx.missing.length) { const list = fx.missing.map((o) => optionById(o).name).join('·'); add(`equip:${g.id}:${fx.missing.join(',')}`, 'equip', `「${name}」에 기대되는 장비가 없습니다`, `이 차급에서 기대되는 ${list}${josa(list, '이/가')} 빠져 판매가 약 ${Math.round((1 - fx.mult) * 100)}% 줄고 있습니다. 페이스리프트로 넣을 수 있습니다.`, { tab: 'garage', id: g.id }); } }
     if (g.lostSales >= 1) add(`capacity:${g.id}`, 'capacity', `「${name}」 주문이 생산을 넘습니다`, `지난달 주문 ${Math.round(g.lastDemand).toLocaleString()}대 중 ${(g.sales.at(-1) ?? 0).toLocaleString()}대만 만들었습니다. 공장 증설이나 생산 배분을 검토하세요.`, { tab: 'company', sub: 'factory' });
     if (freeTeams > 0 && faceliftEligibility(s, g.id).ok) {
       const fp = faceliftPreview(s, g.id, { options: currentEdition(g).options });

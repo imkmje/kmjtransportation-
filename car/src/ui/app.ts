@@ -661,8 +661,8 @@ export function startApp(): void {
   const todoSnooze = new Map<string, number>(); // 항목 키 → 이 달(포함)까지 숨김. 화면 메모리에만(불러오면 다시 보인다)
   const REF_KINDS = new Set<string>(['exec', 'team', 'research', 'hire']); // 늘 떠 있는 참고 항목
   const NO_MUTE = new Set<string>(['choice', 'cash', 'ready', 'regulation']); // 끌 수 없는 종류
-  const TODO_TAG: Record<Q.TodoKind, string> = { choice: '결정', ready: '출시', cands: '채용', cash: '현금', regulation: '규제', reports: '보고', exec: '임원', retrofit: '장비', capacity: '생산', facelift: '얼굴', fullchange: '세대', team: '개발', research: '연구', tired: '휴식', hire: '정원' };
-  const TODO_KIND_NAME: Record<Q.TodoKind, string> = { choice: '결정할 사건', ready: '출시 대기', cands: '채용 후보', cash: '현금 마이너스', regulation: '규제', reports: '임원 보고', exec: '빈 임원 자리', retrofit: '의무 장비', capacity: '생산 한도', facelift: '페이스리프트 적기', fullchange: '풀체인지', team: '빈 개발팀', research: '빈 연구 칸', tired: '지친 직원', hire: '정원 여유' };
+  const TODO_TAG: Record<Q.TodoKind, string> = { choice: '결정', ready: '출시', cands: '채용', cash: '현금', regulation: '규제', reports: '보고', exec: '임원', retrofit: '장비', capacity: '생산', equip: '장비', facelift: '얼굴', fullchange: '세대', team: '개발', research: '연구', tired: '휴식', hire: '정원' };
+  const TODO_KIND_NAME: Record<Q.TodoKind, string> = { choice: '결정할 사건', ready: '출시 대기', cands: '채용 후보', cash: '현금 마이너스', regulation: '규제', reports: '임원 보고', exec: '빈 임원 자리', retrofit: '의무 장비', capacity: '생산 한도', equip: '장비 기대 미달', facelift: '페이스리프트 적기', fullchange: '풀체인지', team: '빈 개발팀', research: '빈 연구 칸', tired: '지친 직원', hire: '정원 여유' };
   /** 서랍·배지에 보이는 할 일(숨긴 것 빼고) */
   const shownTodos = () => { const m = monthOf(game!.state.week); return todos().filter((t) => !todoMute.has(t.kind) && !((todoSnooze.get(t.key) ?? -1) >= m)); };
   /** 배지 숫자: 급한 일 + 지금 할 수 있는 일(참고 제외) */

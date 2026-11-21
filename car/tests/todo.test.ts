@@ -115,3 +115,13 @@ describe('할 일 목록(0.7.0)', () => {
     const before = JSON.stringify(g.state); todoItems(g.state); expect(JSON.stringify(g.state)).toBe(before);
   });
 });
+
+describe('할 일: 장비 기대 미달(1.1.0)', () => {
+  it('판매 중인 차(옛 구성 아님)에 기대 장비가 빠지면 참고 항목, 그 차로 이동', () => {
+    const { g, gen } = launched(1); g.state.week = (1995 - 1970) * 48;
+    const t = todoItems(g.state).find((x) => x.kind === 'equip')!;
+    expect(t.urgent).toBe(false); expect(t.goto).toEqual({ tab: 'garage', id: gen.id }); expect(t.detail).toContain('기대되는');
+    gen.editions.at(-1)!.equipLegacy = true;
+    expect(todoItems(g.state).some((x) => x.kind === 'equip')).toBe(false);
+  });
+});

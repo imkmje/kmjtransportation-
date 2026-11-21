@@ -72,28 +72,25 @@ export function expectMult(e: Equip, body: string, year: number): number {
   return v;
 }
 const yearNow = (s: CarState, year?: number) => year ?? yearOf(s.week);
-/** 추천 구성: 의무·기대 장비는 기본 장비, 그 고객층이 중시하고(값 ≥ 원가) 아직 흔하지 않은 것은 선택 사양, 나머지는 안 넣음.
- *  기본 장비 원가 합이 차 기준가의 stdCap를 넘으면 값이 작은 기대 장비부터 선택 사양으로 내린다 */
-export function recommendedEquip(s: CarState, body: string, segment: string, powertrain: string, year?: number): Equip {
+/** 추천 구성: 의무·기대 장비는 늘 기본 장비, 그 고객층이 중시하고(값 > 원가) 아직 기대되지 않는 것은 선택 사양, 나머지는 안 넣음.
+ *  (1.1.0 배포 전: 기대 장비를 원가 상한으로 선택 사양으로 내리면 추천을 따라도 감점이 생겨 상한을 없앴다. powertrain은 화면 호환용) */
+export function recommendedEquip(s: CarState, body: string, segment: string, _powertrain: string, year?: number): Equip {
   const y = yearNow(s, year), req = new Set(requiredOptions(s)), out: Equip = {};
   for (const o of optionsAt(s)) {
     const ex = expectation(o.id, body, y);
     if (req.has(o.id) || ex === 'expected') out[o.id] = 'std';
     else if (optionValue(o.id, segment) > o.cost) out[o.id] = 'opt';
   }
-  const cap = basePriceOf(s, body, powertrain) * C().stdCap, std = stdOf(out).filter((id) => !req.has(id)).sort((a, b) => optionValue(a, segment) - optionValue(b, segment) || (a < b ? -1 : 1));
-  let sum = stdOf(out).reduce((a, id) => a + optionById(id).cost, 0);
-  for (const id of std) { if (sum <= cap) break; out[id] = 'opt'; sum -= optionById(id).cost; }
   return out;
 }
-/** 전작 구성과 지금 기대를 비교해 바꿀 만한 장비(기대가 된 장비는 기본 장비로, 의무 장비는 기본 장비로) */
+const RANK = (l: EquipLevel | null) => (l === 'std' ? 2 : l === 'opt' ? 1 : 0);
+/** 지금 구성에서 추천 구성까지 올릴 장비(추천과 같은 판단: 목표 단계 = recommendedEquip, 이미 그 단계 이상이면 변화 없음) */
 export function equipChanges(s: CarState, prev: Equip, body: string, segment: string, year?: number): { id: string; name: string; from: EquipLevel | null; to: EquipLevel | null; reason: string }[] {
-  const y = yearNow(s, year), req = new Set(requiredOptions(s)), out: { id: string; name: string; from: EquipLevel | null; to: EquipLevel | null; reason: string }[] = [];
+  const y = yearNow(s, year), req = new Set(requiredOptions(s)), rec = recommendedEquip(s, body, segment, '', y), out: { id: string; name: string; from: EquipLevel | null; to: EquipLevel | null; reason: string }[] = [];
   for (const o of optionsAt(s)) {
-    const from = prev[o.id] ?? null, ex = expectation(o.id, body, y);
-    if (req.has(o.id) && from !== 'std') out.push({ id: o.id, name: o.name, from, to: 'std', reason: '규제로 의무 장비가 됐습니다.' });
-    else if (ex === 'expected' && from !== 'std') out.push({ id: o.id, name: o.name, from, to: 'std', reason: '이 차급에서 기대되는 장비가 됐습니다.' });
-    else if (!from && ex !== 'expected' && optionValue(o.id, segment) > o.cost && !prev[o.id]) out.push({ id: o.id, name: o.name, from, to: 'opt', reason: '이 고객층이 중시하는 장비입니다. 선택 사양으로 넣을 만합니다.' });
+    const from = prev[o.id] ?? null, to = rec[o.id] ?? null;
+    if (RANK(from) >= RANK(to)) continue;
+    out.push({ id: o.id, name: o.name, from, to, reason: req.has(o.id) ? '규제로 의무 장비가 됐습니다.' : expectation(o.id, body, y) === 'expected' ? '이 차급에서 기대되는 장비가 됐습니다.' : '이 고객층이 중시하는 장비입니다. 선택 사양으로 넣을 만합니다.' });
   }
   return out;
 }
