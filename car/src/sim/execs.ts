@@ -187,7 +187,7 @@ function hrIdeas(s: CarState): Idea[] {
     break;
   }
   for (const x of [...s.staff].filter((y) => y.condition < C.low && !isAway(y, s.week)).sort((a, b) => a.condition - b.condition || a.id - b.id).slice(0, 1)) {
-    const w = restWeeksFor(x);
+    const w = X.hr.restWeeks;
     out.push({ kind: 'rest', key: String(x.id), goto: staffGoto(x.id), facts: [`${x.name} 컨디션 ${pct(x.condition)}`, `지친 상태에서는 일의 양이 ${pct(1 - C.lowMult)} 줄어듭니다`],
       text: ['지친 직원이 있습니다. 쉬게 해 주는 편이 낫습니다.', `${x.name}${J(x.name, '이/가')} 많이 지쳤습니다. 휴식을 권합니다.`, `${x.name}의 컨디션이 ${pct(x.condition)}입니다. 이대로면 일의 양이 ${pct(1 - C.lowMult)} 줄어듭니다. ${w}주 휴식을 권합니다.`] });
   }
@@ -335,7 +335,6 @@ function addReport(s: CarState, role: ExecRole, kind: string, text: string, fact
   e.reports.push({ id: s.nextId++, week: s.week, role, execName: seat?.staff.name ?? '', kind, key, text, facts, goto, unread: true, auto, replacementId });
   if (e.reports.length > X.reportsMax) e.reports.splice(0, e.reports.length - X.reportsMax);
 }
-const restWeeksFor = (x: Staff): number => Math.min(config.staff.restMaxWeeks, Math.max(1, Math.ceil((config.staff.condition.mid - x.condition) / config.staff.condition.recover)));
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 const OK: CommandResult = { ok: true };
 
@@ -499,7 +498,7 @@ function delegate(c: ExecCtx): void {
   const s = c.s, fixed = () => monthlyFixed(s);
   if (delegationOn(s, 'hr', 'autoRest'))
     for (const x of [...s.staff].sort((a, b) => a.id - b.id).filter((y) => y.condition < config.staff.condition.low && !isAway(y, s.week))) {
-      const w = restWeeksFor(x);
+      const w = X.hr.restWeeks;
       if (c.run({ type: 'rest', staffId: x.id, weeks: w }).ok) addReport(s, 'hr', 'autoRest', `${x.name}${J(x.name, '이/가')} 지쳐 ${w}주 쉬게 했습니다(컨디션 ${pct(x.condition)}).`, [], staffGoto(x.id), true);
     }
   if (delegationOn(s, 'hr', 'autoTrain')) {

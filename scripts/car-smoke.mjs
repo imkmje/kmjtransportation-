@@ -1069,6 +1069,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
 // ---- 0.7.0 할 일·보고·다음 일까지(새 게임, 1366×1024 → 1024×768) ----
 { const ectx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
   const ep = await ectx.newPage(); ep.on('pageerror', (e) => errors.push(String(e))); ep.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const closeAny = async () => { if (await ep.locator('#sheet').isVisible()) await ep.locator('#sheet [data-act="later"],#sheet [data-act="closeSheet"],#sheet [data-act="closeReview"]').first().click(); }; // 선택 사건 창이 떠 있으면 닫기
   const EG = (fn, a) => ep.evaluate(fn, a), eshot = (n) => process.argv[2] ? ep.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
   await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
   await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '할일 시험'); await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
@@ -1113,10 +1114,24 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await EG(() => document.getElementById('skipbtn').click()); const onOk = await topOk(); await EG(() => window.__car.skip && document.getElementById('skipbtn').click());
   check('상단바(1024×768): 진행 중 표시일 때도 넘치지 않음', onOk);
   await eshot('top-1024x768');
-  await ep.click('#todobtn'); await ep.waitForTimeout(200);
+  await closeAny(); await ep.click('#todobtn'); await ep.waitForTimeout(200);
   { const ks = await ep.locator('.todo-it').evaluateAll((l) => l.map((b) => [b.dataset.kind, b.classList.contains('urgent')]));
     check('할 일 창(1024×768): 급한 일(출시 대기·현금)이 맨 위에 모임', ks.some(([k, u]) => k === 'cash' && u) && ks.slice(0, ks.filter(([, u]) => u).length).every(([, u]) => u), JSON.stringify(ks)); }
   await eshot('todo-1024x768');
+  // 임원 보고: 임원을 두고 [다음 일까지] → 월 결산 보고에서 멈춤, 알림은 한 줄, 보고 탭에 카드
+  await ep.locator('#sheet [data-act="closeSheet"]').click(); await ep.setViewportSize({ width: 1366, height: 1024 });
+  await ep.click('#tabs button[data-tab="garage"]');
+  await EG(() => { const g = window.__car.game; g.state.cash = 1e8; g.state.negMonths = 0; g.command({ type: 'appointExec', role: 'hr', staffId: g.state.staff.find((x) => x.projectId === null).id }); window.__car.render(); });
+  const sk = await EG(() => window.__car.todos().map((t) => t.key));
+  for (let i = 0; i < 5 && !(await EG(() => window.__car.game.state.execs.reports.length)); i++) { await closeAny(); await ep.click('#skipbtn'); await ep.waitForFunction(() => !window.__car.skip, null, { timeout: 60000 }); }
+  const tt = await ep.locator('#toasts').innerText(), reps = await EG(() => window.__car.game.state.execs.reports.filter((r) => r.unread).length);
+  check('임원 보고: 월 결산에 보고가 오면 [다음 일까지]가 멈추고 결산 알림에 "임원 보고 N건"만(보고 창은 뜨지 않음)', reps > 0 && tt.includes(`임원 보고 ${reps}건`) && (await ep.locator('#sheet .rep-card').count()) === 0, `${reps}건, 시작 할 일 ${sk.length}개`);
+  check('임원 보고: 할 일에 읽지 않은 보고 항목', await EG(() => window.__car.todos().some((t) => t.kind === 'reports')));
+  await closeAny(); await ep.click('#todobtn'); await ep.click('[data-act="todoTab"][data-v="reports"]');
+  check('보고 탭: 카드(직함·이름·본문·[이 보고 닫기]), 열면 읽음 처리', (await ep.locator('.rep-card').count()) >= reps && (await ep.locator('.rep-card').first().innerText()).includes('인사 임원') && (await EG(() => window.__car.game.state.execs.reports.every((r) => !r.unread))) && (await ep.locator('.rep-card.unread').count()) >= reps);
+  await eshot('reports-1366x1024');
+  const c0 = await ep.locator('.rep-card').count(); await ep.locator('.rep-card [data-act="repClose"]').first().click();
+  check('[이 보고 닫기] → 카드 하나 줄어듦', (await ep.locator('.rep-card').count()) === c0 - 1);
   await ectx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));

@@ -85,13 +85,13 @@ export const noExpand = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady
 /** 연구 안 함: 신중과 같되 연구를 전혀 하지 않는다(소형 세단·가솔린 3단계·옵션 없음으로만) */
 export const noResearch = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...steady({ research: false, ...opts }), name: 'noResearch' });
 
-/** 임원을 쓰는 신중(0.7.0 균형 점검): 신중과 같고, 달 첫 주마다 빈 임원 자리를 채운다(맡기기를 켤 수 있는 직원이 있으면 임명, 없으면 공고를 내 가장 나은 후보를 채용),
+/** 임원을 쓰는 신중(0.7.0 균형 점검): 신중과 같고, 달 첫 주마다 맡기기가 있는 빈 임원 자리(인사·생산·연구소장)를 채운다(맡기기를 켤 수 있는 직원이 있으면 임명, 없으면 공고를 내 가장 나은 후보를 채용),
  *  켤 수 있는 맡기기를 모두 켜고, 교체 고용 제안은 승인한다. 그 밖의 제안(보고)은 읽기만 한다 */
 export const steadyExec = (opts: Partial<SteadyOptions> = {}): Bot => {
   const base = steady(opts);
   return { name: 'steadyExec', step(g) { base.step(g); if (g.state.week % config.time.weeksPerMonth === 0) manageExecs(g); } };
 };
-const EXEC_ORDER: ExecRole[] = ['hr', 'production', 'research', 'product', 'market', 'finance'];
+const EXEC_ORDER: ExecRole[] = ['hr', 'production', 'research']; // 봇은 제안을 읽지 않으므로 맡기기가 있는 자리만 채운다(임원도 정원을 차지한다)
 function manageExecs(g: Game): void {
   const s = g.state, X = config.exec;
   for (const role of EXEC_ORDER) {
