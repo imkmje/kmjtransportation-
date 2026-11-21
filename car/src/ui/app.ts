@@ -152,7 +152,7 @@ export function startApp(): void {
     const box = $('#toasts'), t = document.createElement('div');
     box.style.setProperty('--tt', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`); // 폰: 상단바 바로 아래
     const undo = !open && undoFresh(); // 0.8.0: 되돌릴 수 있는 조작 직후의 알림에 [되돌리기]
-    if (undo) { open = { label: '되돌리기', fn: doUndo }; ms = Math.max(ms, 8000); undoShown = true; }
+    if (undo) { dropUndoBtns(); open = { label: '되돌리기', fn: doUndo }; ms = Math.max(ms, 8000); undoShown = true; } // 되돌릴 수 있는 것은 하나뿐: 이전 알림의 버튼은 없앤다
 
     const old = key ? keyed.get(key) : undefined;
     if (old?.isConnected) old.remove();
@@ -182,13 +182,14 @@ export function startApp(): void {
   const err = (reason: string) => { sfx('error'); toast(reason, 'bad', '할 수 없습니다'); };
   // ----- 0.8.0 되돌리기: 조작(act) 중에 되돌릴 수 있는 명령이 성공했으면 그 알림에 버튼, 알림이 없었으면 따로 한 줄 -----
   let actHist = -1, undoShown = false;
+  const dropUndoBtns = () => { for (const b of document.querySelectorAll('#toasts [data-undo]')) b.remove(); };
   const undoFresh = () => !!game && actHist >= 0 && !undoShown && game.state.history.length > actHist && Q.undoInfo(game.state).available;
   function doUndo(): void {
     if (!game) return;
     const label = Q.undoInfo(game.state).label, r = game.undoLast();
     if (!r.ok) return err(r.reason);
     sheet.hidden = true; dirty = true; lastPanel = ''; staffPick.clear();
-    for (const b of document.querySelectorAll('#toasts [data-undo]')) b.remove();
+    dropUndoBtns();
     toast(`되돌렸습니다: ${label}`, '', '되돌리기', 5000, 'undo');
     if (saveSet.big) autoSave();
     render();
@@ -397,7 +398,7 @@ export function startApp(): void {
     const ev = game.tick();
     weekReports = ev.reduce((a, e) => a + (e.kind === 'execReport' ? e.count : 0), 0);
     logDev(); weekFresh = true; sfx('weekTick'); dirty = true;
-    for (const b of document.querySelectorAll('#toasts [data-undo]')) b.remove(); // 주가 바뀌면 되돌릴 수 없다
+    dropUndoBtns(); // 주가 바뀌면 되돌릴 수 없다
     for (const e of ev) onEvent(e);
     if (saveSet.every === 'week') autoSave();
     return ev;
@@ -2112,6 +2113,7 @@ export function startApp(): void {
     if (!b || b.hasAttribute('disabled')) return;
     curAct = b.dataset.act!; actHist = game?.state.history.length ?? -1; undoShown = false;
     void act(curAct, b).finally(() => { // 0.8.0 되돌릴 수 있는 조작인데 알림이 없었으면 [되돌리기] 한 줄
+      if (game && game.state.history.length > actHist && !Q.undoInfo(game.state).available) dropUndoBtns(); // 되돌릴 수 없는 조작을 했으면 이전 버튼도 무효
       if (undoFresh()) toast(Q.undoInfo(game!.state).label, '', '조작함', 8000, 'undo');
       actHist = -1;
     });

@@ -1260,6 +1260,10 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('메뉴: "직전 조작 되돌리기 · 대출: 1억원"', (await cp.locator('[data-act="undo"]').innerText()).includes('대출: 1억원') && !(await cp.locator('[data-act="undo"]').isDisabled()));
   await cp.click('[data-act="undo"]');
   check('메뉴에서 되돌리기 → 대출 0, 창 닫힘', (await CG(() => window.__car.game.state.loan.balance)) === 0 && !(await cp.locator('#sheet').isVisible()));
+  await cp.locator('[data-act="borrow"]').first().click(); await cp.locator('[data-act="borrow"]').first().click();
+  check('조작을 두 번 하면 [되돌리기] 버튼은 마지막 알림 하나에만', (await cp.locator('#toasts [data-undo]').count()) === 1);
+  await cp.locator('#toasts [data-undo]').click();
+  check('그 버튼 → 마지막 대출만 되돌림(1억 남음), 버튼 모두 사라짐', (await CG(() => window.__car.game.state.loan.balance)) === 10000 && (await cp.locator('#toasts [data-undo]').count()) === 0);
   await cp.locator('[data-act="borrow"]').first().click(); await CG(() => window.__car.tick(1));
   check('한 주가 지나면 되돌리기 버튼이 사라짐', (await cp.locator('#toasts [data-undo]').count()) === 0 && !(await CG(() => window.__car.Q.undoInfo(window.__car.game.state).available)));
   // 자동 저장: 큰 결정(증설) 뒤 저장 → 메뉴에 마지막 자동 저장 연월, 간격 설정은 기기 저장소에
@@ -1277,7 +1281,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('자동 저장 실패 → "자동 저장에 실패" 알림 한 번', (await cp.locator('#toasts .toast', { hasText: '자동 저장에 실패' }).count()) === 1);
   await cp.reload(); await cp.waitForSelector('#title:not([hidden])');
   // 연 보고서: 11월 말까지 진행 → [다음 일까지]가 12월 결산 뒤 연 보고서 창에서 멈춤
-  await cp.click('[data-act="continue"]'); await CG(() => window.__car.setSpeed(0));
+  await cp.click('[data-act="continue"]'); await cp.waitForFunction(() => window.__car.game && document.getElementById('title').hidden); await CG(() => window.__car.setSpeed(0));
   await CG(() => { const c = window.__car; c.tick(44 - c.game.state.week); });
   for (let i = 0; i < 8 && !(await cp.locator('#sheet .yr').isVisible()) && (await CG(() => window.__car.game.state.week)) < 52; i++) {
     await closeAny(); await cp.click('#skipbtn'); await cp.waitForFunction(() => !window.__car.skip, null, { timeout: 60000 }); await cp.waitForTimeout(100);
