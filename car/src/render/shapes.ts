@@ -24,7 +24,7 @@ export const BODY: Record<BodyId, BodyShape> = {
   sedanM: { L: 4.6, W: 1.78, clr: .2, belt: .92, roof: 1.42, cR: -1.05, cF: .55, rr: .55, rf: .7, wr: .33, wb: 1.4, deck: true, sill: .1, doors: [.95, -.25, -.95], archTrim: .03 },
   coupe: { L: 4.5, W: 1.82, clr: .15, belt: .84, roof: 1.26, cR: -.75, cF: .35, rr: .95, rf: .8, wr: .34, wb: 1.38, deck: true, sill: .1, doors: [.92, -.45], archTrim: .03, fenders: true },
   // SUV 3종: 소형은 짧고 높은 도시형(짧은 오버행), 중형은 기존 SUV, 대형은 길고 각진 3열(긴 휠베이스·높은 지붕·큰 휠, 뒤 쿼터 창 하나 더)
-  suvS: { L: 4.2, W: 1.78, clr: .26, belt: 1.0, roof: 1.62, cR: -1.55, cF: .5, rr: .28, rf: .58, wr: .35, wb: 1.3, deck: false, sill: .16, doors: [.84, -.525, -1.2], archTrim: .05, nose: .17, suv: true },
+  suvS: { L: 4.2, W: 1.78, clr: .26, belt: 1.0, roof: 1.66, cR: -1.55, cF: .5, rr: .28, rf: .58, wr: .35, wb: 1.3, deck: false, sill: .16, doors: [.84, -.525, -1.2], archTrim: .05, nose: .17, suv: true },
   suv: { L: 4.6, W: 1.86, clr: .3, belt: 1.08, roof: 1.72, cR: -1.75, cF: .6, rr: .25, rf: .6, wr: .39, wb: 1.4, deck: false, sill: .2, doors: [.9, -.575, -1.28], archTrim: .07, suv: true },
   suvL: { L: 5.05, W: 1.96, clr: .32, belt: 1.14, roof: 1.86, cR: -2.05, cF: .66, rr: .18, rf: .62, wr: .42, wb: 1.62, deck: false, sill: .22, doors: [.98, -.29, -1.24], archTrim: .075, pil: [.3, .65], nose: .14, edge: .7, suv: true },
   sedanL: { L: 5.1, W: 1.88, clr: .18, belt: .9, roof: 1.44, cR: -1.22, cF: .58, rr: .58, rf: .78, wr: .35, wb: 1.5, deck: true, sill: .1, doors: [1.06, -.12, -1.12], archTrim: .03, nose: .17 },
