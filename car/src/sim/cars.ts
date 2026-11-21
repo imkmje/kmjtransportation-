@@ -55,7 +55,7 @@ export function unitCost(body: string, powertrain: string, tier: number, options
 export function lifeFactor(ageMonths: number): number {
   const { start, rampMonths, plateauMonths, decay } = config.life; // 1.0.0: oldMonths부터 oldDecay를 더 곱한다
   if (ageMonths < rampMonths) return start + ((1 - start) * ageMonths) / rampMonths;
-  return (1 - decay) ** Math.max(0, ageMonths - plateauMonths) * (1 - config.life.oldDecay) ** Math.max(0, ageMonths - config.life.oldMonths);
+  return (1 - decay) ** Math.max(0, ageMonths - plateauMonths) * Math.max(config.life.oldFloor, (1 - config.life.oldDecay) ** Math.max(0, ageMonths - config.life.oldMonths)); // 노후 감소에는 하한(oldFloor)이 있다(수명 0%가 되어 아무것도 팔리지 않던 문제)
 }
 
 export const salaryOf = (ability: number): number => config.salary.base + ability * config.salary.perAbility;

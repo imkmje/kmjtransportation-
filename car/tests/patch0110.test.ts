@@ -9,10 +9,10 @@ import { withRequired } from '../src/sim/dev';
 import { ptCostAdd } from '../src/sim/research';
 import { unitCost } from '../src/sim/cars';
 import { OPTIONS } from '../src/data';
-import { factoryInfo, modelPnL, reputationInfo } from '../src/sim/queries';
+import { faceliftPreview, factoryInfo, modelPnL, reputationInfo } from '../src/sim/queries';
 import { monthOf, monthTime } from '../src/sim/time';
 import { config } from '../src/config';
-import { SPEC, ok, toMonthEnd } from './util';
+import { SPEC, launched, ok, toMonthEnd } from './util';
 
 describe('평판 상한 없앰(0.11.0)', () => {
   it('평판은 100을 넘는다. 효과는 100까지 그대로, 100 → 200의 추가 효과가 0 → 100의 1/3', () => {
@@ -147,5 +147,16 @@ describe('공장 6·7등급(0.11.0, 사용자 요청 "2만 대 넘게 팔린다"
     expect(monthOf(s.week) - m0).toBe(factoryBuildMonths(6));
     expect(capacityOf(s)).toBe(config.factory.levels[5].capacity);
     expect(factoryInfo(s).next?.level).toBe(7);
+  });
+});
+
+describe('오래된 차의 수명 하한(1.0.0 스모크 재현: 1997년 13년 된 차의 페이스리프트 옵션이 예상에 반영되지 않음)', () => {
+  it('출시 13년 된 차도 수명이 0이 되지 않아, 페이스리프트 옵션(에어컨)이 예상 판매·이익을 바꾼다', () => {
+    const { g, gen } = launched(1); toMonthEnd(g); toMonthEnd(g);
+    const m = monthOf(g.state.week); gen.launchMonth = m - 156; gen.lifeMonth = m - 156;
+    const a = faceliftPreview(g.state, gen.id, { options: [] })!, b = faceliftPreview(g.state, gen.id, { options: ['aircon'] })!;
+    expect(a.lifeBefore).toBeGreaterThan(0.1);
+    expect(a.salesAfter).toBeGreaterThan(0);
+    expect(b.profitAfter).not.toBeCloseTo(a.profitAfter, 0);
   });
 });
