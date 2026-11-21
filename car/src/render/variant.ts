@@ -30,6 +30,7 @@ export interface Chassis extends BodyShape {
   roofType: RoofType; // 노치백(트렁크 따로)·세미 패스트백·패스트백
   wedge: number; // 허리선이 뒤로 갈수록 올라가는 양(m, 시대 + 시드)
   dev: Record<DevKey, number>; // 뽑힌 값(−1~+1)
+  persona: number; // 차대 성격(PERSONA 번호, 시드가 없으면 −1)
 }
 
 const warned = new Set<string>();
@@ -48,14 +49,14 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
   const old = era <= 1980, nc = x(), c1 = .45 + .3 * x(), c2 = .15 + .15 * x(), kick = x(), bc = x(), st = x(), sr = x(), rk = x(), cl = x(), bp = x();
   return {
     // 2010은 날 선 캐릭터 라인(늘 1~2줄, 뒤로 치켜 오름), 2020은 매끈한 면(없거나 1줄)
-    crease: era === 2010 ? (nc < .45 ? [c1] : [c1, c2]) : era === 2020 ? (nc < .5 ? [] : [c1]) : nc < (old ? .35 : .15) ? [] : nc < (old ? .9 : .7) ? [c1] : [c1, c2],
-    kick: era === 2010 ? .05 + .07 * kick : era === 2020 ? .02 * kick : era === 1990 ? .02 * kick : 0,
-    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .5, 2020: .12 }[era], // 대형 세단은 늘 크롬 띠. 2010은 크롬 창틀이 흔하고 2020은 드물다
+    crease: era === 2010 ? (nc < .45 ? [c1] : [c1, c2]) : era === 2020 ? (nc < .5 ? [] : [c1]) : era === 2030 ? (nc < .35 ? [] : nc < .75 ? [c1] : [c1, c2]) : nc < (old ? .35 : .15) ? [] : nc < (old ? .9 : .7) ? [c1] : [c1, c2],
+    kick: era === 2010 ? .05 + .07 * kick : era >= 2020 ? .02 * kick : era === 1990 ? .02 * kick : 0,
+    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .5, 2020: .12, 2030: .2 }[era], // 대형 세단은 늘 크롬 띠. 2010은 크롬 창틀이 흔하고 2020은 드물다
     strip: old ? (st < .45 ? (era === 1970 ? 'chrome' : 'dark') : st < .65 ? 'dark' : 'none') : era === 1990 && st < .4 ? 'dark' : 'none',
     sunroof: sr < (id === 'pickup' || id === 'kei' ? .15 : .35),
     rack: rk < (({ suvS: .6, suv: .85, suvL: .9, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
-    clad: b.suv ? cl < (era === 2020 ? .45 : .85) : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < (era === 2020 ? .1 : .3), // 2020은 검은 클래딩이 줄어든다
-    blackPillar: era >= 2010 && !b.bed && bp < (era === 2020 ? .55 : .2), // 떠 있는 지붕은 2020년대 유행
+    clad: b.suv ? cl < (era >= 2020 ? .45 : .85) : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < (era >= 2020 ? .1 : .3), // 2020은 검은 클래딩이 줄어든다
+    blackPillar: era >= 2010 && !b.bed && bp < (era >= 2020 ? .55 : .2), // 떠 있는 지붕은 2020년대 유행
   };
 }
 
@@ -108,7 +109,7 @@ export function chassisOf(look: CarLook): Chassis {
   const n = b.doors.length, at = (d: number) => cR + (cF - cR) * (d * s - b.cR * s) / ((b.cF - b.cR) * s);
   const doors = b.doors.map((d, i) => i > 0 && (i < n - 1 || !b.deck) ? at(d) : d * s);
   return {
-    ...b, dev, side, roofType, L: b.L * s, W: b.W + VARY.wid * dev.wid, belt, roof: Math.max(b.roof + E.roofD + VARY.roof * dev.roof, belt + MIN_ROOF_GAP),
+    ...b, dev, side, roofType, persona: pc, L: b.L * s, W: b.W + VARY.wid * dev.wid, belt, roof: Math.max(b.roof + E.roofD + VARY.roof * dev.roof, belt + MIN_ROOF_GAP),
     cR, cF, rr, rf: base - cF, wb, archGap, archY, archR, archTrim: side.clad ? Math.max(b.archTrim, .065) : b.archTrim,
     wr: wr0 + WHEEL_GROW[look.wheel ?? 1], doors, wedge,
   };
@@ -171,7 +172,7 @@ export function faceOf(look: CarLook): FaceSpec {
   }
   if (f.lamp === 'popup' && look.bodyId !== 'sports' && look.bodyId !== 'coupe') f.lamp = 'rect'; // 팝업 램프는 스포츠카·쿠페만
   if (look.bodyId === 'kei' && f.lamp === 'swept') f.lamp = 'oval'; // 경차는 날 선 램프 대신 둥글고 순한 눈
-  if (ev) f.grille = 'none'; // 전기차는 막힌 그릴
+  if (ev && f.grille !== 'panel') f.grille = 'none'; // 전기차는 막힌 그릴(2030년대 빛나는 패널은 그대로)
   return f;
 }
 
@@ -190,17 +191,17 @@ export function distinctFaces(base: CarLook, seeds: number[], avoid?: CarLook): 
   });
 }
 
-const LAMP: Record<LampKind, string> = { round: '둥근 전조등', twin: '둥근 전조등 2쌍', rect: '네모난 전조등', oval: '타원형 전조등', vertical: '세로로 긴 전조등', swept: '위로 치켜 올라간 전조등', slim: '가늘고 긴 전조등', popup: '팝업 전조등', projector: '렌즈형 전조등' };
-const GRILLE: Record<GrilleKind, string> = { rect: '사각 그릴', hex: '육각 그릴', twin: '위아래 2단 그릴', bars: '가로 줄무늬 그릴', none: '그릴 없는 얼굴', mesh: '그물 그릴', vertical: '세로 줄무늬 그릴', kidney: '좌우로 나뉜 그릴', wide: '전조등까지 이어진 넓은 그릴' };
-const TAIL: Record<TailKind, string> = { bar: '가로 후미등', vertical: '세로 후미등', L: 'L자 후미등', split: '나뉜 후미등', full: '좌우로 이어진 후미등', round: '둥근 후미등' };
-const WHEEL: Record<WheelKind, string> = { twin5: '더블 5스포크 휠', spoke5: '5스포크 휠', multi: '멀티 스포크 휠', mesh: '그물 휠', turbine: '터빈 휠', steel: '철제 휠과 휠캡', aero: '막힌 공력 휠' };
+export const LAMP: Record<LampKind, string> = { round: '둥근 전조등', twin: '둥근 전조등 2쌍', rect: '네모난 전조등', oval: '타원형 전조등', vertical: '세로로 긴 전조등', swept: '위로 치켜 올라간 전조등', slim: '가늘고 긴 전조등', popup: '팝업 전조등', projector: '렌즈형 전조등', pixel: '픽셀 전조등', split: '위아래로 나뉜 전조등' };
+export const GRILLE: Record<GrilleKind, string> = { panel: '빛나는 그릴 패널', rect: '사각 그릴', hex: '육각 그릴', twin: '위아래 2단 그릴', bars: '가로 줄무늬 그릴', none: '그릴 없는 얼굴', mesh: '그물 그릴', vertical: '세로 줄무늬 그릴', kidney: '좌우로 나뉜 그릴', wide: '전조등까지 이어진 넓은 그릴' };
+export const TAIL: Record<TailKind, string> = { pixel: '픽셀 후미등', bar: '가로 후미등', vertical: '세로 후미등', L: 'L자 후미등', split: '나뉜 후미등', full: '좌우로 이어진 후미등', round: '둥근 후미등' };
+export const WHEEL: Record<WheelKind, string> = { cover: '휠 커버', twin5: '더블 5스포크 휠', spoke5: '5스포크 휠', multi: '멀티 스포크 휠', mesh: '그물 휠', turbine: '터빈 휠', steel: '철제 휠과 휠캡', aero: '막힌 공력 휠' };
 
 /** 후보 고르기 화면용 쉬운 한 줄 설명. 차대는 실제 치수를 차체 평균과 비교해서, 얼굴은 뽑힌 부품에서 만든다 */
 export function describeLook(look: CarLook): { chassis: string; face: string } {
   const c = chassisOf(look), top = chassisWords(look), sd = c.side;
   const extra = c.roofType === 'fast' ? '패스트백' : c.roofType === 'semi' ? '세미 패스트백' : sd.sunroof ? '선루프' : sd.rack ? '루프랙' : sd.blackPillar ? '떠 있는 지붕' : sd.beltChrome ? '크롬 창틀' : '';
   const f = faceOf(look);
-  const grille = look.powertrain === 'ev' ? '막힌 그릴' : GRILLE[f.grille];
+  const grille = look.powertrain === 'ev' && f.grille !== 'panel' ? '막힌 그릴' : GRILLE[f.grille];
   return {
     chassis: look.chassisSeed == null ? '기본 비율' : (top.length ? top.join(', ') : '균형 잡힌 표준 비율') + (extra ? ` · ${extra}` : ''),
     face: [LAMP[f.lamp] + (f.bar ? '과 가로 라이트 바' : ''), grille, TAIL[f.tail], WHEEL[f.wheel]].join(', '),

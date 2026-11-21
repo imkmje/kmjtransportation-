@@ -206,7 +206,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     gs.push(g); yss.push(ys); tops.push(T);
   }
   const hatchGlass = !p.deck && p.bed == null; // 트렁크 없는 차의 뒤 유리는 뒷면 데칼(경계가 또렷하게)
-  const vi = (i: number, r: number) => i * RN + (r % RN), idx: number[][] = [[], [], [], []], sgs: number[][] = [[], [], [], []], sill = p.clr + p.sill * (era === 2020 ? .55 : 1); // 2020은 검은 하부가 얇다
+  const vi = (i: number, r: number) => i * RN + (r % RN), idx: number[][] = [[], [], [], []], sgs: number[][] = [[], [], [], []], sill = p.clr + p.sill * (era >= 2020 ? .55 : 1); // 2020년대부터 검은 하부가 얇다
   for (let i = 0; i < N; i++) for (let r = 0; r < RN; r++) {
     const a = vi(i, r), b = vi(i + 1, r), c = vi(i + 1, r + 1), dd = vi(i, r + 1), k = r < J ? r : RN - 1 - r;
     const cx = (pos[a * 3] + pos[b * 3]) / 2, cy = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[c * 3 + 1] + pos[dd * 3 + 1]) / 4;
@@ -372,6 +372,19 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
       });
       lampIn = z0; break;
     }
+    case 'pixel': { // 2030: 어두운 덮개 안에 작은 네모 발광체 4×2
+      const z0 = fw * Math.max(.3, F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), z1 = fw * F.lampZ1, y0 = lampY - LH / 2, y1 = lampY + LH / 2, cw = (z1 - z0) / 4, ch = (y1 - y0) / 2;
+      pair(g => { decal(rect(g * z0, g * z1, y0, y1), M.lens, 1); for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) decal(rect(g * (z0 + cw * i + cw * .18), g * (z0 + cw * (i + 1) - cw * .18), y0 + ch * j + ch * .2, y0 + ch * (j + 1) - ch * .2, 1, 1), M.lamp, 1, L2); });
+      lampIn = z0; break;
+    }
+    case 'split': { // 2030: 보닛 끝 가는 주간등(위) + 범퍼 쪽 작은 본등(아래)
+      const z0 = fw * Math.max(.32, .88 - .45 * lw), z1 = fw * .9, yd = lampY + LH * .45, yl = lampY - LH * .55, r = Math.min(.04, LH * .45);
+      pair(g => {
+        decal(rect(g * z0, g * z1, yd - .011, yd + .011, 8, 1), M.lamp, 1, L2);
+        decal(rect(g * (z1 - (z1 - z0) * .45), g * z1, yl - LH * .45, yl + LH * .45), M.lens, 1); decal(circle(g * (z1 - (z1 - z0) * .22), yl, r), M.lamp, 1, L2);
+      });
+      lampIn = z0; lampTop = yd + .011; break;
+    }
     default: { // rect
       const z0 = fw * Math.max(.3, F.lampZ1 - (F.lampZ1 - F.lampZ0) * lw), lh = E.classic ? .1 : LH;
       pair(g => {
@@ -385,7 +398,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   }
   if (fc.bar) decal(rect(-fw * F.barZ, fw * F.barZ, lampTop - F.barH, lampTop, 12, 1), M.lamp, 1, L2);
   if (fc.bumper === 'black' && !E.classic) for (const s of [1, -1] as const) decal(rect(-fw * .8, fw * .8, p.clr + .06, p.clr + .22, 24, 6), M.trim, s, F.lift * 1.5);
-  if (!ev) {
+  if (!ev || fc.grille === 'panel') {
     const gW = fc.grilleW * (BK.h > 1.2 ? 1.12 : 1), gH = fc.grilleH * (BK.h > 1.2 ? 1.2 : 1); // SUV·픽업은 크고 곧은 그릴
     const gz = Math.min(fw * (E.classic ? F.classicGrilleZ : F.grilleZ) * gW, lampIn - .04), fr = F.grilleFrame;
     const g1 = fc.bar ? Math.min(lampY + F.grilleUp, lampTop - F.barH - .015) : lampY + F.grilleUp, g0 = Math.max(lampY - F.grilleDown * gH, plateTop + .03);
@@ -421,6 +434,11 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
         for (let i = 1; i <= 2; i++) { const y = lampY - .06 + .12 * i / 3; decal(rect(-lampIn + .02, lampIn - .02, y - .005, y + .005, 8, 1), M.chrome, 1, L2); }
         break;
       }
+      case 'panel': { // 2030: 넓고 매끈한 어두운 패널, 윗변이 빛나고 가운데 엠블럼
+        const pz = Math.min(fw * .62 * gW, lampIn + .06), y1 = Math.min(g1, lampTop - .02), y0 = Math.max(lampY - .1 * gH, plateTop + .03);
+        decal(rect(-pz, pz, y0, y1, 12, 3), M.lens, 1); decal(rect(-pz + .01, pz - .01, y1 - .012, y1 - .004, 12, 1), M.lamp, 1, L2);
+        break;
+      }
       default: framed(-gz, gz, g0, g1);
     }
   }
@@ -454,6 +472,11 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
       tailIn = .48; tailTop = tailY + .035; break;
     case 'full': tl(F.tailZ0, F.tailZ1, tailY - .03, tailY + .03); tailTop = tailY + .03; break;
     case 'round': pair(g => { for (const z of [.62, .82]) { decal(circle(g * fw * z, tailY, .058), M.chrome, -1); decal(circle(g * fw * z, tailY, .045), M.tail, -1, L2); } }); tailIn = .55; tailTop = tailY + .058; break;
+    case 'pixel': { // 2030: 좌우로 이어진 붉은 띠 위에 작은 네모 발광체들
+      const y0 = tailY - .03, y1 = tailY + .03; decal(rect(-fw * .9, fw * .9, y0, y1, 12, 1), M.tailLens, -1);
+      for (let i = 0; i < 6; i++) { const z = .5 + i * .07; pair(g => decal(rect(g * fw * z, g * fw * (z + .045), y0 + .012, y1 - .012, 1, 1), M.tail, -1, L2)); }
+      tailIn = .45; tailTop = y1; break;
+    }
     default: tailTop = tailY + (E.classic ? F.classicTailH : F.tailH) / 2;
       if (E.classic) tl(F.classicTailZ0, F.classicTailZ1, tailY - F.classicTailH / 2, tailY + F.classicTailH / 2); else tl(F.tailZ0, F.tailZ1, tailY - F.tailH / 2, tailY + F.tailH / 2);
   }
@@ -485,7 +508,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     add(new THREE.BoxGeometry(.006, .075, .15), M.glass, mx - .04, my + .02, sgn * (mz + .12));
     for (let i = 1; i < doors.length; i++) { // 손잡이: 각 문의 뒤 끝 근처
       const x = doors[i] + F.handleBack, y = p.belt - F.handleDrop;
-      if (era === 2020) add(new THREE.BoxGeometry(F.handleW, .014, .004), M.gloss, x, y, sgn * (sideZ(x, y) + .001)); // 매립형 손잡이: 돌출 없이 선만
+      if (era >= 2020) add(new THREE.BoxGeometry(F.handleW, .014, .004), M.gloss, x, y, sgn * (sideZ(x, y) + .001)); // 매립형 손잡이: 돌출 없이 선만
       else add(new THREE.BoxGeometry(F.handleW, .022, .02), M.chrome, x, y, sgn * (sideZ(x, y) + .006));
     }
   });
@@ -540,12 +563,12 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   // 스포크 무늬: [개수, 길이 비율, 두께(접선), 겹(같은 각도에 나란히 둘 오프셋)]
   const SP: Record<WheelKind, [number, number, number, number[]]> = {
     twin5: [5, .92, .026, [-.028, .028]], spoke5: [5, .92, .07, [0]], multi: [10, .92, .022, [0]], mesh: [16, .92, .012, [0]],
-    turbine: [9, .5, .03, [0]], steel: [0, 0, 0, []], aero: [5, .22, .05, [0]],
+    turbine: [9, .5, .03, [0]], steel: [0, 0, 0, []], aero: [5, .22, .05, [0]], cover: [3, .62, .035, [0]], // cover: 막힌 휠 커버에 긴 홈 3개
   };
   const [nSp, spL, spW, offs] = SP[wk], spoke = nSp ? new THREE.BoxGeometry(rimR * spL, .03, spW) : null;
   // 스포크 휠은 가운데 판을 작게 해 스포크 사이로 어두운 림 안쪽·브레이크 디스크·캘리퍼가 보이게 한다
-  const open = wk !== 'aero' && wk !== 'turbine' && wk !== 'steel';
-  const plate = !open ? (wk === 'steel' ? new THREE.CylinderGeometry(rimR * .66, rimR * .7, .03, 24) : new THREE.CylinderGeometry(rimR * (wk === 'aero' ? .96 : .9), rimR * (wk === 'aero' ? .96 : .9), .015, 32))
+  const covered = wk === 'aero' || wk === 'turbine' || wk === 'cover', open = !covered && wk !== 'steel';
+  const plate = !open ? (wk === 'steel' ? new THREE.CylinderGeometry(rimR * .66, rimR * .7, .03, 24) : new THREE.CylinderGeometry(rimR * (wk === 'turbine' ? .9 : .96), rimR * (wk === 'turbine' ? .9 : .96), .015, 32))
     : new THREE.CylinderGeometry(rimR * .24, rimR * .3, .03, 16);
   const rotor = open ? new THREE.CylinderGeometry(rimR * .8, rimR * .8, .016, 24) : null, caliper = open ? new THREE.BoxGeometry(rimR * .5, .045, rimR * .2) : null;
   for (const x of [-p.wb, p.wb]) for (const sgn of [1, -1]) {
@@ -555,9 +578,9 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     part(plate, wk === 'steel' ? M.chrome : M.rim, wk === 'steel' ? .1 : open ? .1 : .085);
     if (rotor && caliper) { part(rotor, M.rotor, .072); const cp = part(caliper, look.sporty ? M.caliper : M.dark, .085); cp.position.set(-rimR * .2, .085, -sgn * rimR * .62); } // 캘리퍼는 디스크 위쪽 뒤
     if (spoke) for (let i = 0; i < nSp; i++) {
-      const pv = new THREE.Group(); pv.rotation.y = i / nSp * Math.PI * 2; pv.position.y = wk === 'aero' || wk === 'turbine' ? .095 : .105; w.add(pv);
+      const pv = new THREE.Group(); pv.rotation.y = i / nSp * Math.PI * 2; pv.position.y = covered ? .095 : .105; w.add(pv);
       // 터빈·공력 휠은 둘레 가까이에 짧고 어두운 홈, 나머지는 가운데서 뻗는 림색 스포크
-      const dark = wk === 'aero' || wk === 'turbine', r0 = dark ? rimR * (1 - spL / 2 - .08) : rimR * .5;
+      const dark = covered, r0 = dark ? rimR * (1 - spL / 2 - .08) : rimR * .5;
       for (const off of offs) { const sp = new THREE.Mesh(spoke, dark ? M.dark : M.rim); sp.position.set(r0, 0, off); if (wk === 'turbine') sp.rotation.y = .5; sp.castShadow = true; pv.add(sp); }
     }
     part(hub, M.chrome, .115);

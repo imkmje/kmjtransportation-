@@ -20,6 +20,7 @@
 :root.era-2000{--era-stage-top:#ffffff;--era-stage-bottom:#c9d0d9;--era-paper:#faf7f0;--era-rule:#e3dccb;--era-mast-rule:2px solid var(--ink,#14171c);--era-head:900;--era-accent:#ff5a1f;--era-accent-shift:0%}
 :root.era-2010{--era-stage-top:#f7faff;--era-stage-bottom:#c6d0dc;--era-paper:#fbfaf6;--era-rule:#e0ddd5;--era-mast-rule:1.5px solid var(--ink,#14171c);--era-head:800;--era-accent:#ff5a1f;--era-accent-shift:0%}
 :root.era-2020{--era-stage-top:#f3f7ff;--era-stage-bottom:#c1cddc;--era-paper:#fcfcfa;--era-rule:#e4e4df;--era-mast-rule:1px solid var(--ink,#14171c);--era-head:800;--era-accent:#ff5220;--era-accent-shift:4%}
+:root.era-2030{--era-stage-top:#f0f6ff;--era-stage-bottom:#bccbdd;--era-paper:#fdfdfc;--era-rule:#e2e5ea;--era-mast-rule:1px solid var(--ink,#14171c);--era-head:700;--era-accent:#ff4d24;--era-accent-shift:6%}
 
 /* 무대 배경: 기존 토큰에 시대 색을 조금 섞는다 */
 :root[class*="era-"] .stage{background:radial-gradient(120% 90% at 50% 62%,color-mix(in oklab,var(--stage1,#fff) 72%,var(--era-stage-top)) 0,color-mix(in oklab,var(--stage2,#dfe4ea) 72%,var(--era-stage-bottom)) 48%,color-mix(in oklab,var(--stage3,#c9d0d9) 70%,var(--era-stage-bottom)) 100%)}

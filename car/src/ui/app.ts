@@ -9,9 +9,10 @@ import { diffOf } from '../sim/difficulty';
 import { STATS, type ExecRole, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
-import { describeLook, distinctFaces } from '../render/variant';
+import { describeLook } from '../render/variant';
 import type { CarLook } from '../render/look';
 import { createOffice, type Office, type OfficeEvent, type OfficeView } from './office/office';
+import * as LP from './lookpick';
 import { applyEra } from './era';
 import { REVEAL_KEY, playReveal, revealWanted } from './reveal';
 import { CAR_VERSION } from '../version';
@@ -880,7 +881,14 @@ export function startApp(): void {
     return lookOf({ body: g.body, powertrain: g.powertrain, tier: e.tier, color: e.color, wheels: e.wheels, year: genYear(g), chassisSeed: g.chassisSeed, faceSeed: e.faceSeed });
   };
   /** 페이스리프트 얼굴 후보: 지금 얼굴·서로와 앞모습이 겹치지 않게 고른 시드 3개 */
-  const liftFaces = (g: Generation): number[] => { const cur = genLook(g), np = Q.nameplateOf(game!.state, g.id)!; return distinctFaces(cur, Q.lookCandidates(game!.state, np.id, 'face', 'facelift'), cur); };
+  /** 0.13.0 페이스리프트 얼굴 후보의 기준: 지금 모습, sim 후보 첫 시드에서 이어지는 시드 줄, 지금 얼굴은 피함 */
+  const liftCtx = (g: Generation): LP.LookCtx => { const cur = genLook(g), np = Q.nameplateOf(game!.state, g.id)!; return { base: cur, s0: Q.lookCandidates(game!.state, np.id, 'face', 'facelift')[0], avoid: [cur] }; };
+  /** 0.13.0 기획 외관 후보의 기준(풀체인지면 전작 차대·얼굴은 피함) */
+  const planCtx = (d: Draft, kind: 'face' | 'chassis', base: CarLook): LP.LookCtx => {
+    const s = game!.state, prev = d.nameplateId ? s.nameplates.find((x) => x.id === d.nameplateId)?.generations.at(-1) : undefined;
+    const avoid = prev ? [kind === 'face' ? { ...base, faceSeed: currentEdition(prev).faceSeed } : { ...base, chassisSeed: prev.chassisSeed }] : [];
+    return { base, s0: kind === 'face' ? Q.lookCandidates(s, d.nameplateId, 'face', 'nextGen')[0] : Q.lookCandidates(s, d.nameplateId, 'chassis')[0], avoid };
+  };
   /** 개발 중인 차의 모습. 페이스리프트는 그 세대의 시대를 따른다 */
   const projLook = (p: Project, color: string, wheels: 0 | 1 | 2 = 1): CarLook => {
     const g = p.kind === 'facelift' ? Q.generationById(game!.state, p.targetId ?? -1) : undefined;
@@ -1177,7 +1185,11 @@ export function startApp(): void {
     const seeds = { nameplateId: npId, chassisSeed: Q.lookCandidates(s, npId, 'chassis')[0], faceSeed: Q.lookCandidates(s, npId, 'face', 'nextGen')[0], team: idleDev().map((x) => x.id) };
     if (n && prev) { // 0.8.0 전작 그대로: 고객층·동력·옵션에 개발 방향·예산·설계 기간까지(예전 저장의 세대는 기본값). 쓸 수 없게 된 값은 fixDraft가 맞춘다
       const e = currentEdition(prev), opts = new Set(Q.optionsAt(s).map((o) => o.id)), pl = prev.plan, req = new Set(Q.requiredOptions(s));
-      return { name: n.name, body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: e.options.filter((o) => opts.has(o) && !req.has(o)), direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: e.color, mode: 'sum', ...seeds };
+      const d: Draft = { name: n.name, body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: e.options.filter((o) => opts.has(o) && !req.has(o)), direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: PAINT[(Math.max(0, PAINT.findIndex((p) => p[1] === e.color)) + 3) % PAINT.length][1], mode: 'sum', ...seeds }; // 0.13.0 풀체인지는 새 색을 제안
+      // 0.13.0 풀체인지 기본 모양: 전작과 충분히 다른 첫 후보(옆모습·얼굴)
+      const base = lookOf({ body: d.body, powertrain: d.powertrain, tier: d.tier, color: d.color, wheels: 1, year: yearOf(s.week), chassisSeed: d.chassisSeed, faceSeed: d.faceSeed });
+      d.chassisSeed = LP.firstDistinct('chassis', planCtx(d, 'chassis', base)); d.faceSeed = LP.firstDistinct('face', planCtx(d, 'face', { ...base, chassisSeed: d.chassisSeed }));
+      return d;
     }
     const first = !s.nameplates.length && !s.projects.length && (() => { try { return localStorage.getItem(PLANNED_KEY) !== '1'; } catch { return true; } })();
     const d0: Draft = { name: '', body: Q.bodiesAt(s)[0].id, segment: 'worker', powertrain: Q.powertrainsAt(s)[0].id, tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] ?? config.dev.designWeeks[0], color: PAINT[0][1], mode: first ? 'step' : 'sum', ...seeds };
@@ -1257,9 +1269,11 @@ export function startApp(): void {
       <p class="lbl" style="margin-top:14px">색상(출시 때 바꿀 수 있음)</p>${paints('pick', d.color)}`;
     }
     else if (planTab === 'look') {
-      const ch = Q.lookCandidates(s, d.nameplateId, 'chassis'), fa = distinctFaces(lk(), Q.lookCandidates(s, d.nameplateId, 'face', 'nextGen'));
-      body = `<p class="lbl">옆모습(차대) 후보</p><div class="opts looks">${ch.map((v, i) => { const l = lk({ chassisSeed: v }); return `<button class="opt look" data-act="pick" data-k="chassisSeed" data-v="${v}" aria-pressed="${d.chassisSeed === v}">${thumb(l, 0)}<b>옆모습 ${i + 1}</b><small>${esc(describeLook(l).chassis)}</small></button>`; }).join('')}</div>
-        <p class="lbl" style="margin-top:14px">얼굴(앞뒤 모습) 후보</p><div class="opts looks">${fa.map((v, i) => { const l = lk({ faceSeed: v }); return `<button class="opt look" data-act="pick" data-k="faceSeed" data-v="${v}" aria-pressed="${d.faceSeed === v}">${thumb(l, -1.05)}<b>얼굴 ${i + 1}</b><small>${esc(describeLook(l).face)}</small></button>`; }).join('')}</div>
+      // 0.13.0 후보 6개 + 다른 후보 보기 + 직접 고르기, 풀체인지는 전작과 나란히
+      LP.lookKey(`plan:${d.nameplateId}:${d.body}`);
+      const cmp = full && prev ? `<p class="lbl">${prev.number}세대 → 새 세대</p>${LP.compareHtml({ ...genLook(prev), color: look.color }, look, thumb, true, [`${prev.number}세대`, `${prev.number + 1}세대(고른 모양)`])}` : '';
+      body = `${cmp}<p class="lbl"${cmp ? ' style="margin-top:14px"' : ''}>옆모습(차대) 후보</p>${LP.candHtml('chassis', planCtx(d, 'chassis', look), d.chassisSeed, thumb, 'pick')}
+        <p class="lbl" style="margin-top:14px">얼굴(앞뒤 모습) 후보</p>${LP.candHtml('face', planCtx(d, 'face', look), d.faceSeed, thumb, 'pick')}
         <p class="note">모양은 겉모습만 바꾸며 능력치와는 관계가 없습니다. 고른 모양은 무대의 차에 바로 반영됩니다.</p>`;
     } else if (planTab === 'seg') body = `<div class="opts">${SEGMENTS.map((g) => {
       const top = (Object.entries(g.w) as [Stat, number][]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => STAT_NAME[k]).join('·');
@@ -1412,11 +1426,13 @@ export function startApp(): void {
   function liftView(): View {
     const s = game!.state, L = lift!, g = Q.generationById(s, L.genId)!, e = currentEdition(g), np = Q.nameplateOf(s, g.id)!;
     fixLift(L);
-    const pv = Q.faceliftPreview(s, g.id, { options: L.options, tier: L.tier })!, cur = genLook(g), cands = liftFaces(g);
-    const front = -Math.PI / 2, dBefore = Q.grades(e.stats, yearOf(s.week + pv.designWeeks + pv.minTestWeeks)).D, pt = powertrainById(g.powertrain), ok = elig(pv.eligibility);
+    const pv = Q.faceliftPreview(s, g.id, { options: L.options, tier: L.tier })!, cur = genLook(g);
+    LP.lookKey(`lift:${g.id}`);
+    const dBefore = Q.grades(e.stats, yearOf(s.week + pv.designWeeks + pv.minTestWeeks)).D, pt = powertrainById(g.powertrain), ok = elig(pv.eligibility);
     const ovh = ovTop('페이스리프트 기획 · 지금 모습', `${esc(np.name)}<small>${editionName(g)}</small>`, specLine(g.body, g.powertrain, e.tier, g.segment)) + ovHint;
-    const card1 = `<div class="card">${noteBox()}<p class="lbl">1. 새 얼굴 고르기</p><div class="faces"><div class="face now">${thumb(cur, front, 200, 140)}<b>지금 얼굴</b><small>${esc(describeLook(cur).face)}</small></div>
-      ${cands.map((v, i) => { const l = { ...cur, faceSeed: v }; return `<button class="opt face" data-act="liftPick" data-k="faceSeed" data-v="${v}" aria-pressed="${L.faceSeed === v}">${thumb(l, front, 200, 140)}<b>새 얼굴 ${i + 1}</b><small>${esc(describeLook(l).face)}</small></button>`; }).join('')}</div>
+    // 0.13.0 지금 얼굴과 고른 새 얼굴을 나란히(달라진 부품 한 줄) + 후보 6개·다른 후보 보기·직접 고르기
+    const card1 = `<div class="card">${noteBox()}<p class="lbl">1. 새 얼굴 고르기</p><div class="faces">${LP.compareHtml(cur, { ...cur, faceSeed: L.faceSeed }, thumb, false, ['지금 얼굴', '새 얼굴'])}</div>
+      ${LP.candHtml('face', liftCtx(g), L.faceSeed, thumb, 'liftPick', 'face')}
       <p class="note">차대(옆모습·차체 크기)는 그대로 두고 앞뒤 모습만 바꿉니다.</p></div>`;
     const card2 = `<div class="card"><p class="lbl">2. 옵션 갱신</p>${optTiles(L.options, 'liftOpt')}
       <p class="lbl" style="margin-top:14px">3. 동력 등급(${esc(pt.name)})</p><div class="opts">${pt.tiers.map((t, i) => `<button class="opt" data-act="liftPick" data-k="tier" data-v="${i + 1}" aria-pressed="${L.tier === i + 1}" ${i + 1 < e.tier ? 'disabled' : ''}><b>${esc(t.name)}</b><small class="lv">${esc(pt.name)} ${Q.levelForTier(s, g.powertrain, i + 1)}단계</small><small>${i + 1 < e.tier ? '낮출 수 없음' : i + 1 === e.tier ? '지금 등급' : '한 등급 올리기'}</small></button>`).join('')}</div>
@@ -2102,7 +2118,7 @@ export function startApp(): void {
         if (lift?.genId === id) { go('lift'); return; }
         if (!(await dropDraft())) return;
         const ed = currentEdition(g), opts = new Set(Q.optionsAt(s).map((o) => o.id));
-        lift = { genId: id, faceSeed: liftFaces(g)[0], options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: Q.faceliftPreview(s, id, { options: ed.options, tier: ed.tier })?.recommendedTeam ?? idleDev().map((x) => x.id) }; // 기본은 추천 팀(디자이너·테스터)
+        lift = { genId: id, faceSeed: LP.firstDistinct('face', liftCtx(g)), options: ed.options.filter((o) => opts.has(o)), tier: ed.tier, team: Q.faceliftPreview(s, id, { options: ed.options, tier: ed.tier })?.recommendedTeam ?? idleDev().map((x) => x.id) }; // 기본은 추천 팀(디자이너·테스터)
         go('lift'); return;
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
@@ -2161,6 +2177,13 @@ export function startApp(): void {
         if (!game) return; const id = Number(el.dataset.id), policy: PricePolicy | null = v === 'best' ? { kind: 'best' } : v.startsWith('base:') ? { kind: 'base', pct: Number(v.slice(5)) } : null;
         if (run(game.command({ type: 'setPricePolicy', generationId: id, policy }))) { garagePrice.delete(id); toast(policy ? `자동 가격을 켰습니다. ${policyText(policy)}` : '자동 가격을 껐습니다. 가격은 직접 바꿀 때만 바뀝니다.'); render(); }
         return;
+      }
+      case 'lookPage': LP.onPage(el.dataset.t as 'face' | 'chassis', v); render(); return; // 0.13.0 외관 후보 다음 묶음
+      case 'lookWant': { // 0.13.0 직접 고르기: 조건에 맞는 시드를 찾아 바로 반영
+        const t = el.dataset.t as 'face' | 'chassis', key = t === 'face' ? 'faceSeed' : 'chassisSeed';
+        if (screen === 'lift' && lift) { const g = Q.generationById(game!.state, lift.genId); if (g) lift.faceSeed = LP.onWant('face', el.dataset.k!, v, liftCtx(g)); }
+        else if (draft) { const base = lookOf({ body: draft.body, powertrain: draft.powertrain, tier: draft.tier, color: draft.color, wheels: 1, year: yearOf(game!.state.week), chassisSeed: draft.chassisSeed, faceSeed: draft.faceSeed }); draft[key] = LP.onWant(t, el.dataset.k!, v, planCtx(draft, t, base)); }
+        render(); return;
       }
       case 'pick': {
         if (!draft) return; const k = el.dataset.k as keyof Draft;

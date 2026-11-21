@@ -15,6 +15,7 @@ const ERA_LOOK: [number, { key: number; sky: number; ground: number; disc: numbe
   [2000, { key: 0xffffff, sky: 0xffffff, ground: 0xb9c2cc, disc: 0xf5f6f8 }],
   [2010, { key: 0xf8fbff, sky: 0xf6f9ff, ground: 0xb5bfcc, disc: 0xf4f6f9 }],
   [2020, { key: 0xf2f6ff, sky: 0xf2f6ff, ground: 0xb0bccb, disc: 0xf3f5f9 }],
+  [2030, { key: 0xeef4ff, sky: 0xeef5ff, ground: 0xaab8ca, disc: 0xf2f5fa }],
 ];
 /** 출시 연출 조명 단계: off 평소, dark 어두운 무대에 뒤 윤곽광만(실루엣), lit 스포트라이트 */
 export type RevealLight = 'off' | 'dark' | 'lit';
@@ -145,7 +146,7 @@ export class Stage {
 
   /** 연도에 맞춘 무대 분위기(10년 단위, 2.5초쯤에 걸쳐 바뀐다). 처음 부르면 바로 맞춘다 */
   setEra(year: number): void {
-    const d = Math.max(1970, Math.min(2020, Math.floor(year / 10) * 10)), L = ERA_LOOK.find(([y]) => y === d)![1], E = this.eraT, first = !this.eraSet;
+    const d = Math.max(1970, Math.min(2030, Math.floor(year / 10) * 10)), L = ERA_LOOK.find(([y]) => y === d)![1], E = this.eraT, first = !this.eraSet;
     E.key.set(L.key); E.sky.set(L.sky); E.ground.set(L.ground); E.disc.set(L.disc); this.eraSet = true;
     if (first) { this.key.color.copy(E.key); this.hemi.color.copy(E.sky); this.hemi.groundColor.copy(E.ground); this.disc.color.copy(E.disc); }
   }

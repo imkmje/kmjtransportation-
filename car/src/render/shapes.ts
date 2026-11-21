@@ -43,7 +43,7 @@ export const BELT_OVER_ARCH = .13; // 허리선이 휠 아치 꼭대기보다 �
 // 시대 스타일: 끝 둥글림(re: 위아래, rpF/rpR: 평면 앞뒤), 지붕·바닥 모서리 반경, 앞뒤 좁아짐,
 // smooth: 옆선 문지르기 횟수(많을수록 둥근 지붕선), wedge: 벨트라인이 뒤로 갈수록 올라가는 양(쐐기),
 // faceW: 앞뒤 램프·범퍼 데칼이 쓰는 폭 비율(앞뒤가 많이 둥글면 모서리 밖으로 나가지 않게 좁힌다)
-export type Era = 1970 | 1980 | 1990 | 2010 | 2020;
+export type Era = 1970 | 1980 | 1990 | 2010 | 2020 | 2030;
 // 단면 모양: tumble 옆 유리가 위로 갈수록 안쪽으로 눕는 양(텀블홈), crown 보닛·지붕 가운데 볼록, bow 옆판 배부름,
 // tuck 옆판 아래 말아 넣기, chin 앞뒤 끝 바닥 턱 말아 올림. 비례: len 전장 배율, roofD·beltD 지붕·허리선 ±m, wbK 휠베이스 배율, wrD 타이어 반지름 ±m
 export interface EraStyle {
@@ -61,9 +61,11 @@ export const ERA: Record<Era, EraStyle> = {
   // 높은 허리선·짧은 오버행·큰 바퀴, 쐐기
   2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .12, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .02, tuck: .065, chin: .06, sh: 1, len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .04 },
   // 매끈한 면, 짧은 앞 오버행(전기차는 휠베이스 더 길고 보닛 짧게: variant.chassisOf)
+  // 0.13.0 2030년대: 더 둥근 앞뒤(포드형), 높은 허리선·큰 휠, 긴 휠베이스
+  2030: { re: .24, rpF: .68, rpR: .5, rc: .13, rb: .08, taper: .06, smooth: 3, wedge: .04, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .024, tuck: .07, chin: .09, sh: 1, len: 1.01, roofD: .02, beltD: .1, wbK: 1.08, wrD: .05 },
   2020: { re: .2, rpF: .58, rpR: .44, rc: .11, rb: .07, taper: .05, smooth: 3, wedge: .06, faceW: 1, classic: false, tumble: .32, crown: .05, bow: .032, tuck: .07, chin: .08, sh: 1, len: 1, roofD: 0, beltD: .08, wbK: 1.06, wrD: .03 },
 };
-export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1980 ? 1970 : e < 1990 ? 1980 : e < 2010 ? 1990 : e < 2020 ? 2010 : 2020; };
+export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1980 ? 1970 : e < 1990 ? 1980 : e < 2010 ? 1990 : e < 2020 ? 2010 : e < 2030 ? 2020 : 2030; };
 export const eraStyle = (look: CarLook): EraStyle => ERA[eraOf(look)];
 
 // 차대 변형 범위(chassisSeed). 시드마다 각 값이 −1~+1 사이에서 뽑혀 이 폭을 곱한다.
@@ -88,11 +90,12 @@ export const MIN_OVERHANG = .28; // 바퀴 아치 바깥 ~ 차 끝 최소(차체
 export const MIN_TRUNK = .45; // 트렁크 있는 차의 뒤 끝 ~ 뒤 유리 아래 끝 최소(이보다 짧으면 트렁크 없는 차처럼 보인다)
 
 // 얼굴 선택지(faceSeed). 시대마다 고를 수 있는 모양이 다르다. 같은 항목을 두 번 넣으면 그만큼 자주 뽑힌다.
-export type LampKind = 'round' | 'twin' | 'rect' | 'oval' | 'vertical' | 'swept' | 'slim' | 'popup' | 'projector';
-export type GrilleKind = 'rect' | 'hex' | 'twin' | 'bars' | 'none' | 'mesh' | 'vertical' | 'kidney' | 'wide';
+// 0.13.0 2030년대 부품: pixel(픽셀 램프), split(위 주간등 + 아래 본등 분리), panel(빛나는 그릴 패널), 후미등 pixel, 휠 cover(휠 커버)
+export type LampKind = 'round' | 'twin' | 'rect' | 'oval' | 'vertical' | 'swept' | 'slim' | 'popup' | 'projector' | 'pixel' | 'split';
+export type GrilleKind = 'rect' | 'hex' | 'twin' | 'bars' | 'none' | 'mesh' | 'vertical' | 'kidney' | 'wide' | 'panel';
 export type IntakeKind = 'wide' | 'three' | 'slim' | 'none' | 'fog';
-export type TailKind = 'bar' | 'vertical' | 'L' | 'split' | 'full' | 'round';
-export type WheelKind = 'twin5' | 'spoke5' | 'multi' | 'mesh' | 'turbine' | 'steel' | 'aero';
+export type TailKind = 'bar' | 'vertical' | 'L' | 'split' | 'full' | 'round' | 'pixel';
+export type WheelKind = 'twin5' | 'spoke5' | 'multi' | 'mesh' | 'turbine' | 'steel' | 'aero' | 'cover';
 export interface FaceSpec {
   lamp: LampKind; lampW: number; lampDy: number; bar: boolean; // lampW: 크기 배율, lampDy: 높이 이동(m), bar: 앞 가로 라이트 바
   grille: GrilleKind; grilleW: number; grilleH: number;
@@ -115,6 +118,9 @@ export const ERA_FACE: Record<Era, EraFace> = {
     def: { lamp: 'swept', lampW: 1.1, lampDy: 0, bar: false, grille: 'hex', grilleW: 1.4, grilleH: 1.25, intake: 'three', bumper: 'body', tail: 'L', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'twin5' } },
   2020: { lamp: ['slim', 'slim', 'slim', 'vertical'], grille: ['none', 'none', 'rect', 'bars', 'mesh', 'kidney'], intake: ['slim', 'wide', 'slim'], bumper: ['body', 'body', 'black'], tail: ['full', 'full', 'full', 'L'], wheel: ['aero', 'aero', 'twin5', 'multi', 'turbine'], bar: .85, grilleW: [.7, 1.0],
     def: { lamp: 'slim', lampW: 1, lampDy: 0, bar: true, grille: 'none', grilleW: .6, grilleH: .8, intake: 'wide', bumper: 'black', tail: 'full', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'twin5' } },
+  // 2030: 분리형 주간등·픽셀 램프, 빛나는 그릴 패널, 픽셀·일자 후미등, 휠 커버. 2020보다 선택지를 넓혀 후보가 서로 달라 보이게
+  2030: { lamp: ['split', 'pixel', 'slim', 'split', 'pixel', 'projector', 'vertical'], grille: ['panel', 'panel', 'none', 'mesh', 'bars', 'kidney'], intake: ['slim', 'wide', 'three', 'none'], bumper: ['body', 'black'], tail: ['pixel', 'full', 'bar', 'L', 'pixel', 'split'], wheel: ['cover', 'aero', 'turbine', 'twin5', 'cover', 'multi'], bar: .5, grilleW: [.8, 1.2],
+    def: { lamp: 'split', lampW: 1, lampDy: 0, bar: false, grille: 'panel', grilleW: 1, grilleH: 1, intake: 'slim', bumper: 'body', tail: 'pixel', tailDy: 0, plateF: 'center', plateR: 'high', wheel: 'cover' } },
 };
 
 // 얼굴·뒷모습 부품 배치(높이는 벨트라인 아래 또는 지상고 위 거리, 폭은 반폭 hw의 비율)

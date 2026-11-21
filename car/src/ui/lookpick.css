@@ -1,0 +1,26 @@
+/* 외관 고르기(0.13.0): 후보 2×3, 다른 후보 보기, 직접 고르기 칩, 전작과 나란히 */
+.looks6{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.looks6 .opt{min-width:0}
+.looks6 .opt img,.looks6 .opt svg{width:100%;height:auto;display:block}
+.looks6 .opt small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media (max-width:620px){.looks6{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.look-more{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px}
+.look-more .btn{min-height:44px}
+.look-cur{flex:1 1 100%;font-size:12px;color:var(--ink2)}
+.pick{margin-top:10px;border:1px solid var(--line);border-radius:14px;background:var(--card);padding:0 12px}
+.pick summary{min-height:44px;display:flex;align-items:center;font-weight:800;cursor:pointer}
+.pick-row{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:8px;align-items:start;padding:6px 0;border-top:1px solid var(--soft)}
+.pick-k{font-size:13px;font-weight:700;color:var(--ink2);padding-top:12px}
+.pick-chips{display:flex;flex-wrap:wrap;gap:6px}
+.pick .chip{min-height:44px;padding:0 12px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:600 13px/1.2 inherit;cursor:pointer}
+.pick .chip.now{text-decoration:underline;text-underline-offset:3px}
+.pick .chip[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:#fff}
+.pick .chip:disabled{opacity:.35;cursor:not-allowed}
+.pick-miss{margin:6px 0 10px}
+.look-cmp{display:flex;align-items:center;gap:8px;margin:6px 0}
+.cmp-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px}
+.cmp-col b{font-size:13px}
+.cmp-col img,.cmp-col svg{width:100%;height:auto;border-radius:10px;background:var(--soft)}
+.cmp-arrow{font-size:22px;font-weight:900;color:var(--ink3)}
+.look-diff{font-size:13px;line-height:1.5;color:var(--ink2);margin:6px 0 0}
+.look-diff b{color:var(--ink);margin-right:4px}

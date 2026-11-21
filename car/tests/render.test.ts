@@ -7,10 +7,11 @@ import { BODY } from '../src/render/shapes';
 import type { BodyId, CarLook } from '../src/render/look';
 import { roomFor, findPath, EXEC_SEATS, CAPACITY } from '../src/ui/office/layout';
 import { decadeOf } from '../src/ui/era';
+import { faceCandidates, chassisCandidates, faceParts, faceDistance, chassisDistance, chassisParts, findSeed, faceChoices } from '../src/render/pick';
 import { config } from '../src/config';
 
 const BODIES = Object.keys(BODY) as BodyId[];
-const ERAS = [1970, 1985, 1990, 2010, 2020] as const;
+const ERAS = [1970, 1985, 1990, 2010, 2020, 2035] as const;
 const M = createCarMaterials('#c8202f');
 const look = (o: Partial<CarLook> & { bodyId: BodyId }): CarLook => ({ powertrain: 'gas', color: '#c8202f', wheel: 1, era: 2020, ...o } as CarLook);
 const bodyMesh = (g: THREE.Group) => g.children.find((o): o is THREE.Mesh => o instanceof THREE.Mesh && Array.isArray(o.material))!;
@@ -169,7 +170,44 @@ describe('사무실·시대 분위기(0.13.0)', () => {
     }
   });
 
-  it('시대 분위기는 10년 단위(1970년 이전은 1970, 2020년 이후는 2020)', () => {
-    expect([1965, 1970, 1979, 1980, 1999, 2004, 2015, 2020, 2031].map(decadeOf)).toEqual([1970, 1970, 1970, 1980, 1990, 2000, 2010, 2020, 2020]);
+  it('시대 분위기는 10년 단위(1970년 이전은 1970, 2030년 이후는 2030)', () => {
+    expect([1965, 1970, 1979, 1980, 1999, 2004, 2015, 2020, 2031, 2045].map(decadeOf)).toEqual([1970, 1970, 1970, 1980, 1990, 2000, 2010, 2020, 2030, 2030]);
   });
 });
+
+describe('외관 후보·직접 고르기(0.13.0)', () => {
+  it('후보 6개는 서로, 그리고 지금 얼굴과 부품 3개 이상 다르다(차체 12종 × 시대 6, 2020년대 전기차는 2개). 다음 묶음은 결정론적으로 이어진다', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) for (const powertrain of ['gas', 'ev'] as const) {
+      const cur = look({ bodyId, era, powertrain, chassisSeed: 5, faceSeed: 9 }), s0 = 1000 + era + bodyId.length;
+      const a = faceCandidates(cur, s0, 0, [cur]), ps = [cur, ...a.map((f) => ({ ...cur, faceSeed: f }))].map(faceParts);
+      expect(a.length, `${bodyId} ${era}`).toBe(6);
+      for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) expect(faceDistance(ps[i], ps[j]), `${bodyId} ${era} ${powertrain} ${i}-${j}`).toBeGreaterThanOrEqual(era === 2020 && powertrain === 'ev' ? 2 : 3); // 2020년대 전기차는 시대 표가 좁아(막힌 그릴·라이트 바 고정) 2개까지만 보장
+      expect(faceCandidates(cur, s0, 0, [cur])).toEqual(a);
+      const b = faceCandidates(cur, s0, 1, [cur]); expect(b.length).toBe(6); expect(b.some((x) => a.includes(x))).toBe(false);
+    }
+  });
+
+  it('풀체인지 차대 후보 6개는 서로·전작과 지붕선·성격·비례가 다르다', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) {
+      const prev = look({ bodyId, era, chassisSeed: 77, faceSeed: 1 }), c = chassisCandidates(prev, 4242, 0, [prev]), ls = [prev, ...c.map((x) => ({ ...prev, chassisSeed: x }))];
+      expect(c.length).toBe(6);
+      for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) expect(chassisDistance(ls[i], ls[j]), `${bodyId} ${era} ${i}-${j}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('직접 고르기: 고를 수 있는 부품이면 그 부품을 가진 시드를 돌려주고(결정론), 시대에 없는 부품은 흐리게', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) {
+      const base = look({ bodyId, era, chassisSeed: 3, faceSeed: 3 }), ch = faceChoices(base);
+      for (const o of ch.lamp.filter((x) => x.ok)) {
+        const r = findSeed('face', base, 99, { lamp: o.v });
+        expect(r.miss, `${bodyId} ${era} ${o.v}`).toEqual([]);
+        expect(faceParts({ ...base, faceSeed: r.seed }).lamp).toBe(o.v);
+        expect(findSeed('face', base, 99, { lamp: o.v }).seed).toBe(r.seed);
+      }
+      expect(ch.lamp.find((x) => x.v === 'pixel')!.ok).toBe(era >= 2030);
+      const r2 = findSeed('chassis', base, 7, { roofType: BODY[bodyId].deck ? 'fast' : 'notch' });
+      expect(r2.miss).toEqual([]); expect(chassisParts({ ...base, chassisSeed: r2.seed }).roofType).toBe(BODY[bodyId].deck ? 'fast' : 'notch');
+    }
+  });
+});
+

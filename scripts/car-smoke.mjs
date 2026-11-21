@@ -420,7 +420,7 @@ await act('pickNew');
 await act('ptab', '[data-v="look"]');
 await page.waitForTimeout(300);
 const looks = await G(() => [...document.querySelectorAll('.opt.look')].map((b) => ({ k: b.dataset.k, v: Number(b.dataset.v), t: b.querySelector('small')?.textContent ?? '', img: !!b.querySelector('img,svg') })));
-check('모양 단계: 옆모습 후보 3개 + 얼굴 후보 3개, 썸네일과 한 줄 설명', looks.filter((x) => x.k === 'chassisSeed').length === 3 && looks.filter((x) => x.k === 'faceSeed').length === 3 && looks.every((x) => x.img && x.t.length > 2), looks.map((x) => x.t).join(' / '));
+check('모양 단계(0.13.0): 옆모습 후보 6개 + 얼굴 후보 6개, 썸네일과 한 줄 설명', looks.filter((x) => x.k === 'chassisSeed').length === 6 && looks.filter((x) => x.k === 'faceSeed').length === 6 && looks.every((x) => x.img && x.t.length > 2), looks.map((x) => x.t).join(' / '));
 const pickC = looks.filter((x) => x.k === 'chassisSeed')[1].v, pickF = looks.filter((x) => x.k === 'faceSeed')[2].v;
 await act('pick', `[data-k="chassisSeed"][data-v="${pickC}"]`); await act('pick', `[data-k="faceSeed"][data-v="${pickF}"]`);
 await page.waitForTimeout(600);
@@ -458,18 +458,27 @@ check('18개월 뒤 차고 [페이스리프트]가 열림', await page.locator('
 // 0.4.2 수명: 출시 30개월까지 100% 유지 뒤 매달 줄어든다. 30개월이 지난 뒤에 리프트해야 수명 회복을 볼 수 있다
 await G(() => { const c = window.__car, s = c.game.state, g = s.nameplates[0].generations[0]; while (Math.floor(s.week / 4) - g.launchMonth < 31) c.tick(1); c.render(); });
 await act('goLift');
-check('페이스리프트 화면: 지금 얼굴 + 새 얼굴 후보 3개(정면 썸네일)', (await G(() => window.__car.screen)) === 'lift' && (await page.locator('.faces .face.now').count()) === 1 && (await page.locator('.faces .opt.face img, .faces .opt.face svg').count()) === 3);
+check('페이스리프트 화면(0.13.0): 지금 얼굴과 새 얼굴 나란히 + 새 얼굴 후보 6개', (await G(() => window.__car.screen)) === 'lift' && (await page.locator('.faces .look-cmp .cmp-col').count()) === 2 && (await page.locator('.opt.face img, .opt.face svg').count()) === 6 && (await page.locator('.look-diff').innerText()).includes('달라진 점'));
 const ltext = await page.locator('#panel').innerText();
 check('페이스리프트 예상: 비용·기간·디자인·수명 전후·인지도 전후', ['비용', '기간', '디자인', '수명', '인지도', '바꾼 뒤'].every((t) => ltext.includes(t)));
 check('동력 단계는 낮출 수 없음', await G(() => { const g = window.__car.game.state.nameplates[0].generations[0], t = g.editions[0].tier; return [...document.querySelectorAll('[data-act="liftPick"][data-k="tier"]')].every((b) => b.disabled === Number(b.dataset.v) < t); }));
-const face2 = Number(await page.locator('.faces .opt.face').nth(1).getAttribute('data-v'));
-const faceImgs = await G(() => [...document.querySelectorAll('.faces img')].map((i) => i.src));
+const faceImgs = await G(() => [document.querySelector('.faces .cmp-col img')?.src, ...[...document.querySelectorAll('.opt.face img')].map((i) => i.src)].filter(Boolean));
 { const d = []; for (let i = 0; i < faceImgs.length; i++) for (let j = i + 1; j < faceImgs.length; j++) d.push(await imgDiff(faceImgs[i], faceImgs[j]));
-  check('페이스리프트 후보: 지금 얼굴과 후보 3개의 정면 그림이 서로 다름', faceImgs.length === 4 && d.every((x) => x > 0.3), d.map((x) => x.toFixed(2)).join(',')); }
-check('페이스리프트 후보: 앞얼굴 설명(전조등·그릴)이 서로 겹치지 않음', await G(() => { const t = [...document.querySelectorAll('.faces small')].map((x) => x.textContent.split(', ').slice(0, 2).join()); return new Set(t).size === t.length; }));
+  check('페이스리프트 후보: 지금 얼굴과 후보 6개의 그림이 서로 다름', faceImgs.length === 7 && d.every((x) => x > 0.3), `최소 ${Math.min(...d).toFixed(2)}`); }
+check('페이스리프트 후보: 얼굴 설명이 서로 겹치지 않음', await G(() => { const t = [...document.querySelectorAll('.opt.face small')].map((x) => x.textContent); return t.length === 6 && new Set(t).size === 6; }));
+// 0.13.0 [다른 후보 보기] → 다른 6개(결정론), [처음 후보] → 처음 6개
+{ const seeds = () => G(() => [...document.querySelectorAll('.opt.face')].map((b) => b.dataset.v).join());
+  const p0 = await seeds(); await act('lookPage', '[data-t="face"][data-v="next"]'); const p1 = await seeds(); await act('lookPage', '[data-t="face"][data-v="first"]'); const p0b = await seeds();
+  check('페이스리프트 [다른 후보 보기]: 다른 6개, [처음 후보]로 같은 6개', p1.split(',').length === 6 && p1.split(',').every((x) => !p0.split(',').includes(x)) && p0b === p0); }
+// 0.13.0 직접 고르기: 전조등 칩을 누르면 그 전조등의 얼굴을 찾아 미리보기·달라진 점에 반영
+await page.locator('details.pick[data-t="face"] summary').click();
+const lampChip = page.locator('details.pick[data-t="face"] [data-act="lookWant"][data-k="lamp"]:not([disabled]):not(.now):not([data-v=""])').first();
+const lampWant = await lampChip.getAttribute('data-v'), lampLabel = (await lampChip.innerText()).trim();
+await lampChip.click(); await page.waitForTimeout(300);
+const face2 = await G(() => window.__car.lift.faceSeed);
+check('직접 고르기: 전조등을 고르면 그 전조등의 얼굴로, 달라진 점에 전조등', (await page.locator('details.pick[data-t="face"]').getAttribute('open')) !== null && (await page.locator('.look-diff').innerText()).includes('전조등') && (await page.locator('.faces .cmp-col').nth(1).innerText()).length > 0 && (await page.locator('.pick-miss').first().innerText()).includes('찾았습니다'), `${lampWant}(${lampLabel}) → 시드 ${face2}`);
 const liftGenId = await G(() => window.__car.game.state.nameplates[0].generations[0].id);
-const frontBefore = await frontOf(liftGenId), candFront = faceImgs[2];
-await page.locator('.faces .opt.face').nth(1).click();
+const frontBefore = await frontOf(liftGenId), candFront = await G(([id, f]) => window.__car.stage.renderThumb({ ...window.__car.genLook(id), faceSeed: f }, 200, 140, -Math.PI / 2), [liftGenId, face2]);
 await page.waitForTimeout(500);
 await shot('lift');
 await page.locator('.lift-est').scrollIntoViewIfNeeded(); await page.waitForTimeout(200);
@@ -527,6 +536,9 @@ const otherBody = await G(() => [...document.querySelectorAll('[data-act="pick"]
 const sameBody = await G(() => document.querySelector('[data-act="pick"][data-k="body"][aria-pressed="true"]')?.dataset.v);
 if (otherBody) { await act('pick', `[data-k="body"][data-v="${otherBody}"]`); check('차체를 바꾸면 "이름값이 절반만" 경고', (await page.locator('.body-warn').innerText()).includes('절반만')); await act('pick', `[data-k="body"][data-v="${sameBody}"]`); }
 await act('ptab', '[data-v="look"]');
+check('풀체인지 모양(0.13.0): 전작과 새 모양 나란히(정면·옆) + 달라진 점, 후보 6+6, 기본 색은 전작과 다른 새 색', (await page.locator('.look-cmp .cmp-col').count()) === 2 && (await page.locator('.look-cmp img').count()) === 4 && (await page.locator('.look-diff').innerText()).includes('달라진 점') && (await page.locator('[data-act="pick"][data-k="faceSeed"]').count()) === 6
+  && (await G(() => { const c = window.__car, g = c.game.state.nameplates[0].generations.at(-1); return c.draft.color !== g.editions.at(-1).color && c.draft.chassisSeed !== g.chassisSeed; })));
+await shot('fullchange-look');
 const fcC = Number(await page.locator('[data-act="pick"][data-k="chassisSeed"]').nth(1).getAttribute('data-v')), fcF = Number(await page.locator('[data-act="pick"][data-k="faceSeed"]').nth(2).getAttribute('data-v'));
 await act('pick', `[data-k="chassisSeed"][data-v="${fcC}"]`); await act('pick', `[data-k="faceSeed"][data-v="${fcF}"]`);
 await startDev();
