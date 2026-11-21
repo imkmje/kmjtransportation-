@@ -1241,7 +1241,7 @@ export function startApp(): void {
   /** 판의 장비 구성(sim에 equip이 없으면 옵션 = 모두 기본 장비) */
   const edEquip = (e: { options: string[] }, fallback?: string[]): EQ.Equip => { const x = (e as { equip?: EQ.Equip }).equip; return x ? { ...x } : EQ.fromOptions(fallback ?? e.options); };
   function setEquip(o: { equip?: EQ.Equip; options: string[]; equipMode?: string }, e: EQ.Equip, mode?: 'rec' | 'prev' | 'custom'): void {
-    const req = new Set(Q.requiredOptions(game!.state)); o.equip = Object.fromEntries(Object.entries(e).filter(([k]) => !req.has(k))); o.options = EQ.toOptions(o.equip);
+    const req = new Set(Q.requiredOptions(game!.state)); o.equip = Object.fromEntries(Object.entries(e).filter(([k]) => !req.has(k))); o.options = EQ.toOptions(o.equip, game!.state);
     if (mode && 'equipMode' in o || mode) o.equipMode = mode;
   }
   const eqOf = (o: { equip?: EQ.Equip; options: string[] }): EQ.Equip => (o.equip ??= EQ.fromOptions(o.options));

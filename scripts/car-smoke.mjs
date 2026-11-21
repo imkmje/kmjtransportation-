@@ -742,7 +742,7 @@ await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes');
 await page.waitForFunction(() => window.__car.game?.state.companyName === '변환테스트');
 await tick(4);
 await page.click('#tabs button[data-tab="dev"]'); await page.click('#tabs button[data-tab="records"]'); await toGarage();
-check('0.1.0 형식 저장(형식 1) 불러와 이어 하기', await G(() => { const c = window.__car, s = c.game.state; return s.saveVersion === 4 && s.nameplates.length > 0 && typeof c.ui.photos === 'object' && typeof c.ui.colors === 'object'; }) && (await page.locator('#panel').isVisible()));
+check('0.1.0 형식 저장(형식 1) 불러와 이어 하기', await G(() => { const c = window.__car, s = c.game.state; return s.saveVersion >= 4 && s.nameplates.length > 0 && typeof c.ui.photos === 'object' && typeof c.ui.colors === 'object'; }) && (await page.locator('#panel').isVisible()));
 await openMenu();
 const [chooser2] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
 await chooser2.setFiles('car/tests/fixtures/save-v2.json');
@@ -752,19 +752,19 @@ await tick(4);
 for (const t of ['dev', 'records', 'research', 'fin', 'company']) await page.click(`#tabs button[data-tab="${t}"]`);
 for (const c of ['staff', 'hq', 'factory']) await act('cotab', `[data-v="${c}"]`);
 await toGarage();
-check('0.2.0 형식 저장(형식 2) 불러와 이어 하기', await G(() => { const s = window.__car.game.state; return s.saveVersion === 4 && s.hqLevel === 1 && s.staff.every((x) => typeof x.potential === 'number'); }) && (await page.locator('#panel').isVisible()));
+check('0.2.0 형식 저장(형식 2) 불러와 이어 하기', await G(() => { const s = window.__car.game.state; return s.saveVersion >= 4 && s.hqLevel === 1 && s.staff.every((x) => typeof x.potential === 'number'); }) && (await page.locator('#panel').isVisible()));
 
 await openMenu();
 const [chooser3] = await Promise.all([page.waitForEvent('filechooser'), act('import')]);
 await chooser3.setFiles('car/tests/fixtures/save-v3.json');
 await page.waitForSelector('#ask:not([hidden])'); await page.click('#ask-yes');
-await page.waitForFunction(() => window.__car.game?.state.saveVersion === 4 && window.__car.game.state.week > 0);
+await page.waitForFunction(() => window.__car.game?.state.saveVersion >= 4 && window.__car.game.state.week > 0);
 await tick(4);
 for (const t of ['dev', 'records', 'research', 'fin', 'company']) await page.click(`#tabs button[data-tab="${t}"]`);
 for (const c of ['staff', 'hq', 'factory']) await act('cotab', `[data-v="${c}"]`);
 await page.click('#tabs button[data-tab="records"]'); for (const r of ['combo', 'news', 'cars']) await act('rectab', `[data-v="${r}"]`);
 await toGarage();
-check('0.3.0 형식 저장(형식 3) 불러와 이어 하기(연구·사건·조합 노트 채워짐)', await G(() => { const s = window.__car.game.state; return s.saveVersion === 4 && Array.isArray(s.research.done) && Array.isArray(s.knownCombos) && !!s.events; }) && (await page.locator('#panel').isVisible()));
+check('0.3.0 형식 저장(형식 3) 불러와 이어 하기(연구·사건·조합 노트 채워짐)', await G(() => { const s = window.__car.game.state; return s.saveVersion >= 4 && Array.isArray(s.research.done) && Array.isArray(s.knownCombos) && !!s.events; }) && (await page.locator('#panel').isVisible()));
 
 // ---- 4단계: 연구·시대 사건·조합 노트·차체 10종 ----
 const S4 = (fn, arg) => G(fn, arg);

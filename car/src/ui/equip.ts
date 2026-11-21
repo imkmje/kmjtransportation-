@@ -29,7 +29,12 @@ export const equipLive = (): boolean => typeof api.equipInfo === 'function';
 /** 옛 옵션 목록 → 장비 구성(모두 기본 장비). 옛 저장·프리셋·0.x 판 읽기용 */
 export const fromOptions = (opts: readonly string[]): Equip => Object.fromEntries(opts.map((o) => [o, 'std' as const]));
 /** 장비 구성 → sim이 받는 옵션 목록. shortcut: O1 규칙 연결 전에는 선택 사양도 기본 장비처럼 넣어 계산된다 */
-export const toOptions = (e: Equip): string[] => OPTIONS.filter((o) => (equipLive() ? e[o.id] === 'std' : e[o.id])).map((o) => o.id); // 규칙이 들어오면 O1과 같게 options = 기본 장비만(선택 사양은 equip으로 넘긴다)
+export function toOptions(e: Equip, s?: CarState): string[] {
+  if (equipLive()) return OPTIONS.filter((o) => e[o.id] === 'std').map((o) => o.id); // 규칙이 들어오면 O1과 같게 options = 기본 장비만(선택 사양은 equip으로 넘긴다)
+  // shortcut: 연결 전의 sim은 옵션 칸 수를 검사하므로 기본 장비 → 선택 사양 순으로 칸 수까지만(규칙이 들어오면 이 갈래는 쓰지 않는다)
+  const slots = (Q as unknown as { optionSlots?: (x: CarState) => number }).optionSlots, max = s && slots ? slots(s) : Infinity, req = new Set(s ? Q.requiredOptions(s) : []);
+  return [...OPTIONS.filter((o) => e[o.id] === 'std'), ...OPTIONS.filter((o) => e[o.id] === 'opt')].filter((o) => !req.has(o.id)).slice(0, max).map((o) => o.id);
+}
 
 // ---------- 어림값(shim): O1 규칙이 오기 전 화면용. 등장 연도로 기대를 나누고, 값은 Q.optionValue ----------
 const techYear = new Map<string, number>();
