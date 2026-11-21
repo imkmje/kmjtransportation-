@@ -1156,20 +1156,22 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const EG = (fn, a) => ep.evaluate(fn, a), eshot = (n) => process.argv[2] ? ep.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
   await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
   await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '할일 시험'); await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
-  const n0 = await EG(() => window.__car.todos().length);
-  check('할 일 버튼: 상단바에 있고 배지 = 할 일 수, 높이 44px 이상', n0 > 0 && (await ep.locator('#todo-n').innerText()) === String(n0) && (await ep.locator('#todobtn').boundingBox()).height >= 44, `${n0}건`);
-  await ep.click('#todobtn'); await ep.waitForSelector('#sheet:not([hidden]) .todo-it');
+  const n0 = await EG(() => window.__car.todos().length), nb = await EG(() => window.__car.todos().filter((t) => t.urgent || !['exec', 'team', 'research', 'hire'].includes(t.kind)).length);
+  check('할 일 버튼: 상단바에 있고 배지 = 급한 일 + 지금 할 수 있는 일(0.12.0 참고 제외), 높이 44px 이상', n0 > 0 && (await ep.locator('#todo-n').innerText()) === String(nb) && (await ep.locator('#todobtn').boundingBox()).height >= 44, `${nb}/${n0}건`);
+  await ep.click('#todobtn'); await ep.waitForSelector('#drawer:not([hidden]) .todo-it', { state: 'attached' });
+  check('0.12.0 할 일은 오른쪽 서랍(시간은 멈추지 않음), 참고는 접혀 있음', (await ep.locator('#sheet').isHidden()) && !(await EG(() => window.__car.held())) && (await ep.locator('#drawer details.todo-ref:not([open])').count()) === 1);
+  await ep.click('#drawer details.todo-ref > summary');
   check('할 일 창: 항목 수 = 배지, 새 게임에는 개발팀·정원 여유 항목', (await ep.locator('.todo-it').count()) === n0 && (await ep.locator('.todo-it[data-kind="team"]').count()) === 1 && (await ep.locator('.todo-it[data-kind="hire"]').count()) === 1, (await ep.locator('.todo-list').innerText()).replace(/\n/g, ' / ').slice(0, 160));
   await eshot('todo-1366x1024');
   await ep.click('.todo-it[data-kind="team"]');
-  check('할 일 항목 누르기(개발팀) → 신차 기획, 창 닫힘', ['plan', 'start'].includes(await EG(() => window.__car.screen)) && !(await ep.locator('#sheet').isVisible()));
+  check('할 일 항목 누르기(개발팀) → 신차 기획, 서랍 닫힘', ['plan', 'start'].includes(await EG(() => window.__car.screen)) && !(await ep.locator('#sheet').isVisible()) && (await ep.locator('#drawer').isHidden()));
   await ep.click('#todobtn'); await ep.click('.todo-it[data-kind="hire"]');
   check('할 일 항목 누르기(정원 여유) → 회사 탭', (await EG(() => window.__car.screen)) === 'company' && (await ep.locator('#panel [data-act="cotab"][data-v="staff"]').getAttribute('aria-selected')) === 'true');
   await ep.click('#todobtn'); await ep.click('[data-act="todoTab"][data-v="reports"]');
-  check('보고 탭: 임원이 없으면 안내와 [임원 화면] 버튼', (await ep.locator('#sheet').innerText()).includes('임원을 두면 제안을 받을 수 있습니다') && (await ep.locator('#sheet [data-act="todoGoCo"][data-v="exec"]').count()) === 1);
+  check('보고 탭: 임원이 없으면 안내와 [임원 화면] 버튼', (await ep.locator('#drawer').innerText()).includes('임원을 두면 제안을 받을 수 있습니다') && (await ep.locator('#drawer [data-act="todoGoCo"][data-v="exec"]').count()) === 1);
   await eshot('reports-empty-1366x1024');
-  await ep.click('#sheet [data-act="todoGoCo"]');
-  check('[임원 화면] → 회사 탭, 창 닫힘', (await EG(() => window.__car.screen)) === 'company' && !(await ep.locator('#sheet').isVisible()));
+  await ep.click('#drawer [data-act="todoGoCo"]');
+  check('[임원 화면] → 회사 탭, 서랍 닫힘', (await EG(() => window.__car.screen)) === 'company' && (await ep.locator('#drawer').isHidden()));
   // 개발 시작 → [다음 일까지]로 출시 대기까지
   await toGarage(ep); await ep.click('#ov [data-act="plan"]'); await ep.click('[data-act="ptab"][data-v="budget"]'); await ep.click('[data-act="startDev"]');
   const w0 = await EG(() => window.__car.game.state.week), stops = [];
@@ -1202,7 +1204,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     check('할 일 창(1024×768): 급한 일(출시 대기·현금)이 맨 위에 모임', ks.some(([k, u]) => k === 'cash' && u) && ks.slice(0, ks.filter(([, u]) => u).length).every(([, u]) => u), JSON.stringify(ks)); }
   await eshot('todo-1024x768');
   // 임원 보고: 임원을 두고 [다음 일까지] → 월 결산 보고에서 멈춤, 알림은 한 줄, 보고 탭에 카드
-  await ep.locator('#sheet [data-act="closeSheet"]').click(); await ep.setViewportSize({ width: 1366, height: 1024 });
+  await ep.locator('#drawer [data-act="drawerClose"]').click(); await ep.setViewportSize({ width: 1366, height: 1024 });
   await toGarage(ep);
   await EG(() => { const g = window.__car.game; g.state.cash = 1e8; g.state.negMonths = 0; g.command({ type: 'appointExec', role: 'hr', staffId: g.state.staff.find((x) => x.projectId === null).id }); window.__car.render(); });
   const sk = await EG(() => window.__car.todos().map((t) => t.key));
@@ -1551,11 +1553,11 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   { if (await gp.locator('#toasts .more').isVisible()) await gp.click('#toasts .more');
     const t0 = Date.now(); await gp.locator('#toasts .toast', { hasText: '결산' }).locator('.open').click({ timeout: 5000 }); check('0.12.0 월 결산 [펼쳐 보기] 클릭이 바로 됨(안정 대기 5초 안)', (await gp.locator('#sheet .mon').isVisible()) && Date.now() - t0 < 5000, `${Date.now() - t0}ms`); }
   await gclose();
-  await gp.click('#todobtn'); await gp.click('#sheet [data-act="todoTab"][data-v="notes"]');
-  const nN = await gp.locator('#sheet .note-it').count(), nTxt = await gp.locator('#sheet .note-list').innerText();
+  await gp.click('#todobtn'); await gp.click('#drawer [data-act="todoTab"][data-v="notes"]');
+  const nN = await gp.locator('#drawer .note-it').count(), nTxt = await gp.locator('#drawer .note-list').innerText();
   check('0.12.0 할 일 창 세 번째 탭 "알림": 지난 알림 기록(날짜·종류), 꺼 둔 종류도 남음', nN >= 4 && nTxt.includes('월 결산') && nTxt.includes('점검 평판 변화') && /\d{4}년 \d+월/.test(nTxt), `${nN}건`);
   await mshot('notes-1180x820');
-  await gp.locator('#sheet .note-it[data-act="noteGo"]', { hasText: '결산' }).first().click();
+  await gp.locator('#drawer .note-it[data-act="noteGo"]', { hasText: '결산' }).first().click();
   check('0.12.0 기록함 항목 누르기 → 그 화면(월 결산 창)', await gp.locator('#sheet .mon').isVisible());
   await gclose();
   // 평판 ⓘ: 지금 효과 목록과 다음 문턱(0.11.0 Q.reputationInfo)
@@ -1608,7 +1610,8 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const outside = async () => { await gp.mouse.click(6, 816); await gp.waitForTimeout(150); };
   const open = async (name, fn) => { await fn(); await gp.waitForSelector('#sheet:not([hidden])'); await outside(); return [name, await gp.locator('#sheet').isHidden()]; };
   const R = [];
-  R.push(await open('할 일', () => gp.click('#todobtn')));
+  await gp.click('#todobtn'); await gp.waitForSelector('#drawer:not([hidden])'); await gp.mouse.click(300, 400); await gp.waitForTimeout(150);
+  R.push(['할 일 서랍', await gp.locator('#drawer').isHidden()]);
   R.push(await open('설정', async () => { await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); }));
   R.push(await open('월 결산', () => GG(() => window.__car.showMonth(window.__car.game.state.ledger.length - 1))));
   await gp.click('#tabs button[data-tab="garage"]'); await gp.locator('[data-act="cmpClear"]').first().click().catch(() => {});
@@ -1623,6 +1626,57 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await gp.locator(`.gtable [data-act="gopen"][data-id="${gid}"]`).click(); await gp.click('[data-act="discontinue"]'); await gp.waitForSelector('#ask:not([hidden])');
   await gp.mouse.click(6, 816); await gp.waitForTimeout(150);
   check('0.12.0 확인 창(단종) 바깥 누르기 = 취소(창 닫힘, 단종 안 됨)', (await gp.locator('#ask').isHidden()) && (await GG((id) => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id).status, gid)) === 'onSale');
+  // ---- 0.12.0 추가: 조 단위 금액 KPI, 할 일 서랍(나중에·다시 알리지 않기), 계보 정렬, 명예의 전당 ----
+  await gclose(); await GG(() => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.status === 'onSale');
+    g.profit = 117140000; if (g.pnl) g.pnl.rev = 234560000; s.cash = 123450000; const L = s.ledger.at(-1); L.revenue = 123450000; L.profit = -123450000; L.cash = 123450000; window.__car.render(); });
+  const clipped = (root) => GG((q) => [...document.querySelectorAll(`${q} .kpi b, ${q} .co-box > b`)].filter((b) => b.offsetParent && (b.scrollWidth > b.clientWidth + 1 || getComputedStyle(b).textOverflow === 'ellipsis' && b.scrollWidth > b.clientWidth)).map((b) => b.innerText), root);
+  const longRes = {};
+  for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) {
+    await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150);
+    await gp.click('#tabs button[data-tab="garage"]'); const gid0 = await GG(() => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((x) => x.status === 'onSale').id);
+    await gp.locator(`.gtable [data-act="gopen"][data-id="${gid0}"]`).click(); await gp.waitForTimeout(200);
+    if (!(await gp.locator('details.fold[data-fold="pnl"][open]').count())) await gp.click('details.fold[data-fold="pnl"] > summary');
+    await gp.locator('#panel .pnl-card').scrollIntoViewIfNeeded(); const a1 = await clipped('#panel');
+    if (M2) await gp.screenshot({ path: `${M2}/pnl-long-${w}x${h}.png` });
+    await gp.click('#tabs button[data-tab="fin"]'); const a2 = await clipped('#panel');
+    await gp.click('#tabs button[data-tab="company"]'); await gp.click('#panel [data-act="cotab"][data-v="sum"]'); const a3 = await clipped('#panel');
+    await GG(() => window.__car.showMonth(window.__car.game.state.ledger.length - 1)); const a4 = await clipped('#sheet'); await gclose();
+    longRes[w] = [...a1, ...a2, ...a3, ...a4];
+  }
+  check('0.12.0 조 단위 금액(1조 1,714억·−1조 2,345억)이 KPI 칸에서 말줄임·넘침 없음(차 손익·성적·재무·회사 요약·월 결산, 세 해상도)', Object.values(longRes).every((x) => !x.length), JSON.stringify(longRes));
+  await GG(() => { const s = window.__car.game.state; s.cash = 1e6; window.__car.render(); });
+  // 할 일 서랍: 나중에(이번 달 숨김), 다시 알리지 않기(설정에서 되돌림), 1024에서 화면을 다 덮지 않음, 항목 56px·글자 14px
+  await gp.setViewportSize({ width: 1024, height: 768 }); await gp.waitForTimeout(150);
+  await gp.click('#todobtn'); await gp.waitForSelector('#drawer:not([hidden])');
+  const dw = await GG(() => { const d = document.getElementById('drawer').getBoundingClientRect(), it = [...document.querySelectorAll('#drawer .todo-it')].filter((x) => x.offsetParent); return { w: d.width, left: d.left, minH: Math.min(...it.map((x) => x.getBoundingClientRect().height)), fs: Math.min(...it.map((x) => parseFloat(getComputedStyle(x.querySelector('b')).fontSize))) }; });
+  check('0.12.0 할 일 서랍(1024×768): 오른쪽 380~420px, 게임 화면이 옆에 보임, 항목 56px·글자 14px 이상', dw.w >= 380 && dw.w <= 421 && dw.left >= 500 && dw.minH >= 56 && dw.fs >= 14, JSON.stringify(dw));
+  if (M2) for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); await gp.screenshot({ path: `${M2}/todo-drawer-${w}x${h}.png` }); }
+  await gp.locator('#drawer details.todo-ref > summary').click().catch(() => {}); // 참고도 펼쳐서
+  const tFirst = await gp.locator('#drawer .todo-row:has([data-act="todoLater"]) .todo-it').first().getAttribute('data-k');
+  await gp.locator(`#drawer [data-act="todoLater"][data-k="${tFirst}"]`).click();
+  check('0.12.0 할 일 [나중에] → 이번 달 동안 숨김', (await gp.locator(`#drawer .todo-it[data-k="${tFirst}"]`).count()) === 0, tFirst);
+  const mk2 = await gp.locator('#drawer [data-act="todoMute"]').first().getAttribute('data-v');
+  await gp.locator('#drawer [data-act="todoMute"]').first().click();
+  check('0.12.0 할 일 [다시 알리지 않기] → 그 종류 사라짐·기기 저장소', (await gp.locator(`#drawer .todo-it[data-kind="${mk2}"]`).count()) === 0 && (await GG(() => JSON.parse(localStorage.getItem('car-company-todomute')))).includes(mk2));
+  await gp.click('#drawer [data-act="drawerClose"]'); await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
+  await gp.click(`#sheet [data-act="todoUnmute"][data-v="${mk2}"]`);
+  check('0.12.0 설정 → 알림에서 다시 알리기', !(await GG(() => JSON.parse(localStorage.getItem('car-company-todomute')))).includes(mk2)); await gclose();
+  // 차종 계보 정렬·필터, 명예의 전당
+  await gp.setViewportSize({ width: 1180, height: 820 }); await gp.click('#tabs button[data-tab="records"]'); await gp.click('[data-act="rectab"][data-v="cars"]');
+  await gp.click('[data-act="linSort"][data-v="sold"]');
+  const order = await GG(() => [...document.querySelectorAll('.lineage-card')].map((x) => Number(x.dataset.np)));
+  const want2 = await GG(() => [...window.__car.game.state.nameplates].filter((n) => n.generations.length).sort((a, b) => b.generations.reduce((x, g) => x + g.totalSold, 0) - a.generations.reduce((x, g) => x + g.totalSold, 0) || a.id - b.id).map((n) => n.id));
+  check('0.12.0 차종 계보 정렬(많이 팔린 순)·기기에 기억', order.join() === want2.join() && (await GG(() => JSON.parse(localStorage.getItem('car-company-lineage')).sort)) === 'sold', `${order} / ${want2}`);
+  if (M2) await gp.screenshot({ path: `${M2}/lineage-sort-1180x820.png` });
+  await gp.click('[data-act="linFilter"][data-v="off"]');
+  check('0.12.0 차종 계보 필터(단종): 판매 중인 차종이 없음', await GG(() => [...document.querySelectorAll('.lineage-card')].every((x) => window.__car.game.state.nameplates.find((n) => n.id === Number(x.dataset.np)).generations.every((g) => g.status === 'discontinued'))));
+  await gp.click('[data-act="linFilter"][data-v=""]');
+  await gp.click('[data-act="rectab"][data-v="hall"]');
+  const hall = await GG(() => ({ n: document.querySelectorAll('.hall > .hall-grid > .hall-it').length, want: window.__car.Q.hallOfFame(window.__car.game.state).cars.length, t: document.querySelector('.hall')?.innerText ?? '' }));
+  check('0.12.0 명예의 전당: 차 기록 카드(가장 많이 팔린 차·가장 비싼 차 등)와 회사 기록', hall.n === hall.want && hall.t.includes('가장 많이 팔린 차') && (await gp.locator('.hall-co').innerText()).includes('누적 판매'), `${hall.n}/${hall.want}`);
+  if (M2) for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); await gp.screenshot({ path: `${M2}/hall-${w}x${h}.png` }); }
+  const hid = await gp.locator('.hall-it').first().getAttribute('data-v'); await gp.locator('.hall-it').first().click();
+  check('0.12.0 명예의 전당 항목 누르기 → 그 차종 계보', (await gp.locator(`.lineage-card[data-np="${hid}"]`).count()) === 1 && (await gp.locator('[data-act="rectab"][data-v="cars"]').getAttribute('aria-selected')) === 'true');
   await gctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
