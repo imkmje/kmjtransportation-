@@ -810,6 +810,7 @@ body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자
 .key-life small{grid-column:1/-1}.key-life .life{margin:2px 0}
 .key-rv{flex-direction:row;align-items:center;justify-content:flex-start;gap:8px}
 .key-rv svg{width:40px;height:40px;flex:none}.key-rv>div{min-width:0}
+.key-rv small{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
 .ov.gnav{left:auto;top:auto;right:14px;bottom:14px;pointer-events:auto;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--ink2)}
 .ov.gnav .btn{background:#fffe;min-height:44px}
 .pcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start;flex:none}
@@ -864,6 +865,7 @@ details.gone .g-th img{opacity:.75;filter:grayscale(.5)}
 .cmp-t tr:first-child th{vertical-align:bottom;font-size:13px;color:var(--ink)}
 .cmp-t tr:first-child th b{display:block;font-size:15px;font-weight:900}.cmp-t tr:first-child th small{display:block;font-size:12px;color:var(--ink3);font-weight:700}
 .cmp-t .g-th img{width:132px;height:82px;margin:0 0 4px auto}
+.cmp>.row.end>.btn{flex:0 0 auto;min-width:96px}
 .cmp-t th{font-size:12.5px}.cmp-t td{font-size:14px;font-weight:700}
 .cmp-t td.best{font-weight:900;color:var(--ink);background:#f3faf6}
 .cmp-t tr.rival td{font-size:12.5px;font-weight:700;color:var(--ink2)}
@@ -911,7 +913,7 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary::after{content:"펼치기 ▸";margin-left:auto;font-size:12px;font-weight:800;color:var(--ink3);white-space:nowrap}
 details.fold[open]>summary::after{content:"접기 ▾"}
 details.fold>summary .lbl{margin:0;flex:none}
-details.fold>summary span{font-size:13px;font-weight:700;color:var(--ink2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.fold>summary span{font-size:13px;font-weight:700;color:var(--ink2);min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.35}
 details.fold>summary b.pos{color:var(--pos)}details.fold>summary b.neg{color:var(--neg)}
 details.fold[open]>summary{border-radius:16px 16px 0 0;border-bottom:0}
 details.fold[open]>.card{border-radius:0 0 16px 16px;border-top:0;padding-top:4px}
