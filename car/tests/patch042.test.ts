@@ -159,7 +159,7 @@ describe('규제 의무 장비(0.4.2)', () => {
   });
 });
 
-describe('페이스리프트 옵션과 의무 장비(0.5.2 버그)', () => {
+describe('페이스리프트 옵션과 의무 장비(0.6.0 버그)', () => {
   it('미리보기 능력치에 의무 장비가 들어간다(옵션 목록에 없어도 출시 때처럼 자동 포함)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), start = eraTimeline(1).find((x) => x.def.id === 'safety')!.start;
     g.state.cash = 1e9; g.state.week = (start - 30) * 4;

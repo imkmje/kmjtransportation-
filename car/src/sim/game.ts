@@ -611,7 +611,7 @@ export class Game {
     if ((st.saveVersion as number) === 1) migrateV1(st);
     if ((st.saveVersion as number) === 2) migrateV2(st);
     if ((st.saveVersion as number) === 3) migrateV3(st);
-    fillRivalCells(st); // 0.5.2 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
+    fillRivalCells(st); // 0.6.0 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
     return new Game(st);
   }
 
@@ -670,7 +670,7 @@ function migrateV3(st: CarState): void {
   st.research ??= { done: TECHS.filter((t) => done.has(t.id)).map((t) => t.id), active: [], early: [] };
   st.saveVersion = 4;
 }
-/** 경쟁사 자료에 있는데 저장에 없는 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다). 형식 3 변환과 0.5.2 새 차체 칸이 함께 쓴다 */
+/** 경쟁사 자료에 있는데 저장에 없는 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다). 형식 3 변환과 0.6.0 새 차체 칸이 함께 쓴다 */
 function fillRivalCells(st: CarState): void {
   const m = monthOf(st.week);
   st.rivals.forEach((r, ri) => {

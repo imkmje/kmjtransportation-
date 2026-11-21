@@ -727,7 +727,7 @@ check('연구 완료 뒤 카드 ✓ 완료', (await page.locator('.tc.done[data-
 // 기획: 연구한 차체만 열림, 나머지는 흐리게 "연구 필요"
 await page.click('#tabs button[data-tab="garage"]'); await planNew();
 check('기획 차체: 연구한 해치백이 열림', (await page.locator('[data-act="pick"][data-k="body"][data-v="hatch"]').count()) === 1);
-check('기획 차체 10종: 미해금은 흐리게 "연구 필요: ○○"', (await page.locator('.opt[data-k="body"], .opt.locked[data-lock^="body:"]').count()) === 10 && (await page.locator('.opt.locked[data-lock="body:sedanM"]').innerText()).includes('연구 필요: 중형 세단 차체'));
+check('기획 차체 12종(0.6.0 SUV 소·중·대): 미해금은 흐리게 "연구 필요: ○○"', (await page.locator('.opt[data-k="body"], .opt.locked[data-lock^="body:"]').count()) === 12 && (await page.locator('.opt.locked[data-lock="body:sedanM"]').innerText()).includes('연구 필요: 중형 세단 차체'));
 await page.waitForTimeout(400); await shot('plan-bodies');
 await page.locator('.opt.locked[data-lock="body:sedanM"]').click();
 check('흐린 차체를 누르면 연구 화면의 그 기술 상세로', (await S4(() => window.__car.screen)) === 'company' && (await page.locator('.tech-sheet[data-tech="bd_sedanM"]').count()) === 1);
@@ -857,7 +857,7 @@ const rfId = Number(await page.locator('[data-act="retrofit"]').getAttribute('da
 check('판매 중 차: [의무 장비 넣기]가 열림(비용·대당 원가 안내)', (await page.locator('[data-act="retrofit"]').isEnabled()) && /ABS·에어백.*대당 원가 \+\d+만원/.test(await page.locator('.retrofit').innerText()));
 await act('retrofit');
 check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 사라짐', await S4((id) => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), o = g.editions.at(-1).options; return o.includes('abs') && o.includes('airbag'); }, rfId) && (await page.locator('[data-act="retrofit"]').count()) === 0);
-// 페이스리프트·풀체인지 옵션 추가(0.5.2 버그): 판 옵션에 의무 장비가 들어 있어도 빈 칸만큼 새 옵션을 고를 수 있다(본사 4등급 칸 4개 중 2개 사용 + 의무 장비 2개)
+// 페이스리프트·풀체인지 옵션 추가(0.6.0 버그): 판 옵션에 의무 장비가 들어 있어도 빈 칸만큼 새 옵션을 고를 수 있다(본사 4등급 칸 4개 중 2개 사용 + 의무 장비 2개)
 { const want = await S4((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), ed = g.editions.at(-1);
     g.launchMonth = Math.min(g.launchMonth, Math.floor(s.week / 4) - 40); ed.options = ['radio', 'leather', 'abs', 'airbag']; for (const t of ['el_radio', 'el_aircon', 'el_leather']) if (!s.research.done.includes(t)) s.research.done.push(t); c.render(); return 'aircon'; }, rfId);
   await page.locator(`[data-act="goLift"][data-id="${rfId}"]`).click();
@@ -871,7 +871,7 @@ check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 
   await page.locator(`.opt[data-act="opt"][data-v="${want}"]`).click();
   check('풀체인지(의무 장비 있는 차): 빈 칸에 새 옵션 추가됨', await S4((w) => window.__car.draft.options.includes(w), want), JSON.stringify(await S4(() => window.__car.draft.options)));
   await act('cancelPlan'); }
-// 새 차체 7종 3D(0.5.2 소형·대형 SUV 포함)
+// 새 차체 7종 3D(0.6.0 소형·대형 SUV 포함)
 await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_suvS', 'bd_suvL', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
 await planNew();
 { const order = await page.locator('[data-k="body"]').evaluateAll((els) => els.map((e) => e.dataset.v).join(','));

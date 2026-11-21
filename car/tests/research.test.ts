@@ -26,7 +26,7 @@ const toTest = (g: Game) => { const p = g.state.projects[0]; while (p.phase === 
 const LAUNCH = { price: 1200, marketing: 1, color: 'red', wheels: 0 as const };
 
 describe('자료 무결성(4단계)', () => {
-  it('차체 12종(3D 담당이 쓰는 ID, 0.5.2: SUV를 소·중·대로 나누고 세단·SUV를 크기 순으로 묶음), 원가 = 기준가의 82%, 동력 4종, 옵션 12 + 추가', () => {
+  it('차체 12종(3D 담당이 쓰는 ID, 0.6.0: SUV를 소·중·대로 나누고 세단·SUV를 크기 순으로 묶음), 원가 = 기준가의 82%, 동력 4종, 옵션 12 + 추가', () => {
     expect(BODIES.map((b) => b.id)).toEqual(['sedanS', 'sedanM', 'sedanL', 'hatch', 'coupe', 'minivan', 'kei', 'suvS', 'suv', 'suvL', 'pickup', 'sports']);
     for (const b of BODIES) { expect(b.cost).toBe(Math.round(b.basePrice * 0.82)); expect(b.mult.Q).toBe(1); }
     expect(POWERTRAINS.map((p) => [p.id, p.year])).toEqual([['gasoline', 1970], ['diesel', 1982], ['hybrid', 1998], ['ev', 2010]]);
@@ -37,7 +37,7 @@ describe('자료 무결성(4단계)', () => {
     const byYear = [...OPTIONS].sort((a, b) => a.year - b.year), pts = (o: typeof OPTIONS[0]) => o.U + o.D + o.Q;
     expect(pts(byYear.at(-1)!)).toBeGreaterThan(pts(byYear[0]) * 5); // 뒤 시대 옵션일수록 원점수가 크다
   });
-  it('기술 40~52개(0.5.0: 1970년 기초 기술 4개 추가, 0.5.2: 소형·대형 SUV 차체 2개 추가)·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
+  it('기술 40~52개(0.5.0: 1970년 기초 기술 4개 추가, 0.6.0: 소형·대형 SUV 차체 2개 추가)·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
     expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(52);
     expect(new Set(TECHS.map((t) => t.field))).toEqual(new Set(['powertrain', 'body', 'electronics', 'production', 'eco']));
     expect(new Set(TECHS.map((t) => t.id)).size).toBe(TECHS.length);
