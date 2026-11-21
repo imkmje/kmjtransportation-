@@ -7,10 +7,15 @@ import { STATS, type CarState, type Stats } from './types';
 export const zeroStats = (): Stats => ({ P: 0, E: 0, U: 0, D: 0, Q: 0 });
 
 /** 5.1 기준(연도) = 100 × 구간별 상승률의 곱 */
+const stdCache = new Map<number, number>(); // 1.0.0 성능: 판매 계산마다 불려 거듭제곱이 가장 비쌌다
 export function standard(year: number): number {
+  const c = stdCache.get(year);
+  if (c !== undefined) return c;
   const { base, growthFrom: from, growthRates: r } = config.grade;
   let v = base;
   for (let i = 0; i < from.length; i++) v *= (1 + r[i]) ** Math.max(0, Math.min(year, from[i + 1] ?? Infinity) - from[i]); // 구간별 상승률(0.4.2)
+  if (stdCache.size > 512) stdCache.clear();
+  stdCache.set(year, v);
   return v;
 }
 /** 원점수 → 표시 등급 0~10 */
@@ -48,9 +53,9 @@ export function unitCost(body: string, powertrain: string, tier: number, options
 
 /** 7.3 수명: 출시 0~3개월 0.6 → 1.0, 30개월까지 1.0, 이후 매달 −0.6% */
 export function lifeFactor(ageMonths: number): number {
-  const { start, rampMonths, plateauMonths, decay } = config.life;
+  const { start, rampMonths, plateauMonths, decay } = config.life; // 1.0.0: oldMonths부터 oldDecay를 더 곱한다
   if (ageMonths < rampMonths) return start + ((1 - start) * ageMonths) / rampMonths;
-  return (1 - decay) ** Math.max(0, ageMonths - plateauMonths);
+  return (1 - decay) ** Math.max(0, ageMonths - plateauMonths) * Math.max(config.life.oldFloor, (1 - config.life.oldDecay) ** Math.max(0, ageMonths - config.life.oldMonths)); // 노후 감소에는 하한(oldFloor)이 있다(수명 0%가 되어 아무것도 팔리지 않던 문제)
 }
 
 export const salaryOf = (ability: number): number => config.salary.base + ability * config.salary.perAbility;

@@ -99,10 +99,11 @@ describe('봇과 개발', () => {
       expect(allGens(g.state)[0].body).toBe(body);
     }
   });
-  it('신중 봇이 대형 SUV는 2000년대에, 소형 SUV는 수요가 커지는 2010년대에 낸다(시드 5, 2025년까지)', () => {
+  it('신중 봇이 대형 SUV는 2016년까지, 소형 SUV는 수요가 커지는 2010~2024년에 낸다(시드 5, 2025년까지)', () => {
     const g = Game.create({ difficulty: 'normal', seed: 5 }), b = steady();
     for (let w = 0; w < 55 * WPY && g.state.status === 'playing'; w++) { b.step(g); g.tick(); }
     const first = (body: string) => Math.min(...allGens(g.state).filter((x) => x.body === body).map((x) => 1970 + Math.floor(x.launchWeek / WPY)));
-    expect(first('suvL')).toBeLessThan(2012); expect(first('suvS')).toBeGreaterThanOrEqual(2010); expect(first('suvS')).toBeLessThan(2020);
+    // 1.0.0: 공장 4등급 이상 건설비를 올려(유지비 대신 일회성 투자) 생산 라인이 늦게 늘어, 시드 1~6 측정 대형 SUV 2011~2016년·소형 SUV 2021~2023년. 2012/2020 → 2017/2025
+    expect(first('suvL')).toBeLessThan(2017); expect(first('suvS')).toBeGreaterThanOrEqual(2010); expect(first('suvS')).toBeLessThan(2025);
   }, 120_000);
 });

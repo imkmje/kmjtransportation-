@@ -130,8 +130,8 @@ describe('풀체인지(8.3)', () => {
     const b = aged(36, 2);
     ok(b.g.command({ type: 'startFullChange', nameplateId: b.g.state.nameplates[0].id, ...FULL }));
   });
-  it('비용: 같은 차체 85%, 차체를 바꾸면 100%', () => {
-    for (const [body, mult] of [['sedanS', 0.85], ['hatch', 1]] as const) {
+  it('비용: 같은 차체 70%(1.0.0: 85 → 70%), 차체를 바꾸면 100%', () => {
+    for (const [body, mult] of [['sedanS', config.lifecycle.fullChange.sameBodyCost], ['hatch', 1]] as const) {
       const { g } = aged(48);
       while (yearOf(g.state.week) < 1974) g.tick();
       grant(g, 'bd_hatch');

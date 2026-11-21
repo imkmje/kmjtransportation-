@@ -13,7 +13,8 @@ const ROLES: Role[] = ['designer', 'engineer', 'engineer', 'tester', 'sales'];
 const pool: OfficeStaff[] = Array.from({ length: 24 }, (_, i) => ({
   id: `s${i + 1}`, name: FAMILY[i % 10] + GIVEN[(i * 3) % 10], role: ROLES[i % ROLES.length], condition: 0.8, working: true,
 }));
-const st = { level: 1 as OfficeView['level'], count: 4, phase: 'design' as OfficeView['phase'], budget: 'normal' as OfficeView['budget'], tired: 0, idle: 0, car: true, size: 'tablet' };
+const st = { level: 1 as OfficeView['level'], count: 4, phase: 'design' as OfficeView['phase'], budget: 'normal' as OfficeView['budget'], tired: 0, idle: 0, car: true, size: 'tablet', year: 2020, execs: 0 };
+const EXECS = [['인사 임원', '한도윤'], ['기획 임원', '오서연'], ['재무 임원', '문지호'], ['생산 임원', '배하린'], ['연구소장', '신예준'], ['시장 조사 임원', '유수아']];
 let defects = 2, progress = 0.35;
 // [폭, 높이, 위쪽 띠 높이]. wide2 = 게임 개발 탭의 넓은 칸(아이패드 가로)
 const SIZES: Record<string, [number, number, number]> = { tablet: [700, 940, 90], phone: [360, 300, 90], wide: [900, 600, 90], wide2: [1270, 560, 52] };
@@ -21,7 +22,8 @@ const car = silhouetteSvg(lookOf({ body: 'sedanM', powertrain: 'gas', tier: 2, c
 
 function view(): OfficeView {
   const staff = pool.slice(0, st.count).map((s, i) => ({ ...s, condition: i < Math.round(st.count * st.tired) ? 0.2 : 0.8, working: i >= Math.round(st.count * st.idle) }));
-  return { level: st.level, staff, phase: st.phase, budget: st.budget, projectName: '모닝스타 1세대', carSvg: st.car ? car : undefined, progress, defects };
+  return { level: st.level, staff, phase: st.phase, budget: st.budget, projectName: '모닝스타 1세대', carSvg: st.car ? car : undefined, progress, defects, year: st.year,
+    execs: EXECS.slice(0, st.execs).map(([title, name], i) => ({ id: `x${i}`, title, name })) };
 }
 function apply() {
   const [w, h, inset] = SIZES[st.size];
@@ -41,6 +43,8 @@ ctl.innerHTML =
   seg('예산', 'budget', [['low', '절약'], ['normal', '보통'], ['high', '과감']]) +
   seg('지침 비율', 'tired', [['0', '0'], ['0.25', '1/4'], ['0.5', '1/2'], ['1', '전부']]) +
   seg('미배치', 'idle', [['0', '0'], ['0.25', '1/4'], ['0.5', '1/2']]) +
+  seg('연도', 'year', [['1975', '1975'], ['1985', '1985'], ['1995', '1995'], ['2008', '2008'], ['2020', '2020']]) +
+  seg('임원', 'execs', [['0', '0'], ['1', '1'], ['2', '2'], ['4', '4'], ['6', '6']]) +
   seg('무대', 'size', [['tablet', '태블릿 700×940'], ['phone', '폰 360×300'], ['wide', '넓은 칸 900×600'], ['wide2', '개발 탭 1270×560']]) +
   `<div class="row"><button id="score">점수 이벤트 한 주 발생</button><button id="found">결함 발견</button><button id="fixed">결함 제거</button>
    <button id="say">말풍선</button><button id="launch">출시 대사</button><button id="act">멈춤/재개</button></div>`;
@@ -49,7 +53,7 @@ ctl.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]');
   if (!b) return;
   const k = b.dataset.k!, v = b.dataset.v!;
-  (st as Record<string, unknown>)[k] = ['level', 'tired', 'idle'].includes(k) ? Number(v) : v;
+  (st as Record<string, unknown>)[k] = ['level', 'tired', 'idle', 'year', 'execs'].includes(k) ? Number(v) : v;
   if (k === 'level') st.count = [0, 4, 8, 12, 16, 20][st.level];
   (document.getElementById('count') as HTMLInputElement).value = String(st.count);
   apply();

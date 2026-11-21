@@ -1,0 +1,21 @@
+/* 출시 공개 장면. 결과 창(#sheet)을 화면 가득 어둡게 쓰고, 흐림 효과는 끈다(60fps) */
+.sheet.rvl-on{background:#06080b;-webkit-backdrop-filter:none;backdrop-filter:none;padding:0}
+.report.rvl-body{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;border-radius:0;padding:0;background:transparent;animation:none;overflow:hidden}
+.rvl{position:absolute;inset:0;background:radial-gradient(70% 60% at 50% 60%,#1a1e25 0,#0a0c10 70%,#050608 100%);color:#f4f5f7;cursor:pointer;overflow:hidden}
+.rvl-cv{position:absolute;inset:0;opacity:0;animation:rvl-in .5s ease .1s forwards}
+.rvl-cv canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* 스포트라이트가 바닥에 떨어진 원과 위에서 내려오는 빛기둥(그림 한 장, 후처리 없음) */
+.rvl-glow{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s ease-out;
+  background:radial-gradient(38% 16% at 50% 74%,#fff4dc40 0,#fff4dc00 100%),linear-gradient(100deg,transparent 38%,#fff6e214 46%,#fff6e214 54%,transparent 62%)}
+.rvl.lit .rvl-glow{opacity:1}
+.rvl.lit{background:radial-gradient(70% 60% at 50% 62%,#2a2f38 0,#0d1014 72%,#06070a 100%);transition:background .3s}
+.rvl-txt{position:absolute;left:max(24px,4vw);bottom:max(24px,6vh);display:flex;flex-direction:column;gap:6px;opacity:0;transform:translateY(12px);transition:opacity .6s ease,transform .6s ease;text-shadow:0 2px 12px #000a}
+.rvl.txt .rvl-txt{opacity:1;transform:none}
+.rvl-txt small{font-size:13px;font-weight:800;letter-spacing:.3em;color:#ffb48f}
+.rvl-txt b{font-size:clamp(34px,6vw,64px);font-weight:900;letter-spacing:-.03em;line-height:1.05}
+.rvl-txt span{font-size:clamp(15px,1.8vw,19px);font-weight:600;color:#c9ced6}
+.rvl.facelift .rvl-txt b{font-size:clamp(28px,4.6vw,48px)}
+.rvl-skip{position:absolute;top:max(16px,env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));min-height:44px;padding:0 18px;border-radius:999px;border:1px solid #ffffff40;background:#ffffff14;color:#f4f5f7;font:700 14px/1 inherit;cursor:pointer}
+.rvl-skip:focus-visible{outline:3px solid #ff5a1f;outline-offset:2px}
+@keyframes rvl-in{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.rvl-cv{animation:none;opacity:1}.rvl-txt,.rvl-glow{transition:none}}

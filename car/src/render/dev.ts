@@ -4,7 +4,8 @@ import { BODY } from './shapes';
 import { Stage } from './stage';
 import { buildCar, createCarMaterials, disposeCar } from './carBuilder';
 import { silhouetteSvg } from './silhouette';
-import { describeLook } from './variant';
+import { describeLook, distinctFaces } from './variant';
+import { chassisCandidates, chassisChange, faceCandidates, faceChange, findSeed } from './pick';
 
 const $ = (id: string) => document.getElementById(id)!;
 const q = new URLSearchParams(location.search);
@@ -27,7 +28,7 @@ const stage = Stage.supported() ? new Stage($('cv') as HTMLCanvasElement, $('sta
 // 자동 검사용(Playwright): 썸네일, 시드 일괄 생성 검사
 (window as unknown as { __dev: unknown }).__dev = {
   thumb: (l: CarLook, w: number, h: number, yaw?: number, fit?: number) => stage!.renderThumb(l, w, h, yaw, fit),
-  describeLook, buildCar, createCarMaterials, disposeCar,
+  describeLook, buildCar, createCarMaterials, disposeCar, distinctFaces, faceCandidates, chassisCandidates, faceChange, chassisChange, findSeed,
 };
 
 // buildCar 1회 시간(재질은 한 벌로 고정, 첫 회는 워밍업)

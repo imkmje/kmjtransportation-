@@ -1,5 +1,5 @@
 // 0.4.1 긴급 수정: 출시 대기(결함을 다 잡으면 개발비 0), 설명 필드(info), 문구 용어
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Game, allGens } from '../src/sim/game';
 import { defectAdvice, difficultyInfo, loanLimit, projectStatus, researchInfo, upkeepOf } from '../src/sim/queries';
 import { weeklyDevCost } from '../src/sim/dev';
@@ -10,6 +10,8 @@ import { monthOf } from '../src/sim/time';
 import type { Difficulty } from '../src/sim/types';
 import { BODIES, OPTIONS, POWERTRAINS, SEGMENTS, TECHS, RANDOM_EVENTS, ERA_EVENTS } from '../src/data';
 import { config } from '../src/config';
+
+vi.setConfig({ testTimeout: 60_000 }); // 1.0.0: 봇 수십 판(옵션 고르기·동력 고르기가 더해져 기본 5초를 넘는다)
 import { SPEC, ok } from './util';
 
 /** 결함이 0이 되어 출시 대기가 될 때까지 진행(최대 60주). 그 주의 이벤트를 돌려준다 */

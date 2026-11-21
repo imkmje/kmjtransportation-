@@ -5,9 +5,13 @@ import { chassisOf, chassisWords, describeLook, distinctFaces, faceOf } from '..
 import { silhouetteSvg } from '../src/render/silhouette';
 import { BODY } from '../src/render/shapes';
 import type { BodyId, CarLook } from '../src/render/look';
+import { roomFor, findPath, EXEC_SEATS, CAPACITY } from '../src/ui/office/layout';
+import { decadeOf } from '../src/ui/era';
+import { faceCandidates, chassisCandidates, faceParts, faceDistance, chassisDistance, chassisParts, findSeed, faceChoices } from '../src/render/pick';
+import { config } from '../src/config';
 
 const BODIES = Object.keys(BODY) as BodyId[];
-const ERAS = [1970, 1985, 1990, 2010, 2020] as const;
+const ERAS = [1970, 1985, 1990, 2010, 2020, 2035] as const;
 const M = createCarMaterials('#c8202f');
 const look = (o: Partial<CarLook> & { bodyId: BodyId }): CarLook => ({ powertrain: 'gas', color: '#c8202f', wheel: 1, era: 2020, ...o } as CarLook);
 const bodyMesh = (g: THREE.Group) => g.children.find((o): o is THREE.Mesh => o instanceof THREE.Mesh && Array.isArray(o.material))!;
@@ -99,12 +103,12 @@ describe('3D 차 모양', { timeout: 60000 }, () => {
     }
   });
 
-  it('형상 검사: 데칼 빠짐 0, 좌우 대칭, 바퀴는 땅에 닿고 아치 안에, 삼각형 2만 2천 이하', () => {
+  it('형상 검사: 데칼 빠짐 0, 좌우 대칭, 바퀴는 땅에 닿고 아치 안에, 삼각형 2만 4천 이하', () => {
     for (const bodyId of BODIES) for (const era of ERAS) for (let s = 0; s < 4; s++) {
       const l = look({ bodyId, era, chassisSeed: s * 19 + 2, faceSeed: s * 5 + 1, wheel: (s % 3) as 0 | 1 | 2, sporty: s === 1, powertrain: s === 3 ? 'ev' : 'gas' });
       const g = buildCar(l, M), c = chassisOf(l);
       expect(g.userData.decalMiss).toBe(0);
-      expect(tris(g)).toBeLessThanOrEqual(22000);
+      expect(tris(g)).toBeLessThanOrEqual(24000);
       // 좌우 대칭: 차 전체 꼭짓점의 z 합이 0 근처, 최대·최소 z가 같다
       const box = new THREE.Box3().setFromObject(g);
       expect(Math.abs(box.max.z + box.min.z)).toBeLessThan(1e-3);
@@ -149,3 +153,61 @@ describe('3D 차 모양', { timeout: 60000 }, () => {
     expect(svg).toContain(`cx="${-c.wb}" cy="${c.wr.toFixed(2)}"`);
   });
 });
+
+describe('사무실·시대 분위기(1.0.0)', () => {
+  it('본사 등급마다 임원 자리 수는 설정과 같고, 방은 등급이 오를수록 넓어지며, 모든 책상·서는 곳에서 탕비 공간까지 걸어갈 수 있다', () => {
+    let lastArea = 0;
+    for (const lv of [1, 2, 3, 4, 5] as const) {
+      const rm = roomFor(lv), coffee = rm.spots.find((q) => q.kind === 'coffee')!;
+      expect(rm.execs.length).toBe(EXEC_SEATS[lv]);
+      expect(EXEC_SEATS[lv]).toBe(config.exec.seats[lv - 1]);
+      expect(rm.seats.length).toBe(CAPACITY[lv]);
+      expect(rm.W * rm.D).toBeGreaterThan(lastArea); lastArea = rm.W * rm.D;
+      for (const st of rm.seats) expect(findPath(rm.grid, st.access, [coffee.x, coffee.y]), `등급 ${lv} 자리 길 없음`).not.toBeNull();
+      for (const sp of rm.spots) expect(findPath(rm.grid, [sp.x, sp.y], [coffee.x, coffee.y]), `등급 ${lv} ${sp.kind} 길 없음`).not.toBeNull();
+      // 임원실은 사무 책상과 겹치지 않는다
+      for (const e of rm.execs) for (const d of rm.furn.filter((f) => f.kind === 'desk')) expect(e.x > d.x && e.x < d.x + d.w && e.y > d.y && e.y < d.y + d.d).toBe(false);
+    }
+  });
+
+  it('시대 분위기는 10년 단위(1970년 이전은 1970, 2030년 이후는 2030)', () => {
+    expect([1965, 1970, 1979, 1980, 1999, 2004, 2015, 2020, 2031, 2045].map(decadeOf)).toEqual([1970, 1970, 1970, 1980, 1990, 2000, 2010, 2020, 2030, 2030]);
+  });
+});
+
+describe('외관 후보·직접 고르기(1.0.0)', () => {
+  it('후보 6개는 서로, 그리고 지금 얼굴과 부품 3개 이상 다르다(차체 12종 × 시대 6, 2020년대 전기차는 2개). 다음 묶음은 결정론적으로 이어진다', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) for (const powertrain of ['gas', 'ev'] as const) {
+      const cur = look({ bodyId, era, powertrain, chassisSeed: 5, faceSeed: 9 }), s0 = 1000 + era + bodyId.length;
+      const a = faceCandidates(cur, s0, 0, [cur]), ps = [cur, ...a.map((f) => ({ ...cur, faceSeed: f }))].map(faceParts);
+      expect(a.length, `${bodyId} ${era}`).toBe(6);
+      for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) expect(faceDistance(ps[i], ps[j]), `${bodyId} ${era} ${powertrain} ${i}-${j}`).toBeGreaterThanOrEqual(era === 2020 && powertrain === 'ev' ? 2 : 3); // 2020년대 전기차는 시대 표가 좁아(막힌 그릴·라이트 바 고정) 2개까지만 보장
+      expect(faceCandidates(cur, s0, 0, [cur])).toEqual(a);
+      const b = faceCandidates(cur, s0, 1, [cur]); expect(b.length).toBe(6); expect(b.some((x) => a.includes(x))).toBe(false);
+    }
+  });
+
+  it('풀체인지 차대 후보 6개는 서로·전작과 지붕선·성격·비례가 다르다', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) {
+      const prev = look({ bodyId, era, chassisSeed: 77, faceSeed: 1 }), c = chassisCandidates(prev, 4242, 0, [prev]), ls = [prev, ...c.map((x) => ({ ...prev, chassisSeed: x }))];
+      expect(c.length).toBe(6);
+      for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) expect(chassisDistance(ls[i], ls[j]), `${bodyId} ${era} ${i}-${j}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('직접 고르기: 고를 수 있는 부품이면 그 부품을 가진 시드를 돌려주고(결정론), 시대에 없는 부품은 흐리게', () => {
+    for (const bodyId of BODIES) for (const era of ERAS) {
+      const base = look({ bodyId, era, chassisSeed: 3, faceSeed: 3 }), ch = faceChoices(base);
+      for (const o of ch.lamp.filter((x) => x.ok)) {
+        const r = findSeed('face', base, 99, { lamp: o.v });
+        expect(r.miss, `${bodyId} ${era} ${o.v}`).toEqual([]);
+        expect(faceParts({ ...base, faceSeed: r.seed }).lamp).toBe(o.v);
+        expect(findSeed('face', base, 99, { lamp: o.v }).seed).toBe(r.seed);
+      }
+      expect(ch.lamp.find((x) => x.v === 'pixel')!.ok).toBe(era >= 2030);
+      const r2 = findSeed('chassis', base, 7, { roofType: BODY[bodyId].deck ? 'fast' : 'notch' });
+      expect(r2.miss).toEqual([]); expect(chassisParts({ ...base, chassisSeed: r2.seed }).roofType).toBe(BODY[bodyId].deck ? 'fast' : 'notch');
+    }
+  });
+});
+

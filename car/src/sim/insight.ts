@@ -1,7 +1,7 @@
 // 0.10.0 정보와 수습 수단: 차종별 손익, 판매 요인 분해, 직원 성장 기록, 10년 회고, 실패한 차의 수습(조건·미리보기). 순수 함수(상태를 바꾸지 않는다)
 import { config } from '../config';
 import { COMPAT, ERA_EVENTS, TECHS, bodyById, segmentById } from '../data';
-import { avgGrade, grade, standard, unitCost } from './cars';
+import { avgGrade, grade, lifeFactor, standard, unitCost } from './cars';
 import { capacityOf, costMultOf, devTeams as devTeamsOf } from './company';
 import { fixWeekCost, testCut } from './dev';
 import { eraNow, eraTimeline, eventImpactOn, marketMult } from './events';
@@ -10,7 +10,7 @@ import { allGens, linesUsed, sellingGens } from './game';
 import { estimatePnl } from './history';
 import { josa } from './josa';
 import { faceliftEligibility, fullChangeEligibility } from './lifecycle';
-import { awarenessTarget, basePriceOf, cellMonthly, currentEdition, lifeAge, monthlyDemand, rivalBase, toSaleCar, type DemandAlt, type SaleCar } from './market';
+import { awarenessTarget, genBasePrice, cellMonthly, currentEdition, lifeAge, monthlyDemand, rivalBase, toSaleCar, type DemandAlt, type SaleCar } from './market';
 import { bestPrice, compatMark, lifeBar, nameplateOf, priceForecast } from './queries';
 import { ptCostAdd } from './research';
 import { mean } from './reviews';
@@ -45,18 +45,31 @@ export function modelPnL(s: CarState, generationId: number): ModelPnL | null {
   return {
     generationId: g.id, name: nameplateOf(s, g.id)?.name ?? '', number: g.number, status: g.status,
     revenue: p.rev, cogs: p.cogs, marketing: p.mk, recall: p.recall, profit: g.profit, dev: { ...p.dev }, devTotal, net: g.profit - devTotal,
-    recovered: g.profit >= devTotal, paybackMonths: payback, monthly: [...p.months], estimated: !!p.est, facelift: liftCompare(g, p.months, p.dev.lift),
+    recovered: g.profit >= devTotal, paybackMonths: payback, monthly: [...p.months], estimated: !!p.est, facelift: liftCompare(s, g, p.months, p.dev.lift, !!p.est),
   };
 }
-/** 페이스리프트 전후 같은 개월 수(최대 12)의 이익 비교. 리프트 달부터를 '뒤'로 본다. 단순 비교라 수명이 줄어드는 몫은 따로 빼지 않는다 */
-function liftCompare(g: Generation, months: number[], cost: number): FaceliftCompare | null {
-  const lift = g.editions.find((e) => e.kind === 'facelift');
-  if (!lift) return null;
-  const i = monthOf(lift.launchWeek) - g.launchMonth, n = Math.min(MPY, i, months.length - i);
-  if (n <= 0) return { month: monthOf(lift.launchWeek), months: 0, before: 0, after: 0, cost, gain: 0, text: '페이스리프트 뒤 판매 기록이 아직 없습니다.' };
-  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0), before = sum(months.slice(i - n, i)), after = sum(months.slice(i, i + n)), gain = after - before - cost;
-  return { month: monthOf(lift.launchWeek), months: n, before, after, cost, gain,
-    text: `페이스리프트 뒤 ${n}개월 이익 ${won(after)}, 앞 ${n}개월 ${won(before)}. 차이에서 비용 ${won(cost)}${josa(won(cost), '을/를')} 빼면 ${won(gain)}${gain >= 0 ? '로 이득이었습니다' : '로 손해였습니다'}${n < MPY ? `(아직 ${n}개월치)` : ''}.` };
+/** 1.0.0 페이스리프트 비교(반사실): 리프트 뒤 같은 개월 수(최대 12)의 실제 이익과 '하지 않았을 때' 추정 이익.
+ *  추정 = 그달 실제 판매 × (리프트 없는 수명 ÷ 실제 수명) × (리프트 전 판으로 지금 시장에서 판 수요 ÷ 지금 판의 수요, 인지도 가산 뺌) × 리프트 전 판의 대당 이익 − 광고비.
+ *  전에는 단순 전후 비교라 수명 감소를 무시해 이익인 리프트도 손해로 나왔다. 판매 기록을 추정으로 채운 옛 저장이면 단정하지 않는다. before는 '하지 않았을 때 추정' */
+function liftCompare(s: CarState, g: Generation, months: number[], cost: number, est: boolean): FaceliftCompare | null {
+  const k = g.editions.findIndex((e) => e.kind === 'facelift');
+  if (k < 1) return null;
+  const lift = g.editions[k], prev = g.editions[k - 1], lm = monthOf(lift.launchWeek), i = lm - g.launchMonth, n = Math.min(MPY, months.length - i);
+  const none = (text: string) => ({ month: lm, months: 0, before: 0, after: 0, cost, gain: 0, text });
+  if (n <= 0) return none('페이스리프트 뒤 판매 기록이 아직 없습니다.');
+  if (est || g.sales.length < i + n) return none('비교할 기록이 없습니다.');
+  const m = monthOf(s.week), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
+  const cur = { ...toSaleCar(g, m), life: 1 }, old = { ...cur, stats: prev.stats, options: prev.options, awareness: Math.max(0, g.awareness - config.lifecycle.facelift.awareness) };
+  const dNow = monthlyDemand(s, cur, others, t), statR = dNow > 0 ? monthlyDemand(s, old, others, t) / dNow : 1;
+  const unitOld = prev.price - unitCost(g.body, g.powertrain, prev.tier, prev.options, costMultOf(s), ptCostAdd(s, g.powertrain)), mk = config.awareness.marketingCost[g.marketing];
+  let before = 0, after = 0;
+  for (let j = 0; j < n; j++) {
+    const mm = lm + j, lifeR = lifeFactor(mm - g.launchMonth) / Math.max(1e-9, lifeFactor(mm - g.lifeMonth));
+    before += g.sales[i + j] * lifeR * statR * unitOld - mk; after += months[i + j];
+  }
+  const gain = after - before - cost, sign = gain >= 0 ? '+' : '';
+  return { month: lm, months: n, before, after, cost, gain,
+    text: `페이스리프트 뒤 ${n}개월: 하지 않았을 때 추정 ${won(before)} → 실제 ${won(after)}, 비용 ${won(cost)}${josa(won(cost), '을/를')} 빼고 ${sign}${won(gain)}${n < MPY ? `(아직 ${n}개월치)` : ''}.` };
 }
 export interface NameplatePnL { nameplateId: number; name: string; gens: ModelPnL[]; revenue: number; profit: number; devTotal: number; net: number; recovered: boolean; estimated: boolean }
 export function nameplatePnL(s: CarState, nameplateId: number): NameplatePnL | null {
@@ -86,7 +99,7 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
   const known = s.knownCombos.includes(`${g.body}:${g.segment}`), mine = others.filter((o) => o.body === g.body).length;
   const std = standard(Math.floor(t)), mid = config.grade.mid, baseStats = Object.fromEntries(STATS.map((k) => [k, std])) as Stats;
   const patches: Record<FactorKey, ((c: Ctx) => Ctx) | null> = {
-    price: (c) => ({ ...c, car: { ...c.car, price: basePriceOf(s, g.body) } }),
+    price: (c) => ({ ...c, car: { ...c.car, price: genBasePrice(s, g) } }),
     ads: g.marketing > 0 ? (c) => ({ ...c, car: { ...c.car, awareness: Math.max(0, c.car.awareness - adShift) } }) : null, // 모두 돌릴 때는 인지도가 뒤에서 기준값으로 덮는다
     awareness: (c) => ({ ...c, car: { ...c.car, awareness: F.awareness } }),
     life: (c) => ({ ...c, car: { ...c.car, life: 1 } }),
@@ -105,7 +118,7 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
     out.push({ key, name, detail, fix, cf, units: actual - cf, impact: cf > 0 ? actual / cf - 1 : 0 });
   };
   // 가격
-  const base = basePriceOf(s, g.body), now = priceForecast(s, g.id, ed.price) ?? 0, bp = bestPrice(s, g.id);
+  const base = genBasePrice(s, g), now = priceForecast(s, g.id, ed.price) ?? 0, bp = bestPrice(s, g.id);
   const pFix = (() => {
     if (g.clearance) return '가격 인하 판매 중이라 값이 고정되어 있습니다.';
     if (bp && bp.price < ed.price) { const d = (priceForecast(s, g.id, bp.price) ?? 0) - now; return `기준가의 ${pct(bp.price / base)}(최고 이익 가격)로 내리면 월 ${d >= 0 ? '+' : '−'}${Math.abs(d)}대, 예상 월 이익 ${won(bp.profit)}.`; }
@@ -252,7 +265,7 @@ export function clearError(s: CarState, generationId: number): string | null {
 /** 가격 인하 판매 가격: 시장 기준가 × clearPct(10만원 단위, 허용 가격 안) */
 export const clearPriceOf = (s: CarState, g: Generation): number => {
   const b = bodyById(g.body).basePrice;
-  return Math.min(Math.floor((b * config.price.max) / 10) * 10, Math.max(Math.ceil((b * config.price.min) / 10) * 10, Math.round((basePriceOf(s, g.body) * config.rescue.clearPct) / 10) * 10));
+  return Math.min(Math.floor((b * config.price.max) / 10) * 10, Math.max(Math.ceil((b * config.price.min) / 10) * 10, Math.round((genBasePrice(s, g) * config.rescue.clearPct) / 10) * 10));
 };
 export interface RescueOptions {
   target: string | null; // 대상이 아니면 이유
@@ -274,6 +287,6 @@ export function rescueOptions(s: CarState, generationId: number): RescueOptions 
   return {
     target: g.status === 'onSale' ? rescueTargetError(s, g) : '판매 중인 차가 아닙니다.',
     fix: { ok: fe === null, reason: fe, weeks: R.fixWeeks, cost: fixWeekCost(s, g.devCost, team) * R.fixWeeks, team: team.map((x) => x.id), defectsNow: ed.defects, defectsAfter: left, recallNow: rec(ed.defects), recallAfter: rec(left), qNow: grade(ed.stats.Q, y), qAfter: grade(qAfter, y) },
-    clearance: { ok: ce === null, reason: ce, price, pct: price / basePriceOf(s, g.body), months: R.clearMonths, salesNow, salesAfter, profitNow: salesNow * (ed.price - uc) - mk, profitAfter: salesAfter * (price - uc) - mk },
+    clearance: { ok: ce === null, reason: ce, price, pct: price / genBasePrice(s, g), months: R.clearMonths, salesNow, salesAfter, profitNow: salesNow * (ed.price - uc) - mk, profitAfter: salesAfter * (price - uc) - mk },
   };
 }

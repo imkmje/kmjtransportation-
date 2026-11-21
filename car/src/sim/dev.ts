@@ -1,6 +1,6 @@
 // 개발 프로젝트(설계서 6장): 기획 검증, 주간 점수·결함, 주간 개발비
 import { config } from '../config';
-import { BODIES, POWERTRAINS, OPTIONS, SEGMENTS } from '../data';
+import { BODIES, POWERTRAINS, OPTIONS, SEGMENTS, bodyById } from '../data';
 import { defectCut, devSpeed, unlockedIds } from './research';
 import { salaryOf, zeroStats } from './cars';
 import { conditionMult, isAway, optionSlots } from './company';
@@ -41,6 +41,15 @@ export const withRequired = (state: CarState, options: string[]): string[] => [.
 /** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 직원 몫 비율 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
 export const devCostPerWeek = (team: Staff[], budget: Budget, protoMult = 1): number =>
   (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.staffCostShare * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
+/** 1.0.0 시제차 비용의 시대·차급 배수 = 1 + (시대 배수 − 1) × (차체 기준가 ÷ 소형 세단 기준가)^bodyExp. 시대 배수는 devEra 표(1980년까지 1)를 직선 보간.
+ *  1970년대는 그대로, 2000년대 이후 중형 이상은 수백억~천억대(사용자 지적: 차 한 대가 1조를 버는데 개발비가 수십억). 페이스리프트·긴급 개선 비용은 세대 개발비에 비례해 따라 오른다 */
+export function devScale(state: CarState, body: string): number {
+  const E = config.dev.devEra, t = state.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear;
+  let era = E.values[E.values.length - 1];
+  if (t <= E.years[0]) era = E.values[0];
+  else for (let i = 1; i < E.years.length; i++) if (t <= E.years[i]) { era = E.values[i - 1] + ((E.values[i] - E.values[i - 1]) * (t - E.years[i - 1])) / (E.years[i] - E.years[i - 1]); break; }
+  return 1 + (era - 1) * (bodyById(body).basePrice / bodyById(E.refBody).basePrice) ** E.bodyExp;
+}
 /** 페이스리프트의 주간 비용: 그 세대 개발비 × costShare ÷ (설계 주 + 최소 시험 주). 시험을 더 하면 그만큼 더 든다 */
 export const faceliftWeekCost = (genDevCost: number): number =>
   (genDevCost * config.lifecycle.facelift.costShare) / (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks);
@@ -56,7 +65,7 @@ export const fixWeekCost = (state: CarState, genDevCost: number, team: Staff[]):
 export function weeklyDevCost(state: CarState, p: Project): number {
   if (p.kind === 'fix') return fixWeekCost(state, genById(state, p.targetId)?.devCost ?? 0, staffOn(state, p));
   if (p.kind === 'facelift') return faceliftWeekCost(genById(state, p.targetId)?.devCost ?? 0);
-  const base = devCostPerWeek(staffOn(state, p), p.budget, diffOf(state).prototypeMult);
+  const base = devCostPerWeek(staffOn(state, p), p.budget, diffOf(state).prototypeMult * devScale(state, p.body));
   return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
 }
 
