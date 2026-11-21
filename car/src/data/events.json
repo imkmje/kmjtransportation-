@@ -34,7 +34,7 @@
       "warn": "주말 나들이 인구가 늘며 SUV에 관심이 모입니다.",
       "start": "SUV 붐이 일었습니다. 앞으로 오랫동안 SUV가 유행합니다.",
       "end": "SUV 붐이 한풀 꺾였습니다.",
-      "effects": [ { "type": "trend", "id": "suv", "add": 0.3 } ] },
+      "effects": [ { "type": "trend", "id": "suvS", "add": 0.3 }, { "type": "trend", "id": "suv", "add": 0.3 }, { "type": "trend", "id": "suvL", "add": 0.3 } ] },
     { "id": "gfc", "name": "금융위기", "year": 2008, "month": 9, "months": 18,
       "warn": "해외 금융시장이 불안하다는 기사가 이어집니다.",
       "start": "금융위기가 닥쳤습니다. 모든 지역에서 수요가 줄고, 특히 부유층의 구매가 크게 줄어듭니다.",

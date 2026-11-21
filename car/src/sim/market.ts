@@ -103,7 +103,8 @@ export function initRivals(rng: Rng, seed: number): RivalState[] {
   return [...RIVALS].sort((a, b) => (a.id < b.id ? -1 : 1)).map((r, ri) => {
     const cells: Record<string, number> = {}, models: Record<string, RivalModel> = {};
     for (const body of Object.keys(r.cells).sort()) {
-      const base = rivalBase(0) + r.cells[body] + rng.range(-config.rivals.noise, config.rivals.noise);
+      const late = (config.rivals.lateCells as readonly string[]).includes(body), n = config.rivals.noise;
+      const base = rivalBase(0) + r.cells[body] + (late ? (hash01(seed, 4, ri, bodyKey(body)) * 2 - 1) * n : rng.range(-n, n));
       models[body] = firstRivalModel(seed, ri, body, base);
     }
     const st = { id: r.id, name: r.name, cells, models };

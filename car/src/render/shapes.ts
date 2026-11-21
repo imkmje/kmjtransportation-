@@ -15,6 +15,7 @@ export interface BodyShape {
   edge?: number; // 앞뒤 끝 둥글림 배율(없으면 1, 작을수록 각진 앞뒤)
   spoiler?: boolean; // 뒤 스포일러 기본
   fenders?: boolean; // 휠 아치가 허리선 위로 솟아도 된다(쿠페·스포츠카의 부푼 펜더). 아니면 허리선을 아치 위로 올린다
+  suv?: boolean; // SUV 계열(스키드 플레이트·클래딩·루프랙)
 }
 
 export const BODY: Record<BodyId, BodyShape> = {
@@ -22,7 +23,10 @@ export const BODY: Record<BodyId, BodyShape> = {
   hatch: { L: 4.0, W: 1.72, clr: .2, belt: .92, roof: 1.46, cR: -1.4, cF: .45, rr: .3, rf: .6, wr: .31, wb: 1.25, deck: false, sill: .1, doors: [.82, -.47, -1.2], archTrim: .03 },
   sedanM: { L: 4.6, W: 1.78, clr: .2, belt: .92, roof: 1.42, cR: -1.05, cF: .55, rr: .55, rf: .7, wr: .33, wb: 1.4, deck: true, sill: .1, doors: [.95, -.25, -.95], archTrim: .03 },
   coupe: { L: 4.5, W: 1.82, clr: .15, belt: .84, roof: 1.26, cR: -.75, cF: .35, rr: .95, rf: .8, wr: .34, wb: 1.38, deck: true, sill: .1, doors: [.92, -.45], archTrim: .03, fenders: true },
-  suv: { L: 4.6, W: 1.86, clr: .3, belt: 1.08, roof: 1.72, cR: -1.75, cF: .6, rr: .25, rf: .6, wr: .39, wb: 1.4, deck: false, sill: .2, doors: [.9, -.575, -1.28], archTrim: .07 },
+  // SUV 3종: 소형은 짧고 높은 도시형(짧은 오버행), 중형은 기존 SUV, 대형은 길고 각진 3열(긴 휠베이스·높은 지붕·큰 휠, 뒤 쿼터 창 하나 더)
+  suvS: { L: 4.2, W: 1.78, clr: .26, belt: 1.0, roof: 1.62, cR: -1.55, cF: .5, rr: .28, rf: .58, wr: .35, wb: 1.3, deck: false, sill: .16, doors: [.84, -.525, -1.2], archTrim: .05, nose: .17, suv: true },
+  suv: { L: 4.6, W: 1.86, clr: .3, belt: 1.08, roof: 1.72, cR: -1.75, cF: .6, rr: .25, rf: .6, wr: .39, wb: 1.4, deck: false, sill: .2, doors: [.9, -.575, -1.28], archTrim: .07, suv: true },
+  suvL: { L: 5.05, W: 1.96, clr: .32, belt: 1.14, roof: 1.86, cR: -2.05, cF: .66, rr: .18, rf: .62, wr: .42, wb: 1.62, deck: false, sill: .22, doors: [.98, -.29, -1.24], archTrim: .075, pil: [.3, .65], nose: .14, edge: .7, suv: true },
   sedanL: { L: 5.1, W: 1.88, clr: .18, belt: .9, roof: 1.44, cR: -1.22, cF: .58, rr: .58, rf: .78, wr: .35, wb: 1.5, deck: true, sill: .1, doors: [1.06, -.12, -1.12], archTrim: .03, nose: .17 },
   minivan: { L: 4.8, W: 1.9, clr: .19, belt: .98, roof: 1.72, cR: -2.0, cF: .5, rr: .22, rf: 1.08, wr: .34, wb: 1.5, deck: false, sill: .12, doors: [1.02, 0, -1.0], archTrim: .04, pil: [.4, .8], nose: .15 },
   kei: { L: 3.4, W: 1.48, clr: .15, belt: .86, roof: 1.52, cR: -1.36, cF: .44, rr: .16, rf: .56, wr: .27, wb: 1.14, deck: false, sill: .09, doors: [.76, -.32, -.78], archTrim: .03, pil: [.58], nose: .14, edge: .6 },

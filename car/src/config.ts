@@ -121,6 +121,7 @@ export const config = {
     cycleMin: 48, cycleMax: 84, // 모델 교체 주기(개월)
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
+    lateCells: ['suvL', 'suvS'], // 0.5.2에 더한 칸: 새 게임의 첫 모델 강약 난수를 게임 난수 대신 해시로 뽑는다(기존 시드의 난수 순서가 그대로)
   },
   lifecycle: { // 8장
     facelift: {

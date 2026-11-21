@@ -43,7 +43,7 @@ export function bodyOf(id: string): BodyShape {
 
 function sideOf(look: CarLook, b: BodyShape): SideSpec {
   const id = look.bodyId, era = eraOf(look);
-  if (look.chassisSeed == null) return { crease: [.62], kick: 0, beltChrome: era === 1970, strip: 'none', sunroof: false, rack: false, clad: !!b.bed || id === 'suv', blackPillar: false };
+  if (look.chassisSeed == null) return { crease: [.62], kick: 0, beltChrome: era === 1970, strip: 'none', sunroof: false, rack: false, clad: !!b.bed || !!b.suv, blackPillar: false };
   const q = rng(Math.imul(look.chassisSeed, 0x85ebca6b) ^ 0x2c1b3c6d), x = () => q();
   const old = era <= 1980, nc = x(), c1 = .45 + .3 * x(), c2 = .15 + .15 * x(), kick = x(), bc = x(), st = x(), sr = x(), rk = x(), cl = x(), bp = x();
   return {
@@ -53,8 +53,8 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
     beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .3, 2020: .25 }[era], // 대형 세단은 늘 크롬 띠
     strip: old ? (st < .45 ? (era === 1970 ? 'chrome' : 'dark') : st < .65 ? 'dark' : 'none') : era === 1990 && st < .4 ? 'dark' : 'none',
     sunroof: sr < (id === 'pickup' || id === 'kei' ? .15 : .35),
-    rack: rk < (({ suv: .85, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
-    clad: id === 'suv' ? cl < (era === 2020 ? .45 : .85) : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < (era === 2020 ? .1 : .3), // 2020은 검은 클래딩이 줄어든다
+    rack: rk < (({ suvS: .6, suv: .85, suvL: .9, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
+    clad: b.suv ? cl < (era === 2020 ? .45 : .85) : b.bed ? true : (id === 'hatch' || id === 'kei') && cl < (era === 2020 ? .1 : .3), // 2020은 검은 클래딩이 줄어든다
     blackPillar: era >= 2010 && !b.bed && bp < .35,
   };
 }

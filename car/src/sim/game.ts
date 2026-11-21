@@ -611,6 +611,7 @@ export class Game {
     if ((st.saveVersion as number) === 1) migrateV1(st);
     if ((st.saveVersion as number) === 2) migrateV2(st);
     if ((st.saveVersion as number) === 3) migrateV3(st);
+    fillRivalCells(st); // 0.5.2 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
     return new Game(st);
   }
 
@@ -655,7 +656,7 @@ function migrateV2(st: CarState): void {
 /** 저장 형식 3 → 4: 연구·사건·조합 노트·차체 10종.
  *  - 이미 쓰고 있던(판매·개발한) 차체·옵션·동력을 여는 기술과 그 선행 기술을 연구 완료로 표시(연도 자동 해금이 없어졌으므로)
  *  - 판·프로젝트의 실제 동력 단계 = 등급(3단계까지는 등급이 곧 단계였다), 전담 연구원 없음, 출시한 조합은 공개
- *  - 경쟁사의 새 차체 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다) */
+ *  - 경쟁사의 새 차체 칸은 fromJSON의 fillRivalCells가 채운다 */
 function migrateV3(st: CarState): void {
   for (const x of st.staff) x.lab ??= false;
   const gens = st.nameplates.flatMap((n) => n.generations).sort((a, b) => a.id - b.id);
@@ -667,6 +668,10 @@ function migrateV3(st: CarState): void {
   const done = new Set(TECHS.filter((t) => !t.repeatable && t.effects.some((e) => (e.type === 'body' || e.type === 'option' || e.type === 'powertrain') && used.has(e.id))).map((t) => t.id));
   for (let grew = true; grew;) { grew = false; for (const id of [...done]) for (const q of techById(id).pre) if (!done.has(q)) { done.add(q); grew = true; } }
   st.research ??= { done: TECHS.filter((t) => done.has(t.id)).map((t) => t.id), active: [], early: [] };
+  st.saveVersion = 4;
+}
+/** 경쟁사 자료에 있는데 저장에 없는 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다). 형식 3 변환과 0.5.2 새 차체 칸이 함께 쓴다 */
+function fillRivalCells(st: CarState): void {
   const m = monthOf(st.week);
   st.rivals.forEach((r, ri) => {
     const def = RIVALS.find((x) => x.id === r.id);
@@ -675,5 +680,4 @@ function migrateV3(st: CarState): void {
       r.cells[body] = rivalA(r.models[body], m);
     }
   });
-  st.saveVersion = 4;
 }

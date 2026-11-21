@@ -463,7 +463,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     decal(rect(-fw * .93, fw * .93, ty - .004, ty + .004, 12, 1), M.trim, -1, L2);
     pair(g => decal(rect(g * fw * .93 - .004, g * fw * .93 + .004, tb, ty, 1, 4), M.trim, -1, L2));
   }
-  if (id === 'suv') for (const s of [1, -1] as const) decal(rect(-fw * .42, fw * .42, p.clr + .05, p.clr + .12, 8, 2), M.chrome, s, L2); // 스키드 플레이트
+  if (p.suv) for (const s of [1, -1] as const) decal(rect(-fw * .42, fw * .42, p.clr + .05, p.clr + .12, 8, 2), M.chrome, s, L2); // 스키드 플레이트
   if (id === 'minivan') sideBand(-h + E.re + .3, p.doors[p.doors.length - 1] - .02, () => p.belt - .035, .011, M.gloss); // 슬라이딩 도어 레일
   if (id === 'sports') sideBand(-p.wb + ar + .1, -p.wb + ar + .4, () => sill + (p.belt - sill) * .5, .035, M.gloss); // 뒷바퀴 앞 옆 흡기구
   if (id === 'hatch') { // 지붕 끝 립 스포일러(차체색) + 뒤 와이퍼

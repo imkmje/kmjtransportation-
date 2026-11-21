@@ -6,7 +6,9 @@
   "sedanL": { "youth": 0.6, "family": 1.0, "worker": 0.8, "rich": 1.2, "fleet": 1.2, "enthusiast": 0.6 },
   "minivan": { "youth": 0.6, "family": 1.2, "worker": 0.8, "rich": 0.8, "fleet": 1.0, "enthusiast": 0.6 },
   "kei": { "youth": 1.2, "family": 0.8, "worker": 1.2, "rich": 0.6, "fleet": 1.0, "enthusiast": 0.6 },
+  "suvS": { "youth": 1.2, "family": 1.0, "worker": 1.2, "rich": 0.6, "fleet": 0.8, "enthusiast": 0.8 },
   "suv": { "youth": 1.0, "family": 1.2, "worker": 1.0, "rich": 1.0, "fleet": 0.8, "enthusiast": 1.0 },
+  "suvL": { "youth": 0.6, "family": 1.2, "worker": 0.8, "rich": 1.2, "fleet": 0.6, "enthusiast": 1.0 },
   "pickup": { "youth": 0.8, "family": 0.8, "worker": 1.0, "rich": 0.6, "fleet": 1.0, "enthusiast": 0.8 },
   "sports": { "youth": 0.8, "family": 0.6, "worker": 0.6, "rich": 1.2, "fleet": 0.6, "enthusiast": 1.2 }
 }
