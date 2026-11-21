@@ -410,6 +410,7 @@ export function startApp(): void {
         if (look.bodyId === 'pickup' && !lookKey.includes('"bodyId":"pickup"')) stage.setYaw(PICKUP_YAW); // 픽업은 짐칸이 보이게 뒤 3/4에서 시작
         stage.setCar(look);
       } else stage.setColor(look.color);
+      stage.aim(screen === 'lift' || (screen === 'plan' && planTab === 'look') ? LP.aimYaw() : null); // 1.0.0 외관을 고를 때는 고르는 부품이 보이는 각도로
     }
     else { const fb = $('#fb'); fb.hidden = false; fb.innerHTML = silhouetteSvg(look, { color: look.color }); }
     lookKey = key;

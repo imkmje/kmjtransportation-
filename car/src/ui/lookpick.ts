@@ -14,7 +14,7 @@ const SIDE = 0, FRONT = -Math.PI / 2, FRONT34 = -1.25;
 
 /** 화면 상태(쪽 번호·직접 고르기 조건). 기획 대상(key)이 바뀌면 처음으로 */
 const st = { key: '', page: { face: 0, chassis: 0 }, want: { face: {} as Want, chassis: {} as Want }, miss: { face: '', chassis: '' }, open: { face: false, chassis: false } };
-export function lookKey(key: string): void { if (st.key !== key) Object.assign(st, { key, page: { face: 0, chassis: 0 }, want: { face: {}, chassis: {} }, miss: { face: '', chassis: '' }, open: { face: false, chassis: false } }); }
+export function lookKey(key: string): void { if (st.key !== key) focus = { kind: 'face' }; if (st.key !== key) Object.assign(st, { key, page: { face: 0, chassis: 0 }, want: { face: {}, chassis: {} }, miss: { face: '', chassis: '' }, open: { face: false, chassis: false } }); }
 
 /** 후보 계산에 쓰는 것: 기준 모양(고르는 중인 차), 시드 줄의 시작(sim의 lookCandidates 첫 값), 피할 모양(지금 얼굴·전작) */
 export interface LookCtx { base: CarLook; s0: number; avoid: CarLook[] }
@@ -66,5 +66,15 @@ export function compareHtml(before: CarLook, after: CarLook, thumb: Thumb, withC
   return `<div class="look-cmp">${col(before, labels[0])}<span class="cmp-arrow" aria-hidden="true">→</span>${col(after, labels[1])}</div>
     <p class="look-diff"><b>달라진 점</b> ${esc(faceChange(before, after))}${withChassis ? ` · ${esc(chassisChange(before, after))}` : ''}</p>`;
 }
+// 무대 각도: 마지막으로 건드린 부품 묶음이 보이게(후미등은 뒤 3/4, 휠은 옆에 가깝게, 옆모습·장식은 옆, 그 밖의 얼굴은 앞 3/4)
+let focus: { kind: Kind; part?: string } = { kind: 'face' };
+const AIM: Record<string, number> = { tail: 2.5, wheel: -.3 };
+/** 외관을 고르는 화면에서 무대가 향할 각도 */
+export function aimYaw(): number { return focus.kind === 'chassis' ? 0 : AIM[focus.part ?? ''] ?? -1.0; }
+if (typeof document !== 'undefined') document.addEventListener('click', (e) => {
+  const t = e.target as Element | null, w = t?.closest?.<HTMLElement>('[data-act="lookWant"],details.lpick summary'), sd = t?.closest?.<HTMLElement>('[data-k="chassisSeed"],[data-k="faceSeed"]');
+  if (w) focus = { kind: ((w.dataset.t ?? w.parentElement?.dataset.t) as Kind) ?? 'face', part: w.dataset.k };
+  else if (sd) focus = { kind: sd.dataset.k === 'chassisSeed' ? 'chassis' : 'face' };
+}, true);
 // 직접 고르기를 펼치고 접은 상태를 다시 그려도 유지(toggle은 버블링하지 않아 캡처로 듣는다)
 if (typeof document !== 'undefined') document.addEventListener('toggle', (e) => { const d = e.target; if (d instanceof HTMLDetailsElement && d.classList.contains("lpick")) onToggle(d.dataset.t as Kind, d.open); }, true);

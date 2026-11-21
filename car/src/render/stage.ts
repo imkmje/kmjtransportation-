@@ -124,7 +124,11 @@ export class Stage {
     const loop = this.loop = (now: number) => {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(.05, Math.max(0, now - last) / 1000); last = now; // 멈췄다 다시 그릴 때 한 번에 튀지 않게 0.05초로 자른다
-      if (idle > 0) idle -= dt; else if (!drag && this.auto && !this.still) table.rotation.y += dt * .22 * this.spin;
+      if (idle > 0) idle -= dt;
+      else if (!drag && this.aimYaw != null) { // 고르는 부품이 보이는 각도로 부드럽게 돈다(가까운 쪽으로)
+        const df = Math.atan2(Math.sin(this.aimYaw - table.rotation.y), Math.cos(this.aimYaw - table.rotation.y));
+        table.rotation.y += this.still ? df : df * Math.min(1, dt * 4);
+      } else if (!drag && this.auto && !this.still) table.rotation.y += dt * .22 * this.spin;
       this.tickLights(dt);
       this.pop += (1 - this.pop) * Math.min(1, dt * 9);
       const k = .9 + .1 * this.pop; this.carG.scale.set(k, k, k);
@@ -173,9 +177,10 @@ export class Stage {
     const cam = this.cam;
     this.R.setSize(w, h, false); cam.aspect = w / h;
     // 0.9.0 무대가 좁고 길어져(화면의 약 40%) 원판 전체 대신 차 길이(약 5m)에 맞춰 당긴다: 차가 폭의 약 85%를 채워 작아 보이지 않게(원판 가장자리는 잘려도 된다)
-    const d = Math.max(7.8, 11.6 / cam.aspect);
-    const ty = .5 + Math.max(0, 1 - cam.aspect) * d * .33; // 세로로 긴 무대: 위쪽 차 이름 글자를 피해 차를 아래쪽 빈자리로 내린다(0.13.0: 1180×820 차 상세의 아래 여백을 줄이려고 .15 → .33)
-    cam.position.set(0, d * .22 + .5 + (ty - .5), d); cam.lookAt(0, ty, 0); cam.updateProjectionMatrix();
+    const d = Math.max(7.8, 10.8 / cam.aspect); // 차 길이(약 5m)가 무대 폭의 약 75~90%
+    // 세로로 긴 무대: 위쪽 이름 글자를 피해 차를 화면 가운데보다 조금 아래(높이의 약 55%)에 둔다. 카메라 높이는 그대로 두고 보는 점만 올린다(위에서 내려다보지 않게)
+    const below = Math.min(.08, Math.max(0, 1 - cam.aspect) * .25), ty = .5 + 2 * below * Math.tan(cam.fov * Math.PI / 360) * d;
+    cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, ty, 0); cam.updateProjectionMatrix();
   }
 
   /** 그리기 켜기/끄기: 무대가 안 보일 때(회사·기록 탭, 숨은 문서) 끈다 */
@@ -209,6 +214,9 @@ export class Stage {
   }
 
   setAutoRotate(on: boolean): void { this.auto = on; }
+  private aimYaw: number | null = null;
+  /** 무대가 이 각도(setYaw와 같은 기준)를 향해 부드럽게 돌아가 멈춘다. null이면 평소처럼 자동 회전 */
+  aim(yaw: number | null): void { this.aimYaw = yaw; }
   /** 무대의 회전(기본 앞 3/4 = −0.65, 0=옆, −π/2=정면, π/2=뒷면)을 정한다. 이후 끌기·자동 회전은 여기서 이어진다 */
   setYaw(rad: number): void { this.table.rotation.y = rad; }
 
