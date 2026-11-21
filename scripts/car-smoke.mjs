@@ -871,10 +871,12 @@ check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 
   await page.locator(`.opt[data-act="opt"][data-v="${want}"]`).click();
   check('풀체인지(의무 장비 있는 차): 빈 칸에 새 옵션 추가됨', await S4((w) => window.__car.draft.options.includes(w), want), JSON.stringify(await S4(() => window.__car.draft.options)));
   await act('cancelPlan'); }
-// 새 차체 5종 3D
-await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
+// 새 차체 7종 3D(0.5.2 소형·대형 SUV 포함)
+await S4(() => { const s = window.__car.game.state; s.research.done.push('bd_minivan', 'bd_kei', 'bd_suv', 'bd_suvS', 'bd_suvL', 'bd_pickup', 'bd_coupe', 'bd_sports'); window.__car.render(); });
 await planNew();
-for (const b of ['sedanL', 'minivan', 'kei', 'pickup', 'sports']) {
+{ const order = await page.locator('[data-k="body"]').evaluateAll((els) => els.map((e) => e.dataset.v).join(','));
+  check('차체 줄: 세단·SUV가 크기 순으로 묶임', order.includes('sedanS,sedanM,sedanL') && order.includes('suvS,suv,suvL'), order); }
+for (const b of ['sedanL', 'minivan', 'kei', 'suvS', 'suvL', 'pickup', 'sports']) {
   await act('pick', `[data-k="body"][data-v="${b}"]`); await page.waitForTimeout(700);
   check(`새 차체 ${b}: 기획 화면 3D에 그려짐`, (await S4(() => window.__car.look)).includes(`"bodyId":"${b}"`) && (await S4(() => window.__car.stage?.empty)) === false);
   await shot(`body-${b}`);
