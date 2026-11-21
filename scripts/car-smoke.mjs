@@ -207,7 +207,7 @@ await shot('garage');
 // ---- 회사·기록 ----
 await page.click('#tabs button[data-tab="company"]');
 const ctext = await page.locator('#panel').innerText();
-check('회사 탭: 안쪽 탭 5개(재무·직원·본사·공장·연구), 처음은 재무·경쟁사', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
+check('회사 탭: 안쪽 탭 6개(재무·직원·임원·본사·공장·연구), 처음은 재무·경쟁사', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,임원,본사,공장,연구' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
 const cash0 = await G(() => window.__car.game.state.cash);
 await act('borrow', '[data-v="10000"]');
 check('대출 1억 받기', (await G(() => window.__car.game.state.cash)) - cash0 === 10000 && (await G(() => window.__car.game.state.loan.balance)) === 10000);
@@ -518,7 +518,7 @@ await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300);
 const vb1 = await S3(() => document.querySelector('#office svg')?.getAttribute('viewBox') ?? '');
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭: 안쪽 탭 5개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 5);
+check('회사 탭: 안쪽 탭 6개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 6);
 await act('cotab', '[data-v="staff"]');
 const st0 = await page.locator('#panel').innerText();
 check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·하는 일), 정원 4/6(0.5.0 본사 1등급 정원 6)', (await page.locator('#panel .srow:not(.head)').count()) === 4 && st0.includes('4/6') && ['디자이너', '엔지니어', '테스터', '컨디션', '쉬는 중'].every((t) => st0.includes(t)));
@@ -695,7 +695,7 @@ await act('home'); await page.waitForTimeout(150); if (await page.locator('#ask'
 await act('titleNew'); await page.fill('#t-co', '사단 모터스'); await page.click('#title details.seed-det summary'); await page.fill('#t-seed', '4'); await act('diff', '[data-v="normal"]'); await act('startNew');
 await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭 안쪽 탭 5개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,본사,공장,연구');
+check('회사 탭 안쪽 탭 6개(마지막이 연구)', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '재무,직원,임원,본사,공장,연구');
 await act('cotab', '[data-v="research"]');
 const r0 = await page.locator('#panel').innerText();
 check('연구 화면: 분야 5개와 기술 카드 40개 이상', (await page.locator('.rfield').count()) === 5 && (await page.locator('.tc').count()) >= 40 && ['동력', '차체·안전', '편의 장비', '생산', '친환경'].every((t) => r0.includes(t)));
