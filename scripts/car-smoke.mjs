@@ -814,6 +814,13 @@ const eng = await S4(() => window.__car.game.state.staff.find((x) => x.role === 
 await page.locator(`.srow[data-id="${eng}"]`).click();
 await act('assign', `[data-id="${eng}"][data-v="lab"]`);
 check('본사 4등급: [전담 연구원으로] → 전담 연구원', (await S4((id) => window.__car.game.state.staff.find((x) => x.id === id).lab, eng)) && (await page.locator(`.srow[data-id="${eng}"]`).innerText()).includes('전담 연구원'));
+// 일괄 교육(0.6.0): 두 명을 골라 한 번에 교육 → 둘 다 교육 중
+{ const two = await S4(() => { const s = window.__car.game.state; s.cash = Math.max(s.cash, 1e6); const xs = s.staff.slice(0, 2); for (const x of xs) { x.trainings = []; x.restUntil = null; x.ability = Math.min(x.ability, x.potential - 3); } window.__car.render(); return xs.map((x) => x.id); });
+  const box = await page.locator(`.s-pick[data-id="${two[0]}"]`).boundingBox();
+  for (const id of two) await page.locator(`.s-pick[data-id="${id}"]`).click();
+  await act('trainPicked'); const askT = await page.locator('#ask-text').innerText(); await page.click('#ask-yes');
+  check('일괄 교육: 두 명을 골라 교육 보내기 → 둘 다 교육 중, 확인 창에 인원·총 비용', await S4((ids) => { const s = window.__car.game.state; return ids.every((id) => s.staff.find((x) => x.id === id).trainings.includes(s.week)); }, two) && /2명을 교육 보낼까요\?\n총 비용/.test(askT) && (await page.locator(`.srow[data-id="${two[0]}"]`).innerText()).includes('교육 중'), askT.replace(/\n/g, ' | '));
+  check('일괄 교육 고르기 칸: 터치 44px 이상', box.width >= 44 && box.height >= 44, `${box.width}×${box.height}`); }
 // 1990년쯤 연구 화면
 await S4(() => { const s = window.__car.game.state; s.week = 20 * 48; s.research.done.push('bd_sedanM', 'pr_line', 'pr_qc', 'bd_sedanL', 'el_leather'); window.__car.render(); });
 await act('cotab', '[data-v="research"]'); await page.waitForTimeout(200);
