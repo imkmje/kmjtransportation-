@@ -4,6 +4,7 @@ export const num = (n: number): string => Math.round(n).toLocaleString('ko-KR');
 /** 금액: 1조 이상 "1조 2,345억", 1억(1만 만원) 이상 "1,023.2억", 아니면 "4,500만원" */
 export const money = (v: number, sign = false): string => {
   const s = sign && v > 0 ? '+' : v < 0 ? '−' : '', a = Math.abs(v);
+  if (Math.round(a) === 0) return '0원'; // 0.9.0 "0만원" 대신 다른 금액과 같은 표기(광고 '안 함' 칸의 "0원")
   if (a >= 1e8) { const jo = Math.floor(a / 1e8), eok = Math.round((a % 1e8) / 1e4); return `${s}${num(jo)}조${eok ? ` ${num(eok)}억` : ''}`; }
   return a >= 10000 ? `${s}${(a / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}억` : `${s}${num(a)}만원`;
 };

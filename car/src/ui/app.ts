@@ -21,16 +21,17 @@ import { createSound, type Sfx } from './sound';
 import { testCut } from '../sim/dev';
 import * as I from './insight';
 
-type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'company' | 'records';
-type Tab = 'garage' | 'dev' | 'company' | 'records';
+type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records';
+type Tab = 'garage' | 'dev' | 'research' | 'company' | 'fin' | 'records'; // 0.9.0 큰 메뉴 6개(연구·재무를 회사 안쪽에서 꺼냄)
 type PlanTab = 'sum' | 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir' | 'budget';
 /** 기획 초안. nameplateId 0 = 새 차종, 아니면 그 차종의 풀체인지 */
 type Draft = ProjectSpec & { color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step' }; // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[] }
 type RecTab = 'cars' | 'combo' | 'news' | 'years';
-type CoTab = 'fin' | 'staff' | 'hq' | 'factory' | 'research' | 'exec';
-type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView };
+type CoTab = 'staff' | 'hq' | 'factory' | 'exec';
+type GSort = 'name' | 'launch' | 'price' | 'sold' | 'unit' | 'profit' | 'life' | 'review'; // 0.9.0 차고 요약 표 정렬
+type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView; keys?: string }; // keys: 0.9.0 무대 아래 핵심 수치 띠
 interface LaunchSet { pid: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
 
 const WEEK_MS = 3000; // 보통(1배): 1주 = 3초. 0.4.2 사용자 불만(너무 빠름)으로 1.5초 → 3초. 빠름 2배 1.5초, 아주 빠름 4배 0.75초
@@ -87,11 +88,11 @@ export function startApp(): void {
   /** 저장용 화면 정보: 기획 초안·출시 준비 값까지(탭을 옮기거나 다시 불러와도 이어서 하도록) */
   const uiSnap = (): S.UiExtra => ({ ...ui, plan: draft || lift || launch ? JSON.parse(JSON.stringify({ draft, planTab, lift, launch })) as S.PlanSave : undefined });
   let screen: Screen = 'garage';
-  let speed = 1, acc = 0, garageIdx = 0, planTab: PlanTab = 'body';
+  let speed = 1, acc = 0, garageId = -1, garageSum = true, planTab: PlanTab = 'body'; // garageId: 차고 상세에서 보는 세대, garageSum: 0.9.0 차고 첫 화면(전 차종 표)
   let draft: Draft | null = null, launch: LaunchSet | null = null, lift: LiftSet | null = null;
   let startSel: 'full' | 'lift' | null = null; // 기획 첫 화면에서 고른 갈래(목록의 해당 버튼을 강조)
   let execPick: ExecRole | null = null; // 임원 화면: 직원 임명 목록을 펼친 자리
-  let coTab: CoTab = 'fin', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
+  let coTab: CoTab = 'staff', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
   let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
   let devSel: number | null = null; // 개발 탭에서 고른 프로젝트(동시 개발)
@@ -163,6 +164,7 @@ export function startApp(): void {
     const close = () => { if (t.classList.contains('out')) return; t.classList.add('out'); foldToasts(); setTimeout(() => { t.remove(); foldToasts(); }, 300); };
     closers.set(t, close); if (ms >= 12000) t.dataset.imp = '1';
     if (open) (t.querySelector('.open') as HTMLElement).onclick = () => { close(); open.fn(); };
+    if (open && key === 'month') { t.classList.add('tap'); (t.firstElementChild as HTMLElement).onclick = (e) => { if (!(e.target as Element).closest('button')) { close(); open.fn(); } }; } // 월 결산 알림은 글을 눌러도 펼친다
     (t.querySelector('.x') as HTMLElement).onclick = close;
     box.appendChild(t);
     for (let live = [...box.querySelectorAll<HTMLElement>('.toast:not(.out)')], n = live.length; n > TOAST_MAX; n--) { const o = live.find((x) => !x.dataset.imp && !x.classList.contains('out')); if (!o) break; closers.get(o)!(); }
@@ -202,7 +204,7 @@ export function startApp(): void {
     if (corner) box.style.setProperty('--ct', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`);
     foldToasts();
     const st = $('#stage').getBoundingClientRect();
-    if (!wide) { box.style.setProperty('--tw', `${Math.round(Math.max(260, Math.min(400, st.width - 200)))}px`); return; } // 무대 왼쪽 아래, 오른쪽 아래 평점 원(약 170px)을 비켜 간다
+    if (!wide) { box.style.setProperty('--tw', `${Math.round(Math.max(260, Math.min(400, st.width - (document.querySelector('#ov .ov.br') ? 200 : 24))))}px`); box.style.setProperty('--tb', `${Math.round(Math.max(16, innerHeight - st.bottom + 12))}px`); return; } // 0.9.0 무대 안 아래쪽(아래 핵심 수치 띠를 가리지 않게)
     const band = document.querySelector<HTMLElement>('#ov .ofc')?.getBoundingClientRect();
     box.style.setProperty('--ot', `${Math.round((band?.bottom ?? st.top) + 8)}px`);
     box.style.setProperty('--or', `${Math.round(innerWidth - st.right + 12)}px`);
@@ -457,6 +459,32 @@ export function startApp(): void {
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
   }
+  // ----- 0.9.0 월 결산 창: 장부 한 달 그대로(차종별 판매·매출·원가·이익, 지출 내역, 전월 대비). i = 장부 위치(최근 24개월) -----
+  function showMonth(i: number): void {
+    if (!game) return;
+    const s = game.state, led = s.ledger; if (!led.length) return;
+    i = Math.max(0, Math.min(led.length - 1, Math.round(i)));
+    const L = led[i], P = led[i - 1], ml = (e: typeof L) => `${e.year}년 ${e.monthOfYear}월`;
+    const hqOf = (e: typeof L) => e.upkeepHq ?? Math.min(e.upkeep, Q.hqInfo(s).current.upkeep); // 0.5.1 전 장부는 지금 본사 유지비로 나눈다(재무 화면과 같게)
+    // 지출 줄: [이름, 이번 달, 전월]. 임원·연구는 0.9.0부터 장부에 따로 있다(예전 달은 월급·일회성에 들어 있음)
+    const costs = (e: typeof L): [string, number][] => [['차 원가', e.cogs], [e.execPay === undefined ? '직원·임원 월급' : '직원 월급', e.salaries - (e.execPay ?? 0)], ['임원 월급', e.execPay ?? 0], ['본사 유지비', hqOf(e)], ['공장 유지비', e.upkeep - hqOf(e)],
+      ['개발비', e.dev], ['광고비', e.marketing], ['연구 시작 비용', e.research ?? 0], ['대출 이자', e.interest], ['리콜', e.recall], ['일회성 지출(채용 공고·교육·퇴직금·승급·건설 등)', (e.oneOff || 0) - (e.research ?? 0)]];
+    const cur = costs(L), prev = P ? costs(P) : null;
+    const dd = (a: number, b: number | undefined, cost = false) => b === undefined ? '<td class="r d">—</td>' : Math.round(a - b) === 0 ? '<td class="r d">±0</td>' : `<td class="r d ${(a > b) !== cost ? 'pos' : 'neg'}">${money(a - b, true)}</td>`;
+    const kp = (label: string, v: string, a: number, b: number | undefined, cls = '') => `<div class="kpi"><small>${label}</small><b class="${cls}">${v}</b>${b === undefined ? '' : `<small class="${a >= b ? 'pos' : 'neg'}">전월 대비 ${label === '판매' ? `${a - b >= 0 ? '+' : '−'}${num(Math.abs(a - b))}대` : money(a - b, true)}</small>`}</div>`;
+    const cars = L.cars?.length ? `<table class="tbl mon-cars"><tr><th>차종</th><th class="r">판매</th><th class="r">매출</th><th class="r">원가</th><th class="r">광고·리콜</th><th class="r">이익</th><th class="r">전월 대비</th></tr>${L.cars.map((c) => {
+        const g = Q.generationById(s, c.id), pr = c.revenue - c.cogs - c.marketing - c.recall, pc = P?.cars?.find((x) => x.id === c.id), pp = pc ? pc.revenue - pc.cogs - pc.marketing - pc.recall : undefined;
+        return `<tr><td>${g ? `${esc(nameOf(g))} <small class="hint">${g.number}세대</small>` : '단종한 차'}</td><td class="r">${num(c.sold)}대</td><td class="r">${money(c.revenue)}</td><td class="r">${money(c.cogs)}</td><td class="r">${money(c.marketing + c.recall)}</td><td class="r ${pr >= 0 ? 'pos' : 'neg'}">${money(pr, true)}</td>${dd(pr, pp)}</tr>`; }).join('')}</table>`
+      : `<p class="hint">${L.cars ? '이 달에는 판 차가 없습니다.' : '이 달은 0.9.0 전 장부라 차종별 내역이 없습니다.'}</p>`;
+    const rows = cur.filter(([, v], k) => v || (prev?.[k][1] ?? 0)).map(([n, v]) => { const k = cur.findIndex((x) => x[0] === n); return `<tr><td>${n}</td><td class="r">${money(v)}</td>${dd(v, prev?.[k][1], true)}</tr>`; }).join('');
+    const nav = `<div class="row mon-nav"><button class="btn" data-act="monthOpen" data-v="${i - 1}" ${i > 0 ? '' : 'disabled'}>‹ 이전 달</button><button class="btn" data-act="monthOpen" data-v="${i + 1}" ${i < led.length - 1 ? '' : 'disabled'}>다음 달 ›</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    sheetBody.innerHTML = `<div class="mon"><div class="eyebrow"><i></i>${esc(s.companyName)} · 월 결산</div><h2>${ml(L)} 결산${P ? ` <small class="hint">전월(${ml(P)})과 비교</small>` : ''}</h2>
+      <div class="kpis mon-kpis">${kp('판매', `${num(L.sold)}<span>대</span>`, L.sold, P?.sold)}${kp('매출', money(L.revenue), L.revenue, P?.revenue)}${kp('이익', money(L.profit, true), L.profit, P?.profit, L.profit >= 0 ? 'pos' : 'neg')}${kp('월말 현금', money(L.cash), L.cash, P?.cash, L.cash < 0 ? 'neg' : '')}</div>
+      <div class="mon-cols"><section><p class="lbl">차종별 판매와 이익</p>${cars}<p class="note">차종 이익 = 매출 − 원가 − 광고 − 리콜(직원 월급·유지비·개발비 전).</p></section>
+      <section><p class="lbl">지출 내역</p><table class="tbl mon-costs"><tr><th>항목</th><th class="r">금액</th><th class="r">전월 대비</th></tr><tr><td>판매 수입</td><td class="r pos">${money(L.revenue)}</td>${dd(L.revenue, P?.revenue)}</tr>${rows}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td>${dd(L.profit, P?.profit)}</tr></table></section></div>${nav}</div>`;
+    sheet.hidden = false; renderTop();
+  }
   function onEvent(e: GameEvent): void {
     const s = game!.state;
     switch (e.kind) {
@@ -464,7 +492,7 @@ export function startApp(): void {
       case 'replacement': toast(e.text, '', '임원', 7000); break;
       case 'monthEnd': {
         const L = s.ledger[s.ledger.length - 1];
-        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}${weekReports ? ` · 임원 보고 ${weekReports}건` : ''}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 3500, 'month');
+        if (L) toast(`판매 ${num(L.sold)}대 · 이익 ${money(L.profit, true)} · 현금 ${money(L.cash)}${weekReports ? ` · 임원 보고 ${weekReports}건` : ''}`, '', `${L.year}년 ${L.monthOfYear}월 결산`, 6000, 'month', { label: '펼쳐 보기', fn: () => showMonth(s.ledger.length - 1) }); // 0.9.0 누르면 월 결산 창
         // 큰 흑자 = 10억 이상이면서 최근 24개월 최고 이익인 달(늘 버는 후반에 매달 울리지 않게)
         sfx(L && L.profit >= 100000 && s.ledger.every((x) => x.profit <= L.profit) ? 'cashIn' : 'monthClose');
         if (L && (saveSet.every === 'month' || (saveSet.every === 'quarter' && L.monthOfYear % 3 === 0))) autoSave(); // 매주는 tickOnce에서
@@ -496,8 +524,8 @@ export function startApp(): void {
         break;
       }
       case 'recall': sfx('recall'); toast(moneyText(e.text), 'bad', '리콜', 12000); break;
-      case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => { coTab = 'research'; go('company'); } }); break;
-      case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 회사 탭에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
+      case 'unlock': sfx('researchDone'); toast(e.text, 'alert', '연구 완료', 9000, '', { label: '연구 화면', fn: () => go('research') }); break;
+      case 'cashWarning': sfx('warning'); toast(`${e.text}${s.loan.bailoutUsed ? '' : ' 재무 화면에서 대출이나 구제 금융을 받을 수 있습니다.'}`, 'bad', '현금 경고', 12000); break;
       case 'discontinued': toast(e.text, '', '단종'); break;
       case 'reputation': toast(`${e.reason}: ${repWord(e.delta)}`, '', '평판', 5000); break; // 이유를 앞에: "「아리아」 리콜: 평판 −1.5"
       case 'gameOver': sfx('bankrupt'); break; // render()에서 파산 화면을 띄운다
@@ -529,7 +557,7 @@ export function startApp(): void {
     if (!fresh.length) return;
     for (const c of fresh) candSeen.add(c.id);
     const wk = Math.max(1, Math.min(...fresh.map((c) => c.expiresWeek)) - s.week);
-    autoPause('cands', `${ROLE_NAME[fresh[0].role]} 후보 ${fresh.length}명이 왔습니다. ${wk}주 안에 채용하지 않으면 다른 회사로 갑니다.`, '채용 후보', screen === 'company' && coTab === 'staff' ? undefined : { label: '채용 화면', fn: () => { coTab = 'staff'; go('company'); } }); // 이미 채용 화면이면 바로 가기 버튼 없이
+    autoPause('cands', `${ROLE_NAME[fresh[0].role]} 후보 ${fresh.length}명이 왔습니다. ${wk}주 안에 채용하지 않으면 다른 회사로 갑니다.`, '채용 후보', screen === 'company' && coTab === 'staff' ? undefined : { label: '채용 화면', fn: () => goCo('staff') }); // 이미 채용 화면이면 바로 가기 버튼 없이
   }
 
   // ---------- 0.7.0 할 일 목록 · 다음 일까지 ----------
@@ -612,23 +640,27 @@ export function startApp(): void {
     if (!game) return;
     const s = game.state; sheet.hidden = true; todoTab = 'todo';
     switch (t.tab) {
-      case 'garage': { const i = sellingGens(s).findIndex((x) => x.id === t.id); if (i >= 0) garageIdx = i; go('garage'); return; }
+      case 'garage': garageAt(t.id); return;
       case 'dev':
         if (t.sub === 'launch' && t.id !== undefined && Q.projectById(s, t.id)) { openLaunch(t.id); return; }
         if (t.sub === 'plan') { void act('plan', document.createElement('i')); return; }
         if (t.id !== undefined && Q.projectById(s, t.id)) devSel = t.id;
         go(devScreen()); return;
-      case 'company': // 직원 대상이면 그 직원을 고른(자세히 열린) 상태로
-        coTab = (t.sub ?? 'fin') as CoTab;
-        if (coTab === 'staff' && t.id !== undefined && s.staff.some((x) => x.id === t.id)) staffSel = t.id;
-        go('company');
-        if (coTab === 'staff' && staffSel !== null) document.getElementById('staff-card')?.scrollIntoView({ block: 'nearest' });
-        return;
+      case 'company': goCo(t.sub, t.id); return;
       case 'records': go('records'); return;
       case 'choice': showChoice(); return;
       case 'reports': showTodo('reports'); return;
       default: go(screen);
     }
+  }
+
+  /** 회사 안쪽 화면으로 이동하는 한 곳. 0.9.0: 연구·재무는 큰 메뉴로 나갔으므로 예전 이동({company, research|fin})은 그 화면으로. 직원 대상이면 그 직원을 고른(자세히 열린) 상태로 */
+  function goCo(sub = 'staff', id?: number): void {
+    if (sub === 'research' || sub === 'fin') { go(sub); return; }
+    coTab = CO_TABS.some(([k]) => k === sub) ? sub as CoTab : 'staff';
+    if (coTab === 'staff' && id !== undefined && game?.state.staff.some((x) => x.id === id)) staffSel = id;
+    go('company');
+    if (coTab === 'staff' && id !== undefined && staffSel === id) document.getElementById('staff-card')?.scrollIntoView({ block: 'nearest' });
   }
 
   let last = performance.now(), frames = 0, fps = 0, fpsT = last;
@@ -675,6 +707,8 @@ export function startApp(): void {
     put($('#date'), game.dateLabel);
     const c = $('#cash'); put(c, money(s.cash)); c.classList.toggle('neg', s.cash < 0);
     put($('#rep'), String(Math.round(s.reputation)));
+    { const L = s.ledger.at(-1), pc = $('#plchip'), pb = $('#pl'); pc.hidden = !L; // 0.9.0 지난달 손익: ▲3.4억 / ▼1.1억(누르면 재무)
+      if (L) { put(pb, `${L.profit >= 0 ? '▲' : '▼'}${money(Math.abs(L.profit))}`); pb.className = L.profit >= 0 ? 'pos' : 'neg'; pc.setAttribute('aria-label', `${L.year}년 ${L.monthOfYear}월 손익 ${money(L.profit, true)}. 눌러서 재무 화면 보기`); pc.title = `${L.year}년 ${L.monthOfYear}월 손익(영업 이익 아님, 일회성 지출 포함)`; } }
     for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.classList.toggle('on', Number(b.dataset.speed) === speed);
     const held = decisionHeld(); $('#held').hidden = !held; $('#speeds').classList.toggle('held', held); // 좁은 화면에서는 글자 대신 빠르기 버튼 테두리로
     const AE = Q.activeEvents(s), ae = AE.events, up = Q.upcomingEvents(s), pc = Q.pendingChoices(s).length, chip = $('#evchip');
@@ -692,6 +726,11 @@ export function startApp(): void {
     const tab: Tab = deciding() ? 'dev' : (screen as Tab);
     for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
     { const dv = document.querySelector<HTMLElement>('#tabs button[data-tab="dev"]')!, on = !!(draft || lift); dv.classList.toggle('has-draft', on); if (on) dv.title = '기획 중인 차가 있습니다'; else dv.removeAttribute('title'); }
+    { // 0.9.0 큰 메뉴 점 하나: 연구(빈 연구 칸·규제 필수 미연구), 재무(현금 마이너스). 할 일 목록과 같은 판단
+      const T = todos(), dot = (t: string, on: boolean, why: string) => { const el = document.querySelector<HTMLElement>(`#tabs button[data-tab="${t}"]`)!; el.classList.toggle('has-dot', on); if (on) el.title = why; else el.removeAttribute('title'); };
+      const reg = T.some((x) => x.kind === 'regulation'), slot = T.some((x) => x.kind === 'research');
+      dot('research', reg || slot, reg ? '규제에 필요한 연구가 있습니다' : '비어 있는 연구 칸이 있습니다');
+      dot('fin', T.some((x) => x.kind === 'cash'), '현금이 마이너스입니다'); }
   }
   function renderDebug(): void {
     const d = $('#debug');
@@ -713,10 +752,11 @@ export function startApp(): void {
     if (screen === 'company' && coTab === 'staff') dropToast('pause-cands');
     const v: View = screen === 'garage' ? garageView() : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView()
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
-      : { ov: '', panel: screen === 'company' ? companyView() : recordsView(), look: undefined };
+      : { ov: '', panel: screen === 'company' ? companyView() : screen === 'research' ? researchTab() : screen === 'fin' ? finTab() : recordsView(), look: undefined };
     $('#main').classList.toggle('full', v.look === undefined && !v.office);
     $('#main').classList.toggle('wide', !!v.office); // 개발 탭 사무실: 위에 넓게, 아래에 패널 세 칸
     if (v.ov !== lastOv) { ov.innerHTML = v.ov; lastOv = v.ov; } // 띠 높이를 사무실보다 먼저 정한다(--office-top-inset)
+    { const kb = $('#keys'), kh = v.look !== undefined && !v.office ? v.keys ?? '' : ''; if (kb.dataset.v !== kh) { kb.dataset.v = kh; kb.innerHTML = kh; } kb.hidden = !kh; $('#main').classList.toggle('haskeys', !!kh); } // 0.9.0 무대 아래 핵심 수치 띠
     placeToasts();
     showOffice(v.office ?? null);
     if (v.look !== undefined && !v.office) showLook(v.look);
@@ -771,6 +811,9 @@ export function startApp(): void {
   const ovTop = (eyebrow: string, model: string, spec: string, when = '') => `<div class="ov tl"><div class="eyebrow"><i></i>${eyebrow}</div><div class="model">${model}</div><div class="spec">${esc(spec)}</div>${when ? `<div class="spec when">${esc(when)}</div>` : ''}</div>`;
   const ovScore = (label: string, v: number | null) => v === null ? '' : `<div class="ov br">${ring(v)}<div><small>${label}</small><b>${score(v)}</b></div></div>`;
   const ovHint = '<div class="ov bl">끌어서 돌려 보기</div>';
+  /** 0.9.0 넓어진 패널의 두 칸(좁으면 한 칸으로 쌓인다) */
+  const pcols = (a: string, b: string) => `<div class="pcols"><div class="pcol">${a}</div><div class="pcol">${b}</div></div>`;
+  const unitSmall = (v: string) => v.replace(/(만원|억)$/, '<span>$1</span>');
   const paints = (act: string, cur: string) => `<div class="paints">${PAINT.map(([n, c]) => `<button class="paint" data-act="${act}" data-k="color" data-v="${c}" aria-pressed="${cur === c}"><i style="background:${c}"></i>${n}</button>`).join('')}</div>`;
   const nameOf = (g: Generation) => Q.nameplateOf(game!.state, g.id)?.name ?? '';
   const genYear = (g: Generation) => Math.floor(g.launchMonth / 12) + config.time.startYear;
@@ -809,28 +852,106 @@ export function startApp(): void {
   const adviceLine = (g: Generation): string => { const a = Q.advice(g, game!.state); return g.lostSales >= 1 && a.startsWith('주문이') ? '' : `<div class="advice">${esc(a)}</div>`; };
 
   // ----- 차고 -----
-  function garageView() {
+  // 0.9.0: 판매 중인 차가 2대 이상이면 첫 화면은 전 차종 한 줄 요약 표(정렬·비교). 줄을 누르면 상세(무대 + 패널), 상세에서 [← 전 차종]
+  const gSort: { k: GSort; desc: boolean } = { k: 'launch', desc: false };
+  const cmpSel = new Set<number>(); // 비교 보기에 고른 세대(2~4대)
+  /** 지난달 이 차의 장부 한 줄(0.9.0 전 장부면 없음) */
+  const lastCarRow = (g: Generation) => game!.state.ledger.at(-1)?.cars?.find((c) => c.id === g.id);
+  /** 지난달 이 차의 월 이익: 장부 값(매출 − 원가 − 광고 − 리콜). 예전 장부면 지난달 판매 × 대당 이익 − 광고비 */
+  const carMonthProfit = (g: Generation): number => { const r = lastCarRow(g); return r ? r.revenue - r.cogs - r.marketing - r.recall : (g.sales.at(-1) ?? 0) * Q.generationUnitProfit(g, game!.state) - config.awareness.marketingCost[g.marketing]; };
+  const gVal = (g: Generation, k: GSort): number | string => k === 'name' ? nameOf(g) : k === 'launch' ? g.launchWeek : k === 'price' ? currentEdition(g).price : k === 'sold' ? g.sales.at(-1) ?? 0
+    : k === 'unit' ? Q.generationUnitProfit(g, game!.state) : k === 'profit' ? carMonthProfit(g) : k === 'life' ? Q.lifeBar(game!.state, g) : g.reviewAvg;
+  /** 차고에서 넘겨 보는 순서 = 요약 표의 정렬 순서(같으면 ID 순) */
+  const garageList = (): Generation[] => {
+    const k = gSort.k, d = gSort.desc ? -1 : 1;
+    return [...sellingGens(game!.state)].sort((a, b) => { const x = gVal(a, k), y = gVal(b, k); return d * (typeof x === 'string' ? x.localeCompare(y as string, 'ko') : x - (y as number)) || a.id - b.id; });
+  };
+  /** 그 차의 상세로(없는 ID면 전 차종 표) */
+  const garageAt = (id?: number) => { const ok = id !== undefined && sellingGens(game!.state).some((g) => g.id === id); garageId = ok ? id! : -1; garageSum = !ok; go('garage'); };
+  const ageText = (g: Generation) => { const m = monthOf(game!.state.week) - g.launchMonth, y = Math.floor(m / 12), mo = m % 12; return m <= 0 ? '이번 달 출시' : `${[y ? `${y}년` : '', mo ? `${mo}개월` : ''].filter(Boolean).join(' ')} 지남`; };
+  const policyShort = (g: Generation) => (g.pricePolicy ? `자동 · ${g.pricePolicy.kind === 'best' ? '최고 이익' : `기준가 ${g.pricePolicy.pct}%`}` : '수동');
+  /** 상태 배지(할 일 목록과 같은 판단 + 개발 중·단종 예정) */
+  function genBadges(g: Generation): string {
+    const s = game!.state, T = new Map(todos().map((t) => [t.key, t])), np = Q.nameplateOf(s, g.id), b: [string, string][] = [];
+    if (g.status === 'ending') b.push(['이번 달 단종', 'bad']);
+    if (s.projects.some((p) => p.targetId === (p.kind === 'fullchange' ? np?.id : g.id) && p.kind !== 'new')) b.push(['개발 중', 'dev']);
+    if (T.has(`retrofit:${g.id}`)) b.push(['의무 장비 필요', 'bad']);
+    if (T.has(`capacity:${g.id}`)) b.push(['생산 한도', 'warn']);
+    if (T.has(`facelift:${g.id}`)) b.push(['페이스리프트 적기', 'on']);
+    if (np && T.get(`full:${np.id}`)?.title.includes('권장')) b.push(['풀체인지 권장', 'on']);
+    return b.map(([t, c]) => `<span class="gb ${c}">${t}</span>`).join('');
+  }
+  const lifeMini = (v: number) => `<span class="g-life g-opt"><i class="life"><u style="width:${(v * 100).toFixed(1)}%"></u></i><small>${Math.round(v * 100)}%</small></span>`;
+  /** 전 차종 한 줄 요약 표 + 개발 중·단종 구역 + 비교 줄 */
+  function garageTable(): View {
+    const s = game!.state, L = garageList(), all = allGens(s);
+    for (const id of cmpSel) if (!L.some((g) => g.id === id)) cmpSel.delete(id);
+    const H = (k: GSort | '', label: string, cls = '') => k ? `<button class="sh${cls ? ` ${cls}` : ''}" data-act="gSort" data-v="${k}" aria-pressed="${gSort.k === k}">${label}${gSort.k === k ? `<i aria-hidden="true">${gSort.desc ? '▼' : '▲'}</i>` : ''}</button>` : `<span class="${cls}">${label}</span>`;
+    const head = `<div class="gtr-w head"><span class="s-pick"></span><div class="gtr head"><span></span>${H('name', '차종')}${H('launch', '출시', 'g-opt')}${H('price', '가격', 'r g-opt')}${H('sold', '지난달 판매', 'r')}${H('unit', '대당 이익', 'r g-opt')}${H('profit', '월 이익', 'r')}${H('life', '수명', 'g-opt')}${H('review', '평론', 'r g-opt')}${H('', '상태', 'g-opt')}</div></div>`;
+    const row = (g: Generation) => {
+      const e = currentEdition(g), up = Q.generationUnitProfit(g, s), mp = carMonthProfit(g), name = nameOf(g);
+      return `<div class="gtr-w"><button class="s-pick" data-act="cmpPick" data-id="${g.id}" aria-pressed="${cmpSel.has(g.id)}" aria-label="${esc(name)} 비교에 넣기"></button><button class="gtr" data-act="gopen" data-id="${g.id}">
+        <span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(name)}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></span>
+        <span class="g-when g-opt">${Q.monthLabel(g.launchMonth)}<small>${ageText(g)}</small></span><span class="g-num g-opt">${num(e.price)}<small>${policyShort(g)}</small></span>
+        <span class="g-num">${qty(g.sales.at(-1) ?? 0)}대</span><span class="g-num g-opt ${up >= 0 ? 'pos' : 'neg'}">${money(up, true)}</span><span class="g-num ${mp >= 0 ? 'pos' : 'neg'}">${money(mp, true)}</span>
+        ${lifeMini(Q.lifeBar(s, g))}<span class="g-num g-opt">${score(g.reviewAvg)}${g.masterpiece ? '<small>명차</small>' : ''}</span><span class="g-st">${genBadges(g)}</span></button></div>`;
+    };
+    const n = cmpSel.size, bar = `<div class="cmp-bar"><span>내 차 비교 <small>표 왼쪽 네모로 2~4대를 고릅니다</small></span><b>${n}대 고름</b>${n ? '<button class="btn" data-act="cmpClear">고르기 해제</button>' : ''}<button class="btn ink" data-act="cmpOpen" ${n >= 2 ? '' : 'disabled'}>비교 보기</button></div>`;
+    const tot = L.reduce((a, g) => a + (g.sales.at(-1) ?? 0), 0), totP = L.reduce((a, g) => a + carMonthProfit(g), 0), lines = Q.linesOf(s);
+    const main = `<div class="card gtable"><h3>판매 중인 차 ${L.length}대 <small class="hint">지난달 ${num(tot)}대 · 차종 이익 합 ${money(totP, true)} · 생산 라인 ${L.length}/${lines}</small></h3>${bar}${head}${L.map(row).join('')}
+      <p class="note">줄을 누르면 그 차의 무대와 가격·다음 단계 화면으로 갑니다. 머리글을 누르면 정렬, 다시 누르면 반대로 정렬합니다. 월 이익은 지난달 장부의 그 차 몫(매출 − 원가 − 광고 − 리콜)이고 직원 월급·유지비는 넣지 않았습니다.</p></div>`;
+    const dev = s.projects.length ? `<div class="card gsec"><h3>개발 중 ${s.projects.length}대</h3>${s.projects.map((p) => `<button class="gsr" data-act="devSel" data-id="${p.id}"><span class="g-th">${thumb(projLook(p, ui.colors[p.id] ?? PAINT[0][1]), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(p.name)}</b><small>${kindLabel(p)}</small></span><span>${p.waiting ? '<span class="gb on">출시 대기</span>' : phaseText(p)}</span><span>결함 약 ${num(p.defectEst)}개</span><span aria-hidden="true">→</span></button>`).join('')}</div>` : '';
+    const gone = all.filter((g) => g.status === 'discontinued').sort((a, b) => b.launchMonth - a.launchMonth || b.id - a.id);
+    const old = gone.length ? `<details class="card gsec gone"><summary><h3>단종된 차 ${gone.length}대</h3></summary>${gone.map((g) => `<div class="gsr"><span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(nameOf(g))}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></span><span>${Q.monthLabel(g.launchMonth)} 출시${g.endMonth !== null && g.endMonth !== undefined ? ` · ${Q.monthLabel(g.endMonth)} 단종` : ''}</span><span>누적 ${num(g.totalSold)}대 · 평론 ${score(g.reviewAvg)}</span><span></span></div>`).join('')}</details>` : '';
+    const plan = s.projects.length < Q.devTeams(s) ? `<div class="row g-plan"><button class="btn ink" data-act="plan">+ 신차 기획</button></div>` : '';
+    return { ov: '', panel: main + dev + old + plan, look: undefined };
+  }
+  /** 내 차 비교(2~4대): 능력치 5개·가격·판매·이익·수명·평론, 경쟁사는 차급별 세기 한 줄 */
+  function showCompare(): void {
+    const s = game!.state, G = garageList().filter((g) => cmpSel.has(g.id));
+    if (G.length < 2) return err('비교할 차를 2대 이상 고르세요.');
+    const grades = G.map((g) => Q.generationGrades(s, g));
+    const line = (label: string, vals: number[], fmt: (v: number) => string, hi = true) => { const best = hi ? Math.max(...vals) : Math.min(...vals); return `<tr><th>${label}</th>${vals.map((v) => `<td class="r${v === best && vals.some((x) => x !== v) ? ' best' : ''}">${fmt(v)}</td>`).join('')}</tr>`; };
+    const rival = (body: string) => { const R = [...s.rivals].sort((a, b) => (b.cells[body] ?? 0) - (a.cells[body] ?? 0)), top = R[0]?.cells[body] ?? 0; const t = R.filter((r) => (r.cells[body] ?? 0) >= top * 0.97); return !R.length ? '—' : t.length === R.length ? '모두 비슷' : `${t.map((r) => esc(r.name)).join('·')} 강함`; };
+    reviewTimers.forEach(clearTimeout); reviewTimers = [];
+    sheetBody.innerHTML = `<div class="cmp"><div class="eyebrow"><i></i>내 차 비교 · ${esc(game!.dateLabel)}</div><h2>${G.length}대 나란히 보기</h2><div class="tblwrap"><table class="tbl cmp-t">
+      <tr><th></th>${G.map((g) => `<th class="r"><span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><b>${esc(nameOf(g))}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></th>`).join('')}</tr>
+      ${STATS.map((k) => line(STAT_NAME[k], grades.map((x) => x[k]), score)).join('')}
+      ${line('가격', G.map((g) => currentEdition(g).price), (v) => `${num(v)}만원`, false)}${line('지난달 판매', G.map((g) => g.sales.at(-1) ?? 0), (v) => `${num(v)}대`)}
+      ${line('대당 이익', G.map((g) => Q.generationUnitProfit(g, s)), (v) => money(v, true))}${line('월 이익', G.map(carMonthProfit), (v) => money(v, true))}
+      ${line('수명', G.map((g) => Q.lifeBar(s, g)), (v) => `${Math.round(v * 100)}%`)}${line('평론 평균', G.map((g) => g.reviewAvg), score)}
+      <tr class="rival"><th>경쟁사(차급별)</th>${G.map((g) => `<td class="r">${rival(g.body)}</td>`).join('')}</tr></table></div>
+      <p class="note">능력치는 그해 다른 차와 비교한 등급(0~10, 5가 보통)입니다. 굵은 칸이 그 줄에서 가장 좋은 값입니다(가격은 낮은 쪽). 경쟁사는 그 차급에서 지금 가장 센 회사입니다.</p>
+      <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  function garageView(): View {
     const s = game!.state, gens = sellingGens(s), p = s.projects[0];
     const devCard = s.projects.map((p) => `<div class="card"><p class="lbl">개발 중</p><h2>${esc(p.name)}</h2><p class="hint">${p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`} · 남은 결함 약 ${p.defectEst}개</p><div class="row" style="margin-top:10px"><button class="btn" data-act="devSel" data-id="${p.id}">개발 화면 보기</button></div></div>`).join('');
     if (!gens.length) {
       const any = allGens(s).length > 0;
       const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 1년 가까이 설계와 시험을 합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
-      const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(${config.dev.designWeeks[0]}~${config.dev.designWeeks[config.dev.designWeeks.length - 1]}주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '<p class="hint" style="margin-top:6px">개발을 기다리는 동안 회사 탭에서 직원을 뽑거나 연구를 시작할 수 있습니다.</p>' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
+      const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(${config.dev.designWeeks[0]}~${config.dev.designWeeks[config.dev.designWeeks.length - 1]}주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '<p class="hint" style="margin-top:6px">개발을 기다리는 동안 회사 화면에서 직원을 뽑거나 연구 화면에서 연구를 시작할 수 있습니다.</p>' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
       return { ov: ovh, panel: intro + devCard, look: null };
     }
-    garageIdx = ((garageIdx % gens.length) + gens.length) % gens.length;
-    const g = gens[garageIdx], e = currentEdition(g), name = nameOf(g);
+    if (garageSum && gens.length >= 2) return garageTable();
+    const GL = garageList(), g = GL.find((x) => x.id === garageId) ?? GL[0], e = currentEdition(g), name = nameOf(g), gi = GL.indexOf(g);
+    garageId = g.id;
     const price = garagePrice.get(g.id) ?? e.price, up = Q.unitProfit(g.body, g.powertrain, e.tier, e.options, price, Q.costMultOf(s), Q.ptCostAdd(s, g.powertrain)), lines = Q.linesOf(s);
     const lastSale = g.sales.length ? g.sales[g.sales.length - 1] : null, lb = Q.lifeBar(s, g), ending = g.status === 'ending';
     const ovh = ovTop(`차고 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}`, `${esc(name)}<small>${editionName(g)}</small>`, `${specLine(g.body, g.powertrain, e.tier, g.segment)} · ${paintName(e.color)}`, launchWhen(g))
-      + ovScore(`평론 평균${ib('term:평론 평균')}`, g.reviewAvg) + ovHint
-      + (gens.length > 1 ? `<button class="switch l" data-act="gprev" aria-label="이전 차">‹</button><button class="switch r" data-act="gnext" aria-label="다음 차">›</button>` : '');
+      + ovHint
+      + (gens.length > 1 ? `<button class="switch l" data-act="gprev" aria-label="이전 차">‹</button><button class="switch r" data-act="gnext" aria-label="다음 차">›</button><div class="ov tr gnav"><button class="btn" data-act="gsum">← 전 차종</button><span>${gi + 1}/${GL.length}</span></div>` : '');
     const sales = g.sales.slice(-12), mx = Math.max(1, ...sales);
     const chart = sales.length ? `<svg class="mini" viewBox="0 0 300 64" preserveAspectRatio="none" role="img" aria-label="최근 월별 판매">${sales.map((v, i) => { const w = 300 / 12, h = (v / mx) * 56; return `<rect x="${(i * w + 2).toFixed(1)}" y="${(60 - h).toFixed(1)}" width="${(w - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${i === sales.length - 1 ? '#ff5a1f' : '#14171c'}"/>`; }).join('')}</svg>` : '';
-    const card1 = `<div class="card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 10px">${launchWhen(g)}</p><div class="kpis">${kpi('지난달 판매', lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`)}${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi(`대당 이익${ib('term:대당 이익')}`, money(Q.generationUnitProfit(g, s), true), Q.generationUnitProfit(g, s) >= 0 ? 'pos' : 'neg')}${kpi(`평론 평균${ib('term:평론 평균')}`, `${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}`)}</div>
+    // 0.9.0 핵심 수치 4개(지난달 판매·대당 이익·수명·평론)는 무대 아래 띠에, 패널의 성적 카드는 누적·월 이익·판매 그래프·조언
+    const gup = Q.generationUnitProfit(g, s), gmp = carMonthProfit(g);
+    const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
+      <div class="key key-life"><small>수명${ib('term:수명')}</small><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div><b>${Math.round(lb * 100)}<span>%</span></b></div>
+      <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}</b></div></div>`;
+    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 10px">${launchWhen(g)}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
       ${chart ? `<p class="lbl" style="margin-top:12px">최근 판매(달마다)</p>${chart}` : ''}
-      <p class="lbl" style="margin-top:12px">수명${ib('term:수명')}</p><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div>
-      <p class="hint">${Math.round(lb * 100)}% · 출시 뒤 시간이 지날수록 판매가 줄어듭니다.</p>
+      <p class="hint">수명은 출시 뒤 시간이 지날수록 줄고, 줄수록 판매가 줄어듭니다.</p>
       ${adviceLine(g)}${orderLine(g)}${Q.eventImpactOn(s, g.id).map((t) => `<div class="warnbox ev-line" style="margin-top:8px">${esc(t)}</div>`).join('')}</div>`;
     const gn = Q.priceForecast(s, g.id, price) ?? 0, gpr = monthProfit(gn, up, g.marketing);
     const card2 = ending ? '' : `<div class="card price-card"><p class="lbl">판매 가격</p>${priceBlock('gprice', { price, body: g.body, up, sales: `약 ${num(gn)}<span>대</span>`, profit: money(gpr, true), pcls: gpr >= 0 ? 'pos' : 'neg', gen: g.id })}
@@ -846,7 +967,9 @@ export function startApp(): void {
       ${I.rescueBlock(s, g.id)}
       <hr><button class="btn danger" data-act="discontinue" data-id="${g.id}" ${ending ? 'disabled' : ''} style="width:100%">${ending ? '이번 달 말에 단종됩니다' : '단종하기'}</button></div>`;
     const planCard = s.projects.length < Q.devTeams(s) ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
-    return { ov: ovh, panel: card2 + card1 + I.factorsCard(s, g.id) + I.pnlCard(s, g.id) + card3 + devCard + planCard, look: genLook(g) }; // 가격 카드가 맨 위(태블릿 가로에서 스크롤 없이)
+    // 0.9.0 넓어진 패널은 두 칸: 왼쪽 가격 카드, 오른쪽 성적·다음 단계(태블릿 가로에서 가격과 성적이 스크롤 없이 함께 보이게)
+    const right = card1 + I.factorsCard(s, g.id) + I.pnlCard(s, g.id) + card3 + devCard + planCard;
+    return { ov: ovh, panel: card2 ? pcols(card2, right) : right, look: genLook(g), keys };
   }
 
   // ----- 신차 기획 첫 화면(8.7) -----
@@ -1254,11 +1377,14 @@ export function startApp(): void {
     const inherits = fl || (!!prev && prev.status !== 'discontinued');
     const up = Q.unitProfit(p.body, p.powertrain, p.tier, p.options, L.price, Q.costMultOf(s), Q.ptCostAdd(s, p.powertrain)), ex = fl ? null : Q.expectedReviews(s, p.id, L.price), fc = fl ? null : Q.salesForecast(s, p.id, L.price, L.marketing), free = inherits || Q.hasFreeLine(s), reg = Q.regulationError(s, p);
     const look = projLook(p, L.color, L.wheels);
-    const ovh = ovTop(fl ? '페이스리프트 출시 준비' : p.kind === 'fullchange' ? '풀체인지 출시 준비' : '출시 준비', esc(p.name) + (fl ? '<small>페이스리프트</small>' : ''), `${specLine(p.body, p.powertrain, p.tier, p.segment)} · ${paintName(L.color)} · ${WHEELS[L.wheels].name}`) + (ex ? ovScore(`예상 평점${ib('term:예상 평점')}`, ex.avg) : '') + ovHint;
+    const ovh = ovTop(fl ? '페이스리프트 출시 준비' : p.kind === 'fullchange' ? '풀체인지 출시 준비' : '출시 준비', esc(p.name) + (fl ? '<small>페이스리프트</small>' : ''), `${specLine(p.body, p.powertrain, p.tier, p.segment)} · ${paintName(L.color)} · ${WHEELS[L.wheels].name}`) + ovHint;
     const adv = Q.defectAdvice(p, s);
     // 혹평 예고: 예상 평점이 혹평 기준 + 0.5 이하면(실제 평론은 ±0.7 안팎) "출시해도 좋습니다" 대신 붉은 경고
     const flopRisk = !!ex && ex.avg <= config.critics.flop + 0.5, rd = ex ? repDelta(ex.avg) : 0;
-    const card0 = `<div class="card"><p class="lbl">출시 전 점검</p><div class="kpis">${kpi(`남은 결함${ib('term:결함')}`, `약 ${num(p.defectEst)}<span>개</span>`)}${kpi(`예상 리콜 위험${ib('term:리콜')}`, `연 ${Math.round(adv.recallYear * 100)}<span>%</span>`, adv.level === 'many' ? 'neg' : '')}${ex ? kpi(`예상 평판 변화${ib('term:평판')}`, repWord(rd).replace('평판 ', ''), rd < 0 ? 'neg' : rd > 0 ? 'pos' : '') : ''}</div>
+    // 0.9.0 출시 전 점검 수치는 무대 아래 띠(결함·리콜 위험·평판 변화·예상 평점), 패널에는 경고 글만
+    const keys = `<div class="key"><small>남은 결함${ib('term:결함')}</small><b>약 ${num(p.defectEst)}<span>개</span></b></div><div class="key"><small>예상 리콜 위험${ib('term:리콜')}</small><b class="${adv.level === 'many' ? 'neg' : ''}">연 ${Math.round(adv.recallYear * 100)}<span>%</span></b></div>
+      ${ex ? `<div class="key"><small>예상 평판 변화${ib('term:평판')}</small><b class="${rd < 0 ? 'neg' : rd > 0 ? 'pos' : ''}">${repWord(rd).replace('평판 ', '')}</b></div><div class="key key-rv">${ring(ex.avg)}<div><small>예상 평점${ib('term:예상 평점')}</small><b>${score(ex.avg)}</b></div></div>` : ''}`;
+    const card0 = `<div class="card launch-check"><p class="lbl">출시 전 점검</p>
       ${flopRisk ? `<div class="badbox flop-risk" style="margin-top:10px">예상 평점 ${score(ex!.avg)}점으로 혹평(${config.critics.flop}점 이하) 위험이 큽니다. 혹평이면 평판이 ${(Math.round(-config.critics.flopRep * diffOf(s).repLossMult * 10) / 10).toLocaleString('ko-KR')} 떨어지고 판매도 부진합니다. 가격을 낮추거나 개발을 더 하는 편이 낫습니다.</div>${adv.level === 'ok' ? '' : defectBox(adv)}` : defectBox(adv)}${reg ? `<div class="badbox reg-why" style="margin-top:10px">${esc(reg)}</div>` : ''}</div>`;
     const fln = fl ? Q.priceForecast(s, p.targetId ?? -1, L.price) : null, mk = fl ? (Q.generationById(s, p.targetId ?? -1)?.marketing ?? 0) : L.marketing; // 페이스리프트: 지금 차 기준 어림
     const pr = fc ? [monthProfit(fc.min, up, mk), monthProfit(fc.max, up, mk)] : fln !== null ? [monthProfit(fln, up, mk)] : null;
@@ -1272,7 +1398,6 @@ export function startApp(): void {
     const critics = config.critics.list;
     const card3 = ex ? `<div class="card"><p class="lbl">예상 평론</p>
       ${critics.map((c, i) => `<div class="stat"><span>${c.name}${ib(`critic:${c.id}`, c.name)}</span><div class="track"><u style="width:${ex.scores[i] * 10}%"></u></div><b>${score(ex.scores[i])}</b></div>`).join('')}
-      <div class="kpis" style="margin-top:10px">${kpi('예상 평점', score(ex.avg))}</div>
       <p class="note">예상 월 판매는 인지도가 어느 정도 오른 출시 ${config.forecast.months}개월째를 기준으로 한 어림이며 ±${Math.round(config.forecast.spread * 100)}% 범위로 보입니다. 출시 직후는 이보다 적게 팔립니다. 실제 평론 점수는 예상과 0.7점 안팎 차이가 날 수 있습니다.${prev ? ' 풀체인지는 전작과 비교해 평론이 조금 오르내립니다.' : ''}</p></div>` : '';
     const sum = fl ? `새 얼굴로 바꿔 내놓습니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 결함 약 ${num(p.defectEst)}개. 평론가는 다시 평가하지 않고 신문에 기사가 납니다.`
       : `이 조건으로 출시합니다: <b>${num(L.price)}만원</b>(대당 이익 ${money(up, true)}) · 광고 ${MARKETING[L.marketing]} · 예상 평점 ${ex ? score(ex.avg) : '—'} · 월 ${fc ? `${num(fc.min)}~${num(fc.max)}대` : '—'} · 결함 약 ${num(p.defectEst)}개`;
@@ -1280,7 +1405,7 @@ export function startApp(): void {
       ${prev && prev.status === 'onSale' ? `<div class="warnbox prev-end" style="margin-top:10px">출시하면 ${prev.number}세대는 이번 달 말에 단종됩니다(재고 처분 1개월).</div>` : ''}
       ${free ? '' : `<div class="badbox" style="margin-top:10px">공장의 생산 라인 ${Q.linesOf(s)}개를 모두 쓰고 있습니다. 판매 중인 차를 단종하면 그달 말부터 라인이 빕니다. 공장을 증설하면 라인이 늘어납니다.</div><div class="row line-fix" style="margin-top:8px">${weakest() ? `<button class="btn" data-act="goWeak">가장 안 팔리는 「${esc(nameOf(weakest()!))}」 보기 · 단종</button>` : ''}<button class="btn" data-act="goCo" data-v="factory">공장 증설 보기</button></div>`}
       <div class="row" style="margin-top:12px"><button class="btn" data-act="devHome">← 개발 화면으로</button><button class="go" data-act="doLaunch" ${free && !reg ? '' : 'disabled'}>출시하기 <span aria-hidden="true">→</span></button></div></div>`;
-    return { ov: ovh, panel: card0 + card1 + card2 + card3 + card4, look };
+    return { ov: ovh, panel: pcols(card1, card4 + card0 + card3 + card2), look, keys }; // 0.9.0 왼쪽: 가격, 오른쪽 위: 출시 요약·[출시하기](태블릿 가로에서 스크롤 없이), 그 아래 점검·평론·색
   }
 
   /** 판매 중인 차 가운데 지난달 판매가 가장 적은 차(라인 막힘 해결 바로 가기) */
@@ -1364,7 +1489,7 @@ export function startApp(): void {
   }
 
   // ----- 회사(9장): 안쪽 탭 재무 / 직원 / 본사 / 공장 -----
-  const CO_TABS: [CoTab, string][] = [['fin', '재무'], ['staff', '직원'], ['exec', '임원'], ['hq', '본사'], ['factory', '공장'], ['research', '연구']];
+  const CO_TABS: [CoTab, string][] = [['staff', '직원'], ['exec', '임원'], ['hq', '본사'], ['factory', '공장']];
   const ROLE_ORDER: Role[] = ['designer', 'engineer', 'tester', 'sales'];
   const condWord = (c: number) => (c < config.staff.condition.low ? '지침' : c < config.staff.condition.mid ? '보통' : '좋음');
   const growWord = (gap: number) => (gap >= 25 ? '성장 여지 큼' : gap >= 15 ? '성장 여지 보통' : '성장 여지 작음');
@@ -1373,7 +1498,7 @@ export function startApp(): void {
   const cmpRow = (label: string, a: string, b: string, cost = false) => `<tr><td>${label}</td><td class="r">${a}</td><td class="r"><b class="${a === b ? '' : cost ? 'neg' : 'pos'}">${b}</b></td></tr>`;
   function companyView(): string {
     const tabs = `<div class="seg cotabs" role="tablist" aria-label="회사">${CO_TABS.map(([k, l]) => `<button role="tab" data-act="cotab" data-v="${k}" aria-selected="${coTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (coTab === 'exec' ? execTab() : coTab === 'staff' ? staffTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'research' ? researchTab() : finTab());
+    return tabs + (coTab === 'exec' ? execTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : staffTab());
   }
 
   /** 경쟁사가 강한 차급: 점유 점수가 높은 순 최대 3개 + "외 n"(초반에 모두 같으면 "모든 차급 고르게") */
@@ -1396,7 +1521,7 @@ export function startApp(): void {
     const table = L ? `<table class="tbl"><tr><th>${L.year}년 ${L.monthOfYear}월</th><th class="r">금액</th></tr><tr><td>판매 수입 (${num(L.sold)}대)</td><td class="r pos">${money(L.revenue, true)}</td></tr>${rows.filter(([, v]) => v).map(([n, v]) => `<tr><td>${n}</td><td class="r neg">${money(-v)}</td></tr>`).join('')}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td></tr></table>` : '';
     const fin = `<div class="card"><h3>재무</h3><div class="kpis">${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}${kpi('대출', money(s.loan.balance))}${kpi('대출 한도', money(limit))}${kpi(`월 이자${ib('term:대출 이자')}`, `${(rate * 100).toFixed(1)}<span>%</span>`)}</div>
       <p class="hint" style="margin-top:8px">매달 유지비 ${money(hqUp + fUp)}: 본사 ${money(hqUp)} + 공장 ${money(fUp)} · 직원 월급 ${money(s.staff.reduce((a, x) => a + Q.salaryOf(x.ability), 0))}</p>
-      <p class="lbl" style="margin-top:14px">최근 24개월 영업 이익</p>${chart}${led.some((e) => e.oneOff > 0) ? '<p class="note" style="margin-top:2px">막대는 일회성 지출(채용 공고·교육·승급·공장 건설 등)을 뺀 이익입니다. 주황 점은 일회성 지출이 있던 달입니다.</p>' : ''}${table ? `<p class="lbl" style="margin-top:14px">지난달 수입과 지출</p>${table}` : ''}
+      <p class="lbl" style="margin-top:14px">최근 24개월 영업 이익</p>${chart}${led.some((e) => e.oneOff > 0) ? '<p class="note" style="margin-top:2px">막대는 일회성 지출(채용 공고·교육·승급·공장 건설 등)을 뺀 이익입니다. 주황 점은 일회성 지출이 있던 달입니다.</p>' : ''}${table ? `<p class="lbl" style="margin-top:14px">지난달 수입과 지출</p>${table}<button class="btn" data-act="monthOpen" data-v="${led.length - 1}" style="width:100%;margin-top:8px">지난달 결산 펼쳐 보기(차종별·전월 대비)</button>` : ''}
       <p class="lbl" style="margin-top:14px">대출</p><div class="row">${[10000, 50000, 100000].map((a) => `<button class="btn" data-act="borrow" data-v="${a}" ${s.loan.balance + a > limit ? 'disabled' : ''}>${money(a)} 빌리기</button>`).join('')}</div>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="repay" data-v="10000" ${s.loan.balance < 10000 || s.cash < 10000 ? 'disabled' : ''}>1억 갚기</button><button class="btn" data-act="repay" data-v="all" ${s.loan.balance <= 0 || s.cash < s.loan.balance ? 'disabled' : ''}>모두 갚기</button></div>
       <p class="note">한도는 ${money(diffOf(s).loanBase)}에 최근 1년 매출의 ${Math.round(config.loan.revenueRatio * 100)}%를 더한 값입니다. 한도의 ${Math.round(config.loan.highUse * 100)}% 넘게 빌리면 이자가 올라갑니다. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다. 공고·교육·퇴직금·승급·건설비는 낼 때 현금에서 바로 나가고, 그달 장부에 일회성 지출로 적힙니다.</p>
@@ -1404,7 +1529,9 @@ export function startApp(): void {
       ${s.cash < 0 && !s.loan.bailoutUsed ? `<div class="badbox" style="margin-top:10px">현금이 ${s.negMonths}개월째 마이너스입니다. 구제 금융(남은 ${bailInfo().left}번)을 받으면 현금이 0이 되지만 평판이 ${-config.bankruptcy.bailoutRep} 떨어지고 대출 한도가 절반이 됩니다.</div><button class="btn danger" data-act="bailout" style="width:100%;margin-top:8px">구제 금융 받기</button>` : ''}</div>`;
     const mine = sellingGens(s).reduce((a, g) => a + (g.sales[g.sales.length - 1] ?? 0), 0);
     const rivals = `<div class="card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r) => `<div>${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small></span><small class="rv-strong">${rivalStrong(r.cells)}</small></div>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small style="color:#fffa">평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
-    return `<div class="cols">${fin}${rivals}</div>`;
+    // 0.9.0 지난 달들: 누르면 월 결산 창(장부 24개월)
+    const months = led.length ? `<div class="card mon-list"><h3>월 결산 <small class="hint">최근 ${led.length}개월 · 누르면 펼쳐 봅니다</small></h3>${[...new Set(led.map((e) => e.year))].reverse().map((y) => `<p class="lbl mon-y">${y}년</p><div class="mbtns">${led.map((e, i) => [e, i] as const).filter(([e]) => e.year === y).reverse().map(([e, i]) => `<button class="btn mbtn" data-act="monthOpen" data-v="${i}" aria-label="${y}년 ${e.monthOfYear}월 결산 보기"><b>${e.monthOfYear}월</b><small class="${e.profit >= 0 ? 'pos' : 'neg'}">${money(e.profit, true)}</small></button>`).join('')}</div>`).join('')}</div>` : '';
+    return `<div class="cols">${fin}<div class="colstack">${months}${rivals}</div></div>`;
   }
 
   // ----- 0.8.0 직원 표 정렬·필터 -----
@@ -1701,8 +1828,8 @@ export function startApp(): void {
   }
   function adopt(g: Game, extra: S.UiExtra): void {
     game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
-    restorePlan(extra.plan); garageIdx = 0; gameOverShown = false; officeEvents.length = 0; thumbs.clear();
-    coTab = 'fin'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
+    restorePlan(extra.plan); garageId = -1; garageSum = true; cmpSel.clear(); gameOverShown = false; officeEvents.length = 0; thumbs.clear();
+    coTab = 'staff'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false;
     logDev(); // 주간 기록은 화면 메모리에만 있어 불러오면 비므로, 지금 상태 한 줄로 시작한다
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
@@ -1795,7 +1922,7 @@ export function startApp(): void {
   async function act(a: string, el: HTMLElement): Promise<void> {
     const v = el.dataset.v ?? '', s = game?.state;
     switch (a) {
-      case 'tab': go(v === 'dev' ? devScreen() : v as Screen); return; // 기획 초안·출시 준비 값은 탭을 옮겨도 남긴다
+      case 'tab': if (v === 'garage') garageSum = true; go(v === 'dev' ? devScreen() : v as Screen); return; // 기획 초안·출시 준비 값은 탭을 옮겨도 남긴다
       case 'plan': // 8.7: 차종이 있으면 먼저 어디서 시작할지 고른다. 기획 중인 초안이 있으면 그것을 이어서
         if (!s) return;
         if (draft || lift) { go(draft ? 'plan' : 'lift'); return; }
@@ -1917,7 +2044,7 @@ export function startApp(): void {
         const g = lifted ?? allGens(game.state).find((x) => !before.has(x.id)), ed = lifted ? currentEdition(lifted) : undefined;
         if (ed) snapPhoto(`e${ed.id}`); else if (g) snapPhoto(g.id);
         if (g) { const c = config.critics; officeEvents.push({ kind: 'say', mood: lifted ? 'launch' : g.reviewAvg >= c.masterpiece ? 'masterpiece' : g.reviewAvg <= c.flop ? 'badReview' : 'launch' }); }
-        devLog.delete(L.pid); delete ui.colors[L.pid]; launch = null; screen = 'garage'; garageIdx = g ? Math.max(0, sellingGens(game.state).findIndex((x) => x.id === g.id)) : 0; lastPanel = '';
+        devLog.delete(L.pid); delete ui.colors[L.pid]; launch = null; screen = 'garage'; garageId = g?.id ?? -1; garageSum = false; lastPanel = '';
         render();
         const news = r.ok ? r.events?.find((e) => e.kind === 'news') : undefined;
         if (lifted && ed) showNews(ed.headline ?? news?.text ?? '', `${nameOf(lifted)}${josa(nameOf(lifted), '이/가')} 새 얼굴로 돌아왔다. 판매가 되살아나고 인지도도 오를 것으로 보인다.`, undefined, undefined, true);
@@ -1925,9 +2052,14 @@ export function startApp(): void {
         return;
       }
       case 'closeReview': reviewTimers.forEach(clearTimeout); sheet.hidden = true; go('garage'); return;
-      case 'goWeak': { const w = weakest(); if (!w || !s) return; garageIdx = Math.max(0, sellingGens(s).findIndex((x) => x.id === w.id)); go('garage'); return; }
-      case 'gprev': garageIdx--; render(); return;
-      case 'gnext': garageIdx++; render(); return;
+      case 'goWeak': { const w = weakest(); if (w) garageAt(w.id); return; }
+      case 'gprev': case 'gnext': { const L = garageList(), i = L.findIndex((g) => g.id === garageId); if (L.length) garageId = L[((i < 0 ? 0 : i) + (a === 'gnext' ? 1 : -1) + L.length) % L.length].id; lastPanel = ''; render(); return; }
+      case 'gopen': garageAt(Number(el.dataset.id)); return;
+      case 'gsum': garageSum = true; go('garage'); return;
+      case 'gSort': { const k = v as GSort; if (gSort.k === k) gSort.desc = !gSort.desc; else { gSort.k = k; gSort.desc = k !== 'name' && k !== 'launch'; } render(); return; }
+      case 'cmpPick': { const id = Number(el.dataset.id); if (!cmpSel.delete(id)) { if (cmpSel.size >= 4) return err('비교는 4대까지 고를 수 있습니다. 다른 차를 빼고 고르세요.'); cmpSel.add(id); } render(); return; }
+      case 'cmpClear': cmpSel.clear(); render(); return;
+      case 'cmpOpen': showCompare(); return;
       case 'setPrice': { if (!game) return; const id = Number(el.dataset.id), price = garagePrice.get(id), pol = Q.generationById(game.state, id)?.pricePolicy; if (price === undefined) return;
         if (pol && !(await ask(`가격을 직접 바꾸면 자동 가격(${policyName(pol)})이 꺼지고 수동으로 돌아갑니다.\n가격을 ${num(price)}만원으로 바꿀까요?`, '가격 바꾸기'))) return;
         if (run(game.command({ type: 'setPrice', generationId: id, price }))) { garagePrice.delete(id); toast(`가격을 ${num(price)}만원으로 바꿨습니다. 다음 결산부터 반영됩니다.`); render(); } return; }
@@ -1960,7 +2092,7 @@ export function startApp(): void {
       case 'later': sheet.hidden = true; render(); return;
       case 'newsOpen': if (s) { const n = Q.newsLog(s)[Number(v)]; if (n) showNewsItem(n.text, n.week, n.category); } return;
       case 'rectab': recTab = v as RecTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
-      case 'goResearch': coTab = 'research'; go('company'); if (v) showTech(v); return;
+      case 'goResearch': go('research'); if (v) showTech(v); return;
       case 'backPlan': go(draft ? 'plan' : lift ? 'lift' : 'garage'); return;
       case 'startResearch': {
         if (!game) return; const t = Q.researchInfo(game.state).fields.flatMap((f) => f.techs).find((x) => x.id === v); if (!t) return;
@@ -1987,7 +2119,7 @@ export function startApp(): void {
         if (run(game.command({ type: 'dismissExec', role }))) { toast(`${h.name}${josa(h.name, '을/를')} 해임했습니다.`); render(); }
         return;
       }
-      case 'goCo': coTab = v as CoTab; go('company'); return;
+      case 'goCo': goCo(v); return;
       case 'devSel': devSel = Number(el.dataset.id); go('dev'); return;
       case 'devHome': go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로
       case 'resumePlan': go(draft ? 'plan' : lift ? 'lift' : 'dev'); return;
@@ -2095,6 +2227,7 @@ export function startApp(): void {
       case 'saveBig': saveSet.big = !saveSet.big; keep(SAVE_SET_KEY, saveSet); void showMenu(); return;
       case 'undo': doUndo(); return;
       case 'yearOpen': showYearReport(Number(v)); return;
+      case 'monthOpen': showMonth(Number(v)); return;
       case 'decadeOpen': showDecade(Number(v)); return;
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } void showMenu(); return; }
       case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); void showMenu(); return; }
@@ -2190,11 +2323,12 @@ export function startApp(): void {
     }
   });
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
-  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); });
+  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; if (b.dataset.tab === 'garage') garageSum = true; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); }); // 차고를 누르면 전 차종 표부터
   $('#menubtn').addEventListener('click', () => void showMenu());
   $('#mutebtn').addEventListener('click', () => { sound.set({ muted: !sound.settings().muted }); renderMute(); });
   { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 550) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
+  $('#plchip').addEventListener('click', () => { if (game) { sheet.hidden = true; go('fin'); } });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
   $('#todobtn').addEventListener('click', () => { if (game) showTodo(execUnread(game.state) && !todos().length ? 'reports' : 'todo'); });
   $('#skipbtn').addEventListener('click', () => startSkip());
@@ -2216,6 +2350,7 @@ export function startApp(): void {
     setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
     get skip() { return !!skip; }, todos: () => (game ? todos() : []), Q,
+    get garageId() { return garageId; }, get garageSum() { return garageSum; }, goTarget, showMonth,
   };
 
   makeStage();

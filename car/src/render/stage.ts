@@ -112,8 +112,9 @@ export class Stage {
     if (!w || !h) return;
     const cam = this.cam;
     this.R.setSize(w, h, false); cam.aspect = w / h;
-    const d = Math.max(8.6, 12.5 / cam.aspect);
-    cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .62, 0); cam.updateProjectionMatrix();
+    // 0.9.0 무대가 좁고 길어져(화면의 약 40%) 원판 전체 대신 차 길이(약 5m)에 맞춰 당긴다: 차가 폭의 약 85%를 채워 작아 보이지 않게(원판 가장자리는 잘려도 된다)
+    const d = Math.max(7.8, 11.6 / cam.aspect);
+    cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, .5, 0); cam.updateProjectionMatrix();
   }
 
   /** 그리기 켜기/끄기: 무대가 안 보일 때(회사·기록 탭, 숨은 문서) 끈다 */

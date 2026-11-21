@@ -18,7 +18,7 @@ import { ensureHist, newPnl, noteCar, pnlOf, startHist } from './history';
 import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
-import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
+import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerCar, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
@@ -195,6 +195,7 @@ export class Game {
     // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로
     const made = allocate(capacityOf(s), demand, gens.map((g) => g.allocShare));
     let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
+    const carRows: LedgerCar[] = [];
     const ylog = this.yearLog(year);
     gens.forEach((g, i) => {
       const n = made[i], p0 = g.profit, P = pnlOf(g); // 0.10.0 손익 누적(예전 저장은 여기서 추정으로 시작)
@@ -204,6 +205,7 @@ export class Game {
       g.sales.push(n); g.totalSold += n; sold += n;
       revenue += n * ed.price; cogs += n * uc; marketing += mk;
       g.profit += n * (ed.price - uc) - mk;
+      const row: LedgerCar = { id: g.id, sold: n, revenue: n * ed.price, cogs: n * uc, marketing: mk, recall: 0 }; carRows.push(row);
       P.rev += n * ed.price; P.cogs += n * uc; P.mk += mk;
       const target = awarenessTarget(s.reputation, g.marketing, grade(ed.stats.Q, year));
       g.awareness += (target - g.awareness) * (config.awareness.rate + salesAwarenessBonus(s)); // 영업 직원이 수렴을 빠르게(9.1)
@@ -211,7 +213,7 @@ export class Game {
         const pYear = Math.min(config.recall.maxYear, ed.defects * config.recall.perDefect);
         if (this.rng.next() < 1 - (1 - pYear) ** (1 / config.time.monthsPerYear)) {
           const cost = g.totalSold * config.recall.costPerCar * diffOf(s).recallMult;
-          recall += cost; g.profit -= cost; g.recalls++; P.recall += cost;
+          recall += cost; row.recall = cost; g.profit -= cost; g.recalls++; P.recall += cost;
           g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
           const R = config.reputation, before = s.reputation; // 0.5.1: 평판 감점은 규모 비례(누적 판매 / 5,000, 0.5~3) × 난이도 배수
           this.addRep(-Math.min(-config.recall.rep, Math.max(R.recallMin, g.totalSold / R.recallPer)), `「${this.nameOf(g)}」 리콜`);
@@ -229,11 +231,12 @@ export class Game {
       }
       if (g.status === 'ending') { g.status = 'discontinued'; ev.push({ kind: 'discontinued', id: g.id, text: `「${this.nameOf(g)}」 생산을 마쳤습니다. 다음 달부터 생산 라인이 빕니다.` }); }
     });
-    const salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s); // 0.7.0 임원 월급 포함
+    const xPay = execPay(s), salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + xPay; // 0.7.0 임원 월급 포함
     const upkeep = upkeepOf(s), upkeepHq = hqUpkeep(s, s.hqLevel), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
     const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff;
-    s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold };
+    const research = s.pendingResearch ?? 0;
+    s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; s.pendingResearch = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, cars: carRows, execPay: xPay, research };
     s.ledger.push(e);
     ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
     const everyone = [...s.staff, ...Object.values(s.execs?.seats ?? {}).map((x) => x!.staff)];
@@ -537,7 +540,7 @@ export class Game {
         const err = researchError(s, cmd.techId);
         if (err) return fail(err);
         const c = researchCost(s, techById(cmd.techId));
-        this.spend(c.money);
+        this.spend(c.money); s.pendingResearch = (s.pendingResearch ?? 0) + c.money;
         s.research.active.push({ techId: cmd.techId, points: 0, need: c.points, startWeek: s.week });
         return OK;
       }

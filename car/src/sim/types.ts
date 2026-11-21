@@ -161,7 +161,10 @@ export interface LedgerEntry {
   upkeepHq?: number; // 0.5.1: upkeep 중 본사 몫(공장 몫 = upkeep − upkeepHq). 예전 장부에는 없다
   oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
+  cars?: LedgerCar[]; execPay?: number; research?: number; // 0.9.0 월 결산 창용(예전 장부에는 없다): 차종별 한 줄, salaries 중 임원 몫, oneOff 중 연구 시작 비용
 }
+/** 0.9.0 장부의 차종별 한 줄(세대 ID). 이익 = 매출 − 원가 − 광고 − 리콜 */
+export interface LedgerCar { id: number; sold: number; revenue: number; cogs: number; marketing: number; recall: number }
 
 /** 연구 상태(10장). done: 완료한 기술 ID(반복 기술은 여러 번), active: 진행 중(시작 순), early: 등장 연도보다 먼저 완료해 "세계 최초"를 아직 쓰지 않은 기술 */
 export interface ResearchState {
@@ -228,6 +231,7 @@ export interface CarState {
   ledger: LedgerEntry[]; // 최근 24개월
   pendingDev: number; // 이번 달에 쌓인 개발비(월말 정산)
   pendingOneOff: number; // 이번 달 일회성 지출(이미 현금에서 나감, 장부 기록용)
+  pendingResearch?: number; // 0.9.0 이번 달 연구 시작 비용(pendingOneOff에 들어 있음, 장부의 research 칸용)
   nextId: number;
   research: ResearchState; // 10장
   events: EventsState; // 11장 무작위 사건·뉴스(고정 사건은 시드와 날짜로 계산)
