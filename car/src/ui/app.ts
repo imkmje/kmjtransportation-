@@ -982,7 +982,7 @@ export function startApp(): void {
     if (g.clearance) b.push(['가격 인하 판매 중', 'warn']);
     else { const R = Q.rescueOptions(s, g.id); if (R && R.target === null && (R.fix.ok || R.clearance.ok)) b.push(['수습 가능', 'bad']); } // 0.10.0 혹평·부진 차의 긴급 개선·가격 인하 판매
     if (T.has(`retrofit:${g.id}`)) b.push(['의무 장비 필요', 'bad']);
-    if (g.status === 'onSale') { const ei = genEquipInfo(g); if (!ei.legacy && ei.totals.missingExpected.length) b.push(['장비 기대 미달', 'warn']); } // 1.1.0 옛 구성(legacy) 차는 감점이 없어 배지도 없다
+    if (g.status === 'onSale') { const ei = genEquipInfo(g); if (ei.legacy) b.push(['옛 구성', '']); else if (ei.totals.missingExpected.length) b.push(['장비 기대 미달', 'warn']); } // 1.1.0 옛 구성(legacy) 차는 감점이 없어 배지도 없다
     if (T.has(`capacity:${g.id}`)) b.push(['생산 한도', 'warn']);
     if (T.has(`facelift:${g.id}`)) b.push(['페이스리프트 적기', 'on']);
     if (np && T.get(`full:${np.id}`)?.title.includes('권장')) b.push(['풀체인지 권장', 'on']);
@@ -1106,7 +1106,7 @@ export function startApp(): void {
     const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
       <div class="key key-life"><small>수명${ib('term:수명')}</small><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div><b>${Math.round(lb * 100)}<span>%</span></b></div>
       <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}</b></div></div>`;
-    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}${(() => { const ei = genEquipInfo(g); return ei.legacy ? '<br><span class="eq-legacy">옛 구성 · 다음 페이스리프트부터 장비 기대가 적용됩니다</span>' : ei.totals.missingExpected.length ? `<br><span class="why">장비 기대 미달: ${esc(ei.totals.missingExpected.join('·'))}</span>` : ''; })()}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
+    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}${(() => { const ei = genEquipInfo(g); return ei.legacy ? `<br><span class="eq-legacy">${esc(ei.legacyText)}</span>` : ei.totals.missingExpected.length ? `<br><span class="why">장비 기대 미달: ${esc(ei.totals.missingExpected.join('·'))}</span>` : ''; })()}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
       ${chart ? `<p class="lbl" style="margin-top:12px">최근 판매(달마다)</p>${chart}` : ''}
       <p class="hint">수명은 출시 뒤 시간이 지날수록 줄고, 줄수록 판매가 줄어듭니다.</p>
       ${adviceLine(g)}${orderLine(g)}${Q.eventImpactOn(s, g.id).map((t) => `<div class="warnbox ev-line" style="margin-top:8px">${esc(t)}</div>`).join('')}</div>`;
@@ -1246,15 +1246,26 @@ export function startApp(): void {
   }
   const eqOf = (o: { equip?: EQ.Equip; options: string[] }): EQ.Equip => (o.equip ??= EQ.fromOptions(o.options));
   /** 판매 중인 세대의 장비 정보(지금 판의 구성). legacy는 판에 붙은 표시도 본다 */
-  const genEquipInfo = (g: Generation) => { const ed = currentEdition(g), ei = EQ.equipInfo(game!.state, { body: g.body, segment: g.segment, powertrain: g.powertrain, equip: edEquip(ed) }); return { ...ei, legacy: !!(ei.legacy || (ed as { legacy?: boolean }).legacy || (g as { legacy?: boolean }).legacy) }; };
+  const genEquipInfo = (g: Generation) => { const ed = currentEdition(g), ei = EQ.equipInfo(game!.state, { body: g.body, segment: g.segment, powertrain: g.powertrain, equip: edEquip(ed), equipLegacy: !!ed.equipLegacy }); return { ...ei, legacy: !!ei.totals.legacy, legacyText: ei.totals.legacyText ?? '옛 구성 · 다음 페이스리프트부터 장비 기대가 적용됩니다' }; };
   const MODE_WORD = { rec: '추천 구성', prev: '전작 구성', custom: '직접 고름' } as const;
+  /** 전작 이후 기대가 바뀐 장비(규제 의무 장비는 자동으로 들어가므로 빼고 보인다) */
+  const eqChanges = (e: EQ.Equip, body: string, seg: string) => { const req = new Set(Q.requiredOptions(game!.state)); return EQ.equipChanges(game!.state, e, body, seg).filter((c) => !req.has(c.id)); };
+  /** 1.1.0 개발 중(설계 단계) 장비 다시 고르기 창 */
+  let projEq: { pid: number; options: string[]; equip?: EQ.Equip; equipMode?: string } | null = null;
+  function showProjEquip(): void {
+    const s = game!.state, p = projEq && Q.projectById(s, projEq.pid); if (!p || !projEq) return;
+    sheetBody.innerHTML = `<div class="proj-eq"><div class="eyebrow"><i></i>개발 중 · ${esc(p.name)}</div><h2>장비 다시 고르기</h2><p class="hint">설계 단계에서만 바꿀 수 있고 비용은 들지 않습니다.</p>
+      ${EQ.equipPicker(s, { body: p.body, segment: p.segment, powertrain: p.powertrain, tier: p.tier, equip: eqOf(projEq) }, 'proj', ib)}
+      <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button><button class="btn ink" data-act="projEquipApply">이 구성으로 바꾸기</button></div></div>`;
+    sheet.hidden = false; renderTop();
+  }
   /** 장비 고르기 칸(기획·페이스리프트 공통) */
   function equipView(t: 'plan' | 'lift'): string {
     const s = game!.state;
     if (t === 'plan' && draft) { const e = eqOf(draft), prev = draft.nameplateId ? s.nameplates.find((n) => n.id === draft!.nameplateId)?.generations.at(-1) : undefined;
-      return EQ.equipPicker(s, { ...draft, equip: e }, 'plan', ib, prev ? EQ.equipChanges(s, e, draft.body, draft.segment) : [], MODE_WORD[draft.equipMode ?? 'custom']); }
+      return EQ.equipPicker(s, { ...draft, equip: e }, 'plan', ib, prev ? eqChanges(e, draft.body, draft.segment) : [], MODE_WORD[draft.equipMode ?? 'custom']); }
     if (t === 'lift' && lift) { const g = Q.generationById(s, lift.genId); if (!g) return ''; const e = eqOf(lift);
-      return EQ.equipPicker(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, tier: lift.tier, equip: e }, 'lift', ib, EQ.equipChanges(s, e, g.body, g.segment)); }
+      return EQ.equipPicker(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, tier: lift.tier, equip: e }, 'lift', ib, eqChanges(e, g.body, g.segment)); }
     return '';
   }
   /** 팀으로 고를 수 있는 직원: 프로젝트에 배치되지 않은 개발 직무(교육·휴식 중이면 그동안 일하지 않음) */
@@ -1535,6 +1546,8 @@ export function startApp(): void {
       ${wait ? '<div class="okbox wait-badge" style="margin-top:10px"><b>출시 대기</b> · 개발비가 들지 않습니다</div>' : ''}
       <button class="go${wait && ready ? ' pulse' : ''}" data-act="toLaunch" ${ready ? '' : 'disabled'}>${ready ? '출시 준비 →' : p.phase === 'design' ? '설계가 끝나면 시험을 시작합니다' : `시험 ${minT}주 뒤 출시할 수 있습니다`}</button>
       ${p.phase === 'test' ? defectBox(adv) : `<p class="hint" style="margin-top:10px">${p.kind === 'facelift' ? '디자이너가 새 얼굴을 그리고 있습니다. 점수는 디자인에만 쌓입니다.' : '직원들이 매주 능력치를 쌓고 있습니다. 결함도 함께 생깁니다.'}</p>`}${costLine}
+      ${p.phase === 'design' && p.kind !== 'fix' && !p.equip ? '<p class="hint eq-legacy" style="margin-top:8px">새 장비 규칙이 생겼습니다. 출시 전에 장비를 다시 고를 수 있습니다.</p>' : ''}
+      ${p.phase === 'design' && p.kind !== 'fix' ? `<button class="btn" data-act="projEquip" data-id="${p.id}" style="width:100%;margin-top:10px">장비 다시 고르기 <small>설계 단계에서만 · 비용 없음</small></button>` : ''}
       <button class="btn danger" data-act="cancelDev" style="width:100%;margin-top:10px">개발 취소</button>
       ${p.phase === 'test' && !wait ? '<p class="note">시험을 길게 할수록 결함이 줄어 리콜 위험이 낮아지지만 그동안 개발비가 계속 듭니다. 출시 시점은 직접 정합니다.</p>' : ''}</div>`;
     const card3 = `<div class="card dev-side"><p class="lbl">주간 기록</p>${log.length ? `<ul class="log">${log.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="hint">한 주가 지나면 기록이 쌓입니다. 위쪽 빠르기 버튼으로 시간을 진행합니다.</p>'}${waitTodo(free)}</div>`;
@@ -2258,14 +2271,21 @@ export function startApp(): void {
       }
       // 1.1.0 장비: 단계 바꾸기·추천 구성·모두 빼기·전작 이후 기대 변화 반영(data-t: plan | lift)
       case 'eqSet': case 'eqRec': case 'eqNone': case 'eqApply': {
-        if (!game) return; const o = el.dataset.t === 'lift' ? lift : draft; if (!o) return;
-        const g = lift && o === lift ? Q.generationById(game.state, lift.genId) : undefined, body = g?.body ?? (o as Draft).body, seg = g?.segment ?? (o as Draft).segment, pt = g?.powertrain ?? (o as Draft).powertrain;
+        if (!game) return; const o = el.dataset.t === 'lift' ? lift : el.dataset.t === 'proj' ? projEq : draft; if (!o) return;
+        const g = lift && o === lift ? Q.generationById(game.state, lift.genId) : undefined, P = o === projEq ? Q.projectById(game.state, projEq!.pid) : undefined;
+        const body = g?.body ?? P?.body ?? (o as Draft).body, seg = g?.segment ?? P?.segment ?? (o as Draft).segment, pt = g?.powertrain ?? P?.powertrain ?? (o as Draft).powertrain;
         const e = { ...eqOf(o) };
         if (a === 'eqSet') { const k = el.dataset.k!; if (v === 'opt' || v === 'std') e[k] = v; else delete e[k]; setEquip(o, e, 'custom'); }
         else if (a === 'eqRec') setEquip(o, EQ.recommendedEquip(game.state, body, seg, pt), 'rec');
         else if (a === 'eqNone') setEquip(o, {}, 'custom');
-        else { for (const c of EQ.equipChanges(game.state, e, body, seg)) { if (c.to) e[c.id] = c.to; else delete e[c.id]; } setEquip(o, e, 'custom'); toast('기대가 바뀐 장비를 한 번에 반영했습니다.'); }
-        render(); return;
+        else { for (const c of eqChanges(e, body, seg)) { if (c.to) e[c.id] = c.to; else delete e[c.id]; } setEquip(o, e, 'custom'); toast('기대가 바뀐 장비를 한 번에 반영했습니다.'); }
+        if (o === projEq) showProjEquip(); else render(); return;
+      }
+      case 'projEquip': if (game) { const p = Q.projectById(game.state, Number(el.dataset.id)); if (p) { projEq = { pid: p.id, options: [...p.options], equip: edEquip(p) }; showProjEquip(); } } return;
+      case 'projEquipApply': { // 1.1.0 설계 단계 프로젝트의 장비 다시 고르기(sim setProjectEquip, 비용 없음)
+        if (!game || !projEq) return;
+        if (run(game.command({ type: 'setProjectEquip', projectId: projEq.pid, equip: eqOf(projEq) }))) { projEq = null; sheet.hidden = true; toast('장비 구성을 바꿨습니다. 예상 등급과 원가에 반영됩니다.'); render(); }
+        return;
       }
       case 'dir': { if (!draft) return; const k = el.dataset.k as Stat, n = draft.direction[k] + Number(v); if (n < 0 || n > config.dev.dirMax || (Number(v) > 0 && dirLeft(draft) <= 0)) return; draft.direction[k] = n; render(); return; }
       case 'cancelPlan': draft = null; lift = null; draftNote = ''; go('garage'); return;

@@ -12,7 +12,7 @@ export interface EquipItem {
   expectation: 'rare' | 'common' | 'expected'; expectText: string; cost: number; value: number; optPrice: number; takeRate: number;
   level: EquipLevel | null; effect: { std: string; opt: string };
 }
-export interface EquipInfo { items: EquipItem[]; totals: { stdCost: number; stdValue: number; optProfitPerCar: number; basePrice: number; missingExpected: string[]; penalty: number; bonus: number } }
+export interface EquipInfo { items: EquipItem[]; totals: { stdCost: number; stdValue: number; optProfitPerCar: number; basePrice: number; missingExpected: string[]; penalty: number; bonus: number; legacy?: boolean; legacyText?: string } } // legacy: 옛 저장(형식 4)의 출시된 판(감점·가점 없음)
 export interface EquipChange { id: string; name: string; from: EquipLevel | null; to: EquipLevel | null; reason: string }
 export interface EquipSpec { body: string; segment: string; powertrain: string; equip: Equip; [k: string]: unknown }
 
@@ -20,8 +20,7 @@ export interface EquipSpec { body: string; segment: string; powertrain: string; 
 export const fromOptions = (opts: readonly string[]): Equip => Object.fromEntries(opts.map((o) => [o, 'std' as const]));
 /** 장비 구성 → sim의 options(기본 장비 목록, sim의 syncOptions와 같게). 선택 사양은 equip으로 함께 넘긴다 */
 export const toOptions = (e: Equip): string[] => OPTIONS.filter((o) => e[o.id] === 'std').map((o) => o.id);
-/** legacy: 옛 저장(형식 4)에서 올라와 장비 기대 감점을 받지 않는 판(규칙이 붙여 주면) */
-export const equipInfo = (s: CarState, spec: EquipSpec, year?: number): EquipInfo & { legacy?: boolean } => Q.equipInfo(s, spec, year) as EquipInfo & { legacy?: boolean };
+export const equipInfo = (s: CarState, spec: EquipSpec, year?: number): EquipInfo => Q.equipInfo(s, spec, year) as EquipInfo;
 export const recommendedEquip = (s: CarState, body: string, segment: string, powertrain: string, year?: number): Equip => Q.recommendedEquip(s, body, segment, powertrain, year);
 export const equipChanges = (s: CarState, prev: Equip, body: string, segment: string, year?: number): EquipChange[] => Q.equipChanges(s, prev, body, segment, year);
 
@@ -34,7 +33,7 @@ export function equipLine(e: Equip): string {
 const LV: [EquipLevel | '', string][] = [['', '안 넣음'], ['opt', '선택 사양'], ['std', '기본 장비']];
 const EX_ORDER = { expected: 0, common: 1, rare: 2 } as const;
 /** 장비 고르기 칸. t: 'plan' | 'lift'(어느 초안을 고치는지), changes: 풀체인지·페이스리프트의 '전작 이후 기대가 바뀐 장비', ib: ⓘ 버튼 */
-export function equipPicker(s: CarState, spec: EquipSpec, t: 'plan' | 'lift', ib: (k: string, label?: string) => string, changes: EquipChange[] = [], mode = ''): string {
+export function equipPicker(s: CarState, spec: EquipSpec, t: 'plan' | 'lift' | 'proj', ib: (k: string, label?: string) => string, changes: EquipChange[] = [], mode = ''): string {
   const info = equipInfo(s, spec), T = info.totals;
   const items = [...info.items].sort((a, b) => Number(b.available) - Number(a.available) || EX_ORDER[a.expectation] - EX_ORDER[b.expectation] || a.name.localeCompare(b.name, 'ko'));
   const row = (x: EquipItem) => {

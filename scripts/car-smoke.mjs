@@ -938,7 +938,7 @@ await act('retrofit');
 check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 사라짐', await S4((id) => { const s = window.__car.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), o = g.editions.at(-1).options; return o.includes('abs') && o.includes('airbag'); }, rfId) && (await page.locator('[data-act="retrofit"]').count()) === 0);
 // 페이스리프트·풀체인지 옵션 추가(0.6.0 버그): 판 옵션에 의무 장비가 들어 있어도 빈 칸만큼 새 옵션을 고를 수 있다(본사 4등급 칸 4개 중 2개 사용 + 의무 장비 2개)
 { const want = await S4((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.flatMap((n) => n.generations).find((x) => x.id === id), ed = g.editions.at(-1);
-    g.launchMonth = Math.min(g.launchMonth, Math.floor(s.week / 4) - 40); ed.options = ['radio', 'leather', 'abs', 'airbag']; for (const t of ['el_radio', 'el_aircon', 'el_leather']) if (!s.research.done.includes(t)) s.research.done.push(t); c.render(); return 'aircon'; }, rfId);
+    g.launchMonth = Math.min(g.launchMonth, Math.floor(s.week / 4) - 40); ed.options = ['radio', 'leather', 'abs', 'airbag']; ed.equip = { leather: 'std' }; delete ed.equipLegacy; /* 1.1.0 판의 구성은 equip(라디오는 빠진 채: 풀체인지에서 기대 변화로 나오게) */ for (const t of ['el_radio', 'el_aircon', 'el_leather']) if (!s.research.done.includes(t)) s.research.done.push(t); c.render(); return 'aircon'; }, rfId);
   await page.locator(`[data-act="goLift"][data-id="${rfId}"]`).click();
   const lv = (v) => page.locator(`[data-act="eqSet"][data-t="lift"][data-k="${want}"][data-v="${v}"]`), est = () => page.locator('.lift-est').innerText();
   await lv('').click(); const pv0 = await est();
@@ -950,7 +950,7 @@ check('의무 장비 넣기: 판매 중 차의 옵션에 ABS·에어백, 버튼 
   await act('cancelPlan');
   const np = await S4((id) => window.__car.game.state.nameplates.find((n) => n.generations.some((g) => g.id === id)).id, rfId);
   await page.locator(`[data-act="goFull"][data-id="${np}"]`).click(); await act('ptab', '[data-v="opt"]');
-  check('1.1.0 풀체인지: 전작 장비 구성을 물려받음(전작 구성)', await S4(() => window.__car.draft.equipMode === 'prev' && !!window.__car.draft.equip?.radio));
+  check('1.1.0 풀체인지: 전작 장비 구성을 물려받음(전작 구성)', await S4(() => window.__car.draft.equipMode === 'prev' && window.__car.draft.equip?.leather === 'std'), JSON.stringify(await S4(() => window.__car.draft.equip)));
   if (await page.locator('.eq-chg').count()) { await page.click('.eq-chg [data-act="eqApply"]'); check('1.1.0 풀체인지: 전작 이후 기대가 바뀐 장비 상자 → [한 번에 반영]하면 상자가 사라짐', (await page.locator('.eq-chg').count()) === 0); }
   else check('1.1.0 풀체인지: 전작 이후 기대가 바뀐 장비 상자', false, '상자가 없음');
   await page.locator(`[data-act="eqSet"][data-t="plan"][data-k="${want}"][data-v="std"]`).click();
@@ -1243,7 +1243,8 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await xp.click('#tabs button[data-tab="company"]'); await xp.click('#panel [data-act="cotab"][data-v="exec"]');
   check('임원 화면: 자리 카드 6개(빈 자리 1, 잠긴 자리 5와 필요 본사 등급)', (await xp.locator('.exec-card').count()) === 6 && (await xp.locator('.exec-card.empty').count()) === 6 && (await xp.locator('.exec-sum').innerText()).includes('0/1석'));
   await xp.click('.exec-card[data-role="research"] [data-act="execPick"]');
-  check('임명 목록: 관련 능력 순(엔지니어가 위)', (await xp.locator('.exec-card[data-role="research"] .exec-pick .opt').first().innerText()).includes('엔지니어'));
+  { const sk = await xp.locator('.exec-card[data-role="research"] .exec-pick .opt').evaluateAll((l) => l.map((b) => Number((b.innerText.match(/임원 능력 (\d+)/) ?? [])[1])));
+    check('임명 목록: 관련 능력(임원 능력) 높은 순', sk.length > 0 && sk.every((v, i) => i === 0 || sk[i - 1] >= v), JSON.stringify(sk)); } // 1.1.0: 시작 직원 구성이 바뀌어 '엔지니어가 맨 위'는 늘 맞지 않아 정렬 자체를 본다
   await xp.locator('.exec-card[data-role="research"] [data-act="execAppoint"]').first().click();
   check('임명: 자리가 채워지고 나머지는 잠김(본사 2등급 안내)', (await xp.locator('.exec-card.filled[data-role="research"]').count()) === 1 && (await xp.locator('.exec-card.locked').count()) === 5 && (await xp.locator('.exec-card.locked').first().innerText()).includes('본사 2등급'));
   await xshot('exec-1366x1024');
@@ -1491,8 +1492,8 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('0.9.0 월 결산 알림에 [펼쳐 보기]', (await mtoast.count()) === 1 && (await mtoast.locator('.open').innerText()) === '펼쳐 보기');
   if (await gp.locator('#toasts .more').isVisible()) await gp.click('#toasts .more'); // 같은 주에 알림이 셋 이상이면 "+N"을 펼친다
   await GG(() => window.__car.setSpeed(0)); // 클릭 직전에 멈춤. 알림이 이미 닫혔으면(6초) 재무 화면의 월 결산 목록에서 연다
-  if (await gp.locator('#toasts .toast:not(.out)', { hasText: '결산' }).count()) await mtoast.locator('.open').click({ timeout: 5000 }).catch(async () => { await gp.click('#tabs button[data-tab="fin"]'); await gp.locator('.mon-list [data-act="monthOpen"]').first().click(); });
-  else { await gp.click('#tabs button[data-tab="fin"]'); await gp.locator('.mon-list [data-act="monthOpen"]').first().click(); }
+  if (await gp.locator('#toasts .toast:not(.out)', { hasText: '결산' }).count()) await mtoast.locator('.open').click({ timeout: 5000 }).catch(() => {});
+  if (!(await gp.locator('#sheet .mon').isVisible())) { await gclose(); await GG(() => document.querySelector('#tabs button[data-tab="fin"]').click()); await gp.locator('.mon-list [data-act="monthOpen"]').first().click(); }
   check('0.9.0 월 결산 알림 [펼쳐 보기] → 이번 달 결산 창', await gp.locator('#sheet .mon').isVisible());
   await gclose();
   // 1024×768: 차 상세 패널이 스크롤 없이 가격 카드와 성적 카드를 함께 보이고, 상단 바가 넘치지 않음
@@ -1703,6 +1704,16 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   if (M2) for (const [w, h] of [[1024, 768], [1180, 820], [1366, 1024]]) { await gp.setViewportSize({ width: w, height: h }); await gp.waitForTimeout(150); await gp.screenshot({ path: `${M2}/hall-${w}x${h}.png` }); }
   const hid = await gp.locator('.hall-it').first().getAttribute('data-v'); await gp.locator('.hall-it').first().click();
   check('1.0.0 명예의 전당 항목 누르기 → 그 차종 계보', (await gp.locator(`.lineage-card[data-np="${hid}"]`).count()) === 1 && (await gp.locator('[data-act="rectab"][data-v="cars"]').getAttribute('aria-selected')) === 'true');
+  // 1.1.0 개발 중(설계 단계) [장비 다시 고르기] → setProjectEquip
+  { await gclose(); await gp.setViewportSize({ width: 1180, height: 820 });
+    const pid = await GG(() => { const c = window.__car, g = c.game, s = g.state; s.hqLevel = 5; for (const t of ['el_radio', 'el_aircon']) if (!s.research.done.includes(t)) s.research.done.push(t); const team = s.staff.filter((x) => x.projectId === null && x.role !== 'sales' && !x.lab).slice(0, 2).map((x) => x.id);
+      if (!team.length) { const b = s.staff[0]; s.staff.push({ ...b, id: 9900, name: '장비', role: 'designer', projectId: null, trainings: [], restUntil: null, lab: false }); team.push(9900); }
+      const r = g.command({ type: 'startProject', name: '장비시험', body: 'sedanS', segment: 'family', powertrain: 'gasoline', tier: 2, options: [], equip: {}, direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 20, team }); c.render(); return r.ok ? s.projects.at(-1).id : r.reason; });
+    await GG((id) => { window.__car.goTarget({ tab: 'dev', id }); }, pid); await gp.waitForTimeout(300);
+    await gp.locator(`[data-act="projEquip"][data-id="${pid}"]`).click();
+    const k = await gp.locator('#sheet [data-act="eqSet"][data-t="proj"][data-v="std"][aria-pressed="false"]').first().getAttribute('data-k');
+    await gp.click(`#sheet [data-act="eqSet"][data-t="proj"][data-k="${k}"][data-v="std"]`); await gp.click('#sheet [data-act="projEquipApply"]');
+    check('1.1.0 개발 중(설계 단계) [장비 다시 고르기] → 프로젝트 장비가 바뀜', await GG(([id, k]) => window.__car.game.state.projects.find((p) => p.id === id)?.equip?.[k] === 'std', [pid, k]), `${pid} ${k}`); }
   await gctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
