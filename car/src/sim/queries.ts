@@ -332,3 +332,9 @@ export function priceForecast(s: CarState, generationId: number, price: number):
   const m = monthOf(s.week), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   return Math.round(Math.min(capacityOf(s), monthlyDemand(s, { ...toSaleCar(g, m), price }, others, monthTime(m))));
 }
+
+// ---------- 0.7.0 할 일 목록 ----------
+import { todoItems as todoCore, type TodoItem } from './todo';
+export type { TodoItem, TodoKind, TodoGoto } from './todo';
+/** 할 일 목록(급한 일 먼저). 임원 자리·보고는 임원 조회에서 받는다 */
+export const todoItems = (s: CarState): TodoItem[] => todoCore(s);

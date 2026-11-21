@@ -193,4 +193,5 @@ export const config = {
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
   ledgerMonths: 24,
   price: { min: 0.6, max: 2.0 },
+  todo: { candUrgentWeeks: 1, regUrgentMonths: 12 }, // 0.7.0 할 일 목록: 채용 후보가 이 주 이하로 남거나 규제 시행이 이 개월 이하로 남으면 급한 일
 };
