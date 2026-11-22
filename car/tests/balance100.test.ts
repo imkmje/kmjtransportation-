@@ -7,7 +7,8 @@ import { steadyBestExec, type Bot } from '../src/sim/bots';
 import { Game } from '../src/sim/game';
 import type { Difficulty } from '../src/sim/types';
 
-vi.setConfig({ testTimeout: 60_000 });
+// CI에서 60년 봇 한 판이 68초 걸려 60초 제한에 걸렸다(1.2.0 PR). 로컬보다 CI가 느리다.
+vi.setConfig({ testTimeout: 180_000 });
 
 const median = (xs: number[]) => { const v = [...xs].sort((a, b) => a - b); return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2; };
 const JO = 1e8; // 만원 → 조
