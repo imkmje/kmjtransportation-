@@ -22,7 +22,8 @@ export type TechField = 'powertrain' | 'body' | 'electronics' | 'production' | '
 export type TechEffect =
   | { type: 'body' | 'option' | 'powertrain'; id: string }
   | { type: 'ptLevel'; id: string; amount: number }
-  | { type: 'costCut' | 'defectCut' | 'upkeepCut' | 'devSpeed' | 'evCostCut'; value: number };
+  | { type: 'costCut' | 'defectCut' | 'upkeepCut' | 'devSpeed' | 'evCostCut'; value: number }
+  | { type: 'evCharge' | 'evPlatform' }; // 1.2.0 전기차 충전 속도 한 단계 / 전기차 전용 플랫폼(이후 새로 개발하는 전기차 세대)
 /** info: 설명 창(ⓘ)용 사전식 풀이(자료 5종 모두에 있다) */
 export interface TechDef {
   id: string; name: string; desc: string; info: string; field: TechField; year: number; pre: string[]; effects: TechEffect[];
@@ -81,12 +82,15 @@ export interface StaffHist { join: number | null; joinAbility: number | null; si
 export interface Candidate { id: number; name: string; role: Role; ability: number; potential: number; salary: number; expiresWeek: number }
 
 export type Budget = 'low' | 'normal' | 'high';
+/** 1.2.0 전기차 배터리 용량(없으면 표준) */
+export type Battery = 'small' | 'std' | 'large';
 /** 신차 기획(6.1): 기획 단계에서 정하는 것 전부 */
 export interface ProjectSpec {
   name: string; body: string; segment: string; powertrain: string;
   tier: number; // 동력 등급 1~3(보급형/표준/고급) = 연구한 최신 단계에서 −2/−1/0 단계(4단계부터)
   options: string[]; direction: Stats; budget: Budget; designWeeks: number;
   equip?: Equip; // 1.1.0 장비 구성(안 넣음/선택 사양/기본 장비). 주면 options는 기본 장비 목록으로 맞춰진다(없으면 options가 모두 기본 장비)
+  battery?: Battery; // 1.2.0 전기차 배터리 용량(없으면 표준, 전기차가 아니면 무시)
 }
 /** 프로젝트 종류(8장): 새 차종 / 페이스리프트 / 풀체인지 */
 export type ProjectKind = 'new' | 'facelift' | 'fullchange' | 'fix'; // fix: 0.10.0 긴급 개선(targetId = 세대 ID, 설계 없이 시험만, 끝나면 저절로 반영)
@@ -116,6 +120,7 @@ export interface Edition {
   price: number; color: string; wheels: 0 | 1 | 2;
   faceSeed: number; // 얼굴(전조등·그릴 등) 3D 시드
   headline: string | null; // 출시 기사 한 줄(페이스리프트·전작 비교·부활), 없으면 null
+  battery?: Battery; // 1.2.0 전기차 배터리 용량(없으면 표준)
 }
 /** 세대: 차체·동력 종류·고객층이 같은 한 묶음 */
 export interface Generation {
@@ -145,6 +150,7 @@ export interface Generation {
   pnl?: GenPnl; // 0.10.0 손익 누적(없으면 예전 저장: 다음 결산 때 판매 기록으로 추정해 만든다)
   fixed?: { week: number; cost: number }; // 0.10.0 긴급 개선을 마친 주와 든 돈(세대당 1회)
   clearance?: { startMonth: number; lastMonth: number; price: number }; // 0.10.0 가격 인하 판매: lastMonth 결산 뒤 자동 단종
+  evPlatform?: true; // 1.2.0 전기차 전용 플랫폼으로 개발한 세대(출시 때 연구가 끝나 있으면). 페이스리프트는 이어받는다
 }
 /** 세대 손익 누적(0.10.0): 매출·원가·광고비·리콜비, 개발비(처음·페이스리프트·의무 장비·긴급 개선), 월별 이익(sales와 같은 길이). est: 예전 저장에서 추정한 값이 섞임 */
 export interface GenPnl { rev: number; cogs: number; mk: number; recall: number; dev: { base: number; lift: number; retro: number; fix: number }; months: number[]; est?: true }
@@ -215,7 +221,7 @@ export interface ExecState {
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
-  saveVersion: 5;
+  saveVersion: 6;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -229,6 +235,7 @@ export interface CarState {
   candidates: Candidate[]; // 채용 후보(공고를 내면 3명)
   hqLevel: number; // 본사 등급 1~5(9.2)
   factory: { level: number; build: { level: number; doneMonth: number } | null }; // 공장 등급 1~5, 증설 공사(doneMonth 달 초부터 새 등급)
+  batteryPlant: { level: number; build: { level: number; doneMonth: number } | null }; // 1.2.0 배터리 자체 생산 등급(0 = 없음), 건설 공사(공장과 같은 방식)
   projects: Project[];
   nameplates: Nameplate[];
   rivals: RivalState[];
@@ -277,6 +284,7 @@ export type Command =
   | { type: 'assign'; staffId: number; projectId: number | null | 'lab' } // 'lab': 전담 연구원(본사 4등급부터, 엔지니어만)
   | { type: 'upgradeHQ' }
   | { type: 'expandFactory' }
+  | { type: 'buildBatteryPlant' } // 1.2.0 배터리 공장 건설·증설(다음 등급)
   | { type: 'setAllocation'; generationId: number; share: number | null }
   // ---------- 연구(10장)·사건(11장) ----------
   | { type: 'startResearch'; techId: string }

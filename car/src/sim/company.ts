@@ -1,7 +1,7 @@
 // 회사(설계서 9.1 직원, 9.2 본사, 9.3 공장): 등급 표 조회와 직원 상태 판정. 순수 함수(상태를 바꾸지 않는다)
 import { config } from '../config';
 import { eventCostMult, productionMult } from './events';
-import { costCut, upkeepCut } from './research';
+import { costCut, isDone, upkeepCut } from './research';
 import { diffOf } from './difficulty';
 import type { CarState, Role, Staff } from './types';
 
@@ -21,12 +21,27 @@ export const optionSlots = (s: CarState): number => hqDef(s).options;
 /** 월 생산 한도 = 공장 등급 × 사건 배수(감염병·파업, 11장) */
 export const capacityOf = (s: CarState): number => factoryDef(s).capacity * productionMult(s);
 export const linesOf = (s: CarState): number => factoryDef(s).lines;
-/** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율) */
-export const costMultOf = (s: CarState): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s) * (1 + eraCostAdd(s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear));
+/** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율). 1.2.0 powertrain이 전기면 × (1 − 배터리 자체 생산 절감) */
+export const costMultOf = (s: CarState, powertrain?: string): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s) * (1 + eraCostAdd(s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear))
+  * (powertrain === config.events.charging.powertrain ? 1 - batteryPlantCut(s) : 1);
+/** 1.2.0 배터리 자체 생산: 지금 등급의 전기차 대당 원가 절감(없으면 0) */
+export const batteryPlantCut = (s: CarState): number => config.ev.plant.levels[(s.batteryPlant?.level ?? 0) - 1]?.cut ?? 0;
+/** 배터리 공장 등급의 실제 월 유지비(연구 유지비 감면, 난이도의 큰 공장 배수). 0등급은 0 */
+export const batteryPlantUpkeep = (s: CarState, level: number): number => level <= 0 ? 0 : config.ev.plant.levels[level - 1].upkeep * (1 - upkeepCut(s)) * diffOf(s).bigUpkeepMult;
+/** 배터리 공장 건설·증설 조건 */
+export function batteryPlantError(s: CarState): string | null {
+  const P = config.ev.plant, b = s.batteryPlant;
+  if (!isDone(s, P.tech)) return '전기차 연구를 마쳐야 배터리 공장을 지을 수 있습니다.';
+  if (b.build) return '배터리 공장 공사 중에는 추가 공사를 할 수 없습니다.';
+  const next = P.levels[b.level];
+  if (!next) return '배터리 공장이 최고 등급입니다.';
+  if (s.cash < next.cost) return '현금이 모자랍니다.';
+  return null;
+}
 /** 1.0.0 시대별 원가 상승(인건비·부품 단가): costEra.from년까지 0, to년에 max, 사이는 직선. t: 소수 연도 */
 export const eraCostAdd = (t: number): number => { const E = config.market.costEra; return E.max * Math.min(1, Math.max(0, (t - E.from) / (E.to - E.from))); };
 /** 월 유지비 = (공장 × (1 − 연구 유지비 인하) + 본사) × 난이도 배수 */
-export const upkeepOf = (s: CarState): number => factoryUpkeep(s, s.factory.level) + hqUpkeep(s, s.hqLevel);
+export const upkeepOf = (s: CarState): number => factoryUpkeep(s, s.factory.level) + hqUpkeep(s, s.hqLevel) + batteryPlantUpkeep(s, s.batteryPlant?.level ?? 0); // 1.2.0 배터리 공장 포함
 /** 0.5.1: 등급별 실제 월 유지비(난이도 배수, 공장은 연구 감면 반영). 화면 등급표·승급 미리보기·장부가 같은 값을 쓴다 */
 export const factoryUpkeep = (s: CarState, level: number): number => config.factory.levels[level - 1].upkeep * (1 - upkeepCut(s)) * (level >= config.factory.bigLevel ? diffOf(s).bigUpkeepMult : diffOf(s).upkeepMult);
 export const hqUpkeep = (s: CarState, level: number): number => config.hq.levels[level - 1].upkeep * diffOf(s).upkeepMult;

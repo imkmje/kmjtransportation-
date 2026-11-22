@@ -36,10 +36,11 @@ export function partStats(powertrain: string, level: number, options: string[], 
 /** 결함에 따른 품질 배수(남은 결함 1개당 −1%, 최대 −40%) */
 export const defectQMult = (defects: number): number => 1 - Math.min(config.dev.defectQMax, defects * config.dev.defectQPer);
 
-/** 최종 능력치 = 차체 배수 × (동력·옵션 점수 + 개발 점수), 품질은 결함 감점. level: 실제 동력 단계 */
-export function finalStats(body: string, powertrain: string, level: number, options: string[], points: Stats, defects: number, partial: Record<string, number> = {}): Stats {
+/** 최종 능력치 = 차체 배수 × (동력·옵션 점수 + 개발 점수), 품질은 결함 감점. level: 실제 동력 단계. uMult(1.2.0): 실용 배수(전기차 전용 플랫폼) */
+export function finalStats(body: string, powertrain: string, level: number, options: string[], points: Stats, defects: number, partial: Record<string, number> = {}, uMult = 1): Stats {
   const b = bodyById(body), part = partStats(powertrain, level, options, partial), s = zeroStats();
   for (const k of STATS) s[k] = b.mult[k] * (part[k] + points[k]);
+  s.U *= uMult;
   s.Q *= defectQMult(defects);
   return s;
 }

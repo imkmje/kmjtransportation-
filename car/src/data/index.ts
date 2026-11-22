@@ -20,7 +20,7 @@ export const MARKET = marketJson as unknown as Record<string, RegionMarket>;
 export const RIVALS = rivalsJson as unknown as RivalDef[];
 /** 연구 기술(10장), 등장 연도 순 */
 export const TECHS = techJson as unknown as TechDef[];
-/** 시대 사건(11.1 고정 13개, 11.2 무작위 8종) */
+/** 시대 사건(11.1 고정 13개 + 1.2.0 가상 6개, 11.2 무작위 8종) */
 export const ERA_EVENTS = eventsJson.era as unknown as EraEventDef[];
 export const RANDOM_EVENTS = eventsJson.random as unknown as RandomEventDef[];
 export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[]; family: string[]; given: string[] }; // family·given: 채용 후보 이름(성 + 이름)

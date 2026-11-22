@@ -18,6 +18,7 @@ export function specError(state: CarState, s: ProjectSpec): string | null {
   if (!pt || !unlockedIds(state, 'powertrain').has(pt.id)) return '아직 쓸 수 없는 동력입니다(연구가 필요합니다).';
   if (!Number.isInteger(s.tier) || s.tier < 1 || s.tier > pt.tiers.length) return `동력 등급은 1~${pt.tiers.length} 중에서 고르세요.`;
   if (!Array.isArray(s.options)) return '옵션 목록이 올바르지 않습니다.';
+  if (s.battery !== undefined && !Object.keys(config.ev.battery).includes(s.battery)) return '배터리 용량이 올바르지 않습니다.';
   if (s.equip !== undefined && (typeof s.equip !== 'object' || s.equip === null || Object.values(s.equip).some((v) => v !== 'opt' && v !== 'std'))) return '장비 구성이 올바르지 않습니다.';
   const reg = regulationError(state, s); // 0.4.2: 의무 장비 기술을 연구하지 않았으면 개발을 시작할 수 없다
   if (reg) return reg;

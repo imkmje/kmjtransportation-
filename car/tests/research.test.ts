@@ -33,12 +33,12 @@ describe('자료 무결성(4단계)', () => {
     for (const p of POWERTRAINS) expect(p.tiers.length).toBe(3);
     const need = ['radio', 'aircon', 'powerSteering', 'autoTrans', 'abs', 'airbag', 'navigation', 'rearCamera', 'smartKey', 'adas', 'bigScreen', 'autonomy2'];
     for (const id of need) expect(OPTIONS.some((o) => o.id === id), id).toBe(true);
-    expect(OPTIONS.length).toBeGreaterThanOrEqual(16); expect(OPTIONS.length).toBeLessThanOrEqual(18);
+    expect(OPTIONS.length).toBeGreaterThanOrEqual(16); expect(OPTIONS.length).toBeLessThanOrEqual(20); // 1.2.0: 2036년 이후 4개
     const byYear = [...OPTIONS].sort((a, b) => a.year - b.year), pts = (o: typeof OPTIONS[0]) => o.U + o.D + o.Q;
     expect(pts(byYear.at(-1)!)).toBeGreaterThan(pts(byYear[0]) * 5); // 뒤 시대 옵션일수록 원점수가 크다
   });
   it('기술 40~52개(0.5.0: 1970년 기초 기술 4개 추가, 0.6.0: 소형·대형 SUV 차체 2개 추가)·분야 5개, 선행이 모두 있고 순환이 없으며 선행은 같거나 이른 해, 해금 대상이 모두 있다. 반복 기술 1~2개(2035)', () => {
-    expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(52);
+    expect(TECHS.length).toBeGreaterThanOrEqual(40); expect(TECHS.length).toBeLessThanOrEqual(64); // 1.2.0: 전기차 3개 + 2036년 이후 9개
     expect(new Set(TECHS.map((t) => t.field))).toEqual(new Set(['powertrain', 'body', 'electronics', 'production', 'eco']));
     expect(new Set(TECHS.map((t) => t.id)).size).toBe(TECHS.length);
     const ids = new Set(TECHS.map((t) => t.id));
@@ -77,7 +77,7 @@ describe('자료 무결성(4단계)', () => {
     expect([COMPAT.minivan.family, COMPAT.sports.enthusiast, COMPAT.sports.rich, COMPAT.kei.youth, COMPAT.kei.worker, COMPAT.pickup.fleet]).toEqual([1.2, 1.2, 1.2, 1.2, 1.2, 1]);
   });
   it('사건: 고정 13개(11.1 연도), 무작위 8종(선택지 2~3개, 기본 선택이 범위 안)', () => {
-    expect(ERA_EVENTS.map((e) => e.year)).toEqual([1973, 1979, 1986, 1988, 1992, 1997, 2002, 2008, 2012, 2015, 2020, 2025, 2032]);
+    expect(ERA_EVENTS.map((e) => e.year)).toEqual([1973, 1979, 1986, 1988, 1992, 1997, 2002, 2008, 2012, 2015, 2020, 2025, 2032, 2037, 2041, 2045, 2049, 2052, 2057]); // 1.2.0 가상 사건 6개
     expect(RANDOM_EVENTS.length).toBe(8);
     for (const d of RANDOM_EVENTS) { expect(d.choices.length).toBeGreaterThanOrEqual(2); expect(d.choices.length).toBeLessThanOrEqual(3); expect(d.defaultChoice).toBeLessThan(d.choices.length); }
   });
@@ -271,7 +271,7 @@ describe('시대 사건(11.1): 시드로 정한 연도 ±1년, 효과·기간·�
     const gfc = at('gfc');
     expect(marketMult(eraNow(seed, gfc.start))).toBeCloseTo(0.75, 12); expect(eraNow(seed, gfc.start).seg.rich).toBe(0.6);
     const dg = at('dieselgate');
-    expect(dg.end).toBeNull(); expect(eraNow(seed, dg.start + 12 * 50).pt.diesel).toBe(0.4);
+    expect(dg.end).toBeNull(); expect(eraNow(seed, dg.start + 12 * 20).pt.diesel).toBe(0.4); // 1.2.0: 2041년 도심 진입 제한이 더 깎기 전까지
   });
   it('감염병: 12개월 동안 공장 생산 × 0.7(생산 한도)', () => {
     const seed = 3, sp = eraTimeline(seed).find((x) => x.def.id === 'pandemic')!, g = Game.create({ difficulty: 'normal', seed });
@@ -426,11 +426,11 @@ describe('조합 노트(5.5)', () => {
 
 describe('저장 형식 3 → 4', () => {
   it('형식 3 파일(0.3.0 코드로 만든 픽스처)을 올리고 이어서 실행할 수 있다', () => {
-    expect(SAVE_VERSION).toBe(5);
+    expect(SAVE_VERSION).toBe(6);
     const v3 = JSON.parse(readFileSync('car/tests/fixtures/save-v3.json', 'utf8'));
     expect(v3.saveVersion).toBe(3);
     const g = Game.fromJSON(v3), s = g.state;
-    expect(s.saveVersion).toBe(5);
+    expect(s.saveVersion).toBe(6);
     // 이미 쓰던(판매·개발 중) 라디오·에어컨·중형 세단·파워 스티어링(선행 포함)을 연구 완료로, 소형 세단·가솔린은 원래 열려 있음
     expect(s.research.done).toEqual(['el_radio', 'el_aircon', 'bd_sedanM', 'el_powerSteering']); expect(s.research.active).toEqual([]); expect(s.research.early).toEqual([]);
     expect(s.knownCombos).toEqual(['sedanS:worker', 'sedanS:youth']);
@@ -450,7 +450,7 @@ describe('저장 형식 3 → 4', () => {
   it('형식 1·2 파일도 4로 올라간다', () => {
     for (const f of ['save-v1.json', 'save-v2.json']) {
       const s = Game.fromJSON(JSON.parse(readFileSync(`car/tests/fixtures/${f}`, 'utf8'))).state;
-      expect(s.saveVersion).toBe(5); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
+      expect(s.saveVersion).toBe(6); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
     }
   });
 });

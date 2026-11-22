@@ -187,7 +187,7 @@ export const config = {
   events: { // 11장 시대 사건
     shiftYears: 1, // 고정 사건 연도 ±1년(시드로 확정)
     warnMonths: 6, // 예고 뉴스: 시작 6개월 전
-    lastEraYear: 2035, // 이 해 뒤로는 고정 사건이 없다(무작위 사건만)
+    lastEraYear: 2058, // 이 해 뒤로는 고정 사건이 없다(무작위 사건만). 1.2.0: 2035 → 2058(가상 사건)
     randomFrom: 1971, randomPerYear: [0.3, 0.5, 0.2], // 무작위 사건: 1971년부터 해마다 0/1/2회 확률
     choiceWeeks: 4, // 답하지 않으면 4주 뒤 기본 선택
     revenueMonths: 12, // 선택지 비용의 "최근 월평균 매출" 기간
@@ -248,4 +248,30 @@ export const config = {
   // 0.10.0 판매 요인 분해의 기준 상태(이 값과 비교해 몇 % 깎거나 올렸는지). awareness: 기준 인지도, slumpShare·dropShare: 요약 한 줄을 띄우는 부진 기준
   factors: { awareness: 0.5, slumpShare: 0.3, dropShare: 0.3, minShow: 0.01 },
   todo: { candUrgentWeeks: 1, regUrgentMonths: 12 }, // 0.7.0 할 일 목록: 채용 후보가 이 주 이하로 남거나 규제 시행이 이 개월 이하로 남으면 급한 일
+  // 1.2.0 전기차 시대(ev.ts). 동력이 events.charging.powertrain(전기)인 차에만 적용한다
+  ev: {
+    // 배터리 용량: cost = 전기 원가 가산(ptCostAdd) 배수, range = 주행 거리 배수, charge = 충전 시간 배수.
+    // value = 시장이 쳐 주는 값 ÷ 원가 차이(차급별). 소형차는 작은 배터리의 절감분을 덜 깎아 주고, 대형차는 큰 배터리 값을 더 쳐 준다(표준은 지금과 같다)
+    battery: {
+      small: { name: '소형', cost: 0.7, range: 0.7, charge: 0.8, value: { small: 0.8, mid: 1, big: 1.2 } },
+      std: { name: '표준', cost: 1, range: 1, charge: 1, value: { small: 1, mid: 1, big: 1 } },
+      large: { name: '대형', cost: 1.4, range: 1.35, charge: 1.25, value: { small: 0.8, mid: 0.95, big: 1.05 } },
+    },
+    // 표준 배터리 주행 거리(km): 전기 동력 단계별 표(직선 보간), 표 뒤로는 단계마다 perLevel씩(연구로 계속 는다)
+    range: { levels: [7, 8, 9, 10, 11, 12, 13, 14], km: [150, 220, 310, 420, 490, 550, 600, 640], perLevel: 30 },
+    // 기대 주행 거리: 중형 기준 연도 표(표 뒤로는 마지막 값), 차급 배수(도심형 소형차는 덜 기대한다)
+    expect: { years: [2010, 2015, 2020, 2025, 2030, 2040, 2050, 2060], km: [150, 200, 300, 400, 470, 550, 620, 660], class: { small: 0.65, mid: 1, big: 1.2 } },
+    // 주행 거리 매력 = f(이 차) ÷ f(같은 단계 표준 배터리), f(u) = u^low(기대 미만) / 1 + high × min(u − 1, cap)(기대 이상), u = 주행 거리 ÷ 기대. 표준 배터리는 늘 1(지금과 같다)
+    appeal: { low: 0.6, high: 0.15, cap: 0.5, min: 0.7, max: 1.15 },
+    // 충전 속도: 충전 연구 단계(0~)별 10→80% 충전 분(표준 배터리)과 매력 가산. 표 뒤로는 마지막 값
+    charge: { minutes: [60, 35, 20, 12, 8], appeal: [0, 0.04, 0.07, 0.09, 0.1] },
+    // 전용 플랫폼: 실용 × (1 + u), 주행 거리 × (1 + range), 전기 원가 가산 × (1 − costCut)
+    platform: { u: 0.06, range: 0.08, costCut: 0.2 },
+    // 배터리 자체 생산: 등급별 건설비·월 유지비·전기차 대당 원가 절감·공사 개월. tech: 지을 수 있게 되는 연구
+    plant: { tech: 'ec_ev', levels: [
+      { cost: 3000000, upkeep: 150000, cut: 0.03, buildMonths: 9 },
+      { cost: 15000000, upkeep: 500000, cut: 0.06, buildMonths: 12 },
+      { cost: 60000000, upkeep: 1500000, cut: 0.09, buildMonths: 15 },
+    ] },
+  },
 };

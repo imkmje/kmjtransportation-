@@ -9,6 +9,7 @@ import { eraNow, eraTimeline, eventImpactOn, marketMult } from './events';
 import { EXEC_TITLE } from './execs';
 import { allGens, linesUsed, sellingGens } from './game';
 import { estimatePnl } from './history';
+import { EV, genEvInfo } from './ev';
 import { josa } from './josa';
 import { faceliftEligibility, fullChangeEligibility } from './lifecycle';
 import { awarenessTarget, genBasePrice, cellMonthly, currentEdition, lifeAge, monthlyDemand, rivalBase, toSaleCar, type DemandAlt, type SaleCar } from './market';
@@ -62,7 +63,7 @@ function liftCompare(s: CarState, g: Generation, months: number[], cost: number,
   const m = monthOf(s.week), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   const cur = { ...toSaleCar(g, m), life: 1 }, old = { ...cur, stats: prev.stats, options: prev.options, awareness: Math.max(0, g.awareness - config.lifecycle.facelift.awareness) };
   const dNow = monthlyDemand(s, cur, others, t), statR = dNow > 0 ? monthlyDemand(s, old, others, t) / dNow : 1;
-  const unitOld = prev.price - unitCost(g.body, g.powertrain, prev.tier, prev.options, costMultOf(s), ptCostAdd(s, g.powertrain)), mk = config.awareness.marketingCost[g.marketing];
+  const unitOld = prev.price - unitCost(g.body, g.powertrain, prev.tier, prev.options, costMultOf(s, g.powertrain), ptCostAdd(s, g.powertrain, prev.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing];
   let before = 0, after = 0;
   for (let j = 0; j < n; j++) {
     const mm = lm + j, lifeR = lifeFactor(mm - g.launchMonth) / Math.max(1e-9, lifeFactor(mm - g.lifeMonth));
@@ -82,7 +83,7 @@ export function nameplatePnL(s: CarState, nameplateId: number): NameplatePnL | n
 }
 
 // ---------- 2. 판매 요인 ----------
-export type FactorKey = 'price' | 'awareness' | 'ads' | 'life' | 'grade' | 'compat' | 'rivals' | 'ours' | 'era' | 'equip' | 'capacity'; // equip(1.1.0): 장비 기대
+export type FactorKey = 'price' | 'awareness' | 'ads' | 'life' | 'grade' | 'compat' | 'rivals' | 'ours' | 'era' | 'equip' | 'range' | 'capacity'; // equip(1.1.0): 장비 기대, range(1.2.0): 전기차 주행 거리·충전
 /** impact: 실제 수요 ÷ (이 요인만 기준 상태로 돌린 수요) − 1. 음수면 판매를 깎는 요인. units: 실제 − 기준(월 대수, 생산 한도 전). cf: 기준 상태 수요 */
 export interface SalesFactor { key: FactorKey; name: string; detail: string; impact: number; units: number; cf: number; fix: string }
 export interface SalesFactors { generationId: number; demand: number; sold: number | null; capacity: number; base: number; factors: SalesFactor[]; summary: string | null; equipLegacy: boolean } // equipLegacy(1.1.0): 옛 구성(장비 기대 면제)
@@ -110,6 +111,7 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
     ours: mine ? (c) => ({ ...c, alt: { ...c.alt, noOthers: true } }) : null,
     era: (c) => ({ ...c, alt: { ...c.alt, noEra: true } }),
     equip: (c) => ({ ...c, alt: { ...c.alt, noExpect: true } }),
+    range: g.powertrain === EV ? (c) => ({ ...c, alt: { ...c.alt, noEv: true } }) : null,
     capacity: null, // 수요 밖(생산 한도). 지난달 실제로 못 판 몫으로 따로 센다
   };
   let all: Ctx = { car: car0, alt: {} };
@@ -154,6 +156,10 @@ export function salesFactors(s: CarState, generationId: number): SalesFactors | 
   if (ed.equipLegacy) add('equip', '장비 기대', LEGACY_TEXT, '페이스리프트 때 추천 구성을 반영하세요.');
   else add('equip', '장비 기대', fx.missing.length ? `이 차급에서 기대되는 ${nm(fx.missing)}${josa(nm(fx.missing), '이/가')} 없음` : fx.optOnly.length ? `기대되는 ${nm(fx.optOnly)}${josa(nm(fx.optOnly), '이/가')} 선택 사양으로만 있음` : fx.fresh.length ? `아직 드문 ${nm(fx.fresh)}${josa(nm(fx.fresh), '을/를')} 기본으로 넣음` : '기대되는 장비를 모두 갖췄습니다',
     fx.missing.length || fx.optOnly.length ? '페이스리프트로 기대되는 장비를 기본 장비로 넣을 수 있습니다.' : '');
+  // 1.2.0 전기차 주행 거리·충전 속도(같은 단계 표준 배터리·충전 연구 없음과 비교)
+  const evi = patches.range ? genEvInfo(s, g.id) : null;
+  if (evi) add('range', '주행 거리·충전', `주행 거리 ${evi.rangeKm}km(이 차급 기대 ${evi.expectedKm}km), ${evi.batteryName} 배터리, 10→80% 충전 ${evi.chargeMinutes}분`,
+    evi.short ? '주행 거리가 기대보다 짧습니다. 다음 세대에서 배터리를 키우거나 배터리 연구로 동력 단계를 올리세요.' : evi.rangeMult < 1 ? '작은 배터리라 주행 거리 매력이 조금 낮습니다. 대신 원가가 쌉니다.' : '주행 거리가 기대를 채웁니다.');
   // 생산 한도(지난달)
   if (g.lostSales >= 1 && g.lastDemand > 0) {
     const sold = g.sales.at(-1) ?? 0;
@@ -286,7 +292,7 @@ export function rescueOptions(s: CarState, generationId: number): RescueOptions 
   const left = Math.max(0, ed.defects - testCut(team) * R.fixWeeks), rec = (d: number) => Math.min(config.recall.maxYear, d * config.recall.perDefect);
   const q0 = ed.stats.Q / (1 - Math.min(config.dev.defectQMax, ed.defects * config.dev.defectQPer)), qAfter = q0 * (1 + R.qGain) * (1 - Math.min(config.dev.defectQMax, left * config.dev.defectQPer));
   const fe = fixError(s, g.id) ?? (team.length ? null : '쉬고 있는 테스터나 엔지니어가 없습니다.') ?? (s.projects.length >= devTeamsOf(s) ? '개발팀이 모두 바쁩니다.' : null);
-  const price = clearPriceOf(s, g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s), ptCostAdd(s, g.powertrain)), mk = config.awareness.marketingCost[g.marketing], cap = capacityOf(s);
+  const price = clearPriceOf(s, g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s, g.powertrain), ptCostAdd(s, g.powertrain, ed.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing], cap = capacityOf(s);
   const others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   const salesNow = g.status === 'discontinued' ? 0 : priceForecast(s, g.id, ed.price) ?? 0;
   const salesAfter = g.status === 'discontinued' ? 0 : Math.round(Math.min(cap, monthlyDemand(s, { ...toSaleCar(g, m), price, awareness: Math.min(1, g.awareness + R.clearAwareness) }, others, monthTime(m))));
