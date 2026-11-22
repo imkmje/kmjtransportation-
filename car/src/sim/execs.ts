@@ -2,14 +2,16 @@
 // 제안 수치는 화면이 쓰는 조회(queries·research·company)와 같은 함수로 계산한다. 상태를 바꾸는 것은 execCommand·execWeek·execMonth뿐
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById, optionById, segmentById, techById } from '../data';
-import { equipOf, expectEffect, recommendedEquip } from './equip';
+import { equipOf, expectEffect, recommendedEquip, stdOf } from './equip';
 import { grade, salaryOf, unitCost } from './cars';
-import { allocate, capacityOf, costMultOf, isAway, isDevRole, isTraining, linesOf, repEffect, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { allocate, capacityOf, costMultOf, devTeams, isAway, isDevRole, isTraining, linesOf, repEffect, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { linesUsed, sellingGens } from './game';
 import { josa } from './josa';
-import { fullChangeEligibility } from './lifecycle';
-import { REGION, awarenessTarget, basePriceOf, genBasePrice, currentEdition, monthlyDemand, toSaleCar } from './market';
+import { fullChangeEligibility, latestGen } from './lifecycle';
+import { faceliftWeekCost, fullChangeCostMult, withRequired } from './dev';
+import { derivativePlan, nameplateOfGen } from './derive';
+import { REGION, awarenessTarget, basePriceOf, carBasePrice, genBasePrice, currentEdition, monthlyDemand, toSaleCar } from './market';
 import { advice, comboNotes, factoryInfo, faceliftPreview, generationUnitProfit, lifeBar, planPreview, priceForecast } from './queries';
 import { ptCostAdd, regulatedTechs, researchInfo, researchSlots, unlockedBodies } from './research';
 import { mean } from './reviews';
@@ -17,7 +19,7 @@ import { noteExec, startHist } from './history';
 import { staffBrief } from './insight';
 import type { Rng } from './rng';
 import { monthLabel, monthOf, monthTime, yearOf } from './time';
-import type { CarState, Command, CommandResult, ExecGoto, ExecRole, ExecState, GameEvent, Generation, Replacement, Role, Staff } from './types';
+import type { CarState, Command, CommandResult, ExecGoto, ExecRole, ExecState, GameEvent, Generation, Nameplate, ProjectSpec, Replacement, Role, Staff } from './types';
 
 const X = config.exec;
 export const EXEC_ROLES: ExecRole[] = ['hr', 'product', 'finance', 'production', 'research', 'market'];
@@ -43,6 +45,7 @@ const KIND_TITLE: Record<string, string> = {
   regulation: '규제 대비 연구', emptySlot: '빈 연구 칸',
   build: '새 차종 제안', adUp: '광고 늘리기', adDown: '광고 줄이기',
   autoRest: '자동 휴식', autoTrain: '자동 교육', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
+  autoFullChange: '자동 풀체인지', autoFacelift: '자동 페이스리프트', autoDerive: '파생 모델 세대교체', autoGenWait: '세대교체 대기', autoLaunch: '자동 출시', autoLaunchFail: '자동 출시 보류',
   replaceDone: '교체 고용 완료', replaceFail: '교체 고용 실패', replaceHold: '교체 고용 보류', replaceCancel: '교체 고용 취소', replaceWait: '교체 고용 대기',
 };
 
@@ -430,6 +433,15 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       return OK;
     }
     case 'markReportsRead': for (const r of s.execs?.reports ?? []) r.unread = false; return OK;
+    case 'setGenAuto': { // 1.3.0 차종별 세대교체 맡기기(기획 임원이 없거나 능력이 모자라면 켤 수 없고, 켜 둔 설정은 그동안 멈춘다)
+      const n = s.nameplates.find((x) => x.id === cmd.nameplateId);
+      if (!n || !n.generations.length) return fail('없는 차종입니다.');
+      if (cmd.on) { const w = genAutoWhyNot(s); if (w) return fail(w); }
+      s.execs ??= emptyExecs();
+      const m = (s.execs.genAuto ??= {});
+      if (cmd.on) m[n.id] = { launch: cmd.launch ?? true, waitSince: m[n.id]?.waitSince ?? null, told: m[n.id]?.told ?? false }; else delete m[n.id];
+      return OK;
+    }
     case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': {
       const rp = s.execs?.replacements.find((x) => x.id === cmd.id); if (!rp) return fail('없는 교체 제안입니다.');
       if (cmd.type === 'cancelReplacement') { if (rp.status !== 'approved' && rp.status !== 'waiting') return fail('예약된 교체가 아닙니다.'); rp.status = 'cancelled'; rp.waitingFor = null; return OK; }
@@ -447,6 +459,7 @@ const reject = (s: CarState, rp: Replacement) => { rp.status = 'cancelled'; rp.w
 export function execWeek(c: ExecCtx, ev: GameEvent[]): void {
   const s = c.s, e = s.execs;
   if (!e) return;
+  autoLaunch(c, ev); // 1.3.0
   for (const rp of e.replacements.filter((r) => (r.status === 'approved' || r.status === 'waiting') && s.week >= r.nextWeek).sort((a, b) => a.id - b.id)) runReplacement(c, rp, ev);
 }
 /** 매주 week가 오른 뒤: 기다린 임원 후보가 떠난다 */
@@ -547,9 +560,129 @@ function delegate(c: ExecCtx): void {
       addReport(s, 'production', 'autoAlloc', a.shares.every((x) => x === null) ? '주문이 생산 한도 안이라 배분을 주문 비례(자동)로 돌렸습니다.' : `대당 이익이 큰 차부터 만들도록 배분을 바꿨습니다: ${a.gens.map((g, i) => `「${gName(s, g)}」 ${pct(a.shares[i] ?? 0)}`).join(', ')}.`, [], { tab: 'company', sub: 'factory' }, true);
     }
   }
+  autoGen(c); // 1.3.0 세대교체 맡기기
   if (delegationOn(s, 'research', 'autoResearch'))
     for (let t = recommendTech(s, fixed() * X.research.cashMonths); t && s.research.active.length < researchSlots(s); t = recommendTech(s, fixed() * X.research.cashMonths)) {
       if (!c.run({ type: 'startResearch', techId: t.id }).ok) break;
       addReport(s, 'research', 'autoResearch', `빈 연구 칸에 「${t.name}」 연구를 시작했습니다(${won(t.cost.money)}${t.requiredBy ? ', 규제에 필요한 기술' : ''}).`, [], { tab: 'company', sub: 'research' }, true);
     }
+}
+
+// ---------- 1.3.0 세대교체 맡기기(기획 임원) ----------
+// 차종별로 켜면 기획 임원이 때가 된 차종의 페이스리프트·풀체인지(파생 차종은 바탕 차의 새 세대로 다음 세대)를 스스로 시작하고, 맡김 옵션이면 출시까지 한다.
+// 기획 값은 플레이어가 '전작 그대로'로 만들 때와 같고(보너스·불이익 없음), 판단 기준은 제안(productIdeas)과 같은 수명 막대에 시간 기준을 더했다
+const GA = config.genAuto, WPM = config.time.weeksPerMonth;
+/** 맡길 수 없는 이유(맡기기 공통 기준: 기획 임원 능력 delegateSkill 이상). 맡길 수 있으면 null */
+const genAutoWhyNot = (s: CarState): string | null => {
+  const h = holder(s, 'product');
+  if (!h) return '기획 임원이 없습니다.';
+  const k = execSkill('product', h.staff);
+  return k < X.delegateSkill ? `기획 임원 능력이 ${X.delegateSkill} 이상이어야 맡길 수 있습니다(지금 ${k}).` : null;
+};
+
+/** 전작 그대로 다음 세대 기획(0.8.0 화면의 '전작 그대로'와 같은 값): 차체·고객층·동력·동력 등급(연구한 최신 단계 기준)·개발 방향·예산·설계 기간은 전작, 장비는 추천 구성, 전기차 배터리는 전작 */
+export function nextGenSpec(s: CarState, nameplateId: number): Omit<ProjectSpec, 'name'> | null {
+  const prev = s.nameplates.find((x) => x.id === nameplateId)?.generations.at(-1);
+  if (!prev) return null;
+  const e = currentEdition(prev), pl = prev.plan, equip = recommendedEquip(s, prev.body, prev.segment, prev.powertrain);
+  return { body: prev.body, segment: prev.segment, powertrain: prev.powertrain, tier: e.tier, options: stdOf(equip), equip, ...(e.battery ? { battery: e.battery } : {}),
+    direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] };
+}
+
+/** 맡기기 팀: 쉬는 개발 직원(전담 연구원·교육·휴식 중 제외). 빈 개발팀이 여럿이면 직무를 고르게 그 몫만 */
+function autoTeam(s: CarState): number[] {
+  const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !x.lab && !isAway(x, s.week)).sort((a, b) => a.id - b.id), free = devTeams(s) - s.projects.length;
+  if (free <= 1) return idle.map((x) => x.id);
+  const size = Math.ceil(idle.length / free), lists = (['designer', 'engineer', 'tester'] as Role[]).map((r) => idle.filter((x) => x.role === r)), out: number[] = [];
+  for (let i = 0; out.length < size; i++) { const x = lists[i % 3].shift(); if (x) out.push(x.id); }
+  return out.sort((a, b) => a - b);
+}
+
+interface GenStep { kind: 'autoFullChange' | 'autoFacelift' | 'autoDerive'; cmd: Command; cost: number; error: string | null; what: string; why: string; genId: number }
+/** 이 차종에서 지금 시작할 때가 된 일(없으면 null): 파생 차종의 다음 세대 → 풀체인지 → 페이스리프트 순 */
+function genAutoStep(s: CarState, n: Nameplate): GenStep | null {
+  const g = latestGen(n), age = monthOf(s.week) - g.launchMonth, ed = currentEdition(g);
+  if (g.status !== 'onSale') return null;
+  if (s.projects.some((p) => (p.kind === 'fullchange' && p.targetId === n.id) || p.into === n.id || ((p.kind === 'facelift' || p.kind === 'fix') && p.targetId === g.id))) return null;
+  if (n.baseOf !== undefined) {
+    const bn = s.nameplates.find((x) => x.id === n.baseOf), bg = bn ? latestGen(bn) : undefined;
+    if (bn && bg && bg.status === 'onSale' && bg.id !== g.fromGen && !s.projects.some((p) => p.kind === 'derivative' && p.variant === n.variant && nameplateOfGen(s, p.targetId)?.id === bn.id)) {
+      const plan = derivativePlan(s, bg.id, n.variant!);
+      return { kind: 'autoDerive', cmd: { type: 'startDerivative', generationId: bg.id, variant: n.variant! }, cost: typeof plan === 'string' ? 0 : plan.cost, error: typeof plan === 'string' ? plan : null,
+        what: `${g.number + 1}세대 개발`, why: `바탕 차 「${bn.name}」${J(bn.name, '이/가')} ${bg.number}세대로 바뀌었습니다`, genId: g.id };
+    }
+  } else {
+    const life = lifeBar(s, g), due = age >= GA.fullChangeAt || (age >= config.lifecycle.fullChange.afterMonths && life < X.product.fullChangeLife);
+    if (due) {
+      const spec = nextGenSpec(s, n.id)!, team = s.staff.filter((x) => autoTeam(s).includes(x.id));
+      return { kind: 'autoFullChange', cmd: { type: 'startFullChange', nameplateId: n.id, ...spec }, cost: planPreview(s, { ...spec, name: n.name }, team).cost * fullChangeCostMult(true), error: null,
+        what: `${g.number + 1}세대 풀체인지`, why: age >= GA.fullChangeAt ? `출시 ${age}개월째로, 노후가 시작되는 ${config.life.oldMonths}개월 전에 다음 세대가 나와야 합니다` : `출시 ${age}개월째에 수명이 ${pct(life)}까지 떨어졌습니다`, genId: g.id };
+    }
+  }
+  if (!g.editions.some((e) => e.kind === 'facelift') && age >= GA.faceliftAt && (n.baseOf !== undefined || age < GA.fullChangeAt - GA.faceliftGap)) {
+    const equip = recommendedEquip(s, g.body, g.segment, g.powertrain);
+    return { kind: 'autoFacelift', cmd: { type: 'startFacelift', generationId: g.id, options: stdOf(equip), equip, tier: ed.tier }, cost: faceliftWeekCost(g.devCost) * (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks), error: null,
+      what: '페이스리프트', why: `출시 ${age}개월째로 판매 수명의 중간입니다`, genId: g.id };
+  }
+  return null;
+}
+
+/** 월 결산 뒤(맡기기): 켠 차종마다 때가 되면 시작. 현금(예상 개발비 × cashDevMult + 운영비 cashMonths개월 치)·빈 개발팀·쉬는 직원이 있어야 하고, 오래 못 하면 이유를 한 번 보고 */
+function autoGen(c: ExecCtx): void {
+  const s = c.s, map = s.execs?.genAuto;
+  if (!map || genAutoWhyNot(s)) return;
+  for (const n of s.nameplates.filter((x) => map[x.id] && x.generations.length).sort((a, b) => a.id - b.id)) {
+    const st = map[n.id], step = genAutoStep(s, n);
+    if (!step) { st.waitSince = null; st.told = false; continue; }
+    const team = autoTeam(s), need = step.cost * GA.cashDevMult + monthlyFixed(s) * GA.cashMonths, go: ExecGoto = { tab: 'garage', id: step.genId };
+    let why = step.error ?? (s.projects.length >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다'
+      : s.cash < need ? `현금이 ${won(need)}(예상 개발비 ${won(step.cost)}의 ${GA.cashDevMult}배와 운영비 ${GA.cashMonths}개월 치)에 못 미칩니다` : null);
+    if (!why) {
+      const r = c.run({ ...step.cmd, team } as Command);
+      if (r.ok) {
+        s.projects[s.projects.length - 1].auto = true;
+        addReport(s, 'product', step.kind, `「${n.name}」 ${step.what}${J(step.what, '을/를')} 시작했습니다. ${step.why}. 예상 개발비 ${won(step.cost)}, 팀 ${team.length}명.`, [`현금 ${won(s.cash)}`], go, true, null, String(n.id));
+        st.waitSince = null; st.told = false;
+        continue;
+      }
+      why = r.reason;
+    }
+    st.waitSince ??= s.week;
+    if (!st.told && s.week - st.waitSince >= GA.waitReportMonths * WPM) {
+      addReport(s, 'product', 'autoGenWait', `「${n.name}」 ${step.what}${J(step.what, '을/를')} ${Math.floor((s.week - st.waitSince) / WPM)}개월째 시작하지 못하고 있습니다. ${why!.replace(/\.$/, '')}.`, [`현금 ${won(s.cash)}`], go, true, null, String(n.id));
+      st.told = true;
+    }
+  }
+}
+
+/** 매주: 맡기기로 시작한 개발이 끝나면(결함을 다 잡았거나 시험 maxTestWeeks주) 출시. 가격은 자동 가격 정책이 있으면 그 정책(페이스리프트는 지금 값), 없으면 시장 기준가(추천가) */
+function autoLaunch(c: ExecCtx, ev: GameEvent[]): void {
+  const s = c.s, map = s.execs?.genAuto;
+  if (!map || genAutoWhyNot(s)) return;
+  for (const p of s.projects.filter((x) => x.auto).sort((a, b) => a.id - b.id)) {
+    const nid = p.kind === 'fullchange' ? p.targetId : p.kind === 'derivative' ? p.into : nameplateOfGen(s, p.targetId)?.id, n = s.nameplates.find((x) => x.id === nid);
+    if (!n || !map[n.id]?.launch || p.phase !== 'test' || p.testWeeks < config.dev.minTestWeeks || !(p.waiting || p.testWeeks >= GA.maxTestWeeks)) continue;
+    const prev = latestGen(n), pe = currentEdition(prev), policy = prev.pricePolicy ?? null, b = bodyById(p.body).basePrice;
+    const want = p.kind === 'facelift' && policy ? pe.price : carBasePrice(s, { ...p, options: withRequired(s, p.options) });
+    const price = Math.min(Math.floor((b * config.price.max) / 10) * 10, Math.max(Math.ceil((b * config.price.min) / 10) * 10, Math.round(want / 10) * 10));
+    const r = c.run({ type: 'launch', projectId: p.id, price, marketing: prev.marketing, color: pe.color, wheels: pe.wheels });
+    if (!r.ok) { delete p.auto; addReport(s, 'product', 'autoLaunchFail', `「${p.name}」${J(p.name, '을/를')} 출시하지 못해 직접 출시하시도록 남겨 두었습니다. ${r.reason}`, [], { tab: 'dev', sub: 'launch', id: p.id }, true, null, String(n.id)); continue; }
+    if (r.events) ev.push(...r.events);
+    const g = latestGen(n);
+    if (policy && p.kind !== 'facelift') g.pricePolicy = { ...policy };
+    const what = p.kind === 'facelift' ? `${g.number}세대 페이스리프트` : `${g.number}세대`;
+    addReport(s, 'product', 'autoLaunch', `「${n.name}」 ${what}${J(what, '을/를')} 출시했습니다. 가격 ${price.toLocaleString()}만원(${policy ? '자동 가격 정책 유지' : '시장 기준가'}), 평론 평균 ${g.reviewAvg.toFixed(1)}.`, [], { tab: 'garage', id: g.id }, true, null, String(n.id));
+  }
+}
+
+/** 화면용: 세대교체 맡기기 상태(맡길 수 있는지, 차종별 켜짐·출시 자동·지금 할 때가 된 일·기다리기 시작한 주) */
+export function genAutoInfo(s: CarState) {
+  const whyNot = genAutoWhyNot(s), map = s.execs?.genAuto ?? {};
+  return {
+    available: !whyNot, whyNot,
+    cars: s.nameplates.filter((n) => n.generations.length).sort((a, b) => a.id - b.id).map((n) => {
+      const st = map[n.id], step = genAutoStep(s, n);
+      return { nameplateId: n.id, name: n.name, derivative: n.baseOf !== undefined, on: !!st, launch: st?.launch ?? true, active: !!st && !whyNot, next: step ? step.what : null, waitingSince: st?.waitSince ?? null };
+    }),
+  };
 }

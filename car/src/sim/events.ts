@@ -8,7 +8,7 @@ import { staffCap } from './company';
 import { josa } from './josa';
 import { hash01 } from './rng';
 import { monthOf, monthLabel, yearOf, yearOfMonth } from './time';
-import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type PendingChoice, type Stat, type Stats, type TechDef } from './types';
+import { STATS, type CarState, type EraEffect, type EraEventDef, type EventMod, type GameEvent, type Generation, type NewsCategory, type NotifyTopic, type PendingChoice, type Stat, type Stats, type TechDef } from './types';
 
 const E = config.events, MPY = config.time.monthsPerYear;
 export const REGION = 'domestic';
@@ -123,10 +123,11 @@ export const loanRateMult = (s: CarState): number => eraNow(s.seed, monthOf(s.we
 export const rivalHitAdd = (s: CarState, rivalId: string, body: string, m: number): number =>
   modsNow(s, 'rivalHit', m).filter((x) => x.rivalId === rivalId && x.body === body).reduce((a, x) => a + x.value, 0);
 
-function addNews(s: CarState, ev: GameEvent[], text: string, category: NewsCategory, kind: 'news' | 'choice' = 'news', id?: number): void {
-  s.events.news.push({ week: s.week, text, category });
+/** topic(1.3.0): 알림 유형(생략하면 분류·종류로 정한다, notify.ts) */
+function addNews(s: CarState, ev: GameEvent[], text: string, category: NewsCategory, kind: 'news' | 'choice' = 'news', id?: number, topic?: NotifyTopic): void {
+  s.events.news.push({ week: s.week, text, category, ...(topic ? { topic } : {}) });
   if (s.events.news.length > E.newsMax) s.events.news.splice(0, s.events.news.length - E.newsMax);
-  ev.push(id === undefined ? { kind, text, category } : { kind, text, id, category });
+  ev.push({ kind, text, ...(id === undefined ? {} : { id }), category, ...(topic ? { topic } : {}) });
 }
 export { addNews };
 
@@ -135,7 +136,7 @@ export function monthStart(s: CarState, ev: GameEvent[]): void {
   const m = monthOf(s.week);
   s.events.mods = s.events.mods.filter((x) => m < x.untilMonth);
   for (const sp of eraTimeline(s.seed)) {
-    if (m === sp.start - E.warnMonths) addNews(s, ev, `[예고] ${sp.def.warn}`, 'preview');
+    if (m === sp.start - E.warnMonths) addNews(s, ev, `[예고] ${sp.def.warn}`, 'preview', 'news', undefined, sp.def.effects.some((e) => e.type === 'regulation') ? 'warning' : undefined); // 1.3.0 규제 예고는 경고(끌 수 없음)
     if (m === sp.start) addNews(s, ev, `[${sp.def.name}] ${sp.def.start}`, 'start');
     for (const e of sp.def.effects) if (e.type === 'regulation' && e.region === REGION && e.graceMonths > 0 && m === sp.start + e.graceMonths) {
       const list = optNames(e.options ?? []);

@@ -122,7 +122,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     expect(g[2]).toBeGreaterThanOrEqual(4.5); expect(g[2]).toBeLessThanOrEqual(7.5);
     expect(over9).toBeLessThan(0.1);
   });
-  it('4) 성장 속도: 공장 등급 중앙값 10년 1~3(0.5.1)·20년 2~3(초과, 아래 설명)·30년 3~5, 현금 중앙값 20년 100~4,000억·30년 300~20,000억(0.5.1)', () => {
+  it('4) 성장 속도: 공장 등급 중앙값 10년 1~3(0.5.1)·20년 2~3(초과, 아래 설명)·30년 3~5, 현금 중앙값 20년 100~5,500억(1.3.0)·30년 300~40,000억(1.0.0)', () => {
     const st = STEADY(), f = [0, 1, 2].map((i) => median(at(st, i).map((x) => x.factory)));
     console.log(`공장 등급 중앙값 ${f.join(' / ')}, 현금 중앙값 20년 ${eok(cashMed(at(st, 1)))}억 / 30년 ${eok(cashMed(at(st, 2)))}억`);
     expect(f[0]).toBeGreaterThanOrEqual(1); expect(f[0]).toBeLessThanOrEqual(3); // 0.5.1: 공장 2등급 라인 3개·이익률 개선으로 10년 3등급까지 허용
@@ -130,7 +130,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     // 공장을 늦추면 생산 라인(3개)이 모자라 "20년 안에 차체 4종"(목표 8)을 못 맞춘다 → 공장 4등급 유지비를 올려 현금만 눌렀다. 공장 5등급·현금 2,500억을 넘으면 실패
     expect(f[1]).toBeGreaterThanOrEqual(2); expect(f[1]).toBeLessThanOrEqual(5); // 1.0.0: 4 → 5(사용자 요청 '공장을 더 늘릴 수 있게': 건설비 완화·증설 대출로 20년에 5등급, 측정 중앙값 4~5)
     expect(f[2]).toBeGreaterThanOrEqual(3); expect(f[2]).toBeLessThanOrEqual(5); // 0.5.1: 30년 5등급까지
-    expect(cashMed(at(st, 1))).toBeGreaterThanOrEqual(1000000); expect(cashMed(at(st, 1))).toBeLessThanOrEqual(40000000); // 0.5.1: 20년 상한 2,500 → 4,000억(측정 3,500억)
+    expect(cashMed(at(st, 1))).toBeGreaterThanOrEqual(1000000); expect(cashMed(at(st, 1))).toBeLessThanOrEqual(55000000); // 0.5.1: 20년 상한 2,500 → 4,000억(측정 3,500억). 1.3.0: 4,000 → 5,500억(개발 중 직원 성과로 측정 3,888 → 4,847억)
     // 0.4.2: 의무 장비 원가를 시장 기준가에 넣어(봇이 그만큼 값을 받는다) 1990년대 후반 적자가 사라지자 30년 현금이 약 9,400억이 되었다. 1조 2천억을 넘으면 실패
     expect(cashMed(at(st, 2))).toBeGreaterThanOrEqual(3000000); expect(cashMed(at(st, 2))).toBeLessThanOrEqual(400000000); // 0.5.1: 30년 상한 1.2 → 2조(측정 1.23조). 1.0.0: 2 → 4조(균형 기준을 편의 기능 봇으로 바꾸고 너그럽게, 측정 2.14조)
   });
@@ -144,7 +144,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     // 0.5.0: 20년 자산은 큰 투자 시점에 따라 ±10% 흔들린다(측정 0.94~1.15). 리프트 한 번의 손익은 아래 갈래 시험과 patch042의 통제 시나리오로 고정한다
     expect(worthMed(st) / worthMed(nf)).toBeGreaterThanOrEqual(0.9); expect(worthMed(st) / worthMed(nf)).toBeLessThanOrEqual(1.6);
   });
-  it('5) 페이스리프트 1회의 36개월 추가 이익 ÷ 비용 1.5~6(0.5.0 상한 5 → 6, 0.4.2: 리프트가 디자인 밖 능력치도 올려 상한 4 → 5, 같은 순간에서 갈라, 두 쪽 다 그 뒤 다른 결정은 하지 않는다)', () => {
+  it('5) 페이스리프트 1회의 36개월 추가 이익 ÷ 비용 1.5~7(1.3.0 상한 6 → 7, 0.5.0 상한 5 → 6, 0.4.2: 리프트가 디자인 밖 능력치도 올려 상한 4 → 5, 같은 순간에서 갈라, 두 쪽 다 그 뒤 다른 결정은 하지 않는다)', () => {
     let gain = 0, cost = 0, n = 0;
     for (const seed of SEEDS) {
       const g = Game.create({ difficulty: 'normal', seed }), st = steady();
@@ -175,7 +175,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     }
     console.log(`리프트 ${n}회: 평균 추가 이익 ${(gain / n / 10000).toFixed(1)}억, 평균 비용 ${(cost / n / 10000).toFixed(1)}억, 배수 ${(gain / cost).toFixed(2)}`);
     expect(n).toBeGreaterThanOrEqual(8); // 봇은 약한 차·생산 한도에 묶인 차는 리프트하지 않아 10년 안의 첫 리프트가 20판 중 약 9판
-    expect(gain / cost).toBeGreaterThanOrEqual(1.5); expect(gain / cost).toBeLessThanOrEqual(6); // 0.5.0: 가격 벌점 완화로 리프트 뒤 주문이 더 늘어 측정 5.7
+    expect(gain / cost).toBeGreaterThanOrEqual(1.5); expect(gain / cost).toBeLessThanOrEqual(7); // 0.5.0: 가격 벌점 완화로 리프트 뒤 주문이 더 늘어 측정 5.7. 1.3.0: 6 → 7(리프트 개발에도 직원 성과가 붙어 측정 5.48 → 6.25)
   });
   it('6) 신중 ÷ 확장 안 함 20년 현금 1.5배 이상, 확장 안 함 20년 생존 50% 이상, 가격 올리기 ÷ 신중 0.4~1.5, 20년 주문/한도 중앙값 0.7~4.5(0.4.2, 아래 설명)', () => {
     const st = at(STEADY(), 1), ne = at20('noExpand', () => noExpand()), go = at20('gouger', () => gouger());

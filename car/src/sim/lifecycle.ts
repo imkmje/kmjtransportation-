@@ -53,6 +53,7 @@ export function faceliftEligibility(s: CarState, generationId: number): Eligibil
 export function fullChangeEligibility(s: CarState, nameplateId: number): Eligibility {
   const n = nameplateById(s, nameplateId);
   if (!n || !n.generations.length) return no('없는 차종입니다.');
+  if (n.baseOf !== undefined) return no('파생 모델은 바탕 차의 새 세대로 다음 세대를 만듭니다(파생 모델 개발).'); // 1.3.0
   if (s.projects.some((p) => p.kind === 'fullchange' && p.targetId === n.id)) return no('이 차종의 풀체인지(다음 세대)를 이미 개발하고 있습니다.');
   const g = latestGen(n);
   if (g.status !== 'onSale') return regulated(s);

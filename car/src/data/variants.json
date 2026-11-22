@@ -1,0 +1,6 @@
+[
+  {"id":"wagon","name":"왜건","suffix":"왜건","info":"세단·해치백의 지붕을 뒤까지 늘려 짐 공간을 키운 파생 모델. 실용성이 높아 가족 손님에게 잘 맞는다.","bodies":["sedanS","sedanM","sedanL","hatch"],"segment":"family","mult":{"P":0.98,"E":0.98,"U":1.18,"D":0.97,"Q":1},"price":1.05,"cost":1.04,"devShare":0.3,"designWeeks":12},
+  {"id":"coupe","name":"쿠페","suffix":"쿠페","info":"문을 두 개로 줄이고 지붕선을 낮춘 파생 모델. 디자인과 성능이 오르고 실용성은 떨어진다. 젊은 손님과 부유층이 찾는다.","bodies":["sedanS","sedanM","sedanL","hatch"],"segment":"youth","mult":{"P":1.08,"E":0.97,"U":0.75,"D":1.16,"Q":1},"price":1.08,"cost":1.05,"devShare":0.4,"designWeeks":14},
+  {"id":"gt","name":"고성능판","suffix":"GT","info":"엔진·서스펜션·브레이크를 강화한 고성능 파생 모델. 성능이 크게 오르고 원가도 오르며, 출시하면 회사 평판에 가점이 붙는다.","bodies":["sedanS","sedanM","sedanL","hatch","coupe","suvS","suv","suvL","sports"],"segment":"enthusiast","mult":{"P":1.35,"E":0.88,"U":0.97,"D":1.06,"Q":1},"price":1.18,"cost":1.13,"devShare":0.4,"designWeeks":14,"rep":2},
+  {"id":"ev","name":"전기차판","suffix":"EV","info":"같은 차체에 전기 동력을 얹은 파생 모델. 주행 거리·충전 규칙이 적용된다. 전기차 연구가 필요하다.","bodies":["sedanS","sedanM","sedanL","hatch","coupe","minivan","kei","suvS","suv","suvL","pickup","sports"],"powertrain":"ev","mult":{"P":1,"E":1,"U":1,"D":1,"Q":1},"price":1,"cost":1,"devShare":0.45,"designWeeks":16}
+]

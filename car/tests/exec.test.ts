@@ -389,7 +389,7 @@ describe('결정론·저장', () => {
       expect(execInfo(g.state).used).toBe(0);
       ok(g.command({ type: 'appointExec', role: 'hr', staffId: g.state.staff[0].id }));
       toMonthEnd(g);
-      expect(g.state.saveVersion).toBe(6);
+      expect(g.state.saveVersion).toBe(7);
     }
   });
 });
