@@ -102,12 +102,13 @@ export function logoSvg(spec: LogoSpec, size = 26): string {
 }
 
 /** sim 차 값 → 3D 모양. 렌더에 없는 차체는 중형 세단 모양으로 대신한다. year는 출시(기획) 연도 */
-export function lookOf(v: { body: string; powertrain: string; tier: number; color: string; wheels: 0 | 1 | 2; year: number; chassisSeed?: number; faceSeed?: number }): CarLook {
-  const pt = v.powertrain === 'gasoline' ? 'gas' : v.powertrain === 'electric' ? 'ev' : v.powertrain;
+export function lookOf(v: { body: string; powertrain: string; tier: number; color: string; wheels: 0 | 1 | 2; year: number; chassisSeed?: number; faceSeed?: number; variant?: string }): CarLook {
+  if (v.variant === 'coupe') v = { ...v, body: 'coupe' }; // 1.3.0 파생 모델 표시: 쿠페판은 쿠페 차체로, 고성능판은 스포일러·큰 휠·낮은 차고, 왜건은 긴 지붕
+  const gt = v.variant === 'gt', pt = v.powertrain === 'gasoline' ? 'gas' : v.powertrain === 'electric' ? 'ev' : v.powertrain;
   return {
     bodyId: (v.body in BODY ? v.body : 'sedanM') as BodyId,
     powertrain: (['gas', 'diesel', 'hybrid', 'ev'].includes(pt) ? pt : 'gas') as CarLook['powertrain'],
-    color: v.color, wheel: v.wheels, sporty: v.tier >= 3,
+    color: v.color, wheel: gt ? 2 : v.wheels, sporty: gt || v.tier >= 3, ...(gt || v.variant === 'wagon' ? { variant: v.variant as 'wagon' | 'gt' } : {}),
     era: v.year as CarLook['era'], // 연도를 그대로 넘기면 render(eraOf)가 4시대로 나눈다
     chassisSeed: v.chassisSeed, faceSeed: v.faceSeed,
   };

@@ -1,0 +1,12 @@
+[
+  {"id":"training","name":"직원 교육·휴식","locked":false},
+  {"id":"hiring","name":"채용·해고","locked":false},
+  {"id":"research","name":"연구","locked":false},
+  {"id":"dev","name":"개발 단계","locked":false},
+  {"id":"launch","name":"출시·평론","locked":false},
+  {"id":"exec","name":"임원 보고","locked":false},
+  {"id":"finance","name":"재무·결산","locked":false},
+  {"id":"market","name":"시장 뉴스·사건","locked":false},
+  {"id":"factory","name":"공장·설비","locked":false},
+  {"id":"warning","name":"경고(파산 위험·규제·리콜)","locked":true}
+]

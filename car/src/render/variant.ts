@@ -60,6 +60,14 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
   };
 }
 
+/** 1.3.0 파생 모델 표시용 차체(sim의 차체는 바탕 그대로): 왜건은 트렁크 없이 지붕을 뒤 끝까지 늘리고 옆 창을 3장으로, 고성능판은 차고를 낮춘다 */
+function shapeOf(look: CarLook): BodyShape {
+  const b = bodyOf(look.bodyId);
+  if (look.variant === 'wagon') { const cR = -b.L / 2 + .42; return { ...b, deck: false, cR, rr: .24, doors: [b.doors[0], b.doors[1], cR + .5], pil: [.3, .62], spoiler: false }; }
+  if (look.variant === 'gt') return { ...b, clr: Math.max(.08, b.clr - .05) };
+  return b;
+}
+
 const PERSONA: Partial<Record<DevKey, number>>[] = [
   { len: .7, roof: -.8, belt: -.5, wbr: .6, rake: .6, rear: .3 }, // 낮고 긴 차
   { len: -.7, roof: .8, belt: .5, wbr: -.5, rake: -.6, rear: -.4 }, // 높고 짧은 차
@@ -73,7 +81,7 @@ const REAR: Record<RoofType, (rr: number) => number> = { notch: rr => Math.min(r
 
 /** 차체 기본값 + 시대 비례 + chassisSeed 변형. 시드가 없으면 BODY(시대 비례만 반영) */
 export function chassisOf(look: CarLook): Chassis {
-  const b = bodyOf(look.bodyId), keys = Object.keys(VARY) as DevKey[], E = ERA[eraOf(look)], ev = look.powertrain === 'ev';
+  const b = shapeOf(look), keys = Object.keys(VARY) as DevKey[], E = ERA[eraOf(look)], ev = look.powertrain === 'ev';
   const r = rng(look.chassisSeed ?? 0), has = look.chassisSeed != null;
   const dev = Object.fromEntries(keys.map(k => [k, has ? r() * 2 - 1 : 0])) as Record<DevKey, number>;
   // 성격: 변이 축끼리 함께 움직여 한눈에 다른 차가 되게(낮고 긴 / 높고 짧은 / 쐐기 / 객실 앞쪽 / 균형)

@@ -23,13 +23,14 @@ function run(bot: () => Bot, seed: number, years: number, d: Difficulty) {
 }
 
 describe('1.0.0 균형(편의 기능을 다 쓰는 봇, 시드 3개)', () => {
-  it('보통 steadyBestExec: 60년 생존, 현금 중앙값 40년 1.5~6조·60년 3~12조', () => {
+  it('보통 steadyBestExec: 60년 생존, 현금 중앙값 40년 1.5~8조·60년 3~18조(1.3.0)', () => {
     const rs = [1, 2, 3].map((seed) => run(() => steadyBestExec(), seed, 60, 'normal'));
     const c40 = median(rs.map((r) => r.cash[39])), c60 = median(rs.map((r) => r.cash[59]));
     console.log(`보통 steadyBestExec 현금 중앙값 20년 ${(median(rs.map((r) => r.cash[19])) / JO).toFixed(2)}조 / 40년 ${(c40 / JO).toFixed(2)}조 / 60년 ${(c60 / JO).toFixed(2)}조`);
     for (const r of rs) expect(r.alive[59]).toBe(true);
-    expect(c40).toBeGreaterThanOrEqual(1.5 * JO); expect(c40).toBeLessThanOrEqual(6 * JO);
-    expect(c60).toBeGreaterThanOrEqual(3 * JO); expect(c60).toBeLessThanOrEqual(12 * JO);
+    // 1.3.0: 상한 40년 6 → 8조, 60년 12 → 18조(개발 중 직원 성과로 측정 40년 5.23 → 6.41조, 60년 11.05 → 15.81조)
+    expect(c40).toBeGreaterThanOrEqual(1.5 * JO); expect(c40).toBeLessThanOrEqual(8 * JO);
+    expect(c60).toBeGreaterThanOrEqual(3 * JO); expect(c60).toBeLessThanOrEqual(18 * JO);
   });
   it('쉬움 steadyBestExec: 보통보다 많고 60년에 25조를 넘지 않는다(숫자가 무의미해지지 않게. 1.1.0: 장비 개편으로 20 → 25조, 시드 3개 측정 약 20.7조)', () => {
     const rs = [1, 2, 3].map((seed) => run(() => steadyBestExec(), seed, 60, 'easy'));

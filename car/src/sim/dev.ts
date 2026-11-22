@@ -7,6 +7,7 @@ import { conditionMult, isAway } from './company';
 import type { Rng } from './rng';
 import { diffOf } from './difficulty';
 import { regulationError, requiredOptions } from './events';
+import { derivativeWeekCost, variantById } from './derive';
 import { STATS, type Budget, type CarState, type Project, type ProjectSpec, type Staff, type Stats } from './types';
 
 /** 기획 검증: 문제가 있으면 한국어 이유, 없으면 null */
@@ -66,6 +67,7 @@ export const fixWeekCost = (state: CarState, genDevCost: number, team: Staff[]):
 export function weeklyDevCost(state: CarState, p: Project): number {
   if (p.kind === 'fix') return fixWeekCost(state, genById(state, p.targetId)?.devCost ?? 0, staffOn(state, p));
   if (p.kind === 'facelift') return faceliftWeekCost(genById(state, p.targetId)?.devCost ?? 0);
+  if (p.kind === 'derivative') return derivativeWeekCost(genById(state, p.targetId)?.devCost ?? 0, variantById(p.variant)!); // 1.3.0 바탕 세대 개발비의 일부
   const base = devCostPerWeek(staffOn(state, p), p.budget, diffOf(state).prototypeMult * devScale(state, p.body));
   return p.kind === 'fullchange' ? base * fullChangeCostMult(latestGenOf(state, p.targetId)?.body === p.body) : base;
 }
@@ -116,7 +118,7 @@ export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
     per.forEach((w, i) => { for (const k of STATS) { w[k] *= speed; week[k] += w[k]; } log.staff[i].stats = w; });
     let made = 0;
     for (const k of STATS) { p.points[k] += week[k]; made += week[k]; }
-    log.defectsAdded = made * d.defectPerPoint * (p.kind === 'facelift' ? config.lifecycle.facelift.defectRate : 1) * (1 - defectCut(state)); // 연구: 결함 감소
+    log.defectsAdded = made * d.defectPerPoint * (p.kind === 'facelift' ? config.lifecycle.facelift.defectRate : p.kind === 'derivative' ? config.derivative.defectRate : 1) * (1 - defectCut(state)); // 연구: 결함 감소
     p.defects += log.defectsAdded;
     p.weeksDone++;
     if (p.weeksDone >= p.designWeeks) { p.phase = 'test'; log.designDone = true; }

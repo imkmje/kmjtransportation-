@@ -10,6 +10,7 @@ import { researchError, researchSlots } from './research';
 import { diffOf } from './difficulty';
 import { monthLabel, yearOf } from './time';
 import { equipOf, expectEffect } from './equip';
+import { autoLaunching } from './execs';
 import { josa } from './josa';
 import { faceliftPreview, advice } from './queries';
 import type { CarState } from './types';
@@ -32,7 +33,7 @@ export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
 
   const def = (c: ReturnType<typeof pendingChoices>[number]) => c.choices[c.defaultChoice]?.label ?? '';
   for (const c of pendingChoices(s)) add(`choice:${c.id}`, 'choice', `결정할 사건: ${c.name}`, `${c.weeksLeft}주 안에 고르지 않으면 「${def(c)}」${josa(def(c), '으로/로')} 정해집니다.`, { tab: 'choice', id: c.id }, true);
-  for (const p of s.projects) if (p.waiting) add(`ready:${p.id}`, 'ready', `「${p.name}」 출시 준비가 끝났습니다`, '결함을 다 잡았습니다. 가격을 정해 출시할 수 있습니다.', { tab: 'dev', sub: 'launch', id: p.id }, true);
+  for (const p of s.projects) if (p.waiting && !autoLaunching(s, p)) add(`ready:${p.id}`, 'ready', `「${p.name}」 출시 준비가 끝났습니다`, '결함을 다 잡았습니다. 가격을 정해 출시할 수 있습니다.', { tab: 'dev', sub: 'launch', id: p.id }, true);
   if (s.candidates.length) {
     const wk = Math.max(0, Math.min(...s.candidates.map((c) => c.expiresWeek)) - s.week);
     add(`cands:${Math.min(...s.candidates.map((c) => c.id))}`, 'cands', `채용 후보 ${s.candidates.length}명이 기다립니다`, `${wk}주 안에 채용하지 않으면 다른 회사로 갑니다.`, { tab: 'company', sub: 'staff' }, wk <= T.candUrgentWeeks);

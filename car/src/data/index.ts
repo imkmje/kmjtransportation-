@@ -8,7 +8,11 @@ import rivalsJson from './rivals.json';
 import namesJson from './names.json';
 import techJson from './tech.json';
 import eventsJson from './events.json';
-import type { BodyDef, PowertrainDef, OptionDef, SegmentDef, RegionMarket, RivalDef, TechDef, EraEventDef, RandomEventDef } from '../sim/types';
+import variantsJson from './variants.json';
+import criticsJson from './critics.json';
+import staffWinsJson from './staffwins.json';
+import notifyJson from './notify.json';
+import type { BodyDef, PowertrainDef, OptionDef, SegmentDef, RegionMarket, RivalDef, TechDef, EraEventDef, RandomEventDef, VariantDef, CriticDef, NotifyDef, Stat, Role } from '../sim/types';
 
 export const BODIES = bodiesJson as unknown as BodyDef[];
 export const POWERTRAINS = powertrainsJson as unknown as PowertrainDef[];
@@ -23,6 +27,17 @@ export const TECHS = techJson as unknown as TechDef[];
 /** 시대 사건(11.1 고정 13개 + 1.2.0 가상 6개, 11.2 무작위 8종) */
 export const ERA_EVENTS = eventsJson.era as unknown as EraEventDef[];
 export const RANDOM_EVENTS = eventsJson.random as unknown as RandomEventDef[];
+/** 1.3.0 파생 모델 4종 */
+export const VARIANTS = variantsJson as unknown as VariantDef[];
+/** 1.3.0 평론가(config.critics.list와 같은 순서)와 시승기 문장 조각 */
+export const CRITICS = criticsJson as unknown as {
+  critics: CriticDef[]; good: Record<Stat, string[]>; bad: Record<Stat, string[]>; price: Record<'cheap' | 'fair' | 'dear', string[]>;
+  missing: string[]; fresh: string[]; range: Record<'short' | 'ok' | 'long', string[]>; stat: Record<Stat, string>;
+};
+/** 1.3.0 개발 중 직원 성과: 직무별 성과 종류와 문장 */
+export const STAFF_WINS = staffWinsJson as unknown as { roles: Record<Exclude<Role, 'sales'>, string[]>; text: Record<string, string> };
+/** 1.3.0 알림 유형 목록(화면의 알림 설정용) */
+export const NOTIFY = notifyJson as unknown as NotifyDef[];
 export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[]; family: string[]; given: string[] }; // family·given: 채용 후보 이름(성 + 이름)
 
 const find = <T extends { id: string }>(list: T[], id: string, what: string): T => { const x = list.find((v) => v.id === id); if (!x) throw new Error(`없는 ${what}: ${id}`); return x; };

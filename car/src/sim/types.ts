@@ -15,6 +15,13 @@ export type Equip = Record<string, EquipLevel>;
 export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
 export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
+/** 1.3.0 파생 모델(variants.json): 쓸 수 있는 차체, 기본 고객층, 능력치 배수, 시장 기준가·원가 배수, 개발비(바탕 세대 개발비의 몫)·설계 주, powertrain(전기차판), rep(출시 평판 가점) */
+export interface VariantDef { id: string; name: string; suffix: string; info: string; bodies: string[]; segment?: string; powertrain?: string; mult: Stats; price: number; cost: number; devShare: number; designWeeks: number; rep?: number }
+/** 1.3.0 평론가(critics.json): config.critics.list와 같은 id·순서 */
+export interface CriticDef { id: string; name: string; outlet: string; focus: Stat[]; open: Record<'high' | 'mid' | 'low', string[]> }
+/** 1.3.0 알림 유형(notify.json). locked: 끌 수 없음(경고) */
+export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'factory' | 'warning';
+export interface NotifyDef { id: NotifyTopic; name: string; locked: boolean }
 
 /** 연구 분야 5개(10장) */
 export type TechField = 'powertrain' | 'body' | 'electronics' | 'production' | 'eco';
@@ -75,9 +82,14 @@ export interface Staff {
   lab: boolean; // 전담 연구원(10장, 본사 4등급부터): 프로젝트에 배치되지 않고 연구 점수 ×1.5
   hist?: StaffHist; // 0.10.0 성장 기록(없으면 예전 저장: 다음 월 결산부터 쌓는다)
 }
+/** 1.3.0 개발 중 직원 성과(항상 이득, 자동 적용). kind: 'stat:P' 같은 능력치 배수(출시 때) / defects 결함 감소(바로) / time 설계 한 주 단축(바로) / cost 대당 원가 인하(세대) / acclaim 출시 인지도 가산 */
+export type WinKind = 'stat:P' | 'stat:E' | 'stat:U' | 'stat:D' | 'stat:Q' | 'defects' | 'time' | 'cost' | 'acclaim';
+export interface StaffWin { week: number; staffId: number; name: string; role: Role; kind: WinKind; value: number; text: string; project?: string }
+/** 1.3.0 평론가별 시승기(출시 때, 평론가 id·점수·글) */
+export interface Critique { critic: string; score: number; text: string }
 /** 직원 성장 기록(0.10.0). join·joinAbility: 입사 주·입사 때 능력(예전 저장은 null, since부터 기록), years: 연도 → 그해 12월 결산 때 능력,
  *  cars: 참여해 출시한 차(세대 ID, 프로젝트 종류), execs: 임원 경력(to null = 지금 임원) */
-export interface StaffHist { join: number | null; joinAbility: number | null; since: number; years: Record<string, number>; cars: { gen: number; kind: ProjectKind }[]; execs: { role: ExecRole; from: number; to: number | null }[] }
+export interface StaffHist { join: number | null; joinAbility: number | null; since: number; years: Record<string, number>; cars: { gen: number; kind: ProjectKind }[]; execs: { role: ExecRole; from: number; to: number | null }[]; wins?: StaffWin[] } // wins(1.3.0): 개발 중 성과
 /** 채용 후보(공고 1회에 3명, 4주 뒤 사라짐). salary = 요구 월급(= 250 + 능력 × 12) */
 export interface Candidate { id: number; name: string; role: Role; ability: number; potential: number; salary: number; expiresWeek: number }
 
@@ -93,7 +105,7 @@ export interface ProjectSpec {
   battery?: Battery; // 1.2.0 전기차 배터리 용량(없으면 표준, 전기차가 아니면 무시)
 }
 /** 프로젝트 종류(8장): 새 차종 / 페이스리프트 / 풀체인지 */
-export type ProjectKind = 'new' | 'facelift' | 'fullchange' | 'fix'; // fix: 0.10.0 긴급 개선(targetId = 세대 ID, 설계 없이 시험만, 끝나면 저절로 반영)
+export type ProjectKind = 'new' | 'facelift' | 'fullchange' | 'fix' | 'derivative'; // derivative(1.3.0): 파생 모델(targetId = 바탕 세대 ID). fix: 0.10.0 긴급 개선(targetId = 세대 ID, 설계 없이 시험만, 끝나면 저절로 반영)
 export interface Project extends ProjectSpec {
   id: number; startWeek: number;
   level: number; // 실제 동력 단계(개발을 시작할 때 tier와 연구 단계로 정해 고정)
@@ -109,6 +121,10 @@ export interface Project extends ProjectSpec {
   spent: number; // 지금까지 쓴 개발비
   waiting?: boolean; // 출시 대기(0.4.1): 시험 중 실제 결함이 0이 되고 최소 시험 주를 채우면 true. 그 뒤로는 주간 개발비 0, 직원은 풀려난다(없으면 false)
   crew?: number[]; // 출시 대기가 될 때 풀려난 직원 ID(출시 때 경험을 받는다)
+  variant?: string; // 1.3.0 파생 모델 종류(파생 개발·파생 차의 페이스리프트)
+  into?: number; // 1.3.0 파생의 다음 세대: 이어 갈 파생 차종 ID(없으면 새 파생 차종)
+  wins?: StaffWin[]; // 1.3.0 개발 중 직원 성과
+  auto?: true; // 1.3.0 세대교체 맡기기로 기획 임원이 시작한 개발(맡김 옵션에 따라 출시도 자동)
 }
 
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */
@@ -151,6 +167,10 @@ export interface Generation {
   fixed?: { week: number; cost: number }; // 0.10.0 긴급 개선을 마친 주와 든 돈(세대당 1회)
   clearance?: { startMonth: number; lastMonth: number; price: number }; // 0.10.0 가격 인하 판매: lastMonth 결산 뒤 자동 단종
   evPlatform?: true; // 1.2.0 전기차 전용 플랫폼으로 개발한 세대(출시 때 연구가 끝나 있으면). 페이스리프트는 이어받는다
+  variant?: string; fromGen?: number; // 1.3.0 파생 모델 종류와 바탕 세대 ID
+  costCut?: number; // 1.3.0 직원 성과로 줄어든 대당 원가 비율
+  wins?: StaffWin[]; // 1.3.0 이 세대(판 포함) 개발 중 직원 성과 기록
+  critiques?: Critique[]; // 1.3.0 출시 때 평론가별 시승기(reviews와 같은 순서·점수)
 }
 /** 세대 손익 누적(0.10.0): 매출·원가·광고비·리콜비, 개발비(처음·페이스리프트·의무 장비·긴급 개선), 월별 이익(sales와 같은 길이). est: 예전 저장에서 추정한 값이 섞임 */
 export interface GenPnl { rev: number; cogs: number; mk: number; recall: number; dev: { base: number; lift: number; retro: number; fix: number }; months: number[]; est?: true }
@@ -159,7 +179,7 @@ export type PricePolicy = { kind: 'base'; pct: number } | { kind: 'best' };
 /** 세대 기획 값(0.8.0): 개발 방향·예산·설계 기간, 출시 때 쓸 수 있던 옵션(풀체인지에서 "새로 가능" 판단용) */
 export interface GenPlan { direction: Stats; budget: Budget; designWeeks: number; opts: string[] }
 /** 차종: 이름이 같은 세대들의 묶음 */
-export interface Nameplate { id: number; name: string; generations: Generation[] }
+export interface Nameplate { id: number; name: string; generations: Generation[]; baseOf?: number; variant?: string } // baseOf·variant(1.3.0): 파생 모델이면 바탕 차종 ID와 종류
 
 /** 경쟁 차 한 대(칸 하나): n번째 모델, start 달에 출시, cycle개월 뒤 교체, base = 새 차일 때의 기본 A */
 export interface RivalModel { n: number; start: number; cycle: number; base: number }
@@ -189,7 +209,7 @@ export interface PendingChoice { id: number; eventId: string; text: string; week
 export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
 /** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
 export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'other';
-export interface NewsItem { week: number; text: string; category?: NewsCategory } // category가 없는 예전 항목은 'other'로 본다
+export interface NewsItem { week: number; text: string; category?: NewsCategory; topic?: NotifyTopic } // topic(1.3.0): 알림 유형(없으면 notify.ts의 newsTopic이 정한다) // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
 // ---------- 임원(0.7.0) ----------
@@ -216,12 +236,15 @@ export interface ExecState {
   cooldown: Record<string, number>; // "자리:종류:대상" → 다시 제안할 수 있는 주
   replacements: Replacement[];
   rejected: Record<string, number>; // 직원 ID → 교체를 다시 제안할 수 있는 주
+  genAuto?: Record<string, GenAuto>; // 1.3.0 세대교체 맡기기(차종 ID → 설정). 없으면 모두 꺼짐
 }
+/** 1.3.0 차종별 세대교체 맡기기: launch = 개발이 끝나면 출시까지 자동, waitSince = 조건이 안 돼 기다리기 시작한 주, told = 기다림을 보고했음 */
+export interface GenAuto { launch: boolean; waitSince: number | null; told: boolean }
 
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export interface CarState {
-  saveVersion: 6;
+  saveVersion: 7;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -263,6 +286,8 @@ export type Command =
   | { type: 'startFacelift'; generationId: number; options: string[]; equip?: Equip; tier?: number; faceSeed?: number; team?: number[] }
   | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }
+  | { type: 'startDerivative'; generationId: number; variant: string; name?: string; segment?: string; battery?: Battery; team?: number[] } // 1.3.0 파생 모델(판매 중인 세대 바탕). 같은 종류의 파생 차종이 있으면 그 다음 세대가 된다
+  | { type: 'setGenAuto'; nameplateId: number; on: boolean; launch?: boolean } // 1.3.0 세대교체 맡기기(기획 임원). launch 생략 = 출시도 자동
   | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
   | { type: 'discontinue'; generationId: number }
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영
@@ -310,7 +335,7 @@ export type CommandResult = { ok: true; events?: GameEvent[] } | { ok: false; re
 
 // unlock: 연구 완료, news: 시대 사건 예고·시작·끝, choice: 답을 기다리는 무작위 사건(id = 선택 ID)
 export type EventKind = 'designDone' | 'monthEnd' | 'recall' | 'discontinued' | 'unlock' | 'cashWarning' | 'gameOver' | 'news' | 'advice' | 'company' | 'choice';
-export interface BasicEvent { kind: EventKind; text: string; id?: number; category?: NewsCategory } // category: news·choice·unlock의 뉴스 종류
+export interface BasicEvent { kind: EventKind; text: string; id?: number; category?: NewsCategory; topic?: NotifyTopic } // topic(1.3.0): 알림 유형(없으면 notify.ts의 eventTopic이 종류로 정한다) // category: news·choice·unlock의 뉴스 종류
 /** 주간 개발 기록(사무실 화면용): 직원별로 그 주에 실제로 쌓은 점수와 결함 증감 */
 export interface DevWeekEvent {
   kind: 'devWeek'; text: string; id: number; projectId: number;

@@ -223,6 +223,14 @@ export const config = {
     product: { fullChangeLife: 0.55, faceliftPayback: 24 }, // 풀체인지 권유: 수명 막대 55% 아래, 페이스리프트 권유: 비용 회수 24개월 이내
     market: { minSales: 30, lowAwareness: 0.35 }, // 새 차급 권유: 예상 월 판매 30대 이상, 광고 권유: 인지도 35% 아래
   },
+  // 1.3.0 세대교체 맡기기(기획 임원): 판매 중 세대 나이(개월) faceliftAt부터 페이스리프트(fullChangeAt − faceliftGap 전까지만), fullChangeAt부터(또는 수명 막대가 exec.product.fullChangeLife 아래로) 풀체인지.
+  // 노후(life.oldMonths 72개월) 전에 다음 세대가 나오도록 개발 기간(약 10~12개월)만큼 앞서 시작한다. 현금: 예상 개발비 × cashDevMult + 운영비 cashMonths개월 치 이상일 때만.
+  // waitReportMonths개월 넘게 못 하면 이유를 한 번 보고. 자동 출시: 결함을 다 잡았거나 시험이 maxTestWeeks주를 넘으면
+  genAuto: { faceliftAt: 30, fullChangeAt: 58, faceliftGap: 18, cashDevMult: 1.5, cashMonths: 6, waitReportMonths: 6, maxTestWeeks: 28 },
+  derivative: { defectRate: 0.5 }, // 1.3.0 파생 모델 설계 중 결함은 보통의 절반 속도(차대를 그대로 쓴다). 종류별 수치는 data/variants.json
+  // 1.3.0 개발 중 직원 성과: 배치된 직원마다 주당 확률 = chance × 능력, 크기는 능력에 비례(size [능력 0, 능력 100]). 프로젝트당 최대 maxPerProject건, 종류별 합계 상한 caps
+  // (stat: 능력치 배수 합, cost: 원가 인하 합, acclaim: 인지도 가산 합, time: 줄인 설계 주). 세대 원가 인하 합은 costCutMax까지
+  staffWins: { chance: 0.00012, maxPerProject: 3, caps: { stat: 0.08, cost: 0.02, acclaim: 0.06, time: 2 }, size: { stat: [0.015, 0.04], cost: [0.004, 0.012], acclaim: [0.015, 0.04], defects: [2, 6] }, costCutMax: 0.04 },
   devCheat: { cash: 5000000, reputation: 10 }, // 개발자 메뉴: 현금 +500억, 평판 +10
   forecast: { months: 3, spread: 0.3 }, // 0.5.0 출시 화면 예상 월 판매: 출시 3개월째 수요 ± 30%
   optionValue: { good: 1.05, bad: 0.8, fitMin: 0.2 }, // 1.0.0 옵션 값 = 원가 × good(그 옵션의 능력치에 대한 고객층 가중치 평균 ≥ fitMin) / bad(아니면). 차별 기준가에 더한다

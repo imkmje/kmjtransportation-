@@ -3,7 +3,7 @@ import { config } from '../config';
 import { COMPAT, ERA_EVENTS, TECHS, bodyById, optionById, segmentById } from '../data';
 import { avgGrade, grade, lifeFactor, standard, unitCost } from './cars';
 import { LEGACY_TEXT, equipOf, expectEffect } from './equip';
-import { capacityOf, costMultOf, devTeams as devTeamsOf } from './company';
+import { capacityOf, devTeams as devTeamsOf } from './company';
 import { fixWeekCost, testCut } from './dev';
 import { eraNow, eraTimeline, eventImpactOn, marketMult } from './events';
 import { EXEC_TITLE } from './execs';
@@ -17,7 +17,8 @@ import { bestPrice, compatMark, lifeBar, nameplateOf, priceForecast } from './qu
 import { ptCostAdd } from './research';
 import { mean } from './reviews';
 import { monthOf, monthTime, yearOf, yearOfMonth } from './time';
-import { STATS, type CarState, type ExecRole, type Generation, type ProjectKind, type Role, type Staff, type Stats } from './types';
+import { genCostMult } from './derive';
+import { STATS, type CarState, type ExecRole, type Generation, type ProjectKind, type Role, type Staff, type StaffWin, type Stats } from './types';
 
 const MPY = config.time.monthsPerYear, WPY = MPY * config.time.weeksPerMonth;
 const won = (v: number): string => { const a = Math.abs(Math.round(v)), s = v < 0 ? '−' : ''; return a >= 10000 ? `${s}${(Math.round(a / 1000) / 10).toLocaleString('ko-KR')}억원` : `${s}${a.toLocaleString('ko-KR')}만원`; };
@@ -63,7 +64,7 @@ function liftCompare(s: CarState, g: Generation, months: number[], cost: number,
   const m = monthOf(s.week), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   const cur = { ...toSaleCar(g, m), life: 1 }, old = { ...cur, stats: prev.stats, options: prev.options, awareness: Math.max(0, g.awareness - config.lifecycle.facelift.awareness) };
   const dNow = monthlyDemand(s, cur, others, t), statR = dNow > 0 ? monthlyDemand(s, old, others, t) / dNow : 1;
-  const unitOld = prev.price - unitCost(g.body, g.powertrain, prev.tier, prev.options, costMultOf(s, g.powertrain), ptCostAdd(s, g.powertrain, prev.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing];
+  const unitOld = prev.price - unitCost(g.body, g.powertrain, prev.tier, prev.options, genCostMult(s, g), ptCostAdd(s, g.powertrain, prev.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing];
   let before = 0, after = 0;
   for (let j = 0; j < n; j++) {
     const mm = lm + j, lifeR = lifeFactor(mm - g.launchMonth) / Math.max(1e-9, lifeFactor(mm - g.lifeMonth));
@@ -184,6 +185,7 @@ export interface StaffHistory {
   trainings: number; // 지금까지 받은 교육 횟수
   cars: { gen: number; name: string; kind: ProjectKind; reviewAvg: number; totalSold: number; launchMonth: number }[];
   execs: { role: ExecRole; title: string; from: number; to: number | null }[];
+  wins: StaffWin[]; // 1.3.0 개발 중 성과(project = 차 이름)
 }
 const findStaff = (s: CarState, id: number): { x: Staff; exec: ExecRole | null } | null => {
   const x = s.staff.find((y) => y.id === id);
@@ -205,6 +207,7 @@ export function staffHistory(s: CarState, staffId: number): StaffHistory | null 
     id: x.id, name: x.name, role: x.role, exec: f.exec, join, joinAbility: h?.joinAbility ?? null, since, years: join === null ? null : Math.floor((s.week - join) / WPY),
     points, trainings: x.trainings.length, cars,
     execs: (h?.execs ?? []).map((e) => ({ ...e, title: EXEC_TITLE[e.role] })),
+    wins: [...(h?.wins ?? [])], // 1.3.0 개발 중 성과(주·차 이름·내용)
   };
 }
 /** 인사 임원 보고용 한 줄: "입사 3년, 참여한 차 2대" */
@@ -292,7 +295,7 @@ export function rescueOptions(s: CarState, generationId: number): RescueOptions 
   const left = Math.max(0, ed.defects - testCut(team) * R.fixWeeks), rec = (d: number) => Math.min(config.recall.maxYear, d * config.recall.perDefect);
   const q0 = ed.stats.Q / (1 - Math.min(config.dev.defectQMax, ed.defects * config.dev.defectQPer)), qAfter = q0 * (1 + R.qGain) * (1 - Math.min(config.dev.defectQMax, left * config.dev.defectQPer));
   const fe = fixError(s, g.id) ?? (team.length ? null : '쉬고 있는 테스터나 엔지니어가 없습니다.') ?? (s.projects.length >= devTeamsOf(s) ? '개발팀이 모두 바쁩니다.' : null);
-  const price = clearPriceOf(s, g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, costMultOf(s, g.powertrain), ptCostAdd(s, g.powertrain, ed.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing], cap = capacityOf(s);
+  const price = clearPriceOf(s, g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, genCostMult(s, g), ptCostAdd(s, g.powertrain, ed.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing], cap = capacityOf(s);
   const others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   const salesNow = g.status === 'discontinued' ? 0 : priceForecast(s, g.id, ed.price) ?? 0;
   const salesAfter = g.status === 'discontinued' ? 0 : Math.round(Math.min(cap, monthlyDemand(s, { ...toSaleCar(g, m), price, awareness: Math.min(1, g.awareness + R.clearAwareness) }, others, monthTime(m))));

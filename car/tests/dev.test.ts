@@ -145,7 +145,7 @@ describe('기획 미리보기(planPreview)와 결함 안내(defectAdvice)', () =
       const p = g.state.projects[0];
       while (p.phase === 'design' || p.testWeeks < config.dev.minTestWeeks) g.tick();
       const at2 = projectPreview(g.state, p.id)!.avg;
-      expect(p.spent).toBeCloseTo(pv.cost, 6);
+      if (p.wins?.some((w) => w.kind === 'time')) expect(p.spent).toBeLessThan(pv.cost); else expect(p.spent).toBeCloseTo(pv.cost, 6); // 1.3.0 직원 성과(설계 기간 단축)는 그만큼 덜 든다
       expect(at2).toBeGreaterThanOrEqual(pv.min); expect(at2).toBeLessThanOrEqual(pv.max);
       for (let i = 0; i < 20; i++) g.tick(); // 시험을 오래 해도 최고치를 넘지 않는다
       expect(projectPreview(g.state, p.id)!.avg).toBeLessThanOrEqual(pv.max);
