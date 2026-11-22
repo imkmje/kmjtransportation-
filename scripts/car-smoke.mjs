@@ -1751,7 +1751,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('1.2.0 공장 화면: 배터리 공장 구역(없음, 건설 버튼)', (await ep.locator('.fac-bat').innerText()).includes('없음') && (await ep.locator('.fac-bat [data-act="buildBatteryPlant"]:not([disabled])').count()) === 1);
   await ep.click('.fac-bat [data-act="buildBatteryPlant"]'); await ep.waitForSelector('#ask:not([hidden])'); await ep.click('#ask-yes'); await ep.waitForTimeout(150);
   const bt = await ep.locator('.fac-bat').innerText();
-  check('1.2.0 배터리 공장 건설 → 공사 중 표시(남은 개월), 버튼 막힘과 이유', (await EG(() => window.__car.game.state.batteryPlant.build?.level)) === 1 && bt.includes('개월 남았습니다') && bt.includes('공사 중') && (await ep.locator('.fac-bat [data-act="buildBatteryPlant"][disabled]').count()) === 1, bt.split('\n').slice(0, 4).join(' / '));
+  check('1.2.0 배터리 공장 건설 → 공사 중 표시(남은 개월), 건설 버튼 없음, 이유 상자 없음', (await EG(() => window.__car.game.state.batteryPlant.build?.level)) === 1 && bt.includes('개월 남았습니다') && bt.includes('공사 중') && (await ep.locator('.fac-bat [data-act="buildBatteryPlant"]:not([disabled])').count()) === 0 && (await ep.locator('.fac-bat .badbox').count()) === 0, bt.split('\n').slice(0, 4).join(' / '));
   await eshot('battery-plant-1366x1024', '.fac-bat');
   await ep.setViewportSize({ width: 800, height: 1200 }); await ep.waitForTimeout(150); await eshot('battery-plant-800x1200', '.fac-bat');
   check('1.2.0 배터리 공장(800×1200): 가로 넘침 없음', (await EG(() => document.documentElement.scrollWidth - innerWidth)) <= 0);

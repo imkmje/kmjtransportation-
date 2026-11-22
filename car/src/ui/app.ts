@@ -1900,8 +1900,8 @@ export function startApp(): void {
     const nx = n ? `<table class="tbl" style="margin-top:10px"><tr><th>${b ? '공사 중인 등급' : c ? '증설하면' : '지으면'} · ${n.level}등급</th><th class="r">지금</th><th class="r">${c ? '증설 뒤' : '건설 뒤'}</th></tr>${cmpRow('전기차 원가 절감', pct(c?.cut), pct(n.cut))}${cmpRow('월 유지비', money(B.upkeep), money(n.upkeep), true)}</table>
       <div class="kpis" style="margin-top:10px">${kpi('건설비', money(n.cost))}${kpi('공사 기간', `${n.buildMonths}<span>개월</span>`)}</div>
       <p class="hint bat-est" style="margin-top:8px">지난달 전기차 ${num(B.lastMonth.evSold)}대로 어림하면 ${n.level}등급의 월 절감 ${money(raw * n.cut)} − 유지비 ${money(n.upkeep)} = <b class="${nNet >= 0 ? 'pos' : 'neg'}">${money(nNet, true)}</b></p>
-      ${B.canBuild ? '' : `<div class="badbox" style="margin-top:10px">${esc(B.reason ?? '')}</div>`}
-      <button class="go" data-act="buildBatteryPlant" ${B.canBuild ? '' : 'disabled'}>${c ? '배터리 공장 증설' : '배터리 공장 건설'} · ${money(n.cost)}</button>` : '<p class="hint" style="margin-top:10px">배터리 공장이 최고 등급입니다.</p>';
+      ${B.canBuild || b ? '' : `<div class="badbox" style="margin-top:10px">${esc(B.reason ?? '')}</div>`}
+      ${b ? '' : `<button class="go" data-act="buildBatteryPlant" ${B.canBuild ? '' : 'disabled'}>${c ? '배터리 공장 증설' : '배터리 공장 건설'} · ${money(n.cost)}</button>`}` : '<p class="hint" style="margin-top:10px">배터리 공장이 최고 등급입니다.</p>';
     return `<div class="card fac-bat"><p class="lbl">배터리 공장${ib('term:배터리 공장')} · ${c ? `${c.level}등급` : '없음'}</p><div class="kpis">${kpi('전기차 원가 절감', pct(c?.cut))}${kpi('월 유지비', money(B.upkeep))}</div>${build}${gain}${nx}</div>`;
   }
 
