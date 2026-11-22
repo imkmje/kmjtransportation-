@@ -27,6 +27,7 @@ const tick = (n) => G((k) => window.__car.tick(k), n);
 const act = async (a, extra = '') => { await page.locator(`[data-act="${a}"]${extra}`).first().click(); };
 /** 차고 탭(0.9.0): 판매 중인 차가 2대 이상이면 첫 화면이 전 차종 표라, 예전처럼 마지막으로 보던 차의 상세로 들어간다(그 줄을 누른다) */
 const toGarage = async (p = page) => { await p.click('#tabs button[data-tab="garage"]'); if (await p.locator('[data-act="gopen"]').count()) { const id = await p.evaluate(() => window.__car.garageId); await p.locator(id >= 0 && (await p.locator(`[data-act="gopen"][data-id="${id}"]`).count()) ? `[data-act="gopen"][data-id="${id}"]` : '[data-act="gopen"]').first().click(); } };
+const overflowOf = (pg) => pg.evaluate(() => { const p = document.getElementById('panel'); return Math.max(document.documentElement.scrollWidth - window.innerWidth, p.scrollWidth - p.clientWidth); }); // 1.3.0 가로 넘침만(화면·패널)
 const overflow = () => G(() => { const p = document.getElementById('panel'); return Math.max(document.documentElement.scrollWidth - window.innerWidth, document.body.scrollHeight - window.innerHeight, p.scrollWidth - p.clientWidth); }); // 화면 가로 넘침, 본문 세로 스크롤, 패널 안 가로 넘침
 /** 시험이 출시 가능해질 때까지 진행 */
 /** 출시하기: 결함이 많다는 확인 창이 뜨면 "그래도 출시" */
@@ -185,7 +186,7 @@ await page.$eval('#lprice', (el, v) => { el.value = String(v); el.dispatchEvent(
 check('색·휠 선택이 무대 글자에 반영', (await page.locator('#ov .spec').innerText()).includes('코발트') && (await page.locator('#ov .spec').innerText()).includes('큰 휠'));
 await page.waitForTimeout(900);
 await shot('launch');
-await G(() => { localStorage.setItem('car-company-reveal', '1'); window.__revealHold = true; }); // 장면을 글자 단계에서 멈춰 세운다(실제 시간에 기대지 않음)
+await G(() => localStorage.setItem('car-company-reveal', '1')); // 1.3.0: 장면은 글자 단계에서 누를 때까지 기다린다
 await act('doLaunch');
 await page.click('#ask-yes');
 await page.waitForSelector('#sheet:not([hidden])');
@@ -199,7 +200,6 @@ await page.waitForSelector('#sheet:not([hidden])');
   await page.waitForSelector('#sheet .critic');
   const st = await G(() => ({ ...window.__reveal }));
   check('건너뛰기 → 평론 창, 무대 캔버스는 제자리', (await page.locator('#sheet .rvl').count()) === 0 && (await page.locator('#stage #cv').count()) === 1 && st.skipped, `${JSON.stringify(st)}(프레임은 소프트웨어 렌더 참고값)`); }
-await G(() => { window.__revealHold = false; });
 await G(() => localStorage.setItem('car-company-reveal', '0'));
 await page.waitForTimeout(4200);
 const rv = await page.locator('#sheet').innerText();
@@ -1555,22 +1555,26 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await GG(() => { for (const g of window.__car.game.state.nameplates.flatMap((n) => n.generations)) delete g.clearance; document.getElementById('toasts').innerHTML = ''; window.__car.render(); });
   // U3 설정 화면 · U2 알림 종류 켜고 끄기, 묶기, 기록함
   await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.0.0 설정 알림: 종류 11개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet [data-act="noteCat"]').count()) === 11 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
+  check('1.3.0 설정 알림: 유형 10개 + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 10 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 13 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
   await mshot('settings-note-1180x820');
-  await gp.click('#sheet [data-act="noteCat"][data-v="rep"]');
-  check('1.0.0 알림 종류 끄기(평판 변화) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).rep)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="rep"]').getAttribute('aria-pressed')) === 'false');
+  await gp.click('#sheet [data-act="noteCat"][data-v="launch"]');
+  check('1.0.0 알림 종류 끄기(출시·평론) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).launch)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="launch"]').getAttribute('aria-pressed')) === 'false');
   await gp.click('#sheet [data-act="closeSheet"]');
-  await GG(() => window.__car.toast('점검 평판 변화', '', '평판', 5000, '', undefined, 'rep'));
+  await GG(() => window.__car.toast('점검 평판 변화', '', '평판', 5000, '', undefined, 'launch'));
   check('1.0.0 꺼 둔 종류는 띄우지 않음', (await gp.locator('#toasts .toast', { hasText: '점검 평판 변화' }).count()) === 0);
   await GG(() => { localStorage.removeItem('car-company-notify'); });
-  await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="noteCat"][data-v="rep"]'); await gp.click('#sheet [data-act="closeSheet"]');
-  await GG(() => { for (let i = 1; i <= 3; i++) window.__car.toast(`평판 묶음 ${i}`, '', '평판', 5000, '', undefined, 'rep'); });
-  const grp = await GG(() => [...document.querySelectorAll('#toasts .toast[data-cat="rep"]:not(.out)')].map((x) => x.innerText));
-  check('1.0.0 같은 종류가 연달아 오면 묶음("평판 변화 3건", 마지막 내용)', grp.length === 1 && grp[0].includes('평판 변화 3건') && grp[0].includes('평판 묶음 3'), JSON.stringify(grp));
+  await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="noteCat"][data-v="launch"]'); await gp.click('#sheet [data-act="closeSheet"]');
+  await GG(() => { for (let i = 1; i <= 3; i++) window.__car.toast(`평판 묶음 ${i}`, '', '평판', 5000, '', undefined, 'launch'); });
+  const grp = await GG(() => [...document.querySelectorAll('#toasts .toast[data-cat="launch"]:not(.out)')].map((x) => x.innerText));
+  check('1.0.0 같은 종류가 연달아 오면 묶음("출시·평론 3건", 마지막 내용)', grp.length === 1 && grp[0].includes('출시·평론 3건') && grp[0].includes('평판 묶음 3'), JSON.stringify(grp));
   // 월 결산 알림: 다음 달에는 같은 자리에서 내용만 바뀜(새로 만들지 않음, 등장 움직임 한 번)
-  await GG(() => { document.getElementById('toasts').innerHTML = ''; window.__car.tick(4, true); });
-  await GG(() => { const t = [...document.querySelectorAll('#toasts .toast')].find((x) => x.innerText.includes('결산')); if (t) t.dataset.probe = '1'; window.__car.tick(4, true); });
-  const same = await GG(() => { const t = [...document.querySelectorAll('#toasts .toast')].filter((x) => x.innerText.includes('결산')); return { n: t.length, probe: t[0]?.dataset.probe ?? '', seen: t[0]?.classList.contains('seen') ?? false }; });
+  // 1.3.0 흔들림 원인: 두 달 사이에 (1) 다른 알림 둘 이상이 오면 화면 알림 수 상한(2개)으로 오래된 월 결산 알림이 닫히고, (2) 점검 호출 사이 실제 시간이 6초를 넘으면 알림이 저절로 닫혔다.
+  // 그래서 이 점검 동안만 재무·결산 말고 끌 수 있는 유형을 끄고(경고는 그대로), 두 달 진행과 확인을 한 번의 호출 안에서 한다(실제 시간에 기대지 않음)
+  const same = await GG(() => { const c = window.__car, N = c.noteSet, keep = { ...N }; for (const k of Object.keys(N)) if (k !== 'finance') N[k] = false;
+    try { document.getElementById('toasts').innerHTML = ''; c.tick(4, true);
+      const t0 = [...document.querySelectorAll('#toasts .toast')].find((x) => x.innerText.includes('결산')); if (t0) t0.dataset.probe = '1'; c.tick(4, true);
+      const t = [...document.querySelectorAll('#toasts .toast:not(.out)')].filter((x) => x.innerText.includes('결산')); return { n: t.length, probe: t[0]?.dataset.probe ?? '', seen: t[0]?.classList.contains('seen') ?? false, first: !!t0 };
+    } finally { Object.assign(N, keep); } });
   check('1.0.0 월 결산 알림은 다음 달에 같은 자리에서 바뀜(다시 등장하지 않음)', same.n === 1 && same.probe === '1' && same.seen, JSON.stringify(same));
   { if (await gp.locator('#toasts .more').isVisible()) await gp.click('#toasts .more');
     // 알림은 6초 뒤 닫힌다. 느린 소프트웨어 렌더에서 그 전에 못 누르면(이미 닫히는 중) 흔들림이 아니라 시간 초과로 보고 건너뛴다
@@ -1763,6 +1767,125 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await eshot('research-1024x768', '[data-field="eco"]');
   await ectx.close(); }
 
+// ---- 1.3.0 차 만들기: 출시 화면 유지·시승기, 파생 모델, 세대교체 맡기기, 알림 유형 ----
+// CAR_SMOKE_130=폴더 를 주면 화면을 그 폴더에 찍는다
+{ const mctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const mp = await mctx.newPage(); mp.on('pageerror', (e) => errors.push(String(e))); mp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const MG = (fn, a) => mp.evaluate(fn, a), M3 = process.env.CAR_SMOKE_130 ?? '';
+  const mshot3 = async (n) => { if (M3) await mp.screenshot({ path: `${M3}/${n}.png` }); };
+  const mact = async (a, extra = '') => { await mp.locator(`[data-act="${a}"]${extra}`).first().click(); };
+  await mp.goto(URL0); await mp.waitForSelector('#title:not([hidden])');
+  await mp.click('[data-act="titleNew"]'); await mp.fill('#t-co', '파생 시험'); await mp.click('[data-act="startNew"]'); await MG(() => window.__car.setSpeed(0));
+  await MG(() => { const c = window.__car, s = c.game.state; s.week = (2025 - 1970) * 48; s.cash = 1e8; s.hqLevel = 5;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2025 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id); c.render(); });
+  await mact('plan'); if ((await MG(() => window.__car.screen)) === 'start') await mact('pickNew');
+  await mp.fill('#pname', '아리아'); await mact('ptab', '[data-v="seg"]'); await mact('pick', '[data-k="segment"][data-v="family"]'); await mact('ptab', '[data-v="budget"]'); await mact('startDev');
+  // (c)(e) 출시 화면: 공개 장면과 평론 창은 닫기 전까지 떠 있고 시간도 멈춤, 평론가 4명 시승기
+  const pid = await MG(() => { const c = window.__car; c.game.devCheat('finishDev'); return c.game.state.projects.at(-1).id; });
+  await MG((id) => window.__car.goTarget({ tab: 'dev', sub: 'launch', id }), pid);
+  await MG(() => { localStorage.setItem('car-company-reveal', '1'); window.__car.setSpeed(1); });
+  await mact('doLaunch'); if (await mp.locator('#ask').isVisible()) await mp.click('#ask-yes');
+  await mp.waitForSelector('#sheet .rvl'); const wk0 = await MG(() => window.__car.game.state.week);
+  await mp.waitForTimeout(10000);
+  check('1.3.0 출시 공개 장면: 10초 뒤에도 열려 있음(저절로 넘어가지 않음), 시간 멈춤', (await mp.locator('#sheet .rvl').isVisible()) && (await MG(() => window.__car.game.state.week)) === wk0, await mp.locator('#sheet .rvl').getAttribute('data-phase'));
+  await mp.click('#sheet .rvl-skip'); await mp.waitForSelector('#sheet .critic');
+  await mp.waitForTimeout(10000);
+  const crit = await MG(() => [...document.querySelectorAll('#sheet .critic')].map((x) => ({ who: x.querySelector('em')?.innerText ?? '', t: x.querySelector('.crit-t')?.innerText ?? '' })));
+  check('1.3.0 평론 창: 10초 뒤에도 열려 있음, 시간 멈춤', (await mp.locator('#sheet:not([hidden]) .critic').count()) === 4 && (await MG(() => window.__car.game.state.week)) === wk0);
+  check('1.3.0 시승기: 평론가 4명의 이름·매체·글', crit.length === 4 && crit.every((x) => x.who.includes('·') && x.t.length > 15) && crit.some((x) => x.who.includes('월간 모터라인')), JSON.stringify(crit.map((x) => x.who)));
+  await mshot3('review-critiques-1366x1024');
+  await mp.locator('#sheet [data-act="closeReview"]').click();
+  check('1.3.0 평론 창 [닫기]로 닫힘', await mp.locator('#sheet').isHidden());
+  await MG(() => { localStorage.setItem('car-company-reveal', '0'); window.__car.setSpeed(0); });
+  const gid = await MG(() => window.__car.game.state.nameplates[0].generations[0].id);
+  check('1.3.0 차고 상세: 평론가 시승기 접힘 칸', (await mp.locator('.fold[data-fold="crit"]').count()) === 1);
+  // (a) 파생 모델: 4종 카드 → 이름 바꿔 개발 시작 → 출시하면 차고에서 바탕 차 아래
+  await mact('goDerive', `[data-id="${gid}"]`);
+  const cards = await MG(() => [...document.querySelectorAll('.dv')].map((x) => ({ v: x.dataset.v, ok: !x.disabled, t: x.innerText })));
+  check('1.3.0 파생 모델 4종 카드(특색·개발비·기간·고객층 또는 불가 이유)', cards.length === 4 && cards.map((x) => x.v).join() === 'wagon,coupe,gt,ev' && cards.every((x) => x.ok ? /개발비 약 .+ · \d+주~ · 고객층/.test(x.t) : x.t.length > 20), JSON.stringify(cards.map((x) => [x.v, x.ok])));
+  await mshot3('derive-pick-1366x1024');
+  await mact('dvPick', '[data-v="wagon"]');
+  check('1.3.0 파생 고르기: 이름 칸에 기본 제안, 팀 자동 배치', (await mp.inputValue('#dname')) === '아리아 왜건' && (await MG(() => window.__car.game.state.staff.length)) > 0 && (await mp.locator('.team-pick [data-act="dvTeam"][aria-pressed="true"]').count()) > 0);
+  await mp.fill('#dname', '아리아 투어러');
+  check('1.3.0 이름을 바꾸면 무대 글자도 바뀜', (await mp.locator('#dname-ov').innerText()) === '아리아 투어러');
+  await mshot3('derive-wagon-1366x1024');
+  await mact('dvStart');
+  const dp = await MG(() => { const p = window.__car.game.state.projects.at(-1); return p && { kind: p.kind, name: p.name, variant: p.variant, scr: window.__car.screen }; });
+  check('1.3.0 파생 개발 시작: 바꾼 이름·왜건·개발 화면', dp?.kind === 'derivative' && dp.name === '아리아 투어러' && dp.variant === 'wagon' && dp.scr === 'dev', JSON.stringify(dp));
+  check('1.3.0 개발 화면: 파생 모델 개발 중 표시', (await mp.locator('#ov').innerText()).includes('파생 모델 개발 중'));
+  await MG(() => { const c = window.__car, g = c.game, s = g.state, p = s.projects.at(-1); p.wins = [{ week: s.week, staffId: s.staff[0].id, name: s.staff[0].name, role: s.staff[0].role, kind: 'cost', value: 0.01, text: `${s.staff[0].name}이 부품을 바꿔 원가를 1% 줄였습니다.` }]; c.render(); }); // 직원 성과 표시 점검용(드물게 생기므로 직접 넣음)
+  check('1.3.0 개발 화면: 직원 성과 목록', (await mp.locator('#panel .wins-list li').count()) === 1);
+  await MG(() => { const c = window.__car, g = c.game, s = g.state, p = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 }); c.render(); });
+  await mp.click('#tabs button[data-tab="garage"]'); await mp.waitForTimeout(200);
+  const rows = await MG(() => [...document.querySelectorAll('.gtable .gtr-w:not(.head)')].map((x) => ({ d: x.classList.contains('deriv'), t: x.querySelector('.g-name')?.innerText ?? '' })));
+  check('1.3.0 차고 표: 파생 차는 바탕 차 바로 아래 들여 씀', rows.length === 2 && !rows[0].d && rows[0].t.includes('아리아') && rows[1].d && rows[1].t.includes('아리아 투어러') && rows[1].t.includes('왜건'), JSON.stringify(rows));
+  await mshot3('garage-derive-1366x1024');
+  await mp.click('#tabs button[data-tab="records"]');
+  check('1.3.0 기록 탭: 파생 차종 계보가 바탕 아래, 시승기 펼침', (await mp.locator('.lineage-card.deriv').innerText()).includes('아리아」의 파생 모델') && (await mp.locator('.rec-crit').count()) >= 2);
+  // 파생 4종 3D 외관(바탕 차와 나란히)
+  if (M3) { await MG((id) => { const c = window.__car, s = c.game.state, g = c.Q.generationById(s, id), O = c.Q.derivativeOptions(s, id), st = c.stage; const base = c.genLook(id);
+      const box = document.createElement('div'); box.id = 'vcmp'; box.style.cssText = 'position:fixed;inset:0;z-index:99;background:#eef1f4;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;font:700 16px sans-serif';
+      const cell = (look, t) => `<div style="background:#fff;border-radius:12px;padding:6px;text-align:center"><img src="${st.renderThumb(look, 420, 260, -0.65)}" style="width:100%"><div>${t}</div></div>`;
+      box.innerHTML = cell(base, '바탕: 아리아(세단)') + O.map((o) => cell({ ...base, ...(o.id === 'coupe' ? { bodyId: 'coupe' } : {}), ...(o.id === 'gt' ? { variant: 'gt', sporty: true, wheel: 2 } : {}), ...(o.id === 'wagon' ? { variant: 'wagon' } : {}), ...(o.id === 'ev' ? { powertrain: 'ev' } : {}) }, o.name)).join('') + cell(c.genLook(c.game.state.nameplates.at(-1).generations[0].id), '출시한 「아리아 투어러」(왜건)'); document.body.append(box); void g; }, gid);
+    await mshot3('derive-4-looks'); await MG(() => document.getElementById('vcmp').remove()); }
+  // (b) 세대교체 맡기기: 기획 임원이 없으면 이유, 임명하면 켜고 끔
+  await MG(() => window.__car.goTarget({ tab: 'company', sub: 'exec' })); await mp.waitForTimeout(150);
+  check('1.3.0 맡기기: 기획 임원이 없으면 이유', (await mp.locator('.exec-card[data-role="product"] .ga-why').innerText()).includes('기획 임원이 없습니다') && (await mp.locator('.exec-card[data-role="product"] [data-act="genAuto"]:not([disabled])').count()) === 0);
+  await MG(() => { const c = window.__car, s = c.game.state, x = s.staff.find((y) => y.role === 'designer'); x.ability = x.potential = 90; c.game.command({ type: 'appointExec', role: 'product', staffId: x.id }); c.render(); });
+  const npA = await MG(() => window.__car.game.state.nameplates[0].id);
+  await mp.click(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`);
+  const on1 = await MG((id) => window.__car.game.state.execs?.genAuto?.[id] ?? null, npA);
+  check('1.3.0 맡기기 켜짐(출시까지 자동이 기본)', on1?.launch === true && (await mp.locator(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`).getAttribute('aria-pressed')) === 'true', JSON.stringify(on1));
+  await mp.click(`.exec-card[data-role="product"] [data-act="genAutoLaunch"][data-np="${npA}"]`);
+  check('1.3.0 맡기기: 출시는 직접으로 바꿈', (await MG((id) => window.__car.game.state.execs.genAuto[id].launch, npA)) === false);
+  await mp.click('.exec-card[data-role="product"] [data-act="genAutoAll"][data-v="1"]');
+  check('1.3.0 맡기기: 모두 켜기', (await MG(() => Object.keys(window.__car.game.state.execs.genAuto).length)) === 2);
+  await mp.locator('.exec-card[data-role="product"] .ga-sec').scrollIntoViewIfNeeded(); await mshot3('exec-genauto-1366x1024');
+  await mp.click(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`);
+  check('1.3.0 맡기기 꺼짐', (await MG((id) => window.__car.game.state.execs.genAuto[id] ?? null, npA)) === null);
+  await MG((id) => window.__car.goTarget({ tab: 'garage', id }), gid);
+  check('1.3.0 차고 상세: 맡김 토글', (await mp.locator('.ga-one [data-act="genAuto"]').count()) === 1);
+  // 맡긴 차의 자동 출시: 공개 장면으로 게임을 끊지 않고 알림만, 알림을 누르면 시승기
+  await mp.click(`.ga-one [data-act="genAuto"][data-np="${npA}"]`);
+  const auto = await MG((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.find((n) => n.id === id).generations[0]; g.launchMonth -= 60; g.lifeMonth -= 60; s.cash = 1e9;
+    for (let i = 0; i < 160 && s.nameplates.find((n) => n.id === id).generations.length < 2; i++) c.tick(1);
+    return { gens: s.nameplates.find((n) => n.id === id).generations.length, sheet: !document.getElementById('sheet').hidden, rvl: !!document.querySelector('#sheet .rvl'), screen: c.screen }; }, npA);
+  await mp.click('#todobtn'); await mp.click('#drawer [data-act="todoTab"][data-v="notes"]'); // 알림은 12초 뒤 닫히므로(느린 렌더) 알림 기록에서 누른다
+  const autoNote = await mp.locator('#drawer .note-it', { hasText: '기획 임원이 출시했습니다' }).count();
+  check('1.3.0 맡긴 차 자동 출시: 공개 장면·창 없이 알림만', auto.gens === 2 && !auto.sheet && !auto.rvl && autoNote >= 1, JSON.stringify({ ...auto, autoNote }));
+  if (autoNote) { await mp.locator('#drawer .note-it', { hasText: '기획 임원이 출시했습니다' }).first().click(); await mp.waitForSelector('#sheet .critic', { timeout: 5000 }).catch(() => {});
+    check('1.3.0 자동 출시 알림을 누르면 평론 창(시승기)', (await mp.locator('#sheet .crit-t').count()) === 4);
+    await mp.locator('#sheet [data-act="closeReview"]').click().catch(() => {}); }
+  // (d) 알림 유형: 교육 알림을 끄면 교육 보내기 알림이 뜨지 않고 기록에는 남음, 경고는 못 끔
+  await mp.click('#menubtn'); await mp.click('#sheet [data-act="settings"]'); await mp.click('#sheet [data-act="setTab"][data-v="note"]');
+  check('1.3.0 알림 설정: 유형 10종, 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 10 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
+  await mp.click('#sheet [data-act="noteCat"][data-v="training"]');
+  check('1.3.0 교육 알림 끄기 → 기기 저장소', (await MG(() => JSON.parse(localStorage.getItem('car-company-notify')).training)) === false);
+  await mshot3('settings-notify-1366x1024');
+  await mp.click('#sheet [data-act="closeSheet"]');
+  await MG(() => { document.getElementById('toasts').innerHTML = ''; window.__car.goTarget({ tab: 'company', sub: 'staff' }); });
+  const sid = await MG(() => { const c = window.__car, s = c.game.state; s.cash = 1e9; const x = c.Q.staffInfo(s).find((y) => y.canTrain); return x?.id ?? -1; });
+  await mp.click(`[data-act="staffSel"][data-id="${sid}"]`); await mp.click(`[data-act="train"][data-id="${sid}"]`); await mp.waitForTimeout(200);
+  check('1.3.0 교육 알림을 끄면 교육 보내기 알림이 뜨지 않음', (await MG((id) => window.__car.game.state.staff.find((x) => x.id === id).trainings.length, sid)) > 0 && (await mp.locator('#toasts .toast:not(.out)', { hasText: '교육' }).count()) === 0);
+  await mp.click('#todobtn'); await mp.click('#drawer [data-act="todoTab"][data-v="notes"]');
+  check('1.3.0 알림 기록에는 남고 유형 칩·[알림 설정]', (await mp.locator('#drawer .note-list').innerText()).includes('교육을 보냈습니다') && (await mp.locator('#drawer [data-act="noteTopic"][data-v="training"]').count()) === 1 && (await mp.locator('#drawer [data-act="noteSettings"]').count()) === 1);
+  await mp.click('#drawer [data-act="noteTopic"][data-v="training"]');
+  check('1.3.0 알림 기록 유형 거르기', (await mp.locator('#drawer .note-it').count()) >= 1 && (await mp.locator('#drawer .note-it .chip').allInnerTexts()).every((t) => t === '직원 교육·휴식'));
+  await mp.click('#drawer [data-act="drawerClose"]');
+  // 태블릿 세로(800×1200)·가로(1024×768): 넘침 없음
+  for (const [w, h] of [[1024, 768], [800, 1200]]) {
+    await mp.setViewportSize({ width: w, height: h }); await MG(() => { document.getElementById('toasts').innerHTML = ''; window.__car.goTarget({ tab: 'garage' }); }); await mp.waitForTimeout(150);
+    const o1 = await overflowOf(mp); if (w === 800) await mshot3('garage-800x1200');
+    const gl = await MG(() => window.__car.game.state.nameplates[0].generations.at(-1).id); await MG((id) => window.__car.goTarget({ tab: 'garage', id }), gl);
+    await mact('goDerive', `[data-id="${gl}"]`); await mact('dvPick', '[data-v="coupe"]'); await mp.waitForTimeout(200);
+    const o2 = await overflowOf(mp), dsc = await MG(() => window.__car.screen); if (w === 800) await mshot3('derive-800x1200');
+    check(`1.3.0 ${w}×${h}: 파생 고르기 화면`, dsc === 'derive', dsc);
+    await mact('dvCancel').catch(() => {}); await MG(() => window.__car.goTarget({ tab: 'company', sub: 'exec' })); await mp.waitForTimeout(150);
+    const o3 = await overflowOf(mp); if (w === 800) { await mp.locator('.exec-card[data-role="product"] .ga-sec').scrollIntoViewIfNeeded(); await mshot3('exec-genauto-800x1200'); }
+    check(`1.3.0 ${w}×${h}: 차고 표·파생 고르기·임원 맡기기 넘침 없음`, o1 <= 0 && o2 <= 0 && o3 <= 0, `${o1}/${o2}/${o3}`);
+  }
+  await mctx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
-console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);
+console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에
 await done(fails.length ? 1 : 0);

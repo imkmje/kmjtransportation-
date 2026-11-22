@@ -1,6 +1,6 @@
 // G4 출시 공개 장면: 평론 창 전에 어두운 무대 → 실루엣 → 스포트라이트와 'launch' 효과음 → 천천히 회전 → 이름·세대·차급 → 끝.
 // 기존 Stage(렌더러 그대로)의 캔버스를 결과 창(#sheet) 안으로 잠시 옮겨 그린다. 결과 창이 열려 있으므로 게임 시간은 멈춘다.
-// 단계는 .rvl의 data-phase(dark → light → title → done)로 드러낸다. 건너뛰기: 버튼·화면 누르기·Esc. 기기 저장소 'car-company-reveal'이 '0'이면 끈다(기본 켬, 설정 화면에서 바꾼다).
+// 단계는 .rvl의 data-phase(dark → light → title → done)로 드러낸다. 1.3.0: 글자 단계에서 저절로 넘어가지 않고 누를 때까지 기다린다(사용자 지시). 넘기기: 버튼·화면 누르기·Esc. 기기 저장소 'car-company-reveal'이 '0'이면 끈다(기본 켬, 설정 화면에서 바꾼다).
 import './reveal.css';
 import type { Stage } from '../render/stage';
 
@@ -19,7 +19,7 @@ export interface RevealOpts {
   done: () => void; // 끝나거나 건너뛰면 한 번(평론 창·신문을 띄운다)
 }
 // 장면 시간표(초). launch 효과음은 시작 0.32초 뒤 큰 화음이라 그 순간에 불이 켜지게 한다
-const T = { new: { sound: 1.1, text: 2.1, end: 5.3, yaw: -1.4 }, facelift: { sound: .45, text: 1.0, end: 2.7, yaw: -Math.PI / 2 + .28 } } as const;
+const T = { new: { sound: 1.1, text: 2.1, yaw: -1.4 }, facelift: { sound: .45, text: 1.0, yaw: -Math.PI / 2 + .28 } } as const;
 const CHORD = .32;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
@@ -42,9 +42,7 @@ export function playReveal(o: RevealOpts): void {
   const at = (s: number, fn: () => void) => timers.push(window.setTimeout(fn, s * 1000));
   at(t.sound, o.sound);
   at(t.sound + CHORD, () => { stage.setRevealLight('lit'); root.classList.add('lit'); phase('light'); });
-  at(t.text, () => { root.classList.add('txt'); phase('title'); });
-  // 점검용: window.__revealHold가 참이면 글자 단계에서 멈춰 건너뛰기를 기다린다(느린 소프트웨어 렌더에서도 단계를 확인할 수 있게)
-  at(t.end, () => { if (!(window as unknown as { __revealHold?: boolean }).__revealHold) finish(false); });
+  at(t.text, () => { root.classList.add('txt'); phase('title'); const b = root.querySelector<HTMLElement>('.rvl-skip')!; b.innerHTML = '평론 보기 <span aria-hidden="true">▸</span>'; b.focus(); });
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(true); } };
   const onTap = () => finish(true);
   root.addEventListener('click', onTap); document.addEventListener('keydown', onKey, true);

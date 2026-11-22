@@ -8,7 +8,7 @@ import { esc, longCls, money, num, score } from './fmt';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const sign = (x: number) => (x > 0 ? '+' : x < 0 ? '−' : '±');
-const KIND: Record<string, string> = { new: '신차', fullchange: '풀체인지', facelift: '페이스리프트', fix: '긴급 개선' };
+const KIND: Record<string, string> = { new: '신차', fullchange: '풀체인지', facelift: '페이스리프트', fix: '긴급 개선', derivative: '파생 모델' };
 
 /** 막대 그래프(월별 이익): 0 위는 초록, 아래는 빨강 */
 function bars(vals: number[], label: string, w = 300, h = 56): string {
@@ -65,7 +65,8 @@ export function careerBlock(s: CarState, staffId: number): string {
   const head = h.join === null ? `${Q.dateLabel(h.since).replace(/ \d주$/, '')}부터 기록(이전 버전 저장)` : `${Q.dateLabel(h.join).replace(/ \d주$/, '')} 입사 · ${h.years}년째 · 입사 때 능력 ${h.joinAbility}`;
   const cars = h.cars.length ? `<table class="tbl career-cars"><tr><th>참여한 차</th><th>일</th><th class="r">평론</th><th class="r">판매</th></tr>${h.cars.map((c) => `<tr><td>${esc(c.name)}</td><td>${KIND[c.kind] ?? c.kind}</td><td class="r">${score(c.reviewAvg)}</td><td class="r">${num(c.totalSold)}대</td></tr>`).join('')}</table>` : '<p class="hint">아직 참여해 출시한 차가 없습니다.</p>';
   const ex = h.execs.length ? `<p class="hint">임원 경력: ${h.execs.map((e) => `${e.title} ${Q.dateLabel(e.from).replace(/ \d주$/, '')}~${e.to === null ? '지금' : Q.dateLabel(e.to).replace(/ \d주$/, '')}`).join(', ')}</p>` : '';
-  return `<div class="career"><p class="lbl" style="margin-top:14px">경력</p><p class="hint">${esc(head)} · 교육 ${h.trainings}번</p>${line}${cars}${ex}</div>`;
+  const wins = h.wins?.length ? `<p class="lbl" style="margin-top:10px">개발 중 성과 ${h.wins.length}건</p><ul class="log wins-list">${h.wins.map((w) => `<li>「${esc(w.project ?? '')}」 · ${esc(w.text)} <small>${esc(Q.dateLabel(w.week))}</small></li>`).join('')}</ul>` : ''; // 1.3.0
+  return `<div class="career"><p class="lbl" style="margin-top:14px">경력</p><p class="hint">${esc(head)} · 교육 ${h.trainings}번</p>${line}${cars}${wins}${ex}</div>`;
 }
 
 /** 10년 회고 신문(창 본문). 닫기 버튼은 closeReview(기존 신문 창과 같은 동작) */
