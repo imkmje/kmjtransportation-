@@ -3,7 +3,8 @@ import { config } from '../config';
 import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS } from '../data';
 import { bodiesAt, optionsAt, powertrainsAt, unitCost } from './cars';
 import { eraTimeline, optionTech } from './events';
-import { ptCostAdd, researchCost, researchError } from './research';
+import { levelForTier, platformReady, ptCostAdd, researchCost, researchError } from './research';
+import { EV, batteryChoices } from './ev';
 import { equipOf, recommendedEquip, stdOf } from './equip';
 import { specError, withRequired } from './dev';
 import { loanLimit } from './finance';
@@ -16,7 +17,7 @@ import { rescueOptions } from './insight';
 import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { monthOf, monthTime, yearOf } from './time';
-import type { Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
+import type { Battery, Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
 
 export interface Bot { name: string; step(g: Game): void }
 
@@ -300,7 +301,7 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   const options = stdOf(pickEquip(s, body, segment, 'gasoline', o.optPick)), powertrain = o.ptPick === 'gasoline' ? 'gasoline' : o.ptPick === 'newest' ? powertrainsAt(s).filter((x) => !specError(s, { name: '', body, segment, powertrain: x.id, tier: 2, options, direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] })).at(-1)!.id : bestPowertrain(s, body, segment, options, others, team);
   const equip = pickEquip(s, body, segment, powertrain, o.optPick);
   const spec = {
-    body, segment, powertrain, tier: 2, options: stdOf(equip), equip,
+    body, segment, powertrain, tier: 2, options: stdOf(equip), equip, ...(powertrain === EV ? { battery: pickBattery(s, body, segment, stdOf(equip)) } : {}),
     direction: o.sloppy ? SLOPPY_DIRS[Math.floor(hash01(s.seed, 62, s.nextId) * SLOPPY_DIRS.length)] : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: o.budget, designWeeks: o.designWeeks,
   };
   // 직전 차보다 못한 차를 내지 않으려고, 예상 등급이 직전 세대 출시 당시보다 낮으면 기간·예산을 올린다
@@ -328,6 +329,14 @@ function bestPowertrain(s: CarState, body: string, segment: string, options: str
     const v = Math.min(cap, monthlyDemand(s, { body, segment, stats, price, awareness: B.ptAwareness, life: 1, powertrain: pt.id }, cars, t)) * (price - unitCost(body, pt.id, 2, withRequired(s, options), costMultOf(s), ptCostAdd(s, pt.id)));
     if (v > bestV + 1e-9) { best = pt.id; bestV = v; }
   }
+  return best;
+}
+
+/** 1.2.0 전기차 배터리: (매력 배수)^점유율 지수 × (시장 기준가 − 원가, 표준 대비 값·원가 차이 반영)가 가장 큰 용량. 같으면 표준 */
+function pickBattery(s: CarState, body: string, segment: string, options: string[]): Battery {
+  const opts = withRequired(s, options), margin = carBasePrice(s, { body, segment, powertrain: EV, options: opts }) - unitCost(body, EV, 2, opts, costMultOf(s, EV), ptCostAdd(s, EV, 'std', platformReady(s)));
+  let best: Battery = 'std', bestV = -Infinity;
+  for (const c of batteryChoices(s, { body, level: levelForTier(s, EV, 2) })) { const v = c.appeal ** config.market.shareExp * (margin + c.priceDelta - c.costDelta); if (v > bestV + 1e-9 || (c.id === 'std' && v >= bestV - 1e-9)) { best = c.id; bestV = v; } }
   return best;
 }
 

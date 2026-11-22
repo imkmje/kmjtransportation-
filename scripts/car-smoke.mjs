@@ -1716,6 +1716,53 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     check('1.1.0 개발 중(설계 단계) [장비 다시 고르기] → 프로젝트 장비가 바뀜', await GG(([id, k]) => window.__car.game.state.projects.find((p) => p.id === id)?.equip?.[k] === 'std', [pid, k]), `${pid} ${k}`); }
   await gctx.close(); }
 
+// ---- 1.2.0 전기차 시대(2025년 상태를 직접 만듦): 배터리 용량 고르기, 배터리 공장, 전기차 상세 ----
+{ const ectx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const ep = await ectx.newPage(); ep.on('pageerror', (e) => errors.push(String(e))); ep.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const EG = (fn, a) => ep.evaluate(fn, a), E3 = process.env.CAR_SMOKE_EV ?? '';
+  const eshot = async (n, sel) => { if (!E3) return; if (sel) await ep.locator(sel).first().scrollIntoViewIfNeeded(); await ep.screenshot({ path: `${E3}/${n}.png` }); };
+  const eact = async (a, extra = '') => { await ep.locator(`[data-act="${a}"]${extra}`).first().click(); };
+  await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
+  await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '전기 시험'); await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
+  await EG(() => { const c = window.__car, s = c.game.state; s.week = (2025 - 1970) * 48; s.cash = 1e8; s.hqLevel = 5;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2025 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id); c.render(); });
+  await eact('plan'); if ((await EG(() => window.__car.screen)) === 'start') await eact('pickNew');
+  await eact('ptab', '[data-v="power"]');
+  await ep.click('[data-act="pick"][data-k="powertrain"][data-v="ev"]');
+  const evRead = () => EG(() => ({ cost: [...document.querySelectorAll('.plan-est .kpi')].find((k) => k.querySelector('small')?.innerText.includes('대당 원가'))?.querySelector('b')?.innerText ?? '', sum: document.querySelector('.ev-sum')?.innerText ?? '', n: document.querySelectorAll('.bat-opts .opt').length, std: document.querySelector('.bat-opts [data-v="std"]')?.getAttribute('aria-pressed') }));
+  const e0 = await evRead();
+  check('1.2.0 전기차 기획: 배터리 용량 3종(소형·표준·대형), 기본 표준, 주행 거리·충전·전용 플랫폼 줄', e0.n === 3 && e0.std === 'true' && /주행 거리 [\d,]+km/.test(e0.sum) && e0.sum.includes('충전') && e0.sum.includes('전용 플랫폼'), JSON.stringify(e0));
+  await ep.click('.bat-opts [data-act="pick"][data-v="large"]');
+  const e1 = await evRead(), km = (t) => Number((t.match(/주행 거리 ([\d,]+)km/)?.[1] ?? '0').replace(/,/g, ''));
+  check('1.2.0 대형 배터리를 고르면 주행 거리가 늘고 대당 원가가 바뀜', km(e1.sum) > km(e0.sum) && e1.cost !== e0.cost && (await EG(() => window.__car.draft.battery)) === 'large', `${e0.cost}→${e1.cost} / ${km(e0.sum)}→${km(e1.sum)}`);
+  await eshot('plan-battery-1366x1024', '.bat-opts');
+  for (const [w, h] of [[1024, 768], [800, 1200]]) { await ep.setViewportSize({ width: w, height: h }); await ep.waitForTimeout(150);
+    const cut = await EG(() => [...document.querySelectorAll('.bat-opts .opt, .ev-sum')].filter((x) => x.scrollWidth > x.clientWidth + 1).length + Math.max(0, document.documentElement.scrollWidth - innerWidth));
+    check(`1.2.0 배터리 선택(${w}×${h}): 넘침 없음`, cut === 0, String(cut)); if (w === 800) await eshot('plan-battery-800x1200', '.bat-opts'); }
+  await ep.setViewportSize({ width: 1366, height: 1024 });
+  await eact('ptab', '[data-v="budget"]'); await eact('startDev');
+  check('1.2.0 개발 시작: 프로젝트에 대형 배터리', (await EG(() => window.__car.game.state.projects.at(-1)?.battery)) === 'large', JSON.stringify(await EG(() => window.__car.game.state.projects.map((p) => [p.powertrain, p.battery]))));
+  const evGen = await EG(() => { const c = window.__car, g = c.game, s = g.state, p = s.projects.at(-1); g.devCheat('finishDev'); const r = g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#c0392b', wheels: 1 }); c.render(); return r.ok ? s.nameplates.flatMap((n) => n.generations).at(-1).id : r.reason; });
+  await EG((id) => window.__car.goTarget({ tab: 'garage', id }), evGen); await ep.waitForTimeout(200); await ep.locator('#sheet [data-act="closeReview"],#sheet [data-act="closeSheet"]').first().click({ timeout: 2000 }).catch(() => {});
+  const evl = await ep.locator('.ev-line').first().innerText().catch(() => '');
+  check('1.2.0 전기차 상세: 주행 거리·기대·대형 배터리·충전 시간·전용 플랫폼', /주행 거리 [\d,]+km/.test(evl) && evl.includes('대형 배터리') && evl.includes('충전') && evl.includes('전용 플랫폼'), evl);
+  await eshot('ev-garage-1366x1024', '.ev-line');
+  await EG(() => window.__car.goTarget({ tab: 'company', sub: 'factory' })); await ep.waitForTimeout(150);
+  check('1.2.0 공장 화면: 배터리 공장 구역(없음, 건설 버튼)', (await ep.locator('.fac-bat').innerText()).includes('없음') && (await ep.locator('.fac-bat [data-act="buildBatteryPlant"]:not([disabled])').count()) === 1);
+  await ep.click('.fac-bat [data-act="buildBatteryPlant"]'); await ep.waitForSelector('#ask:not([hidden])'); await ep.click('#ask-yes'); await ep.waitForTimeout(150);
+  const bt = await ep.locator('.fac-bat').innerText();
+  check('1.2.0 배터리 공장 건설 → 공사 중 표시(남은 개월), 건설 버튼 없음, 이유 상자 없음', (await EG(() => window.__car.game.state.batteryPlant.build?.level)) === 1 && bt.includes('개월 남았습니다') && bt.includes('공사 중') && (await ep.locator('.fac-bat [data-act="buildBatteryPlant"]:not([disabled])').count()) === 0 && (await ep.locator('.fac-bat .badbox').count()) === 0, bt.split('\n').slice(0, 4).join(' / '));
+  await eshot('battery-plant-1366x1024', '.fac-bat');
+  await ep.setViewportSize({ width: 800, height: 1200 }); await ep.waitForTimeout(150); await eshot('battery-plant-800x1200', '.fac-bat');
+  check('1.2.0 배터리 공장(800×1200): 가로 넘침 없음', (await EG(() => document.documentElement.scrollWidth - innerWidth)) <= 0);
+  await ep.setViewportSize({ width: 1024, height: 768 }); await ep.click('#tabs button[data-tab="research"]'); await ep.waitForTimeout(150);
+  const rc = await ep.locator('.r-charge').innerText().catch(() => '');
+  check('1.2.0 연구 화면: 충전 속도 현재 단계(10→80% N분)', /10→80% \d+분/.test(rc), rc);
+  const rOver = await EG(() => [...document.querySelectorAll('.tc')].filter((x) => x.getBoundingClientRect().right > innerWidth + 1 || x.scrollWidth > x.clientWidth + 1).length);
+  check('1.2.0 연구 트리(1024×768): 기술 칸 넘침 없음', rOver === 0, String(rOver));
+  await eshot('research-1024x768', '[data-field="eco"]');
+  await ectx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목` : `ALL PASS ${checks}항목`);
 await done(fails.length ? 1 : 0);

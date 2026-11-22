@@ -6,13 +6,14 @@ import { eraCostAdd, repEffect, salesFleetMult } from './company';
 import { equipOf, expectMult } from './equip';
 import { REGION, chargingInfra, eraNow, type EraNow, eraWeights, marketMult, requiredOptions, rivalHitAdd, trendOf } from './events';
 import { hash01, type Rng } from './rng';
+import { EV, batteryValue, evDemandMult } from './ev';
 import { diffOf } from './difficulty';
-import { STATS, type Equip, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
+import { STATS, type Battery, type Equip, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
 
 export { REGION };
 
 /** 표 보간(범위 밖은 끝값). t는 소수 연도(달마다 매끄럽게). geometric이면 두 점 사이를 비율로(연 규모: 일정한 성장률) */
-function interp(years: number[], vals: number[], t: number, geometric = false): number {
+export function interp(years: number[], vals: number[], t: number, geometric = false): number {
   if (t <= years[0]) return vals[0];
   for (let i = 1; i < years.length; i++) if (t <= years[i]) {
     const f = (t - years[i - 1]) / (years[i] - years[i - 1]), a = vals[i - 1], b = vals[i];
@@ -50,19 +51,19 @@ export function optionValue(id: string, segment: string, year = config.time.star
   return o.cost * (1 + eraCostAdd(year)) * (fit >= V.fitMin ? V.good : V.bad); // 시대 원가 상승(eraCostAdd)만큼 값도 오른다(공장 원가 배수 ≤ 1이므로 맞는 옵션은 대당 이익을 줄이지 않는다)
 }
 /** 1.0.0 차별 기준가 = 차급 기준가(basePriceOf: 동력 가산·의무 장비 포함) + 단 옵션(의무 장비 제외)의 값. 가격 매력·가성비 평론·최고 이익 가격·자동 가격 % 기준·화면 '기준가'가 같이 쓴다 */
-export function carBasePrice(s: CarState, car: { body: string; segment: string; powertrain?: string; options?: string[] }): number {
+export function carBasePrice(s: CarState, car: { body: string; segment: string; powertrain?: string; options?: string[]; battery?: Battery }): number {
   const req = requiredOptions(s);
-  return basePriceOf(s, car.body, car.powertrain) + (car.options ?? []).reduce((a, o) => a + (req.includes(o) ? 0 : optionValue(o, car.segment, s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear)), 0);
+  return basePriceOf(s, car.body, car.powertrain) + (car.powertrain === EV ? batteryValue(s, car.body, car.battery) : 0) + (car.options ?? []).reduce((a, o) => a + (req.includes(o) ? 0 : optionValue(o, car.segment, s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear)), 0);
 }
 /** 판매 중인 세대의 차별 기준가(지금 판의 옵션) */
-export const genBasePrice = (s: CarState, g: Generation): number => carBasePrice(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, options: currentEdition(g).options });
+export const genBasePrice = (s: CarState, g: Generation): number => carBasePrice(s, { body: g.body, segment: g.segment, powertrain: g.powertrain, options: currentEdition(g).options, battery: currentEdition(g).battery });
 /** 동력의 시장 가격 가산(1.0.0). t: 소수 연도 */
 export const ptPremium = (powertrain: string | undefined, t: number): number => { const p = powertrain ? powertrainById(powertrain).premium : undefined; return p ? interp(p.years, p.values, t) : 0; };
 /** 0.5.1 시장 포화(가격 경쟁): fromYear부터 시장 기준가가 해마다 perYear씩 낮아진다(최대 max). month: 월 번호 */
 export const priceErosion = (month: number): number => { const e = config.market.erosion, y = config.time.startYear + month / config.time.monthsPerYear; return 1 - Math.min(e.max, Math.max(0, (y - e.fromYear) * e.perYear)); };
 
 /** 판매 계산에 필요한 차 한 대의 요약(출시 전 미리보기에도 쓴다). powertrain: 동력 종류(유행·사건 수요 배수, 없으면 배수 1) */
-export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number; powertrain?: string; options?: string[]; equip?: Equip; legacy?: boolean } // legacy(1.1.0): 옛 구성(기대 효과 없음) // options(1.0.0): 단 옵션(차별 기준가에 쓴다)
+export interface SaleCar { body: string; segment: string; stats: Stats; price: number; awareness: number; life: number; powertrain?: string; options?: string[]; equip?: Equip; legacy?: boolean; level?: number; battery?: Battery; evPlatform?: boolean } // level·battery·evPlatform(1.2.0): 전기차 주행 거리(없으면 주행 거리 배수 1) // legacy(1.1.0): 옛 구성(기대 효과 없음) // options(1.0.0): 단 옵션(차별 기준가에 쓴다)
 
 /** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림). fleetMult: 영업 직원의 법인·택시 매력 배수(9.1).
  *  w·trend: 사건이 바꾼 고객층 가중치와 유행 계수(생략하면 자료값·1) */
@@ -77,7 +78,7 @@ export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1,
  *  시대 사건(11장): 칸 규모 × 차체 수요 × 시장 규모, 고객층 비중 × 고객층 배수, 가중치 배수, 유행(차체 × 동력), 동력 수요 배수, 전기는 × 충전 인프라, 경쟁 차 히트작 */
 /** 0.10.0 판매 요인 분해용 바꿔 넣기(생략하면 실제 계산): noEra 시대 사건 효과(충전 인프라 포함) 없음, rivalA 경쟁 차마다 이 A(난이도 배수 전, 히트작 없음),
  *  noOthers 같은 차급의 우리 다른 차 없음, compatSeg 이 고객층의 궁합을 1로 */
-export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string; noExpect?: boolean } // noExpect(1.1.0): 장비 기대 효과 없음
+export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string; noExpect?: boolean; noEv?: boolean } // noExpect(1.1.0): 장비 기대 효과 없음, noEv(1.2.0): 주행 거리·충전 속도 효과 없음
 const NO_ERA: EraNow = { statW: {}, body: {}, pt: {}, seg: {}, market: {}, trendAdd: {}, loan: 1, production: 1 };
 export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number, alt: DemandAlt = {}): number {
   const m = Math.floor((year - config.time.startYear) * config.time.monthsPerYear + 1e-6), n = alt.noEra ? NO_ERA : eraNow(state.seed, m);
@@ -101,6 +102,7 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
     if (mine > 0) total += size * w * (mine / (mine + rest));
   }
   if (car.powertrain) total *= (n.pt[car.powertrain] ?? 1) * (car.powertrain === config.events.charging.powertrain && !alt.noEra ? chargingInfra(state.seed, m) : 1);
+  if (car.powertrain === EV && !alt.noEv) total *= evDemandMult(state, car, year); // 1.2.0 주행 거리(같은 단계 표준 배터리 대비)·충전 속도
   return total;
 }
 
@@ -120,7 +122,7 @@ export const ageMonths = (g: Generation, month: number): number => month - g.lau
 export const lifeAge = (g: Generation, month: number): number => month - g.lifeMonth;
 export const toSaleCar = (g: Generation, month: number): SaleCar => {
   const ed = currentEdition(g);
-  return { body: g.body, segment: g.segment, stats: ed.stats, price: ed.price, awareness: g.awareness, life: lifeFactor(lifeAge(g, month)), powertrain: g.powertrain, options: ed.options, equip: ed.equip ?? equipOf(ed), ...(ed.equipLegacy ? { legacy: true } : {}) };
+  return { body: g.body, segment: g.segment, stats: ed.stats, price: ed.price, awareness: g.awareness, life: lifeFactor(lifeAge(g, month)), powertrain: g.powertrain, options: ed.options, equip: ed.equip ?? equipOf(ed), ...(ed.equipLegacy ? { legacy: true } : {}), level: ed.level, battery: ed.battery, evPlatform: g.evPlatform };
 };
 
 /** 목표 인지도 = 0.15 + 평판/250 + 마케팅 가산 + 입소문(품질 등급) */

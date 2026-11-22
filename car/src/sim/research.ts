@@ -5,7 +5,7 @@ import { isAway } from './company';
 import { josa } from './josa';
 import { yearOf } from './time';
 import { REGION, eraTimeline } from './events';
-import type { BodyDef, CarState, GameEvent, OptionDef, PowertrainDef, Staff, TechDef, TechEffect, TechField } from './types';
+import type { Battery, BodyDef, CarState, GameEvent, OptionDef, PowertrainDef, Staff, TechDef, TechEffect, TechField } from './types';
 
 const R = config.research;
 type UnlockType = 'body' | 'option' | 'powertrain';
@@ -51,11 +51,19 @@ export const defectCut = (s: CarState): number => Math.min(0.8, sumOf(s, 'defect
 export const upkeepCut = (s: CarState): number => Math.min(0.8, sumOf(s, 'upkeepCut'));
 /** 개발 속도 가산(주간 점수 × (1 + 이 값)) */
 export const devSpeed = (s: CarState): number => sumOf(s, 'devSpeed');
-/** 동력 원가 가산: 바닥(minCostAdd)이 있는 동력(전기)은 연구로 줄어든다 */
-export function ptCostAdd(s: CarState, powertrain: string): number {
-  const pt = powertrainById(powertrain);
-  return pt.minCostAdd === undefined ? pt.costAdd : Math.max(pt.minCostAdd, pt.costAdd - sumOf(s, 'evCostCut'));
+/** 동력 원가 가산: 바닥(minCostAdd)이 있는 동력(전기)은 연구로 줄어든다. 1.2.0 전기차는 × 배터리 용량 배수 × 전용 플랫폼 절감(생략하면 표준·플랫폼 없음 = 1.1.0과 같다) */
+export function ptCostAdd(s: CarState, powertrain: string, battery?: Battery, platform?: boolean): number {
+  const pt = powertrainById(powertrain), V = config.ev;
+  const add = pt.minCostAdd === undefined ? pt.costAdd : Math.max(pt.minCostAdd, pt.costAdd - sumOf(s, 'evCostCut'));
+  return powertrain === config.events.charging.powertrain ? add * V.battery[battery ?? 'std'].cost * (platform ? 1 - V.platform.costCut : 1) : add;
 }
+/** 1.2.0 전기차 충전 연구 단계(충전 속도 효과를 낸 기술 수) */
+export const chargeStep = (s: CarState): number => effectsOf(s).filter((e) => e.type === 'evCharge').length;
+/** 1.2.0 전기차 전용 플랫폼 연구를 마쳤는가 */
+export const platformReady = (s: CarState): boolean => effectsOf(s).some((e) => e.type === 'evPlatform');
+/** 자료 순서대로 이 기술까지 한 충전 단계(연구 카드·완료 알림의 분 표시용) */
+const chargeStepAt = (t: TechDef): number => TECHS.slice(0, TECHS.indexOf(t) + 1).flatMap((x) => x.effects).filter((e) => e.type === 'evCharge').length;
+const chargeMin = (step: number): number => { const m = config.ev.charge.minutes; return m[Math.min(step, m.length - 1)]; };
 
 /** 지금 시작하면 드는 비용: 먼저 하면 × (1 + 0.25 × 앞당긴 햇수), 등장 + 8년 뒤면 × 0.5, 반복 기술은 × 1.5^(한 횟수) */
 export function researchCost(s: CarState, t: TechDef): { money: number; points: number; mult: number } {
@@ -105,6 +113,8 @@ export function effectText(e: TechEffect, t?: TechDef): string {
     case 'upkeepCut': return `공장 유지비 ${Math.round(e.value * 100)}% 절감`;
     case 'devSpeed': return `개발 속도 ${Math.round(e.value * 100)}% 향상`;
     case 'evCostCut': { if (!t) return '전기차 추가 원가 감소'; const [a, b] = evCostSpan(t, e.value); return `전기차 추가 원가 ${a}% → ${b}%`; }
+    case 'evCharge': { if (!t) return '전기차 충전 속도 향상'; const n = chargeStepAt(t); return `전기차 10→80% 충전 ${chargeMin(n - 1)}분 → ${chargeMin(n)}분`; }
+    case 'evPlatform': return '새로 개발하는 전기차에 전용 플랫폼 적용(실용·주행 거리 향상, 원가 절감)';
   }
 }
 /** 카드용 효과 줄. 동력 단계 효과는 하나로 묶는다("가솔린·디젤 동력 한 단계 향상") */
@@ -128,6 +138,8 @@ export function unlockText(t: TechDef): string {
     case 'upkeepCut': out.push(`공장 유지비가 ${Math.round(e.value * 100)}% 줄었습니다.`); break;
     case 'devSpeed': out.push(`개발 속도가 ${Math.round(e.value * 100)}% 빨라졌습니다.`); break;
     case 'evCostCut': { const [a, b] = evCostSpan(t, e.value); out.push(`전기차를 만들 때 더 드는 원가가 ${a}%에서 ${b}%로 줄었습니다.`); break; }
+    case 'evCharge': out.push(`전기차 10→80% 충전 시간이 약 ${chargeMin(chargeStepAt(t))}분으로 줄었습니다(표준 배터리 기준).`); break;
+    case 'evPlatform': out.push('이제 새로 개발하는 전기차 세대는 전용 플랫폼을 씁니다. 실내가 넓어지고 주행 거리가 늘며 전기차 원가 가산이 줄어듭니다. 이미 출시한 세대는 그대로입니다.'); break;
     default: break;
   }
   return out.join(' ');
@@ -183,7 +195,8 @@ export function researchWeek(s: CarState, ev: GameEvent[]): void {
 /** "세계 최초": 먼저 연구해 아직 쓰지 않은 기술 중 이 차가 쓰는 것(차체·동력·옵션 해금, 그 동력의 단계) */
 export function worldFirstTechs(s: CarState, car: { body: string; powertrain: string; options: string[] }): string[] {
   return s.research.early.filter((id) => techById(id).effects.some((e) =>
-    (e.type === 'body' && e.id === car.body) || (e.type === 'option' && car.options.includes(e.id)) || ((e.type === 'powertrain' || e.type === 'ptLevel') && e.id === car.powertrain)));
+    (e.type === 'body' && e.id === car.body) || (e.type === 'option' && car.options.includes(e.id)) || ((e.type === 'powertrain' || e.type === 'ptLevel') && e.id === car.powertrain)
+    || ((e.type === 'evCharge' || e.type === 'evPlatform') && car.powertrain === config.events.charging.powertrain)));
 }
 
 // ---------- 연구 화면 조회 ----------

@@ -15,6 +15,7 @@ import { regulationBlock, requiredOptions } from './events';
 export { difficultyInfo } from './difficulty';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
+import { platformUMult, projectPlatform } from './ev';
 import { STATS, type Equip, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
 
 export const projectById = (s: CarState, id: number): Project | undefined => s.projects.find((p) => p.id === id);
@@ -30,7 +31,7 @@ const stdOpts = (x: { options?: string[]; equip?: Equip }): string[] => (x.equip
 export function projectPreview(s: CarState, projectId: number): { stats: Stats; grades: Stats; avg: number } | null {
   const p = projectById(s, projectId);
   if (!p) return null;
-  const y = yearOf(s.week), stats = finalStats(p.body, p.powertrain, p.level, p.options, p.points, p.defects, optWeights(equipOf(p), p.body, p.segment, y));
+  const y = yearOf(s.week), stats = finalStats(p.body, p.powertrain, p.level, p.options, p.points, p.defects, optWeights(equipOf(p), p.body, p.segment, y), platformUMult(projectPlatform(s, p)));
   return { stats, grades: grades(stats, y), avg: avgGrade(stats, y) };
 }
 
@@ -76,7 +77,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
     for (const k of STATS) pts[k] = w[k] * spec.designWeeks * speed;
     const made = STATS.reduce((a, k) => a + pts[k], 0);
     const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint * cut - testCut(team) * d.minTestWeeks);
-    return finalStats(spec.body, spec.powertrain, level, withRequired(s, stdOpts(spec)), pts, defects, optWeights(equipOf(spec), spec.body, spec.segment, y)); // 의무 장비 포함(0.4.2), 1.1.0 선택 사양은 일부
+    return finalStats(spec.body, spec.powertrain, level, withRequired(s, stdOpts(spec)), pts, defects, optWeights(equipOf(spec), spec.body, spec.segment, y), platformUMult(projectPlatform(s, spec))); // 의무 장비 포함(0.4.2), 1.1.0 선택 사양은 일부, 1.2.0 전용 플랫폼
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
   const gr = grades(mid, y), fit = (seg: string) => STATS.reduce((a, k) => a + SEGMENTS.find((x) => x.id === seg)!.w[k] * gr[k], 0), mix = MARKET[REGION].mix[spec.body] ?? {};
@@ -87,7 +88,7 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
 /** 대당 이익 = 판매가 − 원가. costMult: 원가 배수(생략하면 1, 화면은 costMultOf(state)를 넘길 것). ptAdd: 동력 원가 가산(ptCostAdd(state, 동력), 생략하면 자료값) */
 export const unitProfit = (body: string, powertrain: string, tier: number, options: string[], price: number, costMult = 1, ptAdd?: number): number => price - unitCost(body, powertrain, tier, options, costMult, ptAdd);
 /** 세대의 지금 대당 이익. s를 주면 원가 배수(공장·연구·사건)와 연구로 줄어든 동력 가산을 반영 */
-export const generationUnitProfit = (g: Generation, s?: CarState): number => { const e = currentEdition(g); return unitProfit(g.body, g.powertrain, e.tier, e.options, e.price, s ? costMultOf(s) : 1, s ? ptCostAdd(s, g.powertrain) : undefined); };
+export const generationUnitProfit = (g: Generation, s?: CarState): number => { const e = currentEdition(g); return unitProfit(g.body, g.powertrain, e.tier, e.options, e.price, s ? costMultOf(s, g.powertrain) : 1, s ? ptCostAdd(s, g.powertrain, e.battery, g.evPlatform) : undefined); };
 
 /** 예상 월 판매 범위(0.5.0): 출시 3개월째(수명 1.0, 인지도가 3개월 동안 목표로 다가간 값)의 수요 ± forecastSpread(30%). 생산 상한 적용.
  *  (예전: 출시 첫 달 최저 ~ 목표 인지도 최고라 "2~47대"처럼 폭이 너무 넓었다) */
@@ -102,7 +103,7 @@ function launchDemand(s: CarState, projectId: number, price: number, marketing: 
   const y = yearOf(s.week), m = monthOf(s.week);
   const others = sellingGens(s).filter((g) => g.status === 'onSale').map((g) => toSaleCar(g, m));
   const start = awarenessStart(s.reputation, ex.avg), target = Math.max(start, awarenessTarget(s.reputation, marketing, grade(pv.stats.Q, y)));
-  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain, options: withRequired(s, p.options), equip: equipOf(p, s) };
+  const car = { body: p.body, segment: p.segment, stats: pv.stats, price, powertrain: p.powertrain, options: withRequired(s, p.options), equip: equipOf(p, s), level: p.level, battery: p.battery, evPlatform: projectPlatform(s, p) };
   const aw = target + (start - target) * (1 - config.awareness.rate) ** config.forecast.months;
   return monthlyDemand(s, { ...car, awareness: aw, life: 1 }, others, monthTime(m));
 }
@@ -161,7 +162,7 @@ export function faceliftPreview(s: CarState, generationId: number, spec0: { opti
   const dRaw = faceliftWeekByStaff(team, { budget: 'normal', direction: dir }, () => 1).reduce((a, w) => a + w.D, 0) * fl.designWeeks;
   const dCap = fl.dCap * g.editions[0].stats.D, dGain = Math.min(mult.D * dRaw, dCap);
   const defects = Math.max(0, ed.defects * fl.defectKeep + dRaw * d.defectPerPoint * fl.defectRate - testCut(team) * d.minTestWeeks);
-  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), withRequired(s, spec.options), g.points, defects, optWeights(equipOf(spec), g.body, g.segment, yearOf(s.week)))); // 출시 때처럼 의무 장비 포함
+  const stats = faceliftRefresh(finalStats(g.body, g.powertrain, Math.max(ed.level, levelForTier(s, g.powertrain, tier)), withRequired(s, spec.options), g.points, defects, optWeights(equipOf(spec), g.body, g.segment, yearOf(s.week)), platformUMult(!!g.evPlatform))); // 출시 때처럼 의무 장비 포함
   stats.D += dGain;
   const age = lifeAge(g, m), keep = m - g.launchMonth >= fl.lateMonths ? fl.lateLifeKeep : fl.lifeKeep;
   return {
@@ -179,7 +180,7 @@ function faceliftMoney(s: CarState, g: Generation, stats: Stats, options: string
   const others = sellingGens(s).filter((x) => x !== g && x.status === 'onSale').map((x) => toSaleCar(x, m)), cur = toSaleCar(g, m);
   const cap = capacityOf(s) * (g.allocShare ?? 1), mk = config.awareness.marketingCost[g.marketing];
   const before = Math.min(cap, monthlyDemand(s, cur, others, t)), after = Math.min(cap, monthlyDemand(s, { ...cur, stats, options: withRequired(s, options), equip, awareness: Math.min(1, g.awareness + fl.awareness), life: lifeFactor(lifeAgeAfter) }, others, t));
-  const unit = (opts: string[], tr: number) => ed.price - unitCost(g.body, g.powertrain, tr, opts, costMultOf(s), ptCostAdd(s, g.powertrain));
+  const unit = (opts: string[], tr: number) => ed.price - unitCost(g.body, g.powertrain, tr, opts, costMultOf(s, g.powertrain), ptCostAdd(s, g.powertrain, ed.battery, g.evPlatform));
   const pb = before * unit(ed.options, ed.tier) - mk, pa = after * unit(withRequired(s, options), tier) - mk, cost = faceliftWeekCost(g.devCost) * (fl.designWeeks + config.dev.minTestWeeks);
   return { salesBefore: Math.round(before), salesAfter: Math.round(after), profitBefore: pb, profitAfter: pa, paybackMonths: pa > pb ? Math.ceil(cost / (pa - pb)) : null };
 }
@@ -367,7 +368,7 @@ function scanPrices(body: string, base: number, f: (price: number) => { sales: n
 export function bestPrice(s: CarState, generationId: number): BestPrice | null {
   const g = generationById(s, generationId);
   if (!g) return null;
-  const e = currentEdition(g), op = optPerCar(equipOf(e), g.body, g.segment, yearOf(s.week), costMultOf(s)), uc = unitCost(g.body, g.powertrain, e.tier, e.options, costMultOf(s), ptCostAdd(s, g.powertrain)) + op.cost - op.rev, mk = config.awareness.marketingCost[g.marketing]; // 1.1.0: 선택 사양의 대당 평균 이익은 원가에서 뺀다(가격과 무관)
+  const e = currentEdition(g), op = optPerCar(equipOf(e), g.body, g.segment, yearOf(s.week), costMultOf(s)), uc = unitCost(g.body, g.powertrain, e.tier, e.options, costMultOf(s, g.powertrain), ptCostAdd(s, g.powertrain, e.battery, g.evPlatform)) + op.cost - op.rev, mk = config.awareness.marketingCost[g.marketing]; // 1.1.0: 선택 사양의 대당 평균 이익은 원가에서 뺀다(가격과 무관)
   const m = monthOf(s.week), car = toSaleCar(g, m), cap = capacityOf(s), t = monthTime(m), others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m)); // priceForecast와 같은 계산(1.0.0 성능: 다른 차는 한 번만)
   return scanPrices(g.body, genBasePrice(s, g), (price) => { const sales = Math.round(Math.min(cap, monthlyDemand(s, { ...car, price }, others, t))); return { sales, profit: sales * (price - uc) - mk }; }, uc, mk);
 }
@@ -375,7 +376,7 @@ export function bestPrice(s: CarState, generationId: number): BestPrice | null {
 export function bestLaunchPrice(s: CarState, projectId: number, marketing: number): BestPrice | null {
   const p = projectById(s, projectId);
   if (!p) return null;
-  const uc = unitCost(p.body, p.powertrain, p.tier, withRequired(s, p.options), costMultOf(s), ptCostAdd(s, p.powertrain)), mk = config.awareness.marketingCost[marketing] ?? 0;
+  const uc = unitCost(p.body, p.powertrain, p.tier, withRequired(s, p.options), costMultOf(s, p.powertrain), ptCostAdd(s, p.powertrain, p.battery, projectPlatform(s, p))), mk = config.awareness.marketingCost[marketing] ?? 0;
   return scanPrices(p.body, carBasePrice(s, { ...p, options: withRequired(s, p.options) }), (price) => { const sales = Math.round(Math.min(capacityOf(s), launchDemand(s, projectId, price, marketing)!)); return { sales, profit: sales * (price - uc) - mk }; });
 }
 
@@ -466,3 +467,8 @@ export { hallOfFame, type HallOfFame, type HallCar, type HallRow } from './hall'
 
 // ---------- 1.1.0 장비 구성 ----------
 export { equipInfo, recommendedEquip, equipChanges, expectation, takeRate, optPrice, bodyClass, equipOf, type Expectation } from './equip';
+
+// ---------- 1.2.0 전기차 시대 ----------
+export { rangeKm, expectedRange, rangeMult, chargeMinutes, chargeMult, evCarInfo, genEvInfo, batteryChoices, chargeInfo, batteryPlantInfo, projectPlatform, BATTERIES, type EvCarInfo, type BatteryChoice, type BatteryPlantLevel } from './ev';
+export { chargeStep, platformReady } from './research';
+export { batteryPlantCut, batteryPlantUpkeep, batteryPlantError } from './company';

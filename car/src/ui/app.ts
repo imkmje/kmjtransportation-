@@ -6,7 +6,7 @@ import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type ExecRole, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
+import { STATS, type ExecRole, type Battery, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook } from '../render/variant';
@@ -512,7 +512,7 @@ export function startApp(): void {
     const L = led[i], P = led[i - 1], ml = (e: typeof L) => `${e.year}년 ${e.monthOfYear}월`;
     const hqOf = (e: typeof L) => e.upkeepHq ?? Math.min(e.upkeep, Q.hqInfo(s).current.upkeep); // 0.5.1 전 장부는 지금 본사 유지비로 나눈다(재무 화면과 같게)
     // 지출 줄: [이름, 이번 달, 전월]. 임원·연구는 0.9.0부터 장부에 따로 있다(예전 달은 월급·일회성에 들어 있음)
-    const costs = (e: typeof L): [string, number][] => [['차 원가', e.cogs], [e.execPay === undefined ? '직원·임원 월급' : '직원 월급', e.salaries - (e.execPay ?? 0)], ['임원 월급', e.execPay ?? 0], ['본사 유지비', hqOf(e)], ['공장 유지비', e.upkeep - hqOf(e)],
+    const costs = (e: typeof L): [string, number][] => [['차 원가', e.cogs], [e.execPay === undefined ? '직원·임원 월급' : '직원 월급', e.salaries - (e.execPay ?? 0)], ['임원 월급', e.execPay ?? 0], ['본사 유지비', hqOf(e)], [s.batteryPlant.level || s.batteryPlant.build ? '공장 유지비(배터리 공장 포함)' : '공장 유지비', e.upkeep - hqOf(e)],
       ['개발비', e.dev], ['광고비', e.marketing], ['연구 시작 비용', e.research ?? 0], ['대출 이자', e.interest], ['리콜', e.recall], ['일회성 지출(채용 공고·교육·퇴직금·승급·건설 등)', (e.oneOff || 0) - (e.research ?? 0)]];
     const cur = costs(L), prev = P ? costs(P) : null;
     const dd = (a: number, b: number | undefined, cost = false) => b === undefined ? '<td class="r d">—</td>' : Math.round(a - b) === 0 ? '<td class="r d">±0</td>' : `<td class="r d ${(a > b) !== cost ? 'pos' : 'neg'}">${money(a - b, true)}</td>`;
@@ -988,6 +988,8 @@ export function startApp(): void {
     if (np && T.get(`full:${np.id}`)?.title.includes('권장')) b.push(['풀체인지 권장', 'on']);
     return b.map(([t, c]) => `<span class="gb ${c}">${t}</span>`).join('');
   }
+  /** 1.2.0 전기차 한 줄: 주행 거리(기대)·배터리·충전·전용 플랫폼 */
+  const evLine = (g: Generation): string => { const e = Q.genEvInfo(game!.state, g.id); return e ? `<p class="hint ev-line" style="margin:-6px 0 10px">주행 거리 <b class="${e.short ? 'neg' : ''}">${num(e.rangeKm)}km</b>(이 차급 기대 ${num(e.expectedKm)}km)${ib('term:주행 거리')} · ${e.batteryName} 배터리 · 10→80% 충전 ${e.chargeMinutes}분 · 전용 플랫폼 ${e.platform ? '적용' : '미적용'}</p>` : ''; };
   const lifeMini = (v: number) => `<span class="g-life g-opt"><i class="life"><u style="width:${(v * 100).toFixed(1)}%"></u></i><small>${Math.round(v * 100)}%</small></span>`;
   /** 전 차종 한 줄 요약 표 + 개발 중·단종 구역 + 비교 줄 */
   function garageTable(): View {
@@ -1020,7 +1022,7 @@ export function startApp(): void {
   function showCompare(): void {
     const s = game!.state, G = garageList().filter((g) => cmpSel.has(g.id));
     if (G.length < 2) return err('비교할 차를 2대 이상 고르세요.');
-    const grades = G.map((g) => Q.generationGrades(s, g));
+    const grades = G.map((g) => Q.generationGrades(s, g)), ev = G.map((g) => Q.genEvInfo(s, g.id));
     const line = (label: string, vals: number[], fmt: (v: number) => string, hi = true) => { const best = hi ? Math.max(...vals) : Math.min(...vals); return `<tr><th>${label}</th>${vals.map((v) => `<td class="r${v === best && vals.some((x) => x !== v) ? ' best' : ''}">${fmt(v)}</td>`).join('')}</tr>`; };
     const rival = (body: string) => { const R = [...s.rivals].sort((a, b) => (b.cells[body] ?? 0) - (a.cells[body] ?? 0)), top = R[0]?.cells[body] ?? 0; const t = R.filter((r) => (r.cells[body] ?? 0) >= top * 0.97); return !R.length ? '—' : t.length === R.length ? '모두 비슷' : `${t.map((r) => esc(r.name)).join('·')} 강함`; };
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
@@ -1030,6 +1032,7 @@ export function startApp(): void {
       ${line('가격', G.map((g) => currentEdition(g).price), (v) => `${num(v)}만원`, false)}${line('지난달 판매', G.map((g) => g.sales.at(-1) ?? 0), (v) => `${num(v)}대`)}
       ${line('대당 이익', G.map((g) => Q.generationUnitProfit(g, s)), (v) => money(v, true))}${line('월 이익', G.map(carMonthProfit), (v) => money(v, true))}
       ${line('수명', G.map((g) => Q.lifeBar(s, g)), (v) => `${Math.round(v * 100)}%`)}${line('평론 평균', G.map((g) => g.reviewAvg), score)}
+      ${ev.some((e) => e) ? `<tr><th>주행 거리</th>${ev.map((e) => `<td class="r">${e ? `${num(e.rangeKm)}km<br><small>${e.batteryName} 배터리 · 충전 ${e.chargeMinutes}분${e.platform ? ' · 전용 플랫폼' : ''}</small>` : '—'}</td>`).join('')}</tr>` : ''}
       <tr class="rival"><th>경쟁사(차급별)</th>${G.map((g) => `<td class="r">${rival(g.body)}</td>`).join('')}</tr></table></div>
       <p class="note">능력치는 그해 다른 차와 비교한 등급(0~10, 5가 보통)입니다. 굵은 칸이 그 줄에서 가장 좋은 값입니다(가격은 낮은 쪽). 경쟁사는 그 차급에서 지금 가장 센 회사입니다.</p>
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
@@ -1094,7 +1097,7 @@ export function startApp(): void {
     if (garageSum && gens.length >= 2) return garageTable();
     const GL = garageList(), g = GL.find((x) => x.id === garageId) ?? GL[0], e = currentEdition(g), name = nameOf(g), gi = GL.indexOf(g);
     garageId = g.id;
-    const price = garagePrice.get(g.id) ?? e.price, up = Q.unitProfit(g.body, g.powertrain, e.tier, e.options, price, Q.costMultOf(s), Q.ptCostAdd(s, g.powertrain)), lines = Q.linesOf(s);
+    const price = garagePrice.get(g.id) ?? e.price, up = Q.unitProfit(g.body, g.powertrain, e.tier, e.options, price, Q.costMultOf(s, g.powertrain), Q.ptCostAdd(s, g.powertrain, e.battery, g.evPlatform)), lines = Q.linesOf(s);
     const lastSale = g.sales.length ? g.sales[g.sales.length - 1] : null, lb = Q.lifeBar(s, g), ending = g.status === 'ending';
     const ovh = ovTop(`차고 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}`, `${esc(name)}<small>${editionName(g)}</small>`, `${specLine(g.body, g.powertrain, e.tier, g.segment)} · ${paintName(e.color)}`, launchWhen(g))
       + ovHint
@@ -1106,7 +1109,7 @@ export function startApp(): void {
     const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
       <div class="key key-life"><small>수명${ib('term:수명')}</small><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div><b>${Math.round(lb * 100)}<span>%</span></b></div>
       <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}</b></div></div>`;
-    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}${(() => { const ei = genEquipInfo(g); return ei.legacy ? `<br><span class="eq-legacy">${esc(ei.legacyText)}</span>` : ei.totals.missingExpected.length ? `<br><span class="why">장비 기대 미달: ${esc(ei.totals.missingExpected.join('·'))}</span>` : ''; })()}</p><div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
+    const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}${(() => { const ei = genEquipInfo(g); return ei.legacy ? `<br><span class="eq-legacy">${esc(ei.legacyText)}</span>` : ei.totals.missingExpected.length ? `<br><span class="why">장비 기대 미달: ${esc(ei.totals.missingExpected.join('·'))}</span>` : ''; })()}</p>${evLine(g)}<div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
       ${chart ? `<p class="lbl" style="margin-top:12px">최근 판매(달마다)</p>${chart}` : ''}
       <p class="hint">수명은 출시 뒤 시간이 지날수록 줄고, 줄수록 판매가 줄어듭니다.</p>
       ${adviceLine(g)}${orderLine(g)}${Q.eventImpactOn(s, g.id).map((t) => `<div class="warnbox ev-line" style="margin-top:8px">${esc(t)}</div>`).join('')}</div>`;
@@ -1203,6 +1206,7 @@ export function startApp(): void {
     const bodies = Q.bodiesAt(s).map((b) => b.id), pts = Q.powertrainsAt(s).map((x) => x.id), opts = new Set(Q.optionsAt(s).map((o) => o.id));
     if (!bodies.includes(d.body)) { out.push(`차체를 ${bodyById(bodies[0]).name}${josa(bodyById(bodies[0]).name, '으로/로')}`); d.body = bodies[0]; }
     if (!pts.includes(d.powertrain)) { out.push(`동력을 ${powertrainById(pts[0]).name}${josa(powertrainById(pts[0]).name, '으로/로')}`); d.powertrain = pts[0]; }
+    if (d.battery !== undefined && !Q.BATTERIES.includes(d.battery)) delete d.battery; // 1.2.0 저장 파일에서 온 배터리 값
     const nt = powertrainById(d.powertrain).tiers.length; if (!(d.tier >= 1 && d.tier <= nt)) { d.tier = Math.min(2, nt); out.push('동력 등급을 표준으로'); }
     { const e = eqOf(d), lost = Object.keys(e).filter((o) => !opts.has(o)); setEquip(d, Object.fromEntries(Object.entries(e).filter(([o]) => opts.has(o)))); if (lost.length) out.push(`쓸 수 없는 장비 ${lost.length}개를 뺌`); } // 1.1.0 장비 구성 기준(options는 파생)
     const team = keepIdle(d.team); if (team.length !== d.team.length) { out.push(`다른 일을 맡았거나 회사를 떠난 직원 ${d.team.length - team.length}명을 팀에서 뺌`); d.team = team; }
@@ -1229,6 +1233,7 @@ export function startApp(): void {
       const base = lookOf({ body: d.body, powertrain: d.powertrain, tier: d.tier, color: d.color, wheels: 1, year: yearOf(s.week), chassisSeed: d.chassisSeed, faceSeed: d.faceSeed });
       d.chassisSeed = LP.firstDistinct('chassis', planCtx(d, 'chassis', base)); d.faceSeed = LP.firstDistinct('face', planCtx(d, 'face', { ...base, chassisSeed: d.chassisSeed }));
       setEquip(d, edEquip(e, d.options), 'prev'); // 1.1.0 풀체인지는 전작 구성을 물려받는다
+      if (e.battery) d.battery = e.battery; // 1.2.0 전작 배터리 용량
       return d;
     }
     const first = !s.nameplates.length && !s.projects.length && (() => { try { return localStorage.getItem(PLANNED_KEY) !== '1'; } catch { return true; } })();
@@ -1353,12 +1358,12 @@ export function startApp(): void {
       return `<button class="opt" data-act="pick" data-k="segment" data-v="${g.id}" data-tip="seg:${g.id}" aria-pressed="${d.segment === g.id}">${ib(`seg:${g.id}`, g.name)}<b>${esc(g.name)}</b><small class="appeal">매력 <b>${score(Q.teamPreview(s, d.team, { ...d, segment: g.id }).segmentScore)}</b>${g.id === tp.bestSegment ? ' · 가장 맞음' : ''}</small><small>중시: ${top}</small><small>${g.eps >= 2 ? '가격에 민감함' : '가격보다 만족도 중시'}</small>${tag}</button>`;
     }).join('')}</div><p class="note">궁합${ib('term:궁합')} 차체와 고객층에는 궁합(◎ 잘 맞음 · ○ 무난 · △ 덜 맞음 · × 안 맞음)이 있습니다. 한 번 출시해 본 조합만 궁합이 보입니다. 기록 탭의 조합 노트에 모입니다.</p>`;
     else if (planTab === 'power') {
-      const open = new Set(Q.powertrainsAt(s).map((x) => x.id)), pt = powertrainById(d.powertrain), add = Q.ptCostAdd(s, d.powertrain);
+      const open = new Set(Q.powertrainsAt(s).map((x) => x.id)), pt = powertrainById(d.powertrain), add = Q.ptCostAdd(s, d.powertrain, d.battery, Q.projectPlatform(s, d));
       body = `<p class="lbl">동력 종류 <span class="lblterms">동력 단계${ib('term:동력 단계')}</span></p><div class="seg pts">${POWERTRAINS.map((x) => { const t = UNLOCK_TECH.get(`powertrain:${x.id}`); return open.has(x.id) || !t
         ? `<button data-act="pick" data-k="powertrain" data-v="${x.id}" data-tip="pt:${x.id}" aria-pressed="${d.powertrain === x.id}">${esc(x.name)}${ib(`pt:${x.id}`, x.name)}<small>${Q.ptLevel(s, x.id)}단계까지 연구</small></button>`
         : `<button class="locked" data-act="goResearch" data-v="${t.id}" data-lock="powertrain:${x.id}" data-tip="pt:${x.id}">${esc(x.name)}${ib(`pt:${x.id}`, x.name)}<small>연구 필요</small></button>`; }).join('')}</div>
         <p class="lbl">${esc(pt.name)} 등급${ib('term:동력 등급')}</p><div class="opts">${pt.tiers.map((t, i) => `<button class="opt" data-act="pick" data-k="tier" data-v="${i + 1}" data-tip="tier:${i + 1}" aria-pressed="${d.tier === i + 1}">${ib(`tier:${i + 1}`, t.name)}<b>${esc(t.name)}</b><small class="lv">${esc(pt.name)} ${Q.levelForTier(s, d.powertrain, i + 1)}단계</small><small>${TIER_SUB[i] ?? ''}</small><span class="cost">${t.costAdd ? `원가 +${Math.round(t.costAdd * 100)}%` : '원가 기본'}</span></button>`).join('')}</div>
-        ${add ? `<p class="hint pt-add" style="margin-top:10px">${esc(pt.name)} 동력은 차 원가가 <b>${Math.round(add * 100)}%</b> 더 듭니다.${pt.minCostAdd !== undefined ? ' 배터리를 연구하면 줄어듭니다.' : ''}</p>` : ''}${d.powertrain === EV ? chargeBox() : ''}
+        ${add ? `<p class="hint pt-add" style="margin-top:10px">${esc(pt.name)} 동력은 차 원가가 <b>${Math.round(add * 100)}%</b> 더 듭니다.${pt.minCostAdd !== undefined ? ' 배터리를 연구하면 줄어듭니다.' : ''}</p>` : ''}${d.powertrain === EV ? batteryBox(d) + chargeBox() : ''}
         <p class="note">단계는 연구로 오릅니다. 등급은 연구한 가장 높은 단계(고급)에서 한두 단계 낮춘 것입니다. 고급 동력을 고르면 차에 스포일러가 붙습니다.</p>`;
     } else if (planTab === 'opt') body = equipView('plan');
     else if (planTab === 'dir') {
@@ -1378,7 +1383,7 @@ export function startApp(): void {
         : `<div class="row" style="margin-top:12px">${ti > 0 ? `<button class="btn" data-act="ptab" data-v="${tabs[ti - 1][0]}">← 이전</button>` : ''}${last ? '<button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button>' : `<button class="btn" data-act="ptab" data-v="${tabs[ti + 1][0]}">다음 →</button>`}</div><button class="btn ink plan-mode" data-act="planMode" data-v="sum" style="width:100%;margin-top:8px">한 화면 요약으로 보기</button>`}</div>`;
     const fcKpis = fcp ? `${kpi('전작 대비', COMPARE[compare], compare === 'worse' ? 'neg' : compare === 'better' ? 'pos' : '')}${kpi('이어받는 이름값', EQ_WORD(fcp.equity))}${kpi('예상 재구매', `월 ${num(fcp.rebuyPerMonth)}<span>대</span>`)}${kpi('개발비 할인', fcp.costMult < 1 ? `${Math.round((1 - fcp.costMult) * 100)}<span>%</span>` : '없음')}` : '';
     const card2 = `<div class="card plan-est" data-avg="${est.avg.toFixed(3)}" data-max="${est.max.toFixed(3)}"><p class="lbl">예상(대략) · 고른 직원 ${d.team.length}명 기준</p>${statBars(est.grades)}
-      <div class="kpis" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${kpi('예상 개발비', money(est.cost))}${fcKpis}${kpi('대당 원가', money(Q.unitCost(d.body, d.powertrain, d.tier, d.options, Q.costMultOf(s), Q.ptCostAdd(s, d.powertrain))))}${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}</div>
+      <div class="kpis" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${kpi('예상 개발비', money(est.cost))}${fcKpis}${kpi('대당 원가', money(Q.unitCost(d.body, d.powertrain, d.tier, d.options, Q.costMultOf(s, d.powertrain), Q.ptCostAdd(s, d.powertrain, d.battery, Q.projectPlatform(s, d)))))}${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}</div>
       ${fcp ? `<p class="hint" style="margin-top:8px">전 세대 출시 때 등급 ${score(fcp.prevAvg)} → 이번 예상 ${score(est.avg)}. ${compare === 'worse' ? '전작보다 못하면 평론가 모두 점수를 깎고 "전작만 못하다" 기사가 납니다.' : compare === 'better' ? '전작보다 좋으면 평론가 점수가 조금 오르고 "진화했다" 기사가 납니다.' : ''}${fcp.revival ? ' 오래 쉰 이름이라 "부활"로 이름값이 절반만 이어집니다.' : ''}</p>` : ''}
       ${fcp?.hints.length ? `<div class="warnbox fc-hints" style="margin-top:8px"><b>전작보다 낫게 하려면</b><ul>${fcp.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : ''}
       <p class="note">등급은 그해 다른 차와 비교한 점수(0~10, 5가 보통)입니다. 낮은 쪽은 직원 컨디션이 나쁘고 최소 시험만 한 경우, 높은 쪽은 컨디션이 좋고 결함을 다 없앤 경우입니다. 개발비는 설계와 최소 시험 ${config.dev.minTestWeeks}주 기준이며, 시험을 길게 하면 더 듭니다.</p>
@@ -1395,7 +1400,7 @@ export function startApp(): void {
     const rows: { tab: PlanTab; k: string; label: string; value: string; note?: string; bad?: boolean }[] = [
       { tab: 'body', k: 'body', label: '차체', value: bodyById(d.body).name, note: fcp?.bodyChanged ? '전작과 다른 차체: 이름값 절반' : '' },
       { tab: 'seg', k: 'seg', label: '고객층', value: `${segName(d.segment)} · 매력 ${score(tp.segmentScore)}`, note: tp.bestSegment !== d.segment ? `더 맞는 고객층: ${segName(tp.bestSegment)}` : '가장 맞는 고객층' },
-      { tab: 'power', k: 'power', label: '동력', value: `${pt.name} ${tierName(d.powertrain, d.tier)} · ${Q.levelForTier(s, d.powertrain, d.tier)}단계`, note: reg && !block ? reg : '', bad: !!reg && !block },
+      { tab: 'power', k: 'power', label: '동력', value: `${pt.name} ${tierName(d.powertrain, d.tier)} · ${Q.levelForTier(s, d.powertrain, d.tier)}단계${d.powertrain === EV ? (({ c }) => ` · ${c.name} 배터리 ${num(c.rangeKm)}km`)(batteryOf(d)) : ''}`, note: reg && !block ? reg : '', bad: !!reg && !block },
       { tab: 'opt', k: 'opt', label: `장비 · ${MODE_WORD[d.equipMode ?? 'custom']}`, value: EQ.equipLine(eqOf(d)), note: block ? '규제 의무 장비 연구 필요' : req.length ? `의무 장비 ${req.length}개 자동 포함` : '', bad: !!block },
       { tab: 'dir', k: 'dir', label: '개발 방향', value: STATS.every((k) => d.direction[k] === d.direction.P) ? `고르게 ${d.direction.P}점씩` : `${STATS.filter((k) => d.direction[k] > 2).sort((a, b) => d.direction[b] - d.direction[a]).map((k) => `${STAT_NAME[k]} ${d.direction[k]}`).join(' · ') || '낮춘 능력치 있음'} 중시`, note: left ? `${left}점 남음` : STATS.filter((k) => d.direction[k] < 2).map((k) => `${STAT_NAME[k]} ${d.direction[k]}`).join(' · '), bad: left > 0 },
       { tab: 'look', k: 'look', label: '외관', value: `${paintName(d.color)} · ${describeLook(look).chassis}` },
@@ -1438,6 +1443,15 @@ export function startApp(): void {
     const reg = Q.regulationError(game!.state, car);
     return reg ? `<div class="badbox reg-warn" style="margin-bottom:12px">${esc(reg)} ${ib('term:유예 기간')}</div>` : '';
   }
+  /** 1.2.0 기획의 배터리 용량 선택지(지금 고른 차체·등급·전용 플랫폼 기준)와 고른 것 */
+  const batteryOf = (d: Draft) => { const s = game!.state, plat = Q.projectPlatform(s, d), C = Q.batteryChoices(s, { body: d.body, level: Q.levelForTier(s, d.powertrain, d.tier), platform: plat, tier: d.tier }); return { C, c: C.find((x) => x.id === (d.battery ?? 'std'))!, plat }; };
+  /** 1.2.0 배터리 용량 고르기(전기차 기획): 선택지마다 주행 거리·표준 대비 원가·기준가·매력 한 줄, 아래 고른 배터리의 주행 거리·충전·전용 플랫폼 */
+  const batteryBox = (d: Draft): string => {
+    const { C, c, plat } = batteryOf(d), sg = (v: number) => `${Math.round(v) > 0 ? '+' : Math.round(v) < 0 ? '−' : '±'}${num(Math.abs(Math.round(v)))}만원`;
+    const ap = (v: number) => { const p = Math.round((v - 1) * 100); return p ? `매력 ${p > 0 ? '+' : '−'}${Math.abs(p)}%` : '매력 그대로'; };
+    return `<p class="lbl" style="margin-top:14px">배터리 용량${ib('term:배터리 용량')}</p><div class="opts bat-opts">${C.map((x) => `<button class="opt" data-act="pick" data-k="battery" data-v="${x.id}" aria-pressed="${c.id === x.id}"><b>${esc(x.name)}${x.id === 'std' ? ' <small>기본</small>' : ''}</b><small class="bat-km">주행 거리 ${num(x.rangeKm)}km</small><small>원가 ${sg(x.costDelta)} · 기준가 ${sg(x.priceDelta)} · ${ap(x.appeal)}</small></button>`).join('')}</div>
+      <p class="hint ev-sum" style="margin-top:8px">주행 거리 <b>${num(c.rangeKm)}km</b>(이 차급의 기대 ${num(c.expectedKm)}km)${ib('term:주행 거리')} · 10→80% 충전 ${c.chargeMinutes}분 · 전용 플랫폼${ib('term:전용 플랫폼')} ${plat ? '적용' : '미적용'}</p>`;
+  };
   /** 전기차 충전 인프라 안내(전기 동력을 고를 때) */
   const chargeBox = (): string => {
     const c = Q.activeEvents(game!.state).chargingInfra, pct = Math.round(c * 100);
@@ -1470,6 +1484,7 @@ export function startApp(): void {
     if (STATS.every((k) => Number.isInteger(dir[k]) && dir[k]! >= 0 && dir[k]! <= config.dev.dirMax) && STATS.reduce((a, k) => a + dir[k]!, 0) === config.dev.dirTotal) d.direction = { ...(dir as Stats) };
     if (config.dev.designWeeks.includes(p.designWeeks)) d.designWeeks = p.designWeeks;
     if (p.budget in BUDGET) d.budget = p.budget as Budget;
+    { const b = (p as { battery?: Battery }).battery; if (b && Q.BATTERIES.includes(b)) d.battery = b; else delete d.battery; } // 1.2.0 배터리 용량(없으면 표준)
     return out;
   }
 
@@ -1589,7 +1604,7 @@ export function startApp(): void {
   function launchView(): View {
     const s = game!.state, L = launch!, p = Q.projectById(s, L.pid)!, fl = p.kind === 'facelift', prev = prevOf(p);
     const inherits = fl || (!!prev && prev.status !== 'discontinued');
-    const up = Q.unitProfit(p.body, p.powertrain, p.tier, p.options, L.price, Q.costMultOf(s), Q.ptCostAdd(s, p.powertrain)), ex = fl ? null : Q.expectedReviews(s, p.id, L.price), fc = fl ? null : Q.salesForecast(s, p.id, L.price, L.marketing), free = inherits || Q.hasFreeLine(s), reg = Q.regulationError(s, p);
+    const up = Q.unitProfit(p.body, p.powertrain, p.tier, p.options, L.price, Q.costMultOf(s, p.powertrain), Q.ptCostAdd(s, p.powertrain, p.battery, Q.projectPlatform(s, p))), ex = fl ? null : Q.expectedReviews(s, p.id, L.price), fc = fl ? null : Q.salesForecast(s, p.id, L.price, L.marketing), free = inherits || Q.hasFreeLine(s), reg = Q.regulationError(s, p);
     const look = projLook(p, L.color, L.wheels);
     const ovh = ovTop(fl ? '페이스리프트 출시 준비' : p.kind === 'fullchange' ? '풀체인지 출시 준비' : '출시 준비', esc(p.name) + (fl ? '<small>페이스리프트</small>' : ''), `${specLine(p.body, p.powertrain, p.tier, p.segment)} · ${paintName(L.color)} · ${WHEELS[L.wheels].name}`) + ovHint;
     const adv = Q.defectAdvice(p, s);
@@ -1725,9 +1740,9 @@ export function startApp(): void {
   let finRange: V.FinRange = '1y'; // 1.0.0 재무 기간(1년=달마다 / 5년 / 전체)
   function finTab(): string {
     const s = game!.state, L = s.ledger.at(-1), limit = Q.loanLimit(s), rate = Q.loanRate(s), led = s.ledger;
-    const hqUp = Q.hqInfo(s).current.upkeep, fUp = Q.factoryInfo(s).current.upkeep, y = yearOf(s.week), ys = led.filter((e) => e.year === y), ytd = ys.reduce((a, e) => a + e.profit, 0);
+    const hqUp = Q.hqInfo(s).current.upkeep, fUp = Q.factoryInfo(s).current.upkeep, bUp = Q.batteryPlantInfo(s).upkeep, y = yearOf(s.week), ys = led.filter((e) => e.year === y), ytd = ys.reduce((a, e) => a + e.profit, 0);
     const sum = `<div class="card fin-sum"><h3>재무</h3><div class="kpis">${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}${L ? kpi(`지난달 이익 <small>${L.monthOfYear}월</small>`, money(L.profit, true), L.profit >= 0 ? 'pos' : 'neg') : ''}${ys.length ? kpi(`올해 이익 <small>${ys.length}개월</small>`, money(ytd, true), ytd >= 0 ? 'pos' : 'neg') : ''}</div>
-      <p class="hint" style="margin-top:8px">매달 고정비: 본사 유지비 ${money(hqUp)} · 공장 유지비 ${money(fUp)} · 직원 월급 ${money(s.staff.reduce((a, x) => a + Q.salaryOf(x.ability), 0))}</p>
+      <p class="hint" style="margin-top:8px">매달 고정비: 본사 유지비 ${money(hqUp)} · 공장 유지비 ${money(fUp)}${bUp ? ` · 배터리 공장 유지비 ${money(bUp)}` : ''} · 직원 월급 ${money(s.staff.reduce((a, x) => a + Q.salaryOf(x.ability), 0))}</p>
       ${L ? `<button class="btn" data-act="monthOpen" data-v="${led.length - 1}" style="width:100%;margin-top:8px">지난달 결산 펼쳐 보기(차종별·지출 내역·전월 대비)</button>` : ''}</div>`;
     // 대출·구제 금융 조작은 한 카드에
     const loan = `<div class="card fin-loan"><h3>대출·구제 금융</h3><div class="kpis">${kpi('대출', money(s.loan.balance))}${kpi('대출 한도', money(limit))}${kpi(`월 이자${ib('term:대출 이자')}`, `${(rate * 100).toFixed(1)}<span>%</span>`)}</div>
@@ -1870,7 +1885,24 @@ export function startApp(): void {
     const prod = `<div class="card fac-prod"><h3>차종별 생산</h3>${f.cars.length ? `<div class="advice" style="margin:0 0 10px">${esc(Q.capacityAdvice(s))}</div>${rows}
       <p class="hint" style="margin-top:8px">직접 정한 몫 합계 <b class="alloc-sum">${Math.round(manualSum * 100)}%</b> (100%를 넘을 수 없습니다. 나머지는 자동인 차가 주문에 맞춰 나눕니다)</p>${allocWhy ? `<div class="badbox alloc-why" style="margin-top:8px">${esc(allocWhy)}</div>` : ''}
       <p class="note">막대: 진한 부분은 만든 차, 주황 부분은 주문을 받고도 못 만든 차입니다.</p>` : '<p class="hint">판매 중인 차가 없습니다. 차를 출시하면 여기서 차종별 생산량과 못 판 주문을 봅니다.</p>'}</div>`;
-    return `<div class="cols">${cur}${next}${prod}</div>`;
+    return `<div class="cols">${cur}${next}${batteryPlantCard()}${prod}</div>`;
+  }
+  /** 1.2.0 배터리 공장: 공장 등급 카드와 같은 모양. 전기차 연구 전에는 숨김 */
+  function batteryPlantCard(): string {
+    const s = game!.state; if (!s.research.done.includes(config.ev.plant.tech)) return '';
+    const B = Q.batteryPlantInfo(s), c = B.current, n = B.next, b = B.building, pct = (v: number | undefined) => (v ? `${Math.round(v * 100)}%` : '없음');
+    // 다음 등급 어림: 지난달 전기차 원가(절감 전)에 다음 등급 절감률
+    const gens = new Map(allGens(s).map((g) => [g.id, g])), evCogs = (s.ledger.at(-1)?.cars ?? []).reduce((a, x) => a + (gens.get(x.id)?.powertrain === EV ? x.cogs : 0), 0), raw = evCogs / (1 - (c?.cut ?? 0));
+    const net = B.lastMonth.saving - B.upkeep, nNet = n ? raw * n.cut - n.upkeep : 0;
+    const BM = b ? B.levels[b.level - 1].buildMonths : 0;
+    const build = b ? `<div class="build"><p class="lbl">건설 공사 중 · ${b.level}등급</p><div class="prog"><u style="width:${(Math.min(1, Math.max(0, (BM - b.monthsLeft) / BM)) * 100).toFixed(1)}%"></u></div><p class="hint">${b.monthsLeft}개월 남았습니다. 끝나면 전기차 대당 원가가 ${pct(B.levels[b.level - 1].cut)} 줄어듭니다.</p></div>` : '';
+    const gain = c ? `<p class="hint bat-net" style="margin-top:8px">지난달 전기차 ${num(B.lastMonth.evSold)}대 · 절감액 ${money(B.lastMonth.saving)} − 유지비 ${money(B.upkeep)} = <b class="${net >= 0 ? 'pos' : 'neg'}">${money(net, true)}</b> ${net >= 0 ? '이득' : '손해'}</p>` : '';
+    const nx = n ? `<table class="tbl" style="margin-top:10px"><tr><th>${b ? '공사 중인 등급' : c ? '증설하면' : '지으면'} · ${n.level}등급</th><th class="r">지금</th><th class="r">${c ? '증설 뒤' : '건설 뒤'}</th></tr>${cmpRow('전기차 원가 절감', pct(c?.cut), pct(n.cut))}${cmpRow('월 유지비', money(B.upkeep), money(n.upkeep), true)}</table>
+      <div class="kpis" style="margin-top:10px">${kpi('건설비', money(n.cost))}${kpi('공사 기간', `${n.buildMonths}<span>개월</span>`)}</div>
+      <p class="hint bat-est" style="margin-top:8px">지난달 전기차 ${num(B.lastMonth.evSold)}대로 어림하면 ${n.level}등급의 월 절감 ${money(raw * n.cut)} − 유지비 ${money(n.upkeep)} = <b class="${nNet >= 0 ? 'pos' : 'neg'}">${money(nNet, true)}</b></p>
+      ${B.canBuild || b ? '' : `<div class="badbox" style="margin-top:10px">${esc(B.reason ?? '')}</div>`}
+      ${b ? '' : `<button class="go" data-act="buildBatteryPlant" ${B.canBuild ? '' : 'disabled'}>${c ? '배터리 공장 증설' : '배터리 공장 건설'} · ${money(n.cost)}</button>`}` : '<p class="hint" style="margin-top:10px">배터리 공장이 최고 등급입니다.</p>';
+    return `<div class="card fac-bat"><p class="lbl">배터리 공장${ib('term:배터리 공장')} · ${c ? `${c.level}등급` : '없음'}</p><div class="kpis">${kpi('전기차 원가 절감', pct(c?.cut))}${kpi('월 유지비', money(B.upkeep))}</div>${build}${gain}${nx}</div>`;
   }
 
   // ----- 연구(10장) -----
@@ -1902,7 +1934,7 @@ export function startApp(): void {
     const act = r.active.map((a) => `<div class="ract${a.priority ? ' pri' : ''}"><div class="prod-h"><b>${esc(a.name)}${a.priority ? ' <span class="chip on">먼저 하는 중</span>' : ''}${a.requiredBy ? ` <span class="chip bad">${regTag(a.requiredBy)}</span>` : ''}</b><small>${num(a.points)} / ${num(a.need)}점 · 한 주 ${pts1(a.pointsPerWeek)}점 · ${a.weeksLeft === null ? '연구 점수가 없어 멈춤' : `약 ${a.weeksLeft}주 남음`}</small></div><div class="prog"><u style="width:${((a.points / Math.max(1, a.need)) * 100).toFixed(1)}%"></u></div><div class="row">${r.active.length > 1 && !a.priority ? `<button class="btn ink" data-act="priRes" data-v="${a.techId}">먼저 하기 <small>(점수의 ${Math.round(config.research.priorityShare * 100)}%)</small></button>` : ''}<button class="btn" data-act="techSel" data-v="${a.techId}">자세히 · 취소</button></div></div>`).join('');
     const sum = `<div class="card r-sum"><p class="lbl">연구</p><h2 class="r-pts">엔지니어가 연구합니다. 지금 한 주에 ${pts1(r.pointsPerWeek)}점</h2>
       <div class="kpis" style="margin-top:10px">${kpi('한 주 연구 점수', `${pts1(r.pointsPerWeek)}<span>점</span>`)}${kpi('연구 칸', `${r.used}/${r.slots}<span>개 사용</span>`)}${kpi('완료한 기술', `${r.doneCount}<span>개</span>`)}${kpi('전담 연구원', `${labN}<span>명</span>`)}</div>
-      ${zero}${act ? `<p class="lbl" style="margin-top:12px">진행 중인 연구</p>${act}` : '<p class="hint" style="margin-top:10px">진행 중인 연구가 없습니다. 아래에서 "가능" 표시가 있는 기술을 눌러 시작합니다.</p>'}
+      ${zero}${s.research.done.includes(config.ev.plant.tech) ? (({ minutes, nextMinutes }) => `<p class="hint r-charge" style="margin-top:10px">전기차 충전 속도: 10→80% ${minutes}분(표준 배터리)${nextMinutes === null ? ' · 마지막 단계' : ` · 다음 충전 연구를 마치면 약 ${nextMinutes}분`}${Q.platformReady(s) ? ' · 전용 플랫폼 연구 완료' : ''}</p>`)(Q.chargeInfo(s)) : ''}${act ? `<p class="lbl" style="margin-top:12px">진행 중인 연구</p>${act}` : '<p class="hint" style="margin-top:10px">진행 중인 연구가 없습니다. 아래에서 "가능" 표시가 있는 기술을 눌러 시작합니다.</p>'}
       <p class="note">엔지니어가 매주 능력의 10분의 1만큼 점수를 냅니다. 개발에 들어간 엔지니어는 그 ${Math.round(config.research.projectShare * 100)}%만 냅니다. 돈은 시작할 때 내고, 점수가 다 쌓이면 완성됩니다. ${s.hqLevel >= config.research.labHq ? '직원 탭에서 엔지니어를 전담 연구원으로 두면 점수가 1.5배입니다.' : `본사 ${config.research.labHq}등급부터 전담 연구원(점수 1.5배)을 둘 수 있습니다.`} 본사 등급이 오르면 연구 칸이 늘어납니다(지금 ${r.slots}칸). 점수는 진행 중인 연구가 고르게 나눠 받고, [먼저 하기]를 누른 연구는 ${Math.round(config.research.priorityShare * 100)}%를 받습니다. 규제에 필요한 연구는 자동으로 먼저 합니다. 기술이 나오는 해보다 일찍 연구하면 비싸지만, 그 기술을 처음 쓰는 차가 "세계 최초"${ib('term:세계 최초')}로 평론 점수를 1점씩 더 받습니다. 나온 지 8년이 지나면 절반 값입니다.</p>${back}</div>`;
     const fields = r.fields.map((f) => `<div class="card rfield" data-field="${f.id}"><h3>${esc(f.name)} <small class="hint">${f.techs.filter((t) => t.status === 'done' || t.count).length}/${f.techs.length} 완료</small></h3><div class="techs">${f.techs.map(techCard).join('')}</div></div>`).join('');
     return `<div class="research">${sum}${fields}</div>`;
@@ -2225,7 +2257,7 @@ export function startApp(): void {
         if (!draft) return; const list = ui.presets ?? [], name = ($<HTMLInputElement>('#preset-name')?.value ?? '').trim() || `프리셋 ${list.length + 1}`, withBody = !!$<HTMLInputElement>('#preset-body')?.checked;
         const i = list.findIndex((x) => x.name === name);
         if (i < 0 && list.length >= S.PRESET_MAX) return err(`프리셋은 ${S.PRESET_MAX}개까지 저장할 수 있습니다. 하나를 지우고 저장하세요.`);
-        const d = draft, ps: S.PlanPreset = { name, ...(withBody ? { body: d.body } : {}), segment: d.segment, powertrain: d.powertrain, tier: d.tier, options: [...d.options], direction: { ...d.direction }, designWeeks: d.designWeeks, budget: d.budget, ...{ equip: { ...eqOf(d) } } as object }; // 1.1.0 장비 구성도 함께(옛 판은 options만 읽음)
+        const d = draft, ps: S.PlanPreset = { name, ...(withBody ? { body: d.body } : {}), segment: d.segment, powertrain: d.powertrain, tier: d.tier, options: [...d.options], direction: { ...d.direction }, designWeeks: d.designWeeks, budget: d.budget, ...{ equip: { ...eqOf(d) }, ...(d.battery ? { battery: d.battery } : {}) } as object }; // 1.1.0 장비 구성도 함께(옛 판은 options만 읽음)
         ui.presets = i < 0 ? [...list, ps] : list.map((x, k) => (k === i ? ps : x)); dirty = true;
         toast(`프리셋 「${name}」${josa(name, '을/를')} ${i < 0 ? '저장' : '덮어쓰기'}했습니다. 게임을 저장하면 저장 칸에 함께 남습니다.`); showPresets(); return;
       }
@@ -2295,7 +2327,7 @@ export function startApp(): void {
         if (dirLeft(draft) > 0) { planTab = 'dir'; lastPanel = ''; render(); panel.scrollTop = 0; return err(`개발 방향 점수가 ${dirLeft(draft)}점 남았습니다. ${config.dev.dirTotal}점을 모두 나눠야 합니다.`); }
         const { color, nameplateId, team, year: _y, ...spec } = draft; void _y;
         let r: CommandResult = { ok: false, reason: '' };
-        withMoved(team, () => { r = nameplateId ? game!.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team , ...{ equip: spec.equip }})
+        withMoved(team, () => { r = nameplateId ? game!.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team , ...{ equip: spec.equip }, ...(spec.battery ? { battery: spec.battery } : {}) })
           : game!.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName(), team }); return r.ok; });
         if (!run(r)) return;
         const p = game.state.projects[game.state.projects.length - 1] as Project;
@@ -2474,6 +2506,12 @@ export function startApp(): void {
         if (!game) return; const f = Q.factoryInfo(game.state); if (!f.next) return;
         if (!(await ask(`공장을 ${f.next.level}등급으로 증설할까요?\n건설비 ${money(f.next.cost)}${josa(money(f.next.cost), '이/가')} 바로 나갑니다. 공사는 ${f.next.buildMonths}개월 걸리고, 그동안은 지금 공장으로 생산합니다. 다 지으면 공장 유지비가 매달 ${money((f.current.upkeep))}에서 ${money((f.next.upkeep))}${josa(money((f.next.upkeep)), '으로/로')} 늘어납니다.`, '증설하기'))) return;
         if (run(game.command({ type: 'expandFactory' }))) { toast(`공장 증설 공사를 시작했습니다. ${f.next.buildMonths}개월 뒤 끝납니다.`, 'alert', '공장'); render(); }
+        return;
+      }
+      case 'buildBatteryPlant': { // 1.2.0
+        if (!game) return; const B = Q.batteryPlantInfo(game.state), n = B.next; if (!n) return;
+        if (!(await ask(`배터리 공장을 ${n.level}등급으로 ${B.level ? '증설' : '건설'}할까요?\n건설비 ${money(n.cost)}${josa(money(n.cost), '이/가')} 바로 나갑니다. 공사는 ${n.buildMonths}개월 걸리고, 다 지으면 전기차 대당 원가가 ${Math.round(n.cut * 100)}% 줄고 유지비가 매달 ${money(n.upkeep)} 듭니다.`, B.level ? '증설하기' : '건설하기'))) return;
+        if (run(game.command({ type: 'buildBatteryPlant' }))) { toast(`배터리 공장 공사를 시작했습니다. ${n.buildMonths}개월 뒤 끝납니다.`, 'alert', '배터리 공장'); render(); }
         return;
       }
       case 'allocAuto': if (game && run(game.command({ type: 'setAllocation', generationId: Number(el.dataset.id), share: null }))) { allocWhy = ''; render(); } return;
