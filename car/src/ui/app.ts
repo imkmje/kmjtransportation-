@@ -1017,7 +1017,7 @@ export function startApp(): void {
   const gaCar = (npId: number) => gaInfo().cars.find((c) => c.nameplateId === npId);
   /** 맡김 상태 한 줄: 다음 예정·기다림 */
   const gaLine = (c: ReturnType<typeof gaCar>): string => { if (!c) return ''; const w = c.waitingSince !== null ? Math.floor((game!.state.week - c.waitingSince) / config.time.weeksPerMonth) : 0;
-    return !c.on ? (c.next ? `지금 할 때: ${c.next}` : '꺼짐') : !c.active ? '멈춤 · 기획 임원이 맡을 수 없습니다' : c.next ? `다음: ${c.next}${w >= 1 ? ` · ${w}개월째 기다림(이유는 임원 보고)` : c.waitingSince !== null ? ' · 조건을 기다림' : ''}` : `지금은 할 일 없음${c.launch ? ' · 출시까지 맡김' : ' · 출시는 직접'}`; };
+    return !c.on ? (c.next ? `지금 할 때: ${c.next}` : '꺼짐') : !c.active ? '멈춤 · 기획 임원이 맡을 수 없습니다' : c.next ? `다음: ${c.next}${w >= 1 ? ` · ${w}개월째 기다림${c.why ? ` · ${c.why}` : '(이유는 임원 보고)'}` : c.why ? ` · ${c.why}` : c.waitingSince !== null ? ' · 조건을 기다림' : ''}` : `지금은 할 일 없음${c.launch ? ' · 출시까지 맡김' : ' · 출시는 직접'}`; };
   /** 맡김 켜기/끄기 버튼(차고 요약 표·상세·임원 화면 공용) */
   const gaBtn = (npId: number, small = false) => { const c = gaCar(npId), A = gaInfo(); if (!c) return ''; return `<button class="${small ? 'g-auto' : 'btn'}" data-act="genAuto" data-np="${npId}" data-v="${c.on ? 0 : 1}" aria-pressed="${c.on}" ${A.available || c.on ? '' : 'disabled'} aria-label="${esc(c.name)} 세대교체 맡기기 ${c.on ? '끄기' : '켜기'}"${small ? ` title="${esc(gaLine(c))}"` : ''}>${small ? '맡김' : c.on ? '켜짐' : '꺼짐'}</button>`; };
   const gaLaunchBtn = (npId: number) => { const c = gaCar(npId); return c?.on ? `<button class="btn ga-launch" data-act="genAutoLaunch" data-np="${npId}" data-v="${c.launch ? 0 : 1}" aria-pressed="${c.launch}">출시까지 ${c.launch ? '자동' : '직접'}</button>` : ''; };

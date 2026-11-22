@@ -19,7 +19,7 @@ import { noteExec, startHist } from './history';
 import { staffBrief } from './insight';
 import type { Rng } from './rng';
 import { monthLabel, monthOf, monthTime, yearOf } from './time';
-import type { CarState, Command, CommandResult, ExecGoto, ExecRole, ExecState, GameEvent, Generation, Nameplate, ProjectSpec, Replacement, Role, Staff } from './types';
+import type { CarState, Command, CommandResult, ExecGoto, ExecRole, ExecState, GameEvent, Generation, Nameplate, Project, ProjectSpec, Replacement, Role, Staff } from './types';
 
 const X = config.exec;
 export const EXEC_ROLES: ExecRole[] = ['hr', 'product', 'finance', 'production', 'research', 'market'];
@@ -627,6 +627,13 @@ function genAutoStep(s: CarState, n: Nameplate): GenStep | null {
   return null;
 }
 
+/** 지금 시작하지 못하는 이유(시작할 수 있으면 null) */
+function genAutoWait(s: CarState, step: GenStep): string | null {
+  const team = autoTeam(s), need = step.cost * GA.cashDevMult + monthlyFixed(s) * GA.cashMonths;
+  return step.error ?? (s.projects.length >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다'
+    : s.cash < need ? `현금이 ${won(need)}(예상 개발비 ${won(step.cost)}의 ${GA.cashDevMult}배와 운영비 ${GA.cashMonths}개월 치)에 못 미칩니다` : null);
+}
+
 /** 월 결산 뒤(맡기기): 켠 차종마다 때가 되면 시작. 현금(예상 개발비 × cashDevMult + 운영비 cashMonths개월 치)·빈 개발팀·쉬는 직원이 있어야 하고, 오래 못 하면 이유를 한 번 보고 */
 function autoGen(c: ExecCtx): void {
   const s = c.s, map = s.execs?.genAuto;
@@ -634,9 +641,8 @@ function autoGen(c: ExecCtx): void {
   for (const n of s.nameplates.filter((x) => map[x.id] && x.generations.length).sort((a, b) => a.id - b.id)) {
     const st = map[n.id], step = genAutoStep(s, n);
     if (!step) { st.waitSince = null; st.told = false; continue; }
-    const team = autoTeam(s), need = step.cost * GA.cashDevMult + monthlyFixed(s) * GA.cashMonths, go: ExecGoto = { tab: 'garage', id: step.genId };
-    let why = step.error ?? (s.projects.length >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다'
-      : s.cash < need ? `현금이 ${won(need)}(예상 개발비 ${won(step.cost)}의 ${GA.cashDevMult}배와 운영비 ${GA.cashMonths}개월 치)에 못 미칩니다` : null);
+    const team = autoTeam(s), go: ExecGoto = { tab: 'garage', id: step.genId };
+    let why = genAutoWait(s, step);
     if (!why) {
       const r = c.run({ ...step.cmd, team } as Command);
       if (r.ok) {
@@ -653,6 +659,12 @@ function autoGen(c: ExecCtx): void {
       st.told = true;
     }
   }
+}
+
+/** 맡긴 개발(auto)이고 출시까지 맡겼으며 맡기기가 유효하면 true: 출시 대기여도 곧 저절로 출시되므로 할 일에서 뺀다 */
+export function autoLaunching(s: CarState, p: Project): boolean {
+  const id = p.kind === 'fullchange' ? p.targetId : p.kind === 'derivative' ? p.into : nameplateOfGen(s, p.targetId)?.id;
+  return !!p.auto && id !== undefined && id !== null && !!s.execs?.genAuto?.[id]?.launch && !genAutoWhyNot(s);
 }
 
 /** 매주: 맡기기로 시작한 개발이 끝나면(결함을 다 잡았거나 시험 maxTestWeeks주) 출시. 가격은 자동 가격 정책이 있으면 그 정책(페이스리프트는 지금 값), 없으면 시장 기준가(추천가) */
@@ -682,7 +694,7 @@ export function genAutoInfo(s: CarState) {
     available: !whyNot, whyNot,
     cars: s.nameplates.filter((n) => n.generations.length).sort((a, b) => a.id - b.id).map((n) => {
       const st = map[n.id], step = genAutoStep(s, n);
-      return { nameplateId: n.id, name: n.name, derivative: n.baseOf !== undefined, on: !!st, launch: st?.launch ?? true, active: !!st && !whyNot, next: step ? step.what : null, waitingSince: st?.waitSince ?? null };
+      return { nameplateId: n.id, name: n.name, derivative: n.baseOf !== undefined, on: !!st, launch: st?.launch ?? true, active: !!st && !whyNot, next: step ? step.what : null, waitingSince: st?.waitSince ?? null, why: step && st?.waitSince != null ? genAutoWait(s, step) : null };
     }),
   };
 }

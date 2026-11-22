@@ -8,6 +8,7 @@ import { derivativeOptions, derivativesOf } from '../src/sim/derive';
 import { applyWinsToGen, winStats } from '../src/sim/wins';
 import { critiquesOf } from '../src/sim/critiques';
 import { eventTopic, newsTopic, topicLocked } from '../src/sim/notify';
+import { todoItems } from '../src/sim/queries';
 import { genAutoInfo, nextGenSpec } from '../src/sim/execs';
 import { genEvInfo } from '../src/sim/ev';
 import { carBasePrice, currentEdition, genBasePrice } from '../src/sim/market';
@@ -123,6 +124,20 @@ describe('세대교체 맡기기(기획 임원)', () => {
     expect(s.projects[0]).toMatchObject({ kind: 'fullchange', targetId: n.id, auto: true, body: 'sedanM', segment: 'family' });
     expect(s.execs!.reports.at(-1)!.kind).toBe('autoFullChange');
     expect(nextGenSpec(s, n.id)).toMatchObject({ body: 'sedanM', segment: 'family', powertrain: car.powertrain });
+  });
+
+  it('출시까지 맡긴 개발의 출시 대기는 할 일에 잡히지 않고(다음 일까지가 멈추지 않음), 직접 출시일 때만 잡힌다', () => {
+    const g = big(1995, 4), s = g.state, car = quick(g, { type: 'startProject', ...SPEC }), n = npOf(s, car);
+    product(g);
+    ok(g.command({ type: 'setGenAuto', nameplateId: n.id, on: true }));
+    car.launchMonth -= 31; car.lifeMonth -= 31;
+    ok(g.command({ type: 'startFacelift', generationId: car.id, options: [], tier: 2 }));
+    ok(g.devCheat('finishDev'));
+    const p = s.projects[0], ready = () => todoItems(s).some((x) => x.kind === 'ready');
+    expect(p.waiting).toBe(true);
+    expect(ready()).toBe(true); // 직접 시작한 개발
+    p.auto = true; expect(ready()).toBe(false); // 출시까지 맡긴 개발
+    ok(g.command({ type: 'setGenAuto', nameplateId: n.id, on: true, launch: false })); expect(ready()).toBe(true);
   });
 
   it('출시 자동을 끄면 개발이 끝나도 출시하지 않는다(플레이어 몫)', () => {
@@ -282,6 +297,15 @@ describe('파생 모델', () => {
 });
 
 describe('평론가별 시승기', () => {
+  it('여러 시드·여러 차에서 한 차의 시승기 문장이 서로 겹치지 않는다', () => {
+    for (let seed = 1; seed <= 6; seed++) for (const [body, powertrain] of [['sedanM', 'ev'], ['sedanS', 'gasoline'], ['sedanM', 'gasoline']] as const) {
+      const g = big(2025, seed), gen = quick(g, { type: 'startProject', ...SPEC, body, segment: 'family', powertrain });
+      const cs = critiquesOf(g.state, gen.id), parts = cs.flatMap((c) => c.text.split(/(?<=다\.)\s/));
+      expect(new Set(parts).size).toBe(parts.length);
+      expect(cs.map((c) => c.score)).toEqual(gen.reviews);
+    }
+  });
+
   it('평론가 4명(이름·매체), 점수는 기존 평론 그대로(평균 = reviewAvg), 2~3문장, 차 이름·주행 거리(전기차) 반영, 같은 시드 같은 글', () => {
     const make = (seed: number) => { const g = big(2025, seed); return { g, gen: quick(g, { type: 'startProject', ...SPEC, body: 'sedanM', segment: 'family', powertrain: 'ev' }) }; };
     const { g, gen } = make(5), cs = critiquesOf(g.state, gen.id);
