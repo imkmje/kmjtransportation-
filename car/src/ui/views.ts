@@ -114,7 +114,7 @@ export function companySummary(s: CarState): string {
   const rows = Q.staffInfo(s), h = Q.hiringInfo(s), e = Q.execInfo(s), hq = Q.hqInfo(s), f = Q.factoryInfo(s);
   const byRole = (['designer', 'engineer', 'tester', 'sales'] as const).map((r) => `${ROLE_NAME[r]} ${rows.filter((x) => x.role === r).length}`).join(' · ');
   const pay = rows.reduce((a, x) => a + x.salary, 0), xpay = e.roles.reduce((a, r) => a + (r.holder?.pay ?? 0), 0), interest = Math.round(s.loan.balance * Q.loanRate(s));
-  const fix: [string, number][] = [['직원 월급', pay], ['임원 월급', xpay], ['본사 유지비', hq.current.upkeep], ['공장 유지비', f.current.upkeep], ['대출 이자', interest]];
+  const fix: [string, number][] = [['직원 월급', pay], ['임원 월급', xpay], ['본사 유지비', hq.current.upkeep], ['공장 유지비', f.current.upkeep], ['배터리 공장 유지비', Q.batteryPlantInfo(s).upkeep], ['대출 이자', interest]];
   const total = fix.reduce((a, [, v]) => a + v, 0), util = f.current.capacity ? f.produced / f.current.capacity : 0, un = Q.execUnread(s);
   const n = hq.next, nextLine = n ? `다음 ${n.level}등급 ${esc(n.name)} · 비용 ${money(n.cost)}` : '최고 등급입니다';
   const box = (v: string, title: string, big: string, lines: string, cls = '') => `<button class="card co-box${cls ? ` ${cls}` : ''}" data-act="cotab" data-v="${v}"><span class="lbl">${title}</span><b>${big}</b>${lines}<span class="co-go" aria-hidden="true">자세히 →</span></button>`;

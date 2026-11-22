@@ -1,6 +1,6 @@
 // 1.2.0 전기차 시대: 배터리 용량·주행 거리·충전 속도·전용 플랫폼·배터리 자체 생산. 순수 함수
 import { config } from '../config';
-import { bodyById } from '../data';
+import { bodyById, powertrainById } from '../data';
 import { bodyClass } from './equip';
 import { batteryPlantCut, batteryPlantError, batteryPlantUpkeep, costMultOf, eraCostAdd } from './company';
 import { chargeStep, platformReady, ptCostAdd } from './research';
@@ -71,9 +71,11 @@ export function genEvInfo(s: CarState, generationId: number): EvCarInfo | null {
 }
 export interface BatteryChoice { id: Battery; name: string; info: string; rangeKm: number; expectedKm: number; chargeMinutes: number; costDelta: number; priceDelta: number; appeal: number }
 /** 기획 화면의 배터리 선택지: 주행 거리, 기대, 충전 시간, 대당 원가 차이·시장 기준가 차이(표준 대비, 만원), 매력 배수(표준 = 1, 같은 플랫폼).
- *  level: 실제 동력 단계(levelForTier), platform을 빼면 지금 연구 기준. year를 빼면 지금 해 */
-export function batteryChoices(s: CarState, spec: Pick<ProjectSpec, 'body'> & { level: number; platform?: boolean }, year = yearOf(s.week)): BatteryChoice[] {
-  const p = spec.platform ?? platformReady(s), exp = expectedRange(spec.body, year), cm = (b: Battery) => bodyById(spec.body).cost * ptCostAdd(s, EV, b, p) * costMultEv(s);
+ *  level: 실제 동력 단계(levelForTier), platform을 빼면 지금 연구 기준. year를 빼면 지금 해.
+ *  tier: 동력 등급(주면 등급 원가 가산까지 넣어 unitCost 차이와 같아진다. 빼면 예전 값, 봇이 쓴다) */
+export function batteryChoices(s: CarState, spec: Pick<ProjectSpec, 'body'> & { level: number; platform?: boolean; tier?: number }, year = yearOf(s.week)): BatteryChoice[] {
+  const tm = spec.tier ? 1 + (powertrainById(EV).tiers[spec.tier - 1]?.costAdd ?? 0) : 1;
+  const p = spec.platform ?? platformReady(s), exp = expectedRange(spec.body, year), cm = (b: Battery) => bodyById(spec.body).cost * ptCostAdd(s, EV, b, p) * tm * costMultEv(s);
   const base = rangeMult(spec.body, spec.level, 'std', p, year);
   return BATTERIES.map((b) => ({
     id: b, name: V().battery[b].name, info: BATTERY_INFO[b], rangeKm: rangeKm(spec.level, b, p), expectedKm: exp, chargeMinutes: chargeMinutes(s, b),

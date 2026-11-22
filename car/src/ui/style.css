@@ -141,6 +141,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 /* 옵션 타일 */
 .opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.opts.bat-opts{grid-template-columns:repeat(3,minmax(0,1fr))}.bat-opts .opt{min-height:0}.bat-opts .bat-km{font-weight:800;color:var(--ink)}
 .opt{text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:16px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:2px;min-height:104px;transition:border-color .15s,transform .15s;min-width:0}
 .opt:hover:not(:disabled){transform:translateY(-2px)}
 .opt[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}

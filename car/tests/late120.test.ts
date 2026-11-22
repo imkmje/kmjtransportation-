@@ -82,6 +82,17 @@ describe('배터리 용량·주행 거리(1.2.0)', () => {
   });
 });
 
+describe('배터리 선택지 원가 차이(1.2.0 화면 버그)', () => {
+  it('tier를 주면 costDelta가 실제 대당 원가(unitCost) 차이와 같다(동력 등급 원가 가산 포함)', () => {
+    const g = at(2025); grant(g); const s = g.state;
+    for (const tier of [1, 2, 3]) {
+      const c = batteryChoices(s, { body: 'sedanM', level: levelForTier(s, 'ev', tier), tier });
+      const uc = (b: Battery) => unitCost('sedanM', 'ev', tier, [], costMultOf(s, 'ev'), ptCostAdd(s, 'ev', b, true));
+      for (const x of c) expect(x.costDelta).toBeCloseTo(uc(x.id) - uc('std'), 9);
+    }
+  });
+});
+
 describe('전용 플랫폼(1.2.0)', () => {
   it('연구 뒤 새로 출시하는 전기차 세대에만: 실용 +6%, 이미 출시한 세대(와 그 페이스리프트)는 그대로', () => {
     const g = at(2021); grantExcept(g, 'bd_evPlatform'); const s = g.state; s.factory.level = 3;
