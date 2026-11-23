@@ -31,4 +31,10 @@ export function recordPast(s: CarState, startYear: number, yearOfMonth: (m: numb
   runs.unshift({ id, company: s.companyName, startYear, at: now, cars });
   store(runs.sort((a, b) => b.at - a.at).slice(0, MAX_RUNS));
 }
+/** 1.6.0 기기 연동으로 받은 목록을 합친다: 같은 판은 나중에 기록한 쪽 */
+export function mergePast(other: PastRun[]): void {
+  const by = new Map(loadPast().map((r) => [r.id, r]));
+  for (const r of other) { const cur = r && typeof r.id === 'string' && typeof r.at === 'number' ? by.get(r.id) : null; if (cur !== null && (!cur || cur.at < r.at)) by.set(r.id, r); } // 모양 검사는 loadPast가 읽을 때
+  store([...by.values()].sort((a, b) => b.at - a.at).slice(0, MAX_RUNS));
+}
 export const clearPast = (): void => { try { localStorage.removeItem(KEY); } catch { /* 무시 */ } };

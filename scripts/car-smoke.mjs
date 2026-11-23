@@ -2073,6 +2073,127 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('1.5.0 [목록 비우기] 확인 뒤 목록이 빔', (await NG(() => localStorage.getItem('car-company-past-names'))) === null && (await np.locator('.past-card').innerText()).includes('아직 모아 둔 이름이 없습니다'));
   await nctx.close(); }
 
+// ---- 1.6.0 기기 연동: api.github.com·gist.githubusercontent.com을 가짜 보관함(메모리)으로 받아, 기기 A(PC 1366×1024)·B(태블릿 800×1200 터치) 두 컨텍스트가 같은 보관함을 쓴다.
+// A 연동 켜기·올리기 → B 연동 켜기 물음(아니요) → B 새로 열기 물음 → 불러오면 같은 회사·날짜 → A 진행·올리기 → B 올리기 충돌 → 서버 것 불러오기 → 401 실패 줄 → 연동 끄기.
+// CAR_SMOKE_160=폴더 를 주면 화면을 그 폴더에 찍는다. 실제 GitHub에는 연결하지 않는다
+{ const { gunzipSync } = await import('node:zlib');
+  const S6 = process.env.CAR_SMOKE_160 ?? '', TOKEN = 'smoke-token-123';
+  const gists = new Map(); let gseq = 0, down = null;
+  const LIMIT = 2000; // 실제 GitHub는 1MB. 브라우저에서 raw_url 경로를 타게 작게(사진 없는 초반 판은 수 KB)
+  const view = (id) => ({ id, public: false, files: Object.fromEntries([...gists.get(id)].map(([n, c]) => [n, { filename: n, size: c.length, raw_url: `https://gist.githubusercontent.com/me/${id}/raw/${gseq}/${n}`, truncated: c.length > LIMIT, content: c.slice(0, LIMIT) }])) });
+  const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Authorization, Content-Type, Accept', 'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS' };
+  const rawSeen = [];
+  const fake = async (route) => {
+    const r = route.request(), url = r.url(), method = r.method(), json = (status, b) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(b) });
+    if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+    if (down) return json(down, { message: 'error' });
+    const raw = url.match(/^https:\/\/gist\.githubusercontent\.com\/me\/([^/]+)\/raw\/\d+\/(.+)$/);
+    if (raw) { rawSeen.push(r.headers().authorization ?? ''); return route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'text/plain' }, body: gists.get(raw[1])?.get(raw[2]) ?? '' }); }
+    if (r.headers().authorization !== `Bearer ${TOKEN}`) return json(401, { message: 'Bad credentials' });
+    const body = r.postData() ? JSON.parse(r.postData()) : null;
+    if (method === 'GET' && url.startsWith('https://api.github.com/gists?')) return json(200, [...gists.keys()].map((id) => ({ id, files: Object.fromEntries([...gists.get(id).keys()].map((n) => [n, { filename: n }])) })));
+    if (method === 'POST' && url === 'https://api.github.com/gists') { const id = `g${++gseq}`; gists.set(id, new Map(Object.entries(body.files).map(([n, x]) => [n, x.content]))); return json(201, view(id)); }
+    const m = url.match(/^https:\/\/api\.github\.com\/gists\/([^/?]+)$/);
+    if (m && gists.has(m[1])) { if (method === 'GET') return json(200, view(m[1])); if (method === 'PATCH') { gseq++; for (const [n, x] of Object.entries(body.files)) gists.get(m[1]).set(n, x.content); return json(200, view(m[1])); } }
+    return json(404, { message: 'Not Found' });
+  };
+  const meta = () => { const g = [...gists.values()][0]; return g ? JSON.parse(g.get('carcompany-sync-meta.json')) : null; };
+  const until = async (fn, ms = 8000) => { for (let t = 0; t < ms; t += 100) { if (await fn()) return true; await new Promise((r) => setTimeout(r, 100)); } return false; };
+  const open = async (opt) => { const c = await browser.newContext(opt); await c.route('https://api.github.com/**', fake); await c.route('https://gist.githubusercontent.com/**', fake);
+    const p = await c.newPage(); p.on('pageerror', (e) => errors.push(String(e))); p.on('console', (m) => m.type() === 'error' && !/Failed to load resource.*40[13]/.test(m.text()) && errors.push(m.text())); return { c, p }; };
+  const menuOf = async (p) => { await p.evaluate(() => { document.getElementById('sheet').hidden = true; document.getElementById('toasts').innerHTML = ''; }); await p.click('#menubtn'); await p.waitForSelector('#sheet:not([hidden]) .sync-box'); };
+  const shotS = async (p, n, sel = '.sync-box') => { if (!S6) return; const { mkdirSync } = await import('node:fs'); mkdirSync(S6, { recursive: true }); if (sel) await p.locator(sel).first().scrollIntoViewIfNeeded().catch(() => {}); await p.screenshot({ path: `${S6}/${n}.png` }); };
+  const where = (p) => p.evaluate(() => { const s = window.__car.game?.state; return s ? { co: s.companyName, week: s.week, title: !document.getElementById('title').hidden } : null; });
+  const quick = (p) => p.evaluate(() => { const c = window.__car, g = c.game, s = g.state; c.setSpeed(0);
+    g.command({ type: 'startProject', name: '연동카', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    const pr = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: pr.id, price: Math.round(c.Q.carBasePrice(s, pr) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 }); c.tick(20); c.setSpeed(0); });
+
+  // 기기 A(PC)
+  const A = await open({ viewport: { width: 1366, height: 1024 } });
+  await A.p.goto(URL0); await A.p.waitForSelector('#title:not([hidden])');
+  await A.p.click('[data-act="titleNew"]'); await A.p.fill('#t-co', '연동 모터스'); await A.p.click('[data-act="startNew"]'); await quick(A.p);
+  { // 출시 사진 한 장의 크기(400×250 JPEG 0.82, 저장 데이터에 들어가는 모양 그대로)
+    await A.p.evaluate((id) => window.__car.goTarget({ tab: 'garage', id }), await A.p.evaluate(() => window.__car.game.state.nameplates[0].generations[0].id)); await A.p.waitForTimeout(300);
+    const n = await A.p.evaluate(() => new Promise((res) => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = 400; c.height = 250; const k = Math.max(400 / i.width, 250 / i.height); c.getContext('2d').drawImage(i, 0, 0, i.width * k, i.height * k); res(c.toDataURL('image/jpeg', 0.82).length); }; i.src = window.__car.stage.snapshot(); }));
+    console.log(`INFO 1.6.0 출시 사진 한 장 data URL ${n}자`); }
+  await menuOf(A.p);
+  const boxA = await A.p.locator('.sync-box').innerText();
+  check('1.6.0 메뉴 기기 연동 칸: 토큰(비밀번호 칸)·기기 이름(PC 추정)·[연동 켜기]·ⓘ', (await A.p.locator('#sy-token').getAttribute('type')) === 'password' && (await A.p.inputValue('#sy-dev')) === 'PC' && (await A.p.locator('[data-act="syncOn"]').count()) === 1 && (await A.p.locator('.sync-box [data-info="term:기기 연동"]').count()) === 1, boxA.replace(/\n/g, ' ').slice(0, 100));
+  await A.p.click('.sync-box [data-info="term:기기 연동"]'); const tipA = await A.p.evaluate(() => window.__car.tip?.text ?? '');
+  check('1.6.0 ⓘ: 토큰 만드는 법(gist 권한 하나)·숨김 상태·나중 저장', tipA.includes('Tokens (classic)') && tipA.includes('gist 하나만') && tipA.includes('주소를 아는 사람은 볼 수 있는') && tipA.includes('나중 저장이 남는다'));
+  await shotS(A.p, 'menu-off-1366x1024', '');
+  await A.p.keyboard.press('Escape').catch(() => {}); await A.p.evaluate(() => { const t = document.getElementById('tip'); if (t) t.hidden = true; });
+  await A.p.fill('#sy-token', 'wrong'); await A.p.click('[data-act="syncOn"]'); await A.p.waitForTimeout(300);
+  check('1.6.0 틀린 토큰: 켜지지 않고 이유 알림, 이 기기에 토큰을 남기지 않음', (await A.p.evaluate(() => localStorage.getItem('car-company-sync'))) === null && (await A.p.locator('#toasts').innerText()).includes('토큰이 틀렸거나'));
+  await A.p.fill('#sy-token', TOKEN); await A.p.click('[data-act="syncOn"]');
+  const up1 = await until(() => meta()?.rev === 1);
+  const wA1 = await where(A.p), m1 = meta();
+  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 8 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
+  await until(async () => (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각'));
+  check('1.6.0 A 상태 줄: 마지막으로 올린 시각, [지금 올리기]·[서버에서 불러오기]·[연동 끄기]', (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각') && (await A.p.locator('.sync-box [data-act="syncUp"],.sync-box [data-act="syncDown"],.sync-box [data-act="syncOff"]').count()) === 3);
+  await shotS(A.p, 'menu-on-1366x1024');
+  await A.p.setViewportSize({ width: 800, height: 1200 }); await A.p.waitForTimeout(150);
+  check('1.6.0 800×1200: 메뉴 기기 연동 칸 가로 넘침 없음', (await overflowOf(A.p)) <= 0 && await A.p.evaluate(() => { const b = document.querySelector('.sync-box'), r = b.getBoundingClientRect(); return b.scrollWidth <= b.clientWidth + 1 && r.right <= innerWidth; }));
+  await shotS(A.p, 'menu-on-800x1200'); await A.p.setViewportSize({ width: 1366, height: 1024 });
+  const body = gunzipSync(Buffer.from([...gists.values()][0].get('carcompany-sync-save.txt'), 'base64')).toString();
+  check('1.6.0 보관함 본문(gzip+base64): 자동 저장 한 판·지난 판 목록, 토큰 없음', body.includes('"companyName":"연동 모터스"') && body.includes('"past"') && !body.includes(TOKEN) && !JSON.stringify(m1).includes(TOKEN));
+
+  // 기기 B(태블릿): 자기 판이 있는 상태에서 연동 켜기 → 물음(아니요) → 새로 열면 다시 물음 → 불러오기
+  const B = await open({ viewport: { width: 800, height: 1200 }, hasTouch: true });
+  await B.p.goto(URL0); await B.p.waitForSelector('#title:not([hidden])');
+  await B.p.click('[data-act="titleNew"]'); await B.p.fill('#t-co', '다른 회사'); await B.p.click('[data-act="startNew"]'); await B.p.evaluate(() => { window.__car.setSpeed(0); window.__car.tick(6); });
+  await B.p.evaluate(() => window.__car.setSpeed(0)); await menuOf(B.p);
+  check('1.6.0 B 기기 이름 기본값: 터치 화면이면 태블릿', (await B.p.inputValue('#sy-dev')) === '태블릿');
+  await B.p.fill('#sy-token', TOKEN); await B.p.click('[data-act="syncOn"]');
+  await until(() => B.p.locator('#ask').isVisible());
+  const askB = await B.p.locator('#ask-text').innerText();
+  check('1.6.0 B 연동 켜기: 서버 저장이 있으면 불러올지 물음(기기·회사·날짜·저장 시각, 백업 안내)', askB.includes('다른 기기(PC)의 저장이 더 최신입니다') && askB.includes('연동 모터스') && askB.includes(m1.date) && /\d{4}-\d\d-\d\d \d\d:\d\d 저장/.test(askB) && askB.includes('연동 전 백업'), askB.replace(/\n/g, ' '));
+  await B.p.click('#ask-no');
+  check('1.6.0 B 아니요: 자기 판 그대로', (await where(B.p)).co === '다른 회사');
+  await B.p.evaluate(() => window.__car.tick(4)); await B.p.waitForTimeout(1200); // 자동 저장(매달) → 올리기는 rev가 달라 멈춤
+  await B.p.reload(); await B.p.waitForSelector('#title:not([hidden])');
+  const askT = await until(() => B.p.locator('#ask').isVisible());
+  check('1.6.0 B 새로 열기(처음 화면): 다른 기기 저장이 더 최신이라며 물음', askT && (await B.p.locator('#ask-text').innerText()).includes('다른 기기(PC)'));
+  await B.p.waitForTimeout(500); await shotS(B.p, 'title-ask-800x1200', ''); // 창이 떠오르는 동안 기다림
+  await B.p.setViewportSize({ width: 1366, height: 1024 }); await B.p.waitForTimeout(150); await shotS(B.p, 'title-ask-1366x1024', ''); await B.p.setViewportSize({ width: 800, height: 1200 });
+  await B.p.click('#ask-yes');
+  await until(async () => (await where(B.p))?.co === '연동 모터스');
+  const wB1 = await where(B.p);
+  check('1.6.0 B 불러오기: A와 같은 회사·같은 날짜(주), 게임 화면으로', wB1?.co === '연동 모터스' && wB1.week === wA1.week && !wB1.title, `${JSON.stringify(wA1)} / ${JSON.stringify(wB1)}`);
+  check('1.6.0 B 불러오기: 원격 판의 raw_url(1MB 넘김 경로)을 토큰 없이 받음', rawSeen.length >= 1 && rawSeen.every((x) => x === ''), String(rawSeen.length));
+  await B.p.evaluate(() => window.__car.setSpeed(0)); await menuOf(B.p); await B.p.click('[data-act="home"]'); await B.p.waitForSelector('#title:not([hidden])');
+  check('1.6.0 처음 화면: 이 기기의 이전 자동 저장이 "연동 전 백업"으로 남음, 이어 하기는 받은 판', (await B.p.locator('#title').innerText()).includes('연동 전 백업') && (await B.p.locator('[data-act="continue"]').innerText()).includes('연동 모터스'));
+  await B.p.click('[data-act="continue"]'); await B.p.evaluate(() => window.__car.setSpeed(0));
+
+  // A가 더 진행해 올림 → B가 올리려면 충돌 → 서버 것 불러오기
+  await A.p.evaluate(() => { document.getElementById('sheet').hidden = true; window.__car.tick(8); window.__car.setSpeed(0); });
+  await menuOf(A.p); await A.p.click('.sync-box [data-act="syncUp"]');
+  const up2 = await until(() => meta()?.rev >= 2 && meta().date !== m1.date);
+  const wA2 = await where(A.p); await A.c.close();
+  await menuOf(B.p); await B.p.click('.sync-box [data-act="syncUp"]');
+  await until(async () => (await B.p.locator('[data-act="syncForce"]').count()) === 1);
+  const lineB = await B.p.locator('.sync-line').innerText(), revBefore = meta().rev;
+  check('1.6.0 B 올리기 충돌: 자동으로 덮어쓰지 않고 멈춤, [이 기기 것으로 덮어쓰기]·[서버 것 불러오기]', up2 && lineB.includes('올리기를 멈췄습니다') && lineB.includes('PC') && (await B.p.locator('.sync-box [data-act="syncDown"]').count()) === 2 && meta().device === 'PC' && meta().rev === revBefore, lineB);
+  await shotS(B.p, 'conflict-800x1200');
+  await B.p.setViewportSize({ width: 1366, height: 1024 }); await B.p.waitForTimeout(150); await shotS(B.p, 'conflict-1366x1024'); await B.p.setViewportSize({ width: 800, height: 1200 });
+  await B.p.locator('.sync-box [data-act="syncDown"]').first().click(); await until(() => B.p.locator('#ask').isVisible());
+  check('1.6.0 서버 것 불러오기: 확인 창(PC, 회사)', (await B.p.locator('#ask-text').innerText()).includes('서버의 저장(PC:'));
+  await B.p.click('#ask-yes'); await until(async () => (await where(B.p))?.week === wA2.week);
+  const wB2 = await where(B.p);
+  check('1.6.0 서버 것 불러오기: A가 마지막으로 올린 날짜(주)', wB2.co === '연동 모터스' && wB2.week === wA2.week && wB2.week > wB1.week, `${wA2.week}/${wB2.week}`);
+
+  // 실패: 401(토큰 만료) → 게임은 그대로, 상태 줄과 알림
+  down = 401; await B.p.evaluate(() => window.__car.setSpeed(0)); await menuOf(B.p); await B.p.click('.sync-box [data-act="syncUp"]');
+  await until(async () => (await B.p.locator('.sync-line').innerText()).includes('실패'));
+  const failLine = await B.p.locator('.sync-line').innerText();
+  check('1.6.0 401: 상태 줄에 실패 이유(토큰), 알림, 플레이를 막는 창 없음', failLine.includes('토큰이 틀렸거나 만료') && failLine.includes('이 기기에 남아') && (await B.p.locator('#toasts').innerText()).includes('토큰이 틀렸거나') && (await B.p.locator('#ask').isHidden()) && !(await where(B.p)).title, failLine);
+  await shotS(B.p, 'fail-800x1200'); down = null;
+  const lsAll = await B.p.evaluate((t) => Object.keys(localStorage).filter((k) => k !== 'car-company-sync' && (localStorage.getItem(k) ?? '').includes(t)), TOKEN);
+  check('1.6.0 토큰은 연동 설정 한 곳에만(다른 기기 저장소 값에 없음)', lsAll.length === 0, lsAll.join());
+  await B.p.click('.sync-box [data-act="syncOff"]'); await B.p.click('#ask-yes'); await B.p.waitForTimeout(150);
+  check('1.6.0 연동 끄기: 이 기기의 토큰·id를 지우고 입력칸으로, 서버 보관함은 그대로', (await B.p.evaluate(() => localStorage.getItem('car-company-sync'))) === null && (await B.p.locator('#sy-token').count()) === 1 && gists.size === 1 && meta().rev >= 2);
+  await B.c.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에
 await done(fails.length ? 1 : 0);

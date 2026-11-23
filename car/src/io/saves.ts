@@ -13,7 +13,7 @@ export interface PlanPreset { name: string; body?: string; segment: string; powe
 export const PRESET_MAX = 8;
 export interface UiExtra { photos: Record<string, string>; colors: Record<string, string>; logo: LogoSpec; plan?: PlanSave; presets?: PlanPreset[] }
 export interface SaveData { v: number; when: string; game: CarState; ui: UiExtra }
-export type SlotKey = 'auto' | 'slot1' | 'slot2' | 'slot3';
+export type SlotKey = 'auto' | 'slot1' | 'slot2' | 'slot3' | 'backup'; // backup(1.6.0): 기기 연동으로 서버 저장을 받기 전의 자동 저장 한 벌
 export const SLOT_KEYS: SlotKey[] = ['slot1', 'slot2', 'slot3'];
 
 const DB = 'car-company', STORE = 'saves', LS = (k: string) => `car-company-${k}`;
@@ -54,7 +54,7 @@ export async function del(key: SlotKey): Promise<void> {
 export interface SlotInfo { key: SlotKey; when: string; company: string; week: number; cars: number; logo: LogoSpec; difficulty: Difficulty } // difficulty: 예전 저장은 normal
 export async function list(): Promise<SlotInfo[]> {
   const out: SlotInfo[] = [];
-  for (const key of ['auto', ...SLOT_KEYS] as SlotKey[]) {
+  for (const key of ['auto', ...SLOT_KEYS, 'backup'] as SlotKey[]) {
     const d = await get(key);
     if (d?.game) out.push({ key, when: d.when, company: d.game.companyName, week: d.game.week, cars: d.game.nameplates?.length ?? 0, difficulty: d.game.difficulty ?? 'normal', logo: d.ui?.logo ? cleanLogo(d.ui.logo) : { ...DEFAULT_LOGO } });
   }
