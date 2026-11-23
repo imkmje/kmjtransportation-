@@ -1874,6 +1874,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   // 위임한 차의 자동 출시: 공개 장면으로 게임을 끊지 않고 알림만, 알림을 누르면 시승기
   await mp.click(`.ga-one [data-act="genAuto"][data-np="${npA}"]`);
   const auto = await MG((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.find((n) => n.id === id).generations[0]; g.launchMonth -= 60; g.lifeMonth -= 60; s.cash = 1e9;
+    if (!s.staff.some((x) => x.role === 'designer')) s.staff.push({ id: s.nextId++, name: '보충 디자이너', role: 'designer', ability: 60, potential: 70, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }); // 1.6.1: 위임은 디자이너가 없는 팀으로 시작하지 않는다(유일한 디자이너를 기획 임원으로 올렸다)
     for (let i = 0; i < 160 && s.nameplates.find((n) => n.id === id).generations.length < 2; i++) c.tick(1);
     return { gens: s.nameplates.find((n) => n.id === id).generations.length, sheet: !document.getElementById('sheet').hidden, rvl: !!document.querySelector('#sheet .rvl'), screen: c.screen }; }, npA);
   await mp.click('#todobtn'); await mp.click('#drawer [data-act="todoTab"][data-v="notes"]'); // 알림은 12초 뒤 닫히므로(느린 렌더) 알림 기록에서 누른다
