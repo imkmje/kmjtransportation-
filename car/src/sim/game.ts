@@ -66,6 +66,7 @@ const UNDO_KIND: Record<string, string> = {
   appointExec: '임원 임명', hireExec: '임원 채용', dismissExec: '임원 해임', hire: '채용', train: '교육', rest: '휴식',
   foundSubsidiary: '자회사 설립', setSubStrategy: '자회사 전략', setSubArea: '자회사 영역', setSubDividend: '자회사 배당', investSub: '자회사 투자', setSubPresident: '자회사 사장', // 3.0.0
   setSubShare: '자회사 공유 범위', subAddModel: '자회사 모델 추가', subDropModel: '자회사 모델 단종', renameSubModel: '자회사 모델 이름', sellSubsidiary: '자회사 매각',
+  setSubMode: '자회사 운영 방식', setSubModelPrice: '자회사 모델 가격', setSubTarget: '자회사 목표', // 3.1.0(개발 시작에 해당하는 기획·지시·배지는 본사 개발처럼 뺐다)
   setPrice: '가격 변경', setPricePolicy: '가격 변경', renameNameplate: '이름 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
 };
 /** 명령 직전 상태(JSON)와 알림 이름. 상태 밖(WeakMap)에 두어 저장 파일에 들어가지 않는다(불러오면 되돌리기 없음) */
@@ -258,7 +259,7 @@ export class Game {
     const research = s.pendingResearch ?? 0;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; s.pendingResearch = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
     const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, ...(sub ? { subDiv: sub.dividend, subInv: s.pendingSubInv ?? 0 } : {}), cars: carRows, execPay: xPay, research };
-    if (sub) { s.pendingSubInv = 0; for (const r of sub.rep) this.addRep(r.value, `자회사 「${r.name}」의 명성`); }
+    if (sub) { s.pendingSubInv = 0; for (const r of sub.rep) this.addRep(r.value, r.reason ?? `자회사 「${r.name}」의 명성`); }
     s.ledger.push(e);
     ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
     const everyone = [...s.staff, ...Object.values(s.execs?.seats ?? {}).map((x) => x!.staff), ...presidents(s)];
@@ -655,7 +656,8 @@ export class Game {
       case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
       case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 위임
       case 'foundSubsidiary': case 'setSubStrategy': case 'setSubArea': case 'setSubDividend': case 'investSub': case 'setSubPresident': case 'setSubShare':
-      case 'subAddModel': case 'subDropModel': case 'renameSubModel': case 'sellSubsidiary': return subCommand({ s, spend: (c) => this.spend(c) }, cmd, [])!; // 3.0.0 자회사
+      case 'subAddModel': case 'subDropModel': case 'renameSubModel': case 'sellSubsidiary':
+      case 'setSubMode': case 'subPlanModel': case 'subOrderModel': case 'subBadgeModel': case 'subCancelOrder': case 'setSubModelPrice': case 'setSubTarget': return subCommand({ s, spend: (c) => this.spend(c) }, cmd, [])!; // 3.0.0 자회사
       case 'devCheat': { // 개발자 메뉴(개발 단계용)
         const ev: GameEvent[] = [];
         switch (cmd.kind) {

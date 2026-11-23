@@ -16,7 +16,7 @@ import { planPreview } from './queries';
 import { rescueOptions } from './insight';
 import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
-import { SUB_KINDS, foundError } from './subs';
+import { SUB_KINDS, autoSpec, badgeCost, foundError, isDirect, newModelName, slotError, subFunds, subPlanPreview, areaBodies } from './subs';
 import { monthOf, monthTime, yearOf } from './time';
 import type { Battery, Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
 
@@ -45,6 +45,7 @@ export interface SteadyOptions {
   rescue: boolean; // 0.10.0: 수습 대상(혹평·판매 부진)인 차에 긴급 개선, 후속 풀체인지를 개발 중인 혹평 차는 가격 인하 판매
   ptPick: 'auto' | 'gasoline' | 'newest';
   optPick: 'fit' | 'none' | 'misfit';
+  subDirect?: boolean; // 3.1.0: 브랜드 자회사를 직접 운영(빈 차급에 본사 차 배지 또는 직접 기획, subs와 함께)
   subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
 const STEADY: SteadyOptions = {
@@ -71,7 +72,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (turn) hireBest(g);
       if (o.research && turn) research(g, o.sloppy);
       if (o.rescue) rescue(g);
-      if (o.subs && g.state.week % config.time.weeksPerMonth === 0) manageSubs(g);
+      if (o.subs && g.state.week % config.time.weeksPerMonth === 0) { manageSubs(g); if (o.subDirect) manageSubsDirect(g); }
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -149,6 +150,28 @@ function manageSubs(g: Game): void {
   const to = (s.subs ?? []).filter((x) => x.kind === 'premium' || x.kind === 'value').sort((a, b) => a.total.invested / config.subs.kinds[a.kind].cost - b.total.invested / config.subs.kinds[b.kind].cost || a.id - b.id)[0];
   if (to) g.command({ type: 'investSub', subId: to.id, amount: spare });
 }
+/** 3.1.0 직접 운영 봇: 브랜드 자회사를 직접 운영으로 바꾸고, 달마다 자회사마다 한 대까지 빈 차급(영역 안, 상한 안)에 차를 낸다.
+ *  본사가 그 차급에 판매 중인 차가 있으면 배지, 없으면 직접 기획(고객층 가중치 순으로 개발 방향 4·3·2·1·0, 고급은 가격대 높게). 개발비는 자본의 절반까지만 */
+function manageSubsDirect(g: Game): void {
+  const s = g.state;
+  for (const sub of [...(s.subs ?? [])].filter((x) => x.kind === 'premium' || x.kind === 'value').sort((a, b) => a.id - b.id)) {
+    if (!isDirect(sub)) g.command({ type: 'setSubMode', subId: sub.id, mode: 'direct' });
+    const body = areaBodies(s, sub).find((b) => !slotError(s, sub, b) && !sub.models.some((x) => x.body === b));
+    if (!body) continue;
+    const hq = sellingGens(s).filter((x) => x.status === 'onSale' && x.body === body).sort((a, b) => b.reviewAvg - a.reviewAvg || a.id - b.id)[0];
+    if (hq && badgeCost(hq).cost <= subFunds(sub) / 2) { g.command({ type: 'subBadgeModel', subId: sub.id, modelId: hq.id }); continue; }
+    const seg = SEGMENTS.find((x) => x.id === (sub.segment ?? ''))!, order = [...STATS_ORDER].sort((a, b) => (seg?.w[b] ?? 0) - (seg?.w[a] ?? 0));
+    const dirs = [Object.fromEntries(order.map((k, i) => [k, 4 - i])), ...Object.values(config.subs.character).map((c) => c.dir), { P: 2, E: 2, U: 2, D: 2, Q: 2 }] as Record<typeof STATS_ORDER[number], number>[];
+    const base = autoSpec(s, sub, body, 'value', sub.kind === 'premium' ? 'high' : 'mid', newModelName(s, sub, body));
+    let best: { spec: typeof base; critic: number; cost: number } | null = null; // 평론 기대값이 가장 높은 기획(같으면 싼 것), 개발비는 자본의 절반까지
+    for (const direction of dirs) for (const budget of ['normal', 'high'] as const) for (const designWeeks of config.dev.designWeeks.slice(1)) {
+      const spec = { ...base, direction: { ...direction }, budget, designWeeks }, p = subPlanPreview(s, sub, spec);
+      if (!p.error && p.cost <= subFunds(sub) / 2 && (!best || p.critic > best.critic + 1e-9 || (Math.abs(p.critic - best.critic) < 1e-9 && p.cost < best.cost))) best = { spec, critic: p.critic, cost: p.cost };
+    }
+    if (best) g.command({ type: 'subPlanModel', subId: sub.id, ...best.spec });
+  }
+}
+const STATS_ORDER = ['P', 'E', 'U', 'D', 'Q'] as const;
 
 const RANDOM_DEFAULT = (eventId: string): number => RANDOM_EVENTS_BY_ID.get(eventId)!.defaultChoice;
 const RANDOM_EVENTS_BY_ID = new Map(RANDOM_EVENTS.map((d) => [d.id, d]));

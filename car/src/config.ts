@@ -102,7 +102,7 @@ export const config = {
       { name: '글로벌 본사', cost: 15000000, rep: 80, staff: 20, teams: 3, options: 4, upkeep: 40000 },
       // 3.0.0(사용자 지시: 차 6대에 직원 20명 상한은 모자라다). 유지비는 등급마다 약 2.5배(기존 3배·2.7배 추세)
       { name: '그룹 본사', cost: 80000000, rep: 120, staff: 30, teams: 4, options: 4, upkeep: 100000 },
-      { name: '글로벌 캠퍼스', cost: 300000000, rep: 170, staff: 40, teams: 6, options: 4, upkeep: 250000 },
+      { name: '글로벌 캠퍼스', cost: 150000000, rep: 150, staff: 40, teams: 6, options: 4, upkeep: 250000 }, // 3.1.0 조건 3조·평판 170 → 1.5조·평판 150(60년 봇 6판: 모범 6/6, 신중 3/6 도달. 3조는 모범 1/6)
     ],
   },
   staff: { // 9.1 직원
@@ -366,5 +366,24 @@ export const config = {
     finance: { boost: 0.015, boostMax: 0.04, financed: 0.3, spread: 0.014 },
     scaleMax: 3,
     bizFx: { growth: { fx: 1, margin: 0.9 }, profit: { fx: 0.85, margin: 1.35 }, stable: { fx: 1, margin: 1 } } as Record<string, { fx: number; margin: number }>,
+    // 3.1.0 직접 운영·제작 지시·배지(설계서 9.9). 자회사 차는 본사 신차 기획과 같은 계산(planPreview·criticScores)으로 사양·평론을 정하고, 세기(기본 A)는 평론에서 거꾸로 정한다:
+    // 기본 A = 그때 경쟁 차 기본 A + (평론 − 6) ÷ 10 + 종류 + 공유 범위 + 본사 투자 + 브랜드 평판(추정 방식의 평론 셈을 뒤집은 것). 개발비는 처음에 한 번(달마다 내는 개발비 없음)
+    team: { roles: ['designer', 'designer', 'engineer', 'engineer', 'engineer', 'tester', 'tester'] as const, floor: 45, presBonus: 15 }, // 팀 능력을 대신하는 가상 팀: 직무 7명(본사 3~4등급 개발팀 한 팀 규모), 능력 = max(floor, 본사 개발 직원 평균) + presBonus × 사장 능력/100(사장이 없으면 0)
+    planCost: 0.6, // 직접 기획·제작 지시의 개발비 = 본사 신차 개발비 계산 × 이 값 × 공유 범위 개발비 배수(본사 차대·시제차 설비를 함께 쓴다)
+    shareLag: [5, 2, 0], shareTier: [2, 3, 3], // 공유 범위 좁게·보통·넓게: 나온 지 이 햇수가 안 된 본사 동력·장비는 쓰지 못한다, 동력 등급 상한
+    character: { // 제작 지시의 성격: 개발 방향(합 10, 항목당 4 이하)
+      luxury: { name: '고급', dir: { P: 2, E: 0, U: 2, D: 3, Q: 3 } },
+      sport: { name: '스포츠', dir: { P: 4, E: 0, U: 1, D: 3, Q: 2 } },
+      value: { name: '실속', dir: { P: 1, E: 4, U: 3, D: 1, Q: 1 } },
+    },
+    band: { // 가격대: 동력 등급(공유 범위 상한 안), 예산, 가격 배수
+      low: { name: '낮게', tier: 1, budget: 'low', price: 0.9 },
+      mid: { name: '보통', tier: 2, budget: 'normal', price: 1 },
+      high: { name: '높게', tier: 3, budget: 'high', price: 1.1 },
+    },
+    defaultOrder: { premium: { character: 'luxury', band: 'high' }, value: { character: 'value', band: 'mid' } }, // 자회사가 스스로 다시 개발할 때(지시 차의 성격이 없으면)
+    badge: { costShare: 0.3, timeShare: 1 / 3, critic: -0.5, cannibal: 1 }, // 본사 차 배지: 개발비 = 원본 세대 개발비 × 30%, 기간 = 원본 개발 기간 ÷ 3, 평론 −0.5, 본사 원본과의 자기 잠식 = a² × 1(일반 자회사 모델은 0.25)
+    modelPrice: { min: 80, max: 130 }, // 직접 운영의 모델 가격: 브랜드 기준 가격의 80~130%
+    target: { subRep: 3, hqRep: 0.5, maxSold: 10000000, maxProfit: 1e10 }, // 연간 목표를 이루면 브랜드 평판 +3, 본사 평판 +0.5(미달 벌칙 없음)
   },
 };

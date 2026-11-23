@@ -252,7 +252,22 @@ export type SubKind = 'premium' | 'value' | 'parts' | 'finance';
 /** 자회사 전략 9가지(사업 자회사는 growth·profit·stable만) */
 export type SubStrategy = 'growth' | 'share' | 'profit' | 'rival' | 'tech' | 'stable' | 'niche' | 'prestige' | 'ev';
 /** 자회사 모델 한 대(차급 하나): 경쟁 모델(RivalModel)과 같은 n·start·cycle·base에 이름·동력·이번 달 점유 점수(a, 본사 판매의 제 살 깎기에 쓴다)·지난달 판매 */
-export interface SubModel extends RivalModel { body: string; name: string; ev?: true; keep?: true; a: number; sold: number } // keep: 플레이어가 추가를 지시한 모델(전략이 줄이지 않는다)
+export interface SubModel extends RivalModel { body: string; name: string; ev?: true; keep?: true; a: number; sold: number; car?: SubCar; price?: number } // car(3.1.0): 실제 사양(없으면 추정 방식), price(3.1.0): 직접 운영에서 정한 가격 배수(없으면 전략) // keep: 플레이어가 추가를 지시한 모델(전략이 줄이지 않는다)
+// ---------- 3.1.0 자회사 직접 운영(설계서 9.9) ----------
+/** 제작 지시의 성격·가격대 */
+export type SubCharacter = 'luxury' | 'sport' | 'value';
+export type PriceBand = 'low' | 'mid' | 'high';
+/** 실제 사양이 있는 자회사 모델(직접 기획 plan·제작 지시 order·본사 차 배지 badge). 평론은 본사와 같은 계산, 세기(base)는 평론에서 정한다 */
+export interface SubCar {
+  how: 'plan' | 'order' | 'badge';
+  spec: ProjectSpec; level: number; stats: Stats; reviews: number[]; critic: number; // critic: 평론 평균(배지는 감점 뒤)
+  chassisSeed: number; faceSeed: number;
+  character?: SubCharacter; band?: PriceBand; fromGen?: number; // fromGen: 배지의 본사 원본 세대 ID
+}
+/** 개발 중인 자회사 차(직접 기획·제작 지시·배지). doneMonth 월말에 출시. 같은 차급에 모델이 있으면 그 다음 세대가 된다 */
+export interface SubOrder { id: number; body: string; how: SubCar['how']; start: number; doneMonth: number; cost: number; name?: string; spec?: ProjectSpec; character?: SubCharacter; band?: PriceBand; fromGen?: number; chassisSeed?: number; faceSeed?: number }
+/** 연간 목표(판매 대수 또는 이익, 만원) */
+export interface SubTarget { kind: 'sold' | 'profit'; value: number }
 /** 자회사 월 기록(최근 24개월) */
 export interface SubMonth { month: number; sold: number; demand: number; revenue: number; profit: number; dividend: number } // demand: 생산 한도 적용 전 수요
 export interface Subsidiary {
@@ -268,6 +283,10 @@ export interface Subsidiary {
   total: { invested: number; profit: number; dividend: number; sold: number; hqRep: number }; // hqRep: 본사 평판에 더한 합
   reports: { week: number; text: string }[];
   lastPrice: number; // 지난 분기 보고 때의 가격 배수(가격을 바꿨다는 보고용)
+  mode?: 'direct'; // 3.1.0 직접 운영(없으면 전반 위임)
+  orders?: SubOrder[]; // 3.1.0 개발 중인 차
+  devDue?: number; // 3.1.0 이번 달에 낼 개발비(직접 기획·지시·배지, 월말 결산의 비용)
+  target?: SubTarget | null; // 3.1.0 연간 목표
 }
 
 export interface CarState {
@@ -370,6 +389,14 @@ export type Command =
   | { type: 'subDropModel'; subId: number; body: string }
   | { type: 'renameSubModel'; subId: number; body: string; name: string }
   | { type: 'sellSubsidiary'; subId: number }
+  // ---------- 3.1.0 자회사 직접 운영 ----------
+  | { type: 'setSubMode'; subId: number; mode: 'delegate' | 'direct' }
+  | ({ type: 'subPlanModel'; subId: number; chassisSeed?: number; faceSeed?: number } & ProjectSpec)
+  | { type: 'subOrderModel'; subId: number; body: string; character: SubCharacter; priceBand: PriceBand; name?: string }
+  | { type: 'subBadgeModel'; subId: number; modelId: number } // modelId: 본사 판매 중인 세대 ID
+  | { type: 'subCancelOrder'; subId: number; orderId: number }
+  | { type: 'setSubModelPrice'; subId: number; body: string; pct: number | null } // pct: 브랜드 기준 가격의 %(null = 전략대로)
+  | { type: 'setSubTarget'; subId: number; target: SubTarget | null }
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';
