@@ -301,8 +301,8 @@ describe('본사(9.2)와 동시 개발(6.4)', () => {
       expect(cash - s.cash).toBe(next.cost); expect(s.hqLevel).toBe(lv + 1);
     }
     expect(got).toEqual([[6, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4], [30, 4, 4], [40, 6, 4]]);
-    expect([50000, 400000, 3000000, 15000000, 80000000, 300000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억 / 8,000억 / 3조
-    expect([20, 55, 80, 120, 170]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
+    expect([50000, 400000, 3000000, 15000000, 80000000, 150000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억 / 8,000억 / 1.5조(3.1.0: 3조에서 낮춤)
+    expect([20, 55, 80, 120, 150]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
   });
   it('1.1.0: 옵션 칸 수 제한이 없다(본사 1등급에서도 옵션 3개), 제한은 원가와 가격', () => {

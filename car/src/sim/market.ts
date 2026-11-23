@@ -94,7 +94,7 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
   const resp = alt.rivalA === undefined ? rivalResponse(state, car.body, year) : 1;
   for (const r of state.rivals) rivals += ((alt.rivalA ?? (r.cells[car.body] ?? 0) * resp + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e; // 경쟁 차는 고객층과 무관(1.0.0 성능: 한 번만)
   const subs = state.subs?.length && !alt.noSubs;
-  if (subs) rivals += config.subs.cannibal * subPull(state, car.body); // 3.0.0 제 살 깎기: 같은 차급 자회사 모델을 약하게 센다
+  if (subs) rivals += config.subs.cannibal * subPull(state, car.body, false) + config.subs.badge.cannibal * subPull(state, car.body, true); // 3.0.0 제 살 깎기: 같은 차급 자회사 모델을 약하게 센다. 3.1.0 본사 차 배지 모델은 크게
   const carE = withExp(car), othersE = others.map(withExp);
   for (const seg of SEGMENTS) {
     const w = (mix[seg.id] ?? 0) * (n.seg[seg.id] ?? 1);
@@ -111,7 +111,7 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
   return total;
 }
 /** 3.0.0 한 차급의 자회사 모델 점유 점수 합(A^지수, 이번 달 값). 경쟁 몫 계산(본사 제 살 깎기·경쟁 모델 점유·자회사 판매)이 함께 쓴다 */
-export const subPull = (s: CarState, body: string): number => (s.subs ?? []).reduce((a, x) => a + x.models.reduce((b, md) => b + (md.body === body ? md.a ** config.market.shareExp : 0), 0), 0);
+export const subPull = (s: CarState, body: string, badge?: boolean): number => (s.subs ?? []).reduce((a, x) => a + x.models.reduce((b, md) => b + (md.body === body && (badge === undefined || (md.car?.how === 'badge') === badge) ? md.a ** config.market.shareExp : 0), 0), 0); // badge(3.1.0): true면 배지 모델만, false면 배지가 아닌 모델만
 /** 3.0.0 할부 금융 자회사의 본사 판매 배수 */
 export const subSalesMult = (s: CarState): number => 1 + (s.subs ?? []).reduce((a, x) => a + (x.kind === 'finance' ? x.effect : 0), 0);
 

@@ -2372,6 +2372,92 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await three('staff-40', async () => { await sp.locator('#panel .staff-list .srow-w').nth(20).scrollIntoViewIfNeeded(); });
   await sctx.close(); }
 
+// ---- 3.1.0 자회사 직접 운영: 2005년 상태에서 고급·보급형 자회사를 세우고 운영 전환(머리글·강조색·탭) → 직접 운영 → 신차 기획(본사 기획 화면) → 제작 지시 → 다른 자회사로 전환 → 배지 →
+// 목표 → 1년 뒤 자회사 차고(3D·평론가·가격) → 본사로 → 본사 차고의 자회사 차 → 재무 그룹 종합. CAR_SMOKE_310=폴더 를 주면 세 크기 화면을 찍는다
+{ const sctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const sp = await sctx.newPage(); sp.on('pageerror', (e) => errors.push(String(e))); sp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const SG = (fn, a) => sp.evaluate(fn, a), S3 = process.env.CAR_SMOKE_310 ?? '';
+  const SIZES = [[1366, 1024], [1024, 768], [800, 1200]];
+  const three = async (n, fn) => { for (const [w, h] of SIZES) { await sp.setViewportSize({ width: w, height: h }); await SG(() => { document.getElementById('toasts').innerHTML = ''; }); await sp.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(sp); check(`3.1.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (S3) await sp.screenshot({ path: `${S3}/${n}-${w}x${h}.png` }); } await sp.setViewportSize({ width: 1366, height: 1024 }); };
+  const subs = () => SG(() => window.__car.game.state.subs ?? []);
+  const top = () => SG(() => ({ co: document.getElementById('co').textContent, back: !document.getElementById('hqback').hidden, cashL: document.getElementById('cash-l').textContent, hq: document.getElementById('hqcash').hidden ? '' : document.getElementById('hqcash').textContent,
+    tabs: [...document.querySelectorAll('#tabs button')].filter((b) => !b.hidden).map((b) => b.dataset.tab).join(), cls: document.body.className, accent: document.documentElement.style.getPropertyValue('--accent') }));
+  await sp.goto(URL0); await sp.waitForSelector('#title:not([hidden])');
+  await sp.click('[data-act="titleNew"]'); await sp.fill('#t-co', '직접 운영 시험'); await sp.click('[data-act="startNew"]'); await SG(() => window.__car.setSpeed(0));
+  await SG(() => { const c = window.__car, g = c.game, s = g.state; s.week = (2005 - 1970) * 48; s.cash = 1e9; s.hqLevel = 5; s.reputation = 150;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2005 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id);
+    g.command({ type: 'startProject', name: '아리아', body: 'sedanM', segment: 'family', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    const p = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 });
+    { const g0 = s.nameplates[0].generations[0]; g0.devCost = 3000000; g0.reviews = [7.4, 7.8, 7.1, 7.6]; g0.reviewAvg = 7.475; } // 점검용: 개발자 메뉴로 끝낸 개발이라 개발비·평론을 보통 차처럼
+    g.command({ type: 'foundSubsidiary', kind: 'premium', name: '엘리온', color: '#2b3a55' }); g.command({ type: 'foundSubsidiary', kind: 'value', name: '모아', color: '#d9822b' });
+    s.events.pending.length = 0; c.tick(4); s.events.pending.length = 0; c.render(); });
+  await sp.click('#tabs button[data-tab="company"]'); await sp.click('#panel [data-act="cotab"][data-v="sub"]');
+  check('3.1.0 자회사 목록: 자회사마다 [운영 전환], 전반 위임·직접 운영 ⓘ', (await sp.locator('#panel .sub-rows [data-act="subOpen"]').count()) === 2 && (await sp.locator('#panel [data-info="term:직접 운영"]').count()) === 1);
+  await sp.locator('#panel .sub-rows [data-act="subOpen"]').first().click(); await sp.waitForSelector('#panel .sub-bar');
+  const t1 = await top();
+  check('3.1.0 운영 전환(고급): 머리글 이름·[본사로]·자본(본사 현금 작게)·탭 4개·어두운 톤·강조색', t1.co === '엘리온' && t1.back && t1.cashL === '자본' && t1.hq.startsWith('본사') && t1.tabs === 'garage,dev,company,records' && t1.cls.includes('sub-premium') && t1.accent !== '', JSON.stringify(t1));
+  await sp.click('#panel [data-act="subMode"][data-v="direct"]');
+  check('3.1.0 직접 운영으로 바꾸기', (await subs())[0].mode === 'direct');
+  await three('switch-premium');
+  await sp.click('#tabs button[data-tab="dev"]'); await sp.waitForSelector('#panel .sub-work');
+  await sp.click('#panel [data-act="subPlanNew"]'); await sp.waitForSelector('#panel .plan-est');
+  const pt = await sp.locator('#panel').innerText(), ovt = await sp.locator('#ov').innerText();
+  check('3.1.0 자회사 신차 기획: 본사 기획 화면(요약·예상 등급)에 가상 개발팀·예상 평론·개발 기간', ovt.includes('엘리온 신차 기획') && ['가상 개발팀', '예상 평론', '개발 기간', '예상 등급'].every((w) => pt.includes(w)), ovt.slice(0, 60));
+  await three('plan');
+  await sp.click('#panel [data-act="ptab"][data-v="body"]');
+  const bodyN = await sp.locator('#panel [data-act="pick"][data-k="body"]').count();
+  check('3.1.0 기획 차체: 그 자회사 영역의 차급만', bodyN > 0 && bodyN <= 6, String(bodyN));
+  await sp.click('#panel [data-act="ptab"][data-v="sum"]').catch(() => {}); await sp.locator('#panel [data-act="startDev"]').first().click(); await sp.waitForSelector('#panel .sub-work');
+  const o1 = (await subs())[0].orders ?? [];
+  check('3.1.0 기획 개발 시작: 개발 중 · n개월 남음', o1.length === 1 && o1[0].how === 'plan' && (await sp.locator('#panel .sub-ord-m').first().innerText()).includes('개월 남음'));
+  await sp.click('#panel [data-act="subOrderOpen"]'); await sp.waitForSelector('#sheet .sub-order');
+  await sp.click('#sheet [data-act="ordPick"][data-k="character"][data-v="sport"]'); await sp.click('#sheet [data-act="ordPick"][data-k="band"][data-v="high"]');
+  const ot = await sp.locator('#sheet .sub-order').innerText();
+  check('3.1.0 제작 지시 창: 차급·성격·가격대·이름, 예상 평론·개발비·기간', ['차급', '성격', '가격대', '예상 평론', '개발비', '기간'].every((w) => ot.includes(w)) && (await sp.locator('#sheet [data-info="term:제작 지시"]').count()) === 1);
+  await three('order', async () => { await sp.locator('#sheet .sub-order .kpis').scrollIntoViewIfNeeded(); });
+  await sp.click('#sheet [data-act="subOrderDo"]');
+  check('3.1.0 제작 지시: 개발 중 2대(지시는 스포츠·높게)', ((await subs())[0].orders ?? []).length === 2 && (await subs())[0].orders[1].character === 'sport');
+  await sp.locator('#panel .sub-bar [data-act="subOpen"]').first().click(); await sp.waitForTimeout(150);
+  const t2 = await top();
+  check('3.1.0 다른 자회사로 바로 전환(보급형): 밝은 톤·이름', t2.co === '모아' && t2.cls.includes('sub-value'), JSON.stringify(t2));
+  await three('switch-value');
+  await sp.click('#tabs button[data-tab="dev"]'); await sp.click('#panel [data-act="subBadgeOpen"]'); await sp.waitForSelector('#sheet .sub-badge');
+  const bt = await sp.locator('#sheet .sub-badge').innerText();
+  check('3.1.0 배지 창: 본사 판매 중인 차(아리아)·평론 감점·개발비·ⓘ', bt.includes('아리아') && bt.includes('배지 모델로 내기') && (await sp.locator('#sheet [data-info="term:배지 모델"]').count()) === 1);
+  await three('badge');
+  await sp.locator('#sheet [data-act="subBadgeDo"]:not([disabled])').first().click();
+  check('3.1.0 배지: 개발 중(배지)', ((await subs())[1].orders ?? []).some((o) => o.how === 'badge'));
+  await sp.click('#tabs button[data-tab="company"]'); await sp.waitForSelector('#panel .sub-target');
+  await sp.fill('#sub-tgt', '5000'); await sp.click('#panel [data-act="tgtSet"]');
+  check('3.1.0 목표: 판매 5,000대, 진행 막대', (await subs())[1].target?.value === 5000 && (await sp.locator('#panel .sub-target .prog').count()) === 1 && (await sp.locator('#panel [data-info="term:자회사 목표"]').count()) === 1);
+  await three('target', async () => { await sp.locator('#panel .sub-target').scrollIntoViewIfNeeded(); });
+  await SG(() => { const c = window.__car; for (let i = 0; i < 13; i++) { c.game.state.events.pending.length = 0; c.tick(4); } c.render(); });
+  await sp.locator('#panel .sub-bar [data-act="subOpen"]').first().click(); await sp.click('#tabs button[data-tab="garage"]'); await sp.waitForSelector('#panel .sub-car-card');
+  const hasPlan = await SG(() => window.__car.game.state.subs[0].models.some((m) => m.car?.how === 'plan'));
+  await sp.locator('#panel [data-act="subCarSel"]').first().click();
+  const gt = await sp.locator('#panel .sub-car-card').innerText();
+  check('3.1.0 1년 뒤 자회사 차고: 직접 기획한 차 출시, 모델 목록·능력치·가격', hasPlan && (await sp.locator('#panel [data-act="subCarSel"]').count()) >= 2 && gt.includes('대당 원가'), gt.slice(0, 80));
+  const planBody = await SG(() => window.__car.game.state.subs[0].models.find((m) => m.car?.how === 'plan').body);
+  await sp.click(`#panel [data-act="subCarSel"][data-k="${planBody}"]`);
+  check('3.1.0 직접 기획한 차: 평론가 4명 점수', (await sp.locator('#panel .sub-car-card').innerText()).includes('평론가 4명'));
+  await sp.locator('#panel [data-act="subPrice"]').nth(1).click();
+  check('3.1.0 직접 운영 가격 +5%', (await SG((b) => window.__car.game.state.subs[0].models.find((m) => m.body === b).price, planBody)) > 0);
+  await three('sub-garage');
+  await sp.click('#hqback'); await sp.waitForTimeout(150);
+  const t3 = await top();
+  check('3.1.0 [본사로]: 본사 이름·현금·탭 6개·강조색 원래대로', t3.co === '직접 운영 시험' && !t3.back && t3.cashL === '현금' && t3.tabs.split(',').length === 6 && !t3.cls.includes('sub-on') && t3.accent === '', JSON.stringify(t3));
+  await sp.click('#tabs button[data-tab="garage"]'); await sp.waitForSelector('#panel .sub-cars');
+  check('3.1.0 본사 차고: 자회사 차 칸(내 자회사 표시)', (await sp.locator('#panel .sub-cars [data-act="gsubOpen"]').count()) >= 2 && (await sp.locator('#panel .sub-cars').innerText()).includes('내 자회사'));
+  await sp.locator('#panel .sub-cars [data-act="gsubOpen"]').first().click(); await sp.waitForSelector('#panel .sub-car-card');
+  check('3.1.0 본사 차고에서 자회사 차를 무대에(구분 표시·운영 전환 단추)', (await sp.locator('#ov').innerText()).includes('내 자회사') && (await sp.locator('#panel [data-act="gsubBack"]').count()) === 1);
+  await three('hq-garage-sub');
+  await sp.click('#panel [data-act="gsubBack"]');
+  await sp.click('#tabs button[data-tab="fin"]'); await sp.waitForSelector('#panel .group-card');
+  const grt = await sp.locator('#panel .group-card').innerText();
+  check('3.1.0 재무 그룹 종합: 본사+자회사 2곳, 회사별 비중·그래프', ['그룹 종합', '본사', '엘리온', '모아', '이익 비중'].every((w) => grt.includes(w)) && (await sp.locator('#panel .group-card svg').count()) === 2, grt.slice(0, 80));
+  await three('group', async () => { await sp.locator('#panel .group-card').scrollIntoViewIfNeeded(); });
+  await sctx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에
 await done(fails.length ? 1 : 0);

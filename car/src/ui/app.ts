@@ -6,7 +6,7 @@ import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf, yearOfMonth } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type Challenge, type StartCondition, type ExecRole, type Battery, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type NotifyTopic, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type StaffWin, type Stat, type Stats, type SubKind, type SubStrategy } from '../sim/types';
+import { STATS, type Challenge, type StartCondition, type ExecRole, type Battery, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type NotifyTopic, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type StaffWin, type Stat, type Stats, type SubKind, type SubStrategy, type SubCharacter, type PriceBand, type Subsidiary } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook } from '../render/variant';
@@ -32,7 +32,7 @@ type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'derive' | 'dev' | 'launch'
 type Tab = 'garage' | 'dev' | 'research' | 'company' | 'fin' | 'records'; // 0.9.0 큰 메뉴 6개(연구·재무를 회사 안쪽에서 꺼냄)
 type PlanTab = 'sum' | 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir' | 'budget';
 /** 기획 초안. nameplateId 0 = 새 차종, 아니면 그 차종의 풀체인지 */
-type Draft = ProjectSpec & { equip?: EQ.Equip; equipMode?: 'rec' | 'prev' | 'custom'; color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step' }; // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
+type Draft = ProjectSpec & { equip?: EQ.Equip; equipMode?: 'rec' | 'prev' | 'custom'; color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step'; subId?: number }; // subId(3.1.0): 자회사 신차 기획(가상 팀, 영역 안) // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[]; equip?: EQ.Equip } // 1.1.0 equip: 장비 구성(options는 sim에 넘기는 파생값)
 type RecTab = 'cars' | 'hall' | 'combo' | 'news' | 'years' | 'stats' | 'past'; // stats·past: 1.5.0 통계·지난 판의 차
@@ -92,6 +92,26 @@ const $ = <T extends HTMLElement = HTMLElement>(s: string): T => document.queryS
 /** 용어 설명 버튼(ⓘ). 타일 같은 버튼 안에도 넣을 수 있게 span으로 만든다 */
 const ib = (key: string, label = key.slice(key.indexOf(':') + 1)) => `<span class="ib" role="button" tabindex="0" data-info="${esc(key)}" aria-label="${esc(label)} 설명"></span>`;
 
+
+// 3.1.0 운영 전환 화면의 강조색: 자회사 로고 색. 흰 글자·흰 바탕과의 대비가 모자라면 어둡게 한다
+const hexRgb = (h: string): number[] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lumOf = (c: number[]): number => { const [r, g, b] = c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const toHex = (c: number[]): string => `#${c.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('')}`;
+/** 흰색과의 대비가 min 이상이 될 때까지 어둡게 */
+const deepen = (h: string, min: number): string => { let c = hexRgb(h); for (let i = 0; i < 40 && 1.05 / (lumOf(c) + 0.05) < min; i++) c = c.map((v) => v * 0.93); return toHex(c); };
+const tint = (h: string, k: number): string => toHex(hexRgb(h).map((v) => v + (255 - v) * k));
+let themed = '';
+function subTheme(x: { kind: string; color: string } | null): void {
+  const key = x ? `${x.kind}:${x.color}` : '';
+  if (key === themed) return;
+  themed = key;
+  const r = document.documentElement.style, b = document.body.classList;
+  b.remove('sub-premium', 'sub-value', 'sub-biz', 'sub-on');
+  for (const k of ['--accent', '--accent2', '--accent-l', '--accent-bg']) r.removeProperty(k);
+  if (!x || !/^#[0-9a-f]{6}$/i.test(x.color)) return;
+  b.add('sub-on', x.kind === 'premium' ? 'sub-premium' : x.kind === 'value' ? 'sub-value' : 'sub-biz');
+  r.setProperty('--accent', deepen(x.color, 3.2)); r.setProperty('--accent2', deepen(x.color, 4.8)); r.setProperty('--accent-l', tint(x.color, 0.45)); r.setProperty('--accent-bg', tint(x.color, 0.86));
+}
 
 export function startApp(): void {
   let game: Game | null = null;
@@ -889,14 +909,19 @@ export function startApp(): void {
     sound.setEra(yearOf(s.week)); applyEra(yearOf(s.week), stage); // M3 시대별 화면 분위기
     // 바뀐 값만 고친다(매 주 상단바를 통째로 다시 쓰면 누르는 순간 버튼이 다시 만들어져 터치가 씹힐 수 있다)
     const put = (el: HTMLElement, v: string, html = false) => { if (el.dataset.v !== v) { el.dataset.v = v; if (html) el.innerHTML = v; else el.textContent = v; } };
-    put($('#co'), s.companyName); $('#co').title = s.companyName;
-    put($('#mylogo'), myLogo(26), true);
+    const sx = curSub(); subTheme(sx); // 3.1.0 운영 전환: 머리글에 자회사 로고·이름, 강조색은 자회사 색
+    put($('#co'), sx ? sx.name : s.companyName); $('#co').title = sx ? `${sx.name} · ${s.companyName}의 자회사` : s.companyName;
+    put($('#mylogo'), sx ? subMark(sx.name, sx.color, 26) : myLogo(26), true);
+    $('#hqback').hidden = !sx;
+    for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.hidden = !!sx && (b.dataset.tab === 'research' || b.dataset.tab === 'fin' || (!isBrandK(sx.kind) && (b.dataset.tab === 'garage' || b.dataset.tab === 'dev')));
     put($('#date'), game.dateLabel);
     // 1.0.0 좁은 상단 바(1240px 이하)에서는 1조 이상을 "3.4조"로 줄인다(전체 금액은 title·aria)
     const topMoney = (v: number) => (innerWidth <= 1240 && Math.abs(v) >= 1e8 ? `${v < 0 ? '−' : ''}${(Math.abs(v) / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}조` : money(v));
-    const c = $('#cash'); put(c, topMoney(s.cash)); c.classList.toggle('neg', s.cash < 0); c.title = money(s.cash);
+    const c = $('#cash'), hc = $('#hqcash'); put($('#cash-l'), sx ? '자본' : '현금');
+    if (sx) { put(c, topMoney(sx.capital)); c.classList.remove('neg'); c.title = `${sx.name} 자본 ${money(sx.capital)}`; put(hc, `본사 ${topMoney(s.cash)}`); hc.classList.toggle('neg', s.cash < 0); hc.hidden = false; }
+    else { put(c, topMoney(s.cash)); c.classList.toggle('neg', s.cash < 0); c.title = money(s.cash); hc.hidden = true; }
     put($('#rep'), String(Math.round(s.reputation)));
-    { const L = s.ledger.at(-1), pc = $('#plchip'), pb = $('#pl'); pc.hidden = !L; // 0.9.0 지난달 손익: ▲3.4억 / ▼1.1억(누르면 재무)
+    { const L = s.ledger.at(-1), pc = $('#plchip'), pb = $('#pl'); pc.hidden = !L || !!sx; // 3.1.0 운영 전환 중에는 본사 손익 칩을 숨긴다(머리글 자리) // 0.9.0 지난달 손익: ▲3.4억 / ▼1.1억(누르면 재무)
       if (L) { put(pb, `${L.profit >= 0 ? '▲' : '▼'}${topMoney(Math.abs(L.profit))}`); pb.className = L.profit >= 0 ? 'pos' : 'neg'; pc.setAttribute('aria-label', `${L.year}년 ${L.monthOfYear}월 손익 ${money(L.profit, true)}. 눌러서 재무 화면 보기`); pc.title = `${L.year}년 ${L.monthOfYear}월 손익(영업 이익 아님, 일회성 지출 포함)`; } }
     for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.classList.toggle('on', Number(b.dataset.speed) === speed);
     const held = decisionHeld(); $('#held').hidden = !held; $('#speeds').classList.toggle('held', held); // 좁은 화면에서는 글자 대신 빠르기 버튼 테두리로
@@ -940,7 +965,14 @@ export function startApp(): void {
     if (screen === 'derive' && (!derive || Q.generationById(s, derive.genId)?.status !== 'onSale')) { derive = null; screen = 'garage'; }
     if (screen === 'launch') dropToast('pause-ready'); // 알림이 가리키던 화면에 왔으면 그 알림은 닫는다
     if (screen === 'company' && coTab === 'staff') dropToast('pause-cands');
-    const v: View = screen === 'garage' ? garageView() : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView() : screen === 'derive' ? deriveView()
+    if (draft?.subId !== undefined && !s.subs?.some((x) => x.id === draft!.subId)) { draft = null; if (screen === 'plan') screen = 'dev'; }
+    const sx = curSub();
+    if (sx) { // 3.1.0 운영 전환: 자회사에 맞는 탭만(차고·개발·회사·기록)
+      if (screen === 'plan' && draft?.subId !== sx.id) screen = 'dev';
+      if (!['garage', 'dev', 'plan', 'company', 'records'].includes(screen) || (!isBrandK(sx.kind) && (screen === 'garage' || screen === 'dev' || screen === 'plan'))) screen = 'company';
+    }
+    const v: View = sx && screen !== 'plan' ? (screen === 'garage' ? subGarageView(sx.id) : screen === 'dev' ? subDevView(sx.id) : screen === 'records' ? subRecordsView(sx.id) : { ov: '', panel: subBar(sx) + subDetailView(sx.id), look: undefined })
+      : screen === 'garage' ? (garageSub && s.subs?.some((x) => x.id === garageSub!.id) ? subGarageView(garageSub.id, true) : garageView()) : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView() : screen === 'derive' ? deriveView()
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : screen === 'research' ? researchTab() : screen === 'fin' ? finTab() : recordsView(), look: undefined };
     $('#main').classList.toggle('full', v.look === undefined && !v.office);
@@ -1135,7 +1167,7 @@ export function startApp(): void {
     const gone = all.filter((g) => g.status === 'discontinued').sort((a, b) => b.launchMonth - a.launchMonth || b.id - a.id);
     const old = gone.length ? `<details class="card gsec gone"><summary><h3>단종된 차 ${gone.length}대</h3></summary>${gone.map((g) => `<div class="gsr"><span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(nameOf(g))}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></span><span>${Q.monthLabel(g.launchMonth)} 출시${g.endMonth !== null && g.endMonth !== undefined ? ` · ${Q.monthLabel(g.endMonth)} 단종` : ''}</span><span>누적 ${num(g.totalSold)}대 · 평론 ${score(g.reviewAvg)}</span><span></span></div>`).join('')}</details>` : '';
     const plan = s.projects.length < Q.devTeams(s) ? `<div class="row g-plan"><button class="btn ink" data-act="plan">+ 신차 기획</button></div>` : '';
-    return { ov: '', panel: main + dev + old + plan, look: undefined };
+    return { ov: '', panel: main + subCarsCard() + dev + old + plan, look: undefined };
   }
   /** 내 차 비교(2~4대): 능력치 5개·가격·판매·이익·수명·평론, 경쟁사는 차급별 세기 한 줄 */
   function showCompare(): void {
@@ -1246,7 +1278,7 @@ export function startApp(): void {
       const any = allGens(s).length > 0;
       const ovh = `<div class="ov empty"><div><h3>${p ? '개발 중인 차가 있습니다' : any ? '판매 중인 차가 없습니다' : '첫 차를 기획할 차례입니다'}</h3><p>${p ? `「${esc(p.name)}」${josa(p.name, '을/를')} 개발하고 있습니다. 시험이 끝나면 출시할 수 있습니다.` : '차체와 고객층을 정하면 직원들이 1년 가까이 설계와 시험을 합니다.'}</p>${p ? '<button class="go dark" data-act="devHome">개발 보기</button>' : '<button class="go" data-act="plan">신차 기획</button>'}</div></div>`;
       const intro = `<div class="card"><p class="lbl">${esc(s.companyName)}</p><h2>${p ? '개발이 끝나면 출시할 수 있습니다' : '차고가 비어 있습니다'}</h2><p class="hint" style="margin-top:8px">회사의 한 바퀴: <b>기획</b> → <b>설계</b>(${config.dev.designWeeks[0]}~${config.dev.designWeeks[config.dev.designWeeks.length - 1]}주) → <b>시험</b>(결함 줄이기) → <b>출시</b>(가격·색) → 매달 <b>판매</b>. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>${p ? '<p class="hint" style="margin-top:6px">개발을 기다리는 동안 회사 화면에서 직원을 뽑거나 연구 화면에서 연구를 시작할 수 있습니다.</p>' : '<button class="go" data-act="plan">신차 기획 시작</button>'}</div>`;
-      return { ov: ovh, panel: intro + devCard, look: null };
+      return { ov: ovh, panel: intro + devCard + subCarsCard(), look: null };
     }
     if (garageSum && gens.length >= 2) return garageTable();
     const GL = garageList(), g = GL.find((x) => x.id === garageId) ?? GL[0], e = currentEdition(g), name = nameOf(g), gi = GL.indexOf(g);
@@ -1293,7 +1325,7 @@ export function startApp(): void {
       + fold('crit', '평론가 시승기', `평론 평균 ${score(g.reviewAvg)}`, critiqueList(g.id)) + (g.wins?.length ? fold('wins', '직원 성과', `개발 중 ${g.wins.length}건`, winsList(g.wins)) : ''); // 1.3.0
     // 키 큰 화면(1366×1024 등): 성적 카드(판매 그래프·조언)를 무대 아래로 옮겨 무대를 차에 맞는 비율로 줄이고 오른쪽 칸 스크롤을 줄인다
     const t = tallStage(), c1 = t ? '' : card1;
-    return { ov: ovh, panel: card2 ? pcols(card2 + fac, c1 + pnl + card3 + devCard + planCard) : c1 + fac + pnl + card3 + devCard + planCard, look: genLook(g), keys: keys + (t ? `<div class="key-more">${card1}</div>` : '') };
+    return { ov: ovh, panel: card2 ? pcols(card2 + fac, c1 + pnl + card3 + devCard + planCard + subCarsCard()) : c1 + fac + pnl + card3 + devCard + planCard + subCarsCard(), look: genLook(g), keys: keys + (t ? `<div class="key-more">${card1}</div>` : '') };
   }
 
   // ----- 신차 기획 첫 화면(8.7) -----
@@ -1482,14 +1514,17 @@ export function startApp(): void {
     const s = game!.state, d = draft!, y = yearOf(s.week), full = d.nameplateId > 0;
     const n = full ? s.nameplates.find((x) => x.id === d.nameplateId) : undefined, prev = n?.generations.at(-1);
     fixDraft(d);
+    const sub = d.subId === undefined ? undefined : s.subs?.find((x) => x.id === d.subId), steam = sub ? Q.subTeam(s, sub) : []; // 3.1.0 자회사 신차 기획: 가상 팀, 영역 안
+    const teamPv = (spec: ProjectSpec) => (sub ? Q.planPreview(s, spec, steam) : Q.teamPreview(s, d.team, spec)), spv = sub ? Q.subPlanPreview(s, sub, d) : null;
     const fcp = full ? Q.fullChangePreview(s, d.nameplateId, d) : null, name = full ? n!.name : d.name.trim() || defaultName();
-    const tp = Q.teamPreview(s, d.team, d), est = { ...tp, cost: tp.cost * (fcp?.costMult ?? 1) }; // 고른 팀 기준(풀체인지는 개발비 할인 반영)
+    const tp = teamPv(d), est = { ...tp, cost: spv ? spv.cost : tp.cost * (fcp?.costMult ?? 1) }; // 고른 팀 기준(풀체인지는 개발비 할인 반영)
+    if (sub) { const segs = (SUBS.kinds[sub.kind] as { segments?: string[] }).segments ?? []; tp.bestSegment = [...segs].sort((a, b) => teamPv({ ...d, segment: b }).segmentScore - teamPv({ ...d, segment: a }).segmentScore || (a < b ? -1 : 1))[0] ?? d.segment; } // 더 맞는 고객층도 영역 안에서
     const compare = fcp ? (est.avg > fcp.prevAvg ? 'better' : est.avg < fcp.prevAvg ? 'worse' : 'same') : 'same';
     const lk = (o: Partial<Draft> = {}) => { const x = { ...d, ...o }; return lookOf({ body: x.body, powertrain: x.powertrain, tier: x.tier, color: x.color, wheels: 1, year: y, chassisSeed: x.chassisSeed, faceSeed: x.faceSeed }); };
     const look = lk(), tabs = planTabs(d);
     if (planTab !== 'sum' && !tabs.some(([k]) => k === planTab)) planTab = d.mode === 'step' ? tabs[0][0] : 'sum';
     const onSum = planTab === 'sum', sumMode = d.mode !== 'step';
-    const ovh = ovTop(full ? `풀체인지 기획 · ${(prev?.number ?? 0) + 1}세대` : '새 차 기획 · 설계 전', `<span id="pname-ov">${esc(name)}</span>${full ? `<small>${(prev?.number ?? 0) + 1}세대</small>` : ''}`, specLine(d.body, d.powertrain, d.tier, d.segment)) + ovScore(`예상 등급${ib('term:예상 등급')}`, est.avg) + ovHint;
+    const ovh = ovTop(sub ? `${esc(sub.name)} 신차 기획 · 직접 운영` : full ? `풀체인지 기획 · ${(prev?.number ?? 0) + 1}세대` : '새 차 기획 · 설계 전', `<span id="pname-ov">${esc(name)}</span>${full ? `<small>${(prev?.number ?? 0) + 1}세대</small>` : ''}`, specLine(d.body, d.powertrain, d.tier, d.segment)) + ovScore(`예상 등급${ib('term:예상 등급')}`, est.avg) + ovHint;
     const bodyWarn = fcp?.bodyChanged ? `<div class="warnbox body-warn" style="margin-top:10px">차체를 바꾸면 이름값이 절반만 이어집니다(${EQ_WORD(fcp.equityBase)} → ${EQ_WORD(fcp.equity)}). 개발비 할인도 없어집니다.</div>` : '';
     let body = '';
     if (onSum) body = planSummary(d, est, tp, fcp, compare, look);
@@ -1501,8 +1536,8 @@ export function startApp(): void {
         <p class="lbl" style="margin-top:12px">이어받는 것</p><ul class="inherit"><li>차 이름 「${esc(n!.name)}」${josa(n!.name, '과/와')} 이름값(출시 초기 인지도 가산)</li><li>전 세대 고객의 재구매(첫 12개월, 매달 약 ${num(fcp?.rebuyPerMonth ?? 0)}대)</li><li>같은 차체면 개발비 ${Math.round(config.lifecycle.fullChange.sameBodyCost * 100)}%만 듭니다</li></ul>
         <div class="okbox" style="margin-top:10px">새 세대를 출시하면 ${prev.number}세대는 그 달 말에 단종됩니다(생산 라인을 이어 씁니다).</div>`;
     } else if (planTab === 'body') {
-      const open = new Set(Q.bodiesAt(s).map((b) => b.id));
-      body = `<div class="opts">${BODIES.filter((b) => open.has(b.id)).map((b) => `<button class="opt" data-act="pick" data-k="body" data-v="${b.id}" data-tip="body:${b.id}" aria-pressed="${d.body === b.id}">${ib(`body:${b.id}`, b.name)}${silhouetteSvg(lk({ body: b.id }))}<b>${esc(b.name)}</b><small>기준 가격 ${money(b.basePrice)}</small><span class="cost">원가 ${money(b.cost)}</span></button>`).join('')}</div>${BODIES.some((b) => !open.has(b.id)) ? `<p class="lbl" style="margin-top:12px">연구로 여는 차체</p><div class="locked-row">${BODIES.filter((b) => !open.has(b.id)).map((b) => lockedOpt('body', b.id, `<b>${esc(b.name)}</b>`, 'lock-chip')).join('')}</div>` : ''}<p class="note">아직 못 쓰는 차체는 연구로 엽니다. 누르면 연구 화면으로 갑니다.</p>${bodyWarn}
+      const open = new Set(Q.bodiesAt(s).map((b) => b.id).filter((b) => !sub || sub.bodies.includes(b)));
+      body = `${sub ? `<p class="hint" style="margin-bottom:8px">${esc(sub.name)}${josa(sub.name, '이/가')} 맡은 영역의 차급만 고를 수 있습니다.</p>` : ''}<div class="opts">${BODIES.filter((b) => open.has(b.id)).map((b) => `<button class="opt" data-act="pick" data-k="body" data-v="${b.id}" data-tip="body:${b.id}" aria-pressed="${d.body === b.id}">${ib(`body:${b.id}`, b.name)}${silhouetteSvg(lk({ body: b.id }))}<b>${esc(b.name)}</b><small>기준 가격 ${money(b.basePrice)}</small><span class="cost">원가 ${money(b.cost)}</span></button>`).join('')}</div>${!sub && BODIES.some((b) => !open.has(b.id)) ? `<p class="lbl" style="margin-top:12px">연구로 여는 차체</p><div class="locked-row">${BODIES.filter((b) => !open.has(b.id)).map((b) => lockedOpt('body', b.id, `<b>${esc(b.name)}</b>`, 'lock-chip')).join('')}</div>` : ''}<p class="note">아직 못 쓰는 차체는 연구로 엽니다. 누르면 연구 화면으로 갑니다.</p>${bodyWarn}
       <p class="lbl" style="margin-top:14px">색상(출시 때 바꿀 수 있음)</p>${paints('pick', d.color)}`;
     }
     else if (planTab === 'look') {
@@ -1512,10 +1547,10 @@ export function startApp(): void {
       body = `${cmp}<p class="lbl"${cmp ? ' style="margin-top:14px"' : ''}>옆모습(차대) 후보</p>${LP.candHtml('chassis', planCtx(d, 'chassis', look), d.chassisSeed, thumb, 'pick')}
         <p class="lbl" style="margin-top:14px">얼굴(앞뒤 모습) 후보</p>${LP.candHtml('face', planCtx(d, 'face', look), d.faceSeed, thumb, 'pick')}
         <p class="note">모양은 겉모습만 바꾸며 능력치와는 관계가 없습니다. 고른 모양은 무대의 차에 바로 반영됩니다.</p>`;
-    } else if (planTab === 'seg') body = `<div class="opts">${SEGMENTS.map((g) => {
+    } else if (planTab === 'seg') body = `<div class="opts">${SEGMENTS.filter((g) => !sub || (SUBS.kinds[sub.kind] as { segments?: string[] }).segments?.includes(g.id)).map((g) => {
       const top = (Object.entries(g.w) as [Stat, number][]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => STAT_NAME[k]).join('·');
       const mk = Q.comboMark(s, d.body, g.id), tag = mk ? `<span class="tag mk">${mk} ${MARK_WORD[mk]}</span>` : '<span class="tag q">? 출시해 보면 알 수 있습니다</span>';
-      return `<button class="opt" data-act="pick" data-k="segment" data-v="${g.id}" data-tip="seg:${g.id}" aria-pressed="${d.segment === g.id}">${ib(`seg:${g.id}`, g.name)}<b>${esc(g.name)}</b><small class="appeal">매력 <b>${score(Q.teamPreview(s, d.team, { ...d, segment: g.id }).segmentScore)}</b>${g.id === tp.bestSegment ? ' · 가장 맞음' : ''}</small><small>중시: ${top}</small><small>${g.eps >= 2 ? '가격에 민감함' : '가격보다 만족도 중시'}</small>${tag}</button>`;
+      return `<button class="opt" data-act="pick" data-k="segment" data-v="${g.id}" data-tip="seg:${g.id}" aria-pressed="${d.segment === g.id}">${ib(`seg:${g.id}`, g.name)}<b>${esc(g.name)}</b><small class="appeal">매력 <b>${score(teamPv({ ...d, segment: g.id }).segmentScore)}</b>${g.id === tp.bestSegment ? ' · 가장 맞음' : ''}</small><small>중시: ${top}</small><small>${g.eps >= 2 ? '가격에 민감함' : '가격보다 만족도 중시'}</small>${tag}</button>`;
     }).join('')}</div><p class="note">궁합${ib('term:궁합')} 차체와 고객층에는 궁합(◎ 잘 맞음 · ○ 무난 · △ 덜 맞음 · × 안 맞음)이 있습니다. 한 번 출시해 본 조합만 궁합이 보입니다. 기록 탭의 조합 노트에 모입니다.</p>`;
     else if (planTab === 'power') {
       const open = new Set(Q.powertrainsAt(s).map((x) => x.id)), pt = powertrainById(d.powertrain), add = Q.ptCostAdd(s, d.powertrain, d.battery, Q.projectPlatform(s, d));
@@ -1530,7 +1565,7 @@ export function startApp(): void {
       const left = dirLeft(d);
       body = `<p class="left">남은 점수 <b>${left}</b> / ${config.dev.dirTotal}점${ib('term:개발 방향')}</p>${STATS.map((k) => `<div class="dir"><span>${STAT_NAME[k]}${ib(`stat:${k}`, STAT_NAME[k])}</span><button data-act="dir" data-k="${k}" data-v="-1" aria-label="${STAT_NAME[k]} 빼기" ${d.direction[k] <= 0 ? 'disabled' : ''}>−</button><div class="dots" aria-label="${STAT_NAME[k]} ${d.direction[k]}점">${Array.from({ length: config.dev.dirMax }, (_, i) => `<i class="${i < d.direction[k] ? 'on' : ''}"></i>`).join('')}</div><button data-act="dir" data-k="${k}" data-v="1" aria-label="${STAT_NAME[k]} 더하기" ${d.direction[k] >= config.dev.dirMax || left <= 0 ? 'disabled' : ''}>+</button></div>`).join('')}<p class="note">한 능력치에 0~${config.dev.dirMax}점을 줄 수 있습니다. 2점이 보통이며, 많이 줄수록 그 능력치가 더 크게 오릅니다. ${config.dev.dirTotal}점을 모두 나눠야 개발을 시작할 수 있습니다.</p>`;
     } else body = `<p class="lbl">예산</p><div class="opts">${(Object.keys(BUDGET) as Budget[]).map((b) => `<button class="opt" data-act="pick" data-k="budget" data-v="${b}" aria-pressed="${d.budget === b}"><b>${BUDGET[b].name}</b><small>${BUDGET[b].sub}</small></button>`).join('')}</div>
-      <p class="lbl" style="margin-top:14px">설계 기간</p><div class="opts">${config.dev.designWeeks.map((w, i) => `<button class="opt" data-act="pick" data-k="designWeeks" data-v="${w}" aria-pressed="${d.designWeeks === w}"><b>${w}주</b><small>${['빠르지만 점수가 적음', '보통', '오래 걸리지만 점수가 많음'][i] ?? ''}</small></button>`).join('')}</div>${bodyWarn}${teamPicker(d.team, 'teamPick', d)}`;
+      <p class="lbl" style="margin-top:14px">설계 기간</p><div class="opts">${config.dev.designWeeks.map((w, i) => `<button class="opt" data-act="pick" data-k="designWeeks" data-v="${w}" aria-pressed="${d.designWeeks === w}"><b>${w}주</b><small>${['빠르지만 점수가 적음', '보통', '오래 걸리지만 점수가 많음'][i] ?? ''}</small></button>`).join('')}</div>${bodyWarn}${sub ? `<div class="okbox" style="margin-top:14px">개발은 ${esc(sub.name)}의 가상 개발팀(${steam.length}명, 능력 ${steam[0]?.ability ?? 0})이 합니다. 자회사에는 자체 직원이 없어 본사 개발 직원 평균 능력으로 계산하고, 사장이 있으면 능력이 조금 오릅니다. 본사 직원은 빠지지 않습니다.</div>` : teamPicker(d.team, 'teamPick', d)}`;
     const ti = tabs.findIndex(([k]) => k === planTab), last = ti === tabs.length - 1 && !sumMode, left = dirLeft(d), dirNo = tabs.findIndex(([k]) => k === 'dir') + 1;
     const nameBox = full ? `<p class="lbl">차 이름(이어받음)</p><p class="namefix">${esc(name)} <small>${(prev?.number ?? 0) + 1}세대</small></p>`
       : `<p class="lbl">차 이름</p><div class="name-row"><input class="namein" id="pname" type="text" maxlength="12" value="${esc(d.name)}" placeholder="${esc(defaultName())}" aria-label="차 이름">${pastBtn('pname')}</div>`;
@@ -1542,10 +1577,12 @@ export function startApp(): void {
       ${onSum ? '' : sumMode ? '<div class="row" style="margin-top:12px"><button class="btn" data-act="ptab" data-v="sum">← 요약으로</button><button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button></div>'
         : `<div class="row" style="margin-top:12px">${ti > 0 ? `<button class="btn" data-act="ptab" data-v="${tabs[ti - 1][0]}">← 이전</button>` : ''}${last ? '<button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button>' : `<button class="btn" data-act="ptab" data-v="${tabs[ti + 1][0]}">다음 →</button>`}</div><button class="btn ink plan-mode" data-act="planMode" data-v="sum" style="width:100%;margin-top:8px">한 화면 요약으로 보기</button>`}</div>`;
     const fcKpis = fcp ? `${kpi('전작 대비', COMPARE[compare], compare === 'worse' ? 'neg' : compare === 'better' ? 'pos' : '')}${kpi('이어받는 이름값', EQ_WORD(fcp.equity))}${kpi('예상 재구매', `월 ${num(fcp.rebuyPerMonth)}<span>대</span>`)}${kpi('개발비 할인', fcp.costMult < 1 ? `${Math.round((1 - fcp.costMult) * 100)}<span>%</span>` : '없음')}` : '';
-    const card2 = `<div class="card plan-est" data-avg="${est.avg.toFixed(3)}" data-max="${est.max.toFixed(3)}"><p class="lbl">예상(대략) · 고른 직원 ${d.team.length}명 기준</p>${statBars(est.grades)}
-      <div class="kpis" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${kpi('예상 개발비', money(est.cost))}${fcKpis}${kpi('대당 원가', money(Q.unitCost(d.body, d.powertrain, d.tier, d.options, Q.costMultOf(s, d.powertrain), Q.ptCostAdd(s, d.powertrain, d.battery, Q.projectPlatform(s, d)))))}${kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}</div>
+    const subBox = spv ? `<div class="kpis" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">${kpi('예상 평론', score(spv.critic))}${kpi('개발 기간', `${spv.months}<span>개월</span>`)}${kpi('쓸 수 있는 자본', money(Q.subDetail(s, sub!.id)!.funds))}${kpi('공유 범위', `${Q.SHARE_NAMES[sub!.share]}`)}</div>${spv.error || spv.fundError ? `<div class="badbox" style="margin-top:8px">${esc(spv.error ?? spv.fundError ?? '')}</div>` : ''}` : '';
+    const card2 = `<div class="card plan-est" data-avg="${est.avg.toFixed(3)}" data-max="${est.max.toFixed(3)}"><p class="lbl">예상(대략) · ${sub ? `${esc(sub.name)} 가상 개발팀 ${steam.length}명 기준` : `고른 직원 ${d.team.length}명 기준`}</p>${statBars(est.grades)}
+      <div class="kpis" style="margin-top:10px;grid-template-columns:repeat(2,1fr)">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${kpi('예상 개발비', money(est.cost))}${fcKpis}${kpi('대당 원가', money(Q.unitCost(d.body, d.powertrain, d.tier, d.options, Q.costMultOf(s, d.powertrain), Q.ptCostAdd(s, d.powertrain, d.battery, Q.projectPlatform(s, d)))))}${sub ? '' : kpi('현금', money(s.cash), s.cash < 0 ? 'neg' : '')}</div>${subBox}
       ${fcp ? `<p class="hint" style="margin-top:8px">전 세대 출시 때 등급 ${score(fcp.prevAvg)} → 이번 예상 ${score(est.avg)}. ${compare === 'worse' ? '전작보다 못하면 평론가 모두 점수를 깎고 "전작만 못하다" 기사가 납니다.' : compare === 'better' ? '전작보다 좋으면 평론가 점수가 조금 오르고 "진화했다" 기사가 납니다.' : ''}${fcp.revival ? ' 오래 쉰 이름이라 "부활"로 이름값이 절반만 이어집니다.' : ''}</p>` : ''}
       ${fcp?.hints.length ? `<div class="warnbox fc-hints" style="margin-top:8px"><b>전작보다 낫게 하려면</b><ul>${fcp.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : ''}
+      ${sub ? `<p class="note">자회사 차는 기술을 공유 범위만큼 본사 것을 씁니다(나온 지 ${SUBS.shareLag[sub.share]}년이 안 된 동력·장비는 못 씀, 동력 등급 ${SUBS.shareTier[sub.share]}까지). 개발비는 자회사 자본에서 나가고, 기간이 지나면 시험까지 마친 상태로 출시합니다.</p>` : ''}
       <p class="note">등급은 그해 다른 차와 비교한 점수(0~10, 5가 보통)입니다. 낮은 쪽은 직원 컨디션이 나쁘고 최소 시험만 한 경우, 높은 쪽은 컨디션이 좋고 결함을 다 없앤 경우입니다. 개발비는 설계와 최소 시험 ${config.dev.minTestWeeks}주 기준이며, 시험을 길게 하면 더 듭니다.</p>
       <button class="btn" data-act="cancelPlan" style="width:100%;margin-top:8px">기획 그만두기</button></div>`;
     // 패널 위에 붙는 요약(스크롤해도 보인다): 예상 등급, 고른 고객층의 매력, 더 맞는 고객층
@@ -1555,7 +1592,7 @@ export function startApp(): void {
   /** 0.8.0 한 화면 요약: 항목마다 한 줄(누르면 그 항목 화면), 예상, [단계별로]·[프리셋]·[개발 시작] */
   function planSummary(d: Draft, est: { min: number; max: number; cost: number }, tp: ReturnType<typeof Q.teamPreview>, fcp: Q.FullChangePreview | null, compare: keyof typeof COMPARE, look: CarLook): string {
     const s = game!.state, pt = powertrainById(d.powertrain), left = dirLeft(d), reg = Q.regulationError(s, d), block = Q.regulationBlock(s), req = Q.requiredOptions(s).filter((o) => !d.options.includes(o));
-    const staff = s.staff.filter((x) => d.team.includes(x.id)), busy = busyReason(), minT = config.dev.minTestWeeks;
+    const staff = s.staff.filter((x) => d.team.includes(x.id)), busy = d.subId === undefined ? busyReason() : null, minT = config.dev.minTestWeeks, sub = d.subId === undefined ? undefined : s.subs?.find((x) => x.id === d.subId);
     const roles = (['designer', 'engineer', 'tester'] as const).map((r) => [r, staff.filter((x) => x.role === r).length] as const).filter(([, n]) => n).map(([r, n]) => `${ROLE_NAME[r]} ${n}`).join(' · ');
     const rows: { tab: PlanTab; k: string; label: string; value: string; note?: string; bad?: boolean }[] = [
       { tab: 'body', k: 'body', label: '차체', value: bodyById(d.body).name, note: fcp?.bodyChanged ? '전작과 다른 차체: 이름값 절반' : '' },
@@ -1564,7 +1601,7 @@ export function startApp(): void {
       { tab: 'opt', k: 'opt', label: `장비 · ${MODE_WORD[d.equipMode ?? 'custom']}`, value: EQ.equipLine(eqOf(d)), note: block ? '규제 의무 장비 연구 필요' : req.length ? `의무 장비 ${req.length}개 자동 포함` : '', bad: !!block },
       { tab: 'dir', k: 'dir', label: '개발 방향', value: STATS.every((k) => d.direction[k] === d.direction.P) ? `고르게 ${d.direction.P}점씩` : `${STATS.filter((k) => d.direction[k] > 2).sort((a, b) => d.direction[b] - d.direction[a]).map((k) => `${STAT_NAME[k]} ${d.direction[k]}`).join(' · ') || '낮춘 능력치 있음'} 중시`, note: left ? `${left}점 남음` : STATS.filter((k) => d.direction[k] < 2).map((k) => `${STAT_NAME[k]} ${d.direction[k]}`).join(' · '), bad: left > 0 },
       { tab: 'look', k: 'look', label: '외관', value: `${paintName(d.color)} · ${describeLook(look).chassis}` },
-      { tab: 'budget', k: 'team', label: '개발팀', value: `${d.team.length}명`, note: busy ?? (d.team.length ? roles : '고른 직원이 없습니다'), bad: !!busy || !d.team.length },
+      sub ? { tab: 'budget', k: 'team', label: '개발팀', value: `${esc(sub.name)} 가상 팀 ${SUBS.team.roles.length}명`, note: `능력 ${Q.subTeam(s, sub)[0].ability}` } : { tab: 'budget', k: 'team', label: '개발팀', value: `${d.team.length}명`, note: busy ?? (d.team.length ? roles : '고른 직원이 없습니다'), bad: !!busy || !d.team.length },
       { tab: 'budget', k: 'weeks', label: '설계 기간', value: `${d.designWeeks}주 + 시험 ${minT}주부터` },
       { tab: 'budget', k: 'budget', label: '예산', value: `${BUDGET[d.budget].name} · ${BUDGET[d.budget].sub}` },
     ];
@@ -1573,7 +1610,7 @@ export function startApp(): void {
     const k4 = `<div class="kpis sum-kpis" style="margin-top:10px">${kpi(`예상 등급${ib('term:예상 등급')}`, `${score(est.min)}~${score(est.max)}`)}${fcp ? kpi('전작 대비', ({ better: '더 좋음', worse: '못함', same: '비슷함' } as const)[compare], compare === 'worse' ? 'neg' : compare === 'better' ? 'pos' : '') : kpi(`고객층 매력${ib('term:고객층 매력')}`, score(tp.segmentScore))}${kpi('예상 개발비', money(est.cost))}${kpi('기간', `약 ${d.designWeeks + minT}<span>주</span>`)}</div>`;
     return `${ntBox}<div class="sumrows">${rows.map((r) => `<button class="sumrow${r.bad ? ' bad' : ''}" data-act="ptab" data-v="${r.tab}" data-row="${r.k}"><small>${r.label}</small><b>${esc(r.value)}</b>${r.note ? `<em>${esc(r.note)}</em>` : ''}</button>`).join('')}</div>${k4}
       ${fcp?.hints.length ? `<div class="warnbox fc-hints" style="margin-top:8px"><b>전작보다 낫게 하려면</b><ul>${fcp.hints.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : ''}
-      <div class="row sum-go" style="margin-top:10px"><button class="btn" data-act="planMode" data-v="step">단계별로</button><button class="btn" data-act="presets">프리셋</button><button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button></div>`;
+      <div class="row sum-go" style="margin-top:10px"><button class="btn" data-act="planMode" data-v="step">단계별로</button>${sub ? '' : '<button class="btn" data-act="presets">프리셋</button>'}<button class="go" data-act="startDev">개발 시작 <span aria-hidden="true">→</span></button></div>`;
   }
   const full = (d: Draft) => d.nameplateId > 0;
   /** 풀체인지: 전작 이후 새로 가능해진 것. items는 [새 기술 반영]이 적용하는 것(새 옵션), info는 알림만(의무 장비·연구로 오른 동력 단계) */
@@ -1978,7 +2015,7 @@ export function startApp(): void {
     const rivals = `<div class="card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r) => `<button class="rv-co" data-act="rivalOpen" data-v="${r.id}" aria-label="${esc(r.name)} 라인업 보기">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small></span><small class="rv-strong">${rivalStrong(r.cells)}<br>라인업 ${Object.keys(r.models).length}종 ›</small></button>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small>평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">회사를 누르면 모델 라인업과 지난 세대를 봅니다. 경쟁사 이름·모델 이름·로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
     // 0.9.0 지난 달들: 누르면 월 결산 창(장부 24개월)
     const months = led.length ? `<div class="card mon-list"><h3>월 결산 <small class="hint">최근 ${led.length}개월 · 누르면 펼쳐 봅니다</small></h3>${[...new Set(led.map((e) => e.year))].reverse().map((y) => `<p class="lbl mon-y">${y}년</p><div class="mbtns">${led.map((e, i) => [e, i] as const).filter(([e]) => e.year === y).reverse().map(([e, i]) => `<button class="btn mbtn" data-act="monthOpen" data-v="${i}" aria-label="${y}년 ${e.monthOfYear}월 결산 보기"><b>${e.monthOfYear}월</b><small class="${e.profit >= 0 ? 'pos' : 'neg'}">${money(e.profit, true)}</small></button>`).join('')}</div>`).join('')}</div>` : '';
-    return `<div class="fin-wrap"><div class="fin-l">${V.finMain(s, finRange)}</div><div class="colstack">${sum}${loan}${months}${rivals}${s.subs?.length ? subHqCard(true) : ''}</div></div>`;
+    return `<div class="fin-wrap"><div class="fin-l">${V.finMain(s, finRange)}${groupCard()}</div><div class="colstack">${sum}${loan}${months}${rivals}${s.subs?.length ? subHqCard(true) : ''}</div></div>`;
   }
 
   // ----- 0.8.0 직원 표 정렬·필터 -----
@@ -2077,22 +2114,23 @@ export function startApp(): void {
 
   // ----- 3.0.0 자회사 -----
   let subSel: number | null = null, subPick: '' | 'pres' | 'add' = '', foundKind: SubKind = 'premium', foundColor = '';
+  let subView: number | null = null, subCar = '', garageSub: { id: number; body: string } | null = null, ordSet: { id: number; body: string; character: SubCharacter; band: PriceBand } | null = null, tgtKind: 'sold' | 'profit' = 'sold'; // 3.1.0 운영 전환(UI 상태, 저장하지 않음)
   const SUBS = config.subs;
   const subMark = (name: string, color: string, z = 40) => `<span class="sub-mark" style="--c:${color};width:${z}px;height:${z}px" aria-hidden="true">${esc([...name][0] ?? '')}</span>`;
   /** 자회사 모델 썸네일: 경쟁 모델과 같은 방식, 색은 자회사 로고 색 */
-  const subLook = (v: Q.SubModelView): CarLook => lookOf({ body: v.body, powertrain: v.ev ? 'electric' : 'gasoline', tier: 2, color: v.color, wheels: 1, year: v.year, chassisSeed: v.seed, faceSeed: v.seed >>> 3 });
+  const subLook = (v: Q.SubModelView): CarLook => lookOf({ body: v.body, powertrain: v.powertrain, tier: v.tier, color: v.color, wheels: 1, year: v.year, chassisSeed: v.chassisSeed, faceSeed: v.faceSeed }); // 3.1.0 실제 사양이 있으면 그 동력·등급·모양
   function subTab(): string {
     const s = game!.state, info = Q.subsInfo(s);
     if (subSel !== null && !s.subs?.some((x) => x.id === subSel)) subSel = null;
     if (subSel !== null) return subDetailView(subSel);
-    const rows = info.list.map((x) => `<button class="gsr sub-row" data-act="subSel" data-id="${x.id}">${subMark(x.name, x.color)}<span class="g-name"><b>${esc(x.name)}</b><small>${esc(x.kindName)} · ${esc(x.strategyName)}${x.switching ? ' <i class="sub-sw">전환 중</i>' : ''}</small></span><span>${x.kind === 'premium' || x.kind === 'value' ? `모델 ${x.models}개` : '사업 자회사'}<br><small>사장 ${x.president ? esc(x.president) : '없음'}</small></span><span>최근 12개월 이익 <b class="${x.profit12 >= 0 ? 'pos' : 'neg'}">${money(x.profit12, true)}</b><br><small>배당 ${money(x.dividend12)}</small></span><span aria-hidden="true">→</span></button>`).join('');
+    const rows = info.list.map((x) => `<button class="gsr sub-row" data-act="subSel" data-id="${x.id}">${subMark(x.name, x.color)}<span class="g-name"><b>${esc(x.name)}</b><small>${esc(x.kindName)} · ${esc(x.strategyName)}${x.switching ? ' <i class="sub-sw">전환 중</i>' : ''}</small></span><span>${x.kind === 'premium' || x.kind === 'value' ? `모델 ${x.models}개` : '사업 자회사'}<br><small>사장 ${x.president ? esc(x.president) : '없음'}</small></span><span>최근 12개월 이익 <b class="${x.profit12 >= 0 ? 'pos' : 'neg'}">${money(x.profit12, true)}</b><br><small>배당 ${money(x.dividend12)}</small></span><span aria-hidden="true">→</span></button><button class="btn sub-go" data-act="subOpen" data-id="${x.id}">운영 전환</button>`).join('');
     const canFound = info.found.some((f) => f.ok);
     const why = canFound ? '' : `<ul class="sub-why">${info.found.map((f) => `<li><b>${esc(f.name)}</b> ${esc(f.reason ?? '')}</li>`).join('')}</ul>`;
     const pres = Q.presidents(s).length;
     return `<div class="cols co-sub"><div class="card sub-list"><h3>자회사${ib('term:자회사')} <small class="hint">${info.used}/${info.max}곳</small></h3>
       ${rows ? `<div class="sub-rows">${rows}</div>` : `<p class="hint" style="margin:8px 0">아직 자회사가 없습니다. 자회사는 본사 ${SUBS.hqMin}등급부터 세울 수 있고, 본사 등급마다 둘 수 있는 수가 정해져 있습니다(${SUBS.maxByHq.map((n, i) => (n ? `${i + 1}등급 ${n}곳` : '')).filter(Boolean).join(' · ')}).</p>`}
       <button class="go" data-act="subFoundOpen" ${canFound ? '' : 'disabled'}>자회사 설립</button>${why}
-      <p class="note">자회사는 본사가 전략과 큰 방향만 지시하고 운영은 위임합니다. 이익의 일부는 배당으로 본사에 들어오고(장부의 '자회사 배당'), 설립비·추가 투자는 '자회사 투자'로 적습니다.${pres ? ` 자회사 사장 ${pres}명은 본사 직원 목록에 없습니다.` : ''}</p></div>
+      <p class="note">자회사는 본사가 전략과 큰 방향만 지시하고 운영은 위임합니다(전반 위임${ib('term:전반 위임')}). 고급·보급형 브랜드는 직접 운영${ib('term:직접 운영')}으로 바꿔 신차를 직접 기획할 수 있고, [운영 전환]을 누르면 화면이 그 자회사 것으로 바뀝니다. 이익의 일부는 배당으로 본사에 들어오고(장부의 '자회사 배당'), 설립비·추가 투자는 '자회사 투자'로 적습니다.${pres ? ` 자회사 사장 ${pres}명은 본사 직원 목록에 없습니다.` : ''}</p></div>
       ${info.list.length ? subHqCard() : ''}</div>`;
   }
   /** 본사가 자회사에서 받은 효과(자회사 목록·재무 화면) */
@@ -2103,9 +2141,9 @@ export function startApp(): void {
   }
   function subDetailView(id: number): string {
     const s = game!.state, d = Q.subDetail(s, id)!, B = d.brand;
-    const head = `<div class="card sub-head"><div class="row sub-top"><button class="btn" data-act="subBack">← 자회사 목록</button></div><div class="rv-head">${subMark(d.name, d.color, 48)}<div><h2>${esc(d.name)} <small class="hint">${esc(d.kindName)} · ${d.foundedYear}년 설립</small></h2><p class="hint">${esc(d.kindDesc)}</p></div></div>
+    const head = `<div class="card sub-head">${subView === id ? '' : `<div class="row sub-top"><button class="btn" data-act="subBack">← 자회사 목록</button><button class="btn ink" data-act="subOpen" data-id="${id}">운영 전환</button></div>`}<div class="rv-head">${subMark(d.name, d.color, 48)}<div><h2>${esc(d.name)} <small class="hint">${esc(d.kindName)} · ${d.foundedYear}년 설립</small></h2><p class="hint">${esc(d.kindDesc)}</p></div></div>
       <div class="kpis">${kpi('자본', money(d.capital))}${B ? kpi('월 생산 한도', `${num(d.capacity)}<span>대</span>`) + kpi('모델', `${d.models.length}/${d.modelCap}<span>개</span>`) + kpi('브랜드 평판', String(Math.round(d.rep))) : ''}${d.hqEffect ? kpi('본사에 주는 효과', esc(d.hqEffect.text), 'pos', 'kpi-word') : ''}</div></div>`;
-    return `<div class="sub-detail">${head}${subStrategyCard(d)}<div class="cols">${subSettingsCard(d)}${subPresidentCard(d)}</div>${B ? subLineupCard(d) : ''}${subResultCard(d)}
+    return `<div class="sub-detail">${head}<div class="cols">${subModeCard(d)}${subTargetCard(d)}</div>${subView === id ? '' : subWorkCard(d)}${subStrategyCard(d)}<div class="cols">${subSettingsCard(d)}${subPresidentCard(d)}</div>${B ? subLineupCard(d) : ''}${subResultCard(d)}
       <div class="card sub-sell"><h3>매각</h3><p class="hint">지금 매각하면 자본의 ${Math.round(SUBS.sellShare * 100)}%인 <b>${money(d.sellPrice)}</b>을 받습니다. 매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없고, 모델과 실적 기록이 사라집니다. 사장은 본사 직원으로 돌아옵니다.</p><button class="btn danger" data-act="subSell" data-id="${d.id}" style="width:100%;margin-top:8px">「${esc(d.name)}」 매각 · ${money(d.sellPrice)}</button></div></div>`;
   }
   function subStrategyCard(d: Q.SubDetail): string {
@@ -2178,6 +2216,138 @@ export function startApp(): void {
       <div class="row" style="margin-top:12px"><button class="btn ink" data-act="subRenameDo" data-id="${id}" data-k="${body}">이름 바꾸기</button><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
     const inp = $<HTMLInputElement>('#sub-rn'); inp?.focus(); inp?.select();
+  }
+
+  // ---------- 3.1.0 자회사 직접 운영·운영 전환 ----------
+  const HOW_NAME: Record<string, string> = { plan: '직접 기획', order: '제작 지시', badge: '본사 차 배지' };
+  const CHARS: [SubCharacter, string, string][] = [['luxury', '고급', '디자인·품질 중심'], ['sport', '스포츠', '성능·디자인 중심'], ['value', '실속', '연비·실용 중심']];
+  const BANDS: [PriceBand, string, string][] = [['low', '낮게', '동력 1등급·낮은 예산·가격 ×0.9'], ['mid', '보통', '동력 2등급·보통 예산'], ['high', '높게', '동력 3등급·높은 예산·가격 ×1.1']];
+  /** 지금 운영 전환 중인 자회사(없어졌으면 본사로) */
+  const curSub = (): Subsidiary | null => { if (subView === null || !game) return null; const x = game.state.subs?.find((y) => y.id === subView); if (!x) subView = null; return x ?? null; };
+  const isBrandK = (k: SubKind) => k === 'premium' || k === 'value';
+  /** 운영 전환: 화면이 그 자회사 것으로 바뀐다(UI 상태일 뿐, 저장하지 않는다) */
+  function openSub(id: number, sc: Screen = 'company'): void {
+    const x = game?.state.subs?.find((y) => y.id === id); if (!x) return;
+    subView = id; subCar = ''; garageSub = null; subPick = ''; go(isBrandK(x.kind) ? sc : sc === 'records' ? 'records' : 'company');
+  }
+  function closeSub(): void { const id = subView; subView = null; subCar = ''; subSel = id; coTab = 'sub'; go('company'); }
+  /** 자회사 화면 위 띠: 다른 자회사로 바로 전환 */
+  function subBar(x: Subsidiary): string {
+    const others = (game!.state.subs ?? []).filter((y) => y.id !== x.id);
+    return `<div class="sub-bar"><span class="sub-bar-t">${subMark(x.name, x.color, 22)}<b>${esc(x.name)}</b><small>${esc(SUBS.kinds[x.kind].name)} · ${isBrandK(x.kind) ? (Q.isDirect(x) ? '직접 운영' : '전반 위임') : '전반 위임'}</small></span>${others.length ? `<span class="sub-bar-o"><small>다른 자회사</small>${others.map((y) => `<button class="btn" data-act="subOpen" data-id="${y.id}">${subMark(y.name, y.color, 18)}${esc(y.name)}</button>`).join('')}</span>` : ''}</div>`;
+  }
+  /** 자회사 차고(운영 전환 화면, 본사 차고에서 자회사 차 보기): 모델 목록·고른 모델의 3D·능력치·평론·가격 */
+  function subGarageView(id: number, fromHq = false): View {
+    const s = game!.state, x = s.subs!.find((y) => y.id === id)!, d = Q.subDetail(s, id)!, direct = d.mode === 'direct';
+    const back = fromHq ? '<div class="row"><button class="btn" data-act="gsubBack">← 본사 차고</button></div>' : '';
+    if (!d.models.length) return { ov: `<div class="ov empty"><div><h3>${esc(d.name)} 차고가 비어 있습니다</h3><p>${d.orders.length ? `개발 중인 차가 ${d.orders.length}대 있습니다.` : direct ? '개발 탭에서 신차를 기획하거나 제작을 지시하세요.' : '전략에 따라 이번 달 말에 첫 모델이 나옵니다.'}</p></div></div>`, panel: (fromHq ? back : subBar(x)) + `<div class="card"><p class="hint">아직 판매 중인 모델이 없습니다.</p></div>`, look: null };
+    const v = d.models.find((m) => m.body === (fromHq ? garageSub?.body : subCar)) ?? d.models[0];
+    if (fromHq) garageSub = { id, body: v.body }; else subCar = v.body;
+    const list = d.models.map((m) => `<button class="gsr sub-car" data-act="${fromHq ? 'gsubOpen' : 'subCarSel'}" data-id="${id}" data-k="${m.body}" aria-pressed="${m.body === v.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small>${m.bodyName} · ${m.number}세대 · ${esc(m.how ? HOW_NAME[m.how] : '자체 개발')}</small></span><span>평론 ${score(m.critic)}</span><span>지난달 ${num(m.sold)}대</span></button>`).join('');
+    const crit = v.reviews ? `<p class="lbl" style="margin-top:12px">평론가 4명</p><div class="kpis">${config.critics.list.map((c, i) => kpi(esc(c.name), score(v.reviews![i] ?? 0))).join('')}</div>` : `<p class="note">이 모델은 자회사가 전략에 따라 스스로 개발했습니다. 평론은 추정 평론${ib('term:추정 평론')}입니다.</p>`;
+    const pct = v.pricePct ?? null, step = (dv: number) => Math.min(SUBS.modelPrice.max, Math.max(SUBS.modelPrice.min, (pct ?? Math.round(v.price / Math.max(1, v.stdPrice) * 100)) + dv));
+    const price = direct && !fromHq ? `<hr><p class="lbl">가격 · 브랜드 기준 가격 ${num(v.stdPrice)}만원</p><div class="row sub-px"><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(-5)}">−5%</button><b class="sub-divv">${pct === null ? '전략대로' : `${pct}%`}</b><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(5)}">+5%</button><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="" ${pct === null ? 'disabled' : ''}>전략대로</button></div>
+      <p class="note">가격은 브랜드 기준 가격의 ${SUBS.modelPrice.min}~${SUBS.modelPrice.max}%로 정합니다. 비싸게 받으면 대당 이익이 늘고 판매가 줄어듭니다. 정하지 않으면 전략이 정합니다.</p>` : '';
+    const acts = fromHq ? `<button class="btn ink" data-act="subOpen" data-id="${id}" data-v="garage" style="width:100%;margin-top:10px">${esc(d.name)} 운영 전환</button>` : `<div class="row sub-mact" style="margin-top:10px"><button class="btn" data-act="subRenameOpen" data-id="${id}" data-k="${v.body}">이름 변경</button><button class="btn danger" data-act="subDrop" data-id="${id}" data-k="${v.body}">단종</button></div>`;
+    const card = `<div class="card sub-car-card"><p class="lbl"><i class="sub-own">${fromHq ? '내 자회사' : esc(v.how ? HOW_NAME[v.how] : '자체 개발')}</i> ${esc(d.name)}</p><h2>${esc(v.name)} <small class="hint">${v.bodyName} · ${v.number}세대 · ${v.year}년</small></h2>${v.fromName ? `<p class="hint">본사 「${esc(v.fromName)}」의 배지 모델${ib('term:배지 모델')}</p>` : ''}
+      ${statBars(v.grades)}<div class="kpis" style="margin-top:10px">${kpi('평론', score(v.critic))}${kpi('가격', `${num(v.price)}<span>만원</span>`)}${kpi('대당 원가', `${num(v.unitCost)}<span>만원</span>`)}${kpi('지난달 판매', `${num(v.sold)}<span>대</span>`)}${kpi('차급 점유', `${Math.round(v.share * 100)}<span>%</span>`)}${kpi('다음 세대교체', v.cycleLeft ? `${v.cycleLeft}<span>개월 뒤</span>` : '이번 달')}</div>
+      ${crit}${price}${acts}</div>`;
+    const ovh = ovTop(`${esc(d.name)} 차고 · ${fromHq ? '내 자회사' : esc(SUBS.kinds[x.kind].name)}`, `${esc(v.name)}<small>${v.number}세대</small>`, specLine(v.body, v.powertrain, v.tier, v.segment)) + ovScore('평론', v.critic) + ovHint;
+    return { ov: ovh, panel: (fromHq ? back : subBar(x)) + `<div class="card gsec"><h3>${esc(d.name)} 모델 ${d.models.length}대</h3>${list}</div>` + card, look: subLook(v) };
+  }
+  /** 개발 중인 차와 새 차 내기(본사 자회사 상세·운영 전환의 개발 탭 공통) */
+  function subWorkCard(d: Q.SubDetail): string {
+    if (!d.brand) return '';
+    const direct = d.mode === 'direct', inSub = subView === d.id;
+    const ords = d.orders.length ? `<div class="sub-orders">${d.orders.map((o) => `<div class="sub-ord"><div><b>${esc(o.name || `${o.bodyName} 신차`)}</b><small>${o.bodyName} · ${HOW_NAME[o.how]}${o.character ? ` · ${o.character}·가격 ${o.band}` : ''}${o.replaces ? ` · 「${esc(o.replaces)}」 다음 세대` : ''}</small></div><div class="prog"><u style="width:${(((o.months - o.monthsLeft) / Math.max(1, o.months)) * 100).toFixed(1)}%"></u></div><span class="sub-ord-m">개발 중 · ${o.monthsLeft ? `${o.monthsLeft}개월 남음` : '이번 달 말 출시'}</span><button class="btn" data-act="subCancelOrd" data-id="${d.id}" data-v="${o.id}">취소</button></div>`).join('')}</div>` : '<p class="hint">개발 중인 차가 없습니다.</p>';
+    return `<div class="card sub-work"><h3>개발 <small class="hint">자본 중 쓸 수 있는 돈 ${money(d.funds)} · 가상 개발팀 ${SUBS.team.roles.length}명, 능력 ${d.team}</small></h3>${ords}
+      <div class="row sub-new" style="margin-top:10px"><button class="btn ink" data-act="subPlanNew" data-id="${d.id}" ${direct ? '' : 'disabled'}>신차 기획</button><button class="btn" data-act="subOrderOpen" data-id="${d.id}">제작 지시${ib('term:제작 지시')}</button><button class="btn" data-act="subBadgeOpen" data-id="${d.id}">본사 차 배지${ib('term:배지 모델')}</button></div>
+      ${direct ? '' : `<p class="note why">신차를 직접 기획하려면 직접 운영${ib('term:직접 운영')}으로 바꾸세요. 제작 지시와 배지는 전반 위임에서도 쓸 수 있습니다.</p>`}
+      <p class="note">개발비는 자회사 자본에서 그달 비용으로 나가고, 개발 기간이 지나면 그달 말에 출시합니다. 같은 차급에 모델이 있으면 그 다음 세대가 됩니다. 자본이 모자라면 본사에서 추가 투자하세요.${inSub ? '' : ' 신차 기획은 운영 전환 화면에서 합니다.'} 취소해도 낸 개발비는 돌아오지 않습니다.</p></div>`;
+  }
+  /** 운영 방식 카드 */
+  function subModeCard(d: Q.SubDetail): string {
+    const go2 = subView === d.id ? '' : `<button class="btn ink" data-act="subOpen" data-id="${d.id}" style="width:100%;margin-top:8px">운영 전환 · ${esc(d.name)} 화면으로</button>`;
+    if (!d.brand) return `<div class="card sub-mode"><p class="lbl">운영 방식</p><h2>전반 위임${ib('term:전반 위임')}</h2><p class="hint">부품 회사·할부 금융은 전반 위임으로만 운영합니다.</p>${go2}</div>`;
+    const direct = d.mode === 'direct';
+    return `<div class="card sub-mode"><p class="lbl">운영 방식</p><div class="seg sub-modes"><button data-act="subMode" data-id="${d.id}" data-v="delegate" aria-pressed="${!direct}">전반 위임${ib('term:전반 위임')}<small>전략이 모델 수·세대교체·가격을 정함</small></button><button data-act="subMode" data-id="${d.id}" data-v="direct" aria-pressed="${direct}">직접 운영${ib('term:직접 운영')}<small>신차 기획·가격·단종을 직접</small></button></div>
+      <p class="note">${direct ? '직접 운영 중에는 자회사가 스스로 모델을 늘리거나 줄이지 않습니다. 손대지 않은 차는 전략 주기에 맞춰 세대교체하고, 가격을 정하지 않은 차는 전략이 가격을 정합니다.' : '전략이 모델을 늘리거나 줄입니다. 직접 운영으로 바꾸면 그때부터 모델 수를 본사가 정합니다.'}</p>${go2}</div>`;
+  }
+  /** 연간 목표 카드 */
+  function subTargetCard(d: Q.SubDetail): string {
+    const t = d.target, unit = (k: 'sold' | 'profit', v: number) => (k === 'sold' ? `${num(v)}대` : money(v, true));
+    const last = d.last12, kind = d.brand ? tgtKind : 'profit', guess = kind === 'sold' ? Math.max(100, Math.round(last.sold * 1.1 / 100) * 100) : Math.max(10000, Math.round(last.profit * 1.1 / 10000) * 10000);
+    const cur = t ? `<p class="hint">${t.year}년 목표 <b>${t.kind === 'sold' ? '판매' : '이익'} ${unit(t.kind, t.value)}</b> · 지금까지 ${unit(t.kind, t.progress)}(${Math.round(Math.min(1, Math.max(0, t.progress / t.value)) * 100)}%)</p><div class="prog"><u style="width:${(Math.min(1, Math.max(0, t.progress / t.value)) * 100).toFixed(1)}%"></u></div>` : '<p class="hint">정한 목표가 없습니다.</p>';
+    return `<div class="card sub-target"><p class="lbl">연간 목표${ib('term:자회사 목표')}</p>${cur}
+      ${d.brand ? `<div class="seg" style="margin-top:8px"><button data-act="tgtKind" data-v="sold" aria-pressed="${kind === 'sold'}">판매 대수</button><button data-act="tgtKind" data-v="profit" aria-pressed="${kind === 'profit'}">이익</button></div>` : ''}
+      <div class="row" style="margin-top:8px"><input class="namein sub-tgt-in" id="sub-tgt" type="number" min="1" step="${kind === 'sold' ? 100 : 10000}" value="${guess}" aria-label="목표 값(${kind === 'sold' ? '대' : '만원'})"><span class="hint">${kind === 'sold' ? '대' : '만원'}</span><button class="btn ink" data-act="tgtSet" data-id="${d.id}" data-v="${kind}">목표 정하기</button>${t ? `<button class="btn" data-act="tgtClear" data-id="${d.id}">지우기</button>` : ''}</div>
+      <p class="note">최근 12개월 ${d.brand ? `판매 ${num(last.sold)}대, ` : ''}이익 ${money(last.profit, true)}. 12월 결산에서 목표를 이루면 브랜드 평판 +${SUBS.target.subRep}, 본사 평판 +${SUBS.target.hqRep}입니다. 못 미쳐도 벌칙은 없습니다.</p></div>`;
+  }
+  /** 운영 전환의 개발 탭 */
+  function subDevView(id: number): View {
+    const s = game!.state, x = s.subs!.find((y) => y.id === id)!, d = Q.subDetail(s, id)!;
+    const draftCard2 = draft?.subId === id ? `<div class="card"><p class="lbl">기획 중</p><h2>${esc(draft.name.trim() || '이름 없음')}</h2><button class="go" data-act="tab" data-v="plan">기획 이어 하기</button></div>` : '';
+    return { ov: '', panel: subBar(x) + draftCard2 + subWorkCard(d) + subModeCard(d), look: undefined };
+  }
+  /** 운영 전환의 기록 탭: 분기 보고와 이 자회사의 뉴스 */
+  function subRecordsView(id: number): View {
+    const s = game!.state, x = s.subs!.find((y) => y.id === id)!, d = Q.subDetail(s, id)!;
+    const news = s.events.news.filter((n) => n.category === 'sub' && n.text.includes(`「${x.name}」`) && !n.text.startsWith('[')).slice(-30).reverse();
+    return { ov: '', panel: subBar(x) + `<div class="card"><h3>출시·전략 뉴스 <small class="hint">최근 ${news.length}건</small></h3>${news.length ? `<ul class="sub-reports">${news.map((n) => `<li><small>${yearOf(n.week)}년 ${(monthOf(n.week) % 12) + 1}월</small>${esc(n.text)}</li>`).join('')}</ul>` : '<p class="hint">아직 뉴스가 없습니다.</p>'}</div>`
+      + `<div class="card sub-rep"><h3>분기 보고 <small class="hint">최근 ${d.reports.length}건</small></h3>${d.reports.length ? `<ul class="sub-reports">${d.reports.map((r) => `<li><small>${yearOf(r.week)}년 ${(monthOf(r.week) % 12) + 1}월</small>${esc(r.text)}</li>`).join('')}</ul>` : '<p class="hint">아직 보고가 없습니다.</p>'}</div>`, look: undefined };
+  }
+  /** 제작 지시 창 */
+  function showSubOrder(): void {
+    const s = game!.state, o = ordSet, x = o && s.subs?.find((y) => y.id === o.id); if (!o || !x) return;
+    const d = Q.subDetail(s, o.id)!, bodies = d.areaReady;
+    if (!bodies.includes(o.body)) o.body = bodies.find((b) => !Q.subSlotError(s, x, b)) ?? bodies[0] ?? '';
+    const err0 = o.body ? Q.subSlotError(s, x, o.body) : '맡은 영역에 연구한 차급이 없습니다.';
+    const pv = o.body ? Q.subPlanPreview(s, x, Q.subAutoSpec(s, x, o.body, o.character, o.band)) : null;
+    const why = err0 ?? pv?.fundError ?? null;
+    sheetBody.innerHTML = `<div class="sub-order"><div class="eyebrow"><i></i>${esc(x.name)} · 제작 지시${ib('term:제작 지시')}</div><h2>${esc(x.name)}에 차 만들기 지시</h2>
+      <p class="lbl" style="margin-top:10px">차급</p><div class="row sub-bodies">${bodies.map((b) => { const has = d.models.find((m) => m.body === b), busy = d.orders.some((x) => x.body === b); return `<button class="btn" data-act="ordPick" data-k="body" data-v="${b}" aria-pressed="${o.body === b}" ${busy ? 'disabled' : ''}>${bodyById(b).name}${busy ? '<small>개발 중</small>' : has ? `<small>「${esc(has.name)}」 다음 세대</small>` : ''}</button>`; }).join('') || '<p class="hint">맡은 영역에 본사가 연구한 차급이 없습니다.</p>'}</div>
+      <p class="lbl" style="margin-top:10px">성격</p><div class="seg">${CHARS.map(([k, n, sub]) => `<button data-act="ordPick" data-k="character" data-v="${k}" aria-pressed="${o.character === k}">${n}<small>${sub}</small></button>`).join('')}</div>
+      <p class="lbl" style="margin-top:10px">가격대</p><div class="seg">${BANDS.map(([k, n, sub]) => `<button data-act="ordPick" data-k="band" data-v="${k}" aria-pressed="${o.band === k}">${n}<small>${sub}</small></button>`).join('')}</div>
+      <label class="lbl" for="ord-name" style="margin-top:10px">차 이름(비우면 자회사가 정함)</label><input class="namein" id="ord-name" type="text" maxlength="${config.nameMax}" value="${esc(($<HTMLInputElement>('#ord-name')?.value) ?? '')}" autocomplete="off">
+      ${pv ? `<div class="kpis" style="margin-top:12px">${kpi('예상 평론', score(pv.critic))}${kpi('개발비', money(pv.cost))}${kpi('기간', `${pv.months}<span>개월</span>`)}${kpi('쓸 수 있는 자본', money(d.funds))}</div>` : ''}
+      ${why ? `<div class="badbox" style="margin-top:10px">${esc(why)}</div>` : ''}
+      <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button><button class="btn ink" data-act="subOrderDo" ${why ? 'disabled' : ''}>제작 지시</button></div>
+      <p class="note">자회사가 공유 범위 안의 본사 기술로 사양을 짜 개발합니다. 예상 평론은 평론가의 흔들림을 뺀 값입니다.</p></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  /** 본사 차 배지 창 */
+  function showSubBadge(id: number): void {
+    const s = game!.state, x = s.subs?.find((y) => y.id === id); if (!x) return;
+    const list = Q.badgeChoices(s, x);
+    sheetBody.innerHTML = `<div class="sub-badge"><div class="eyebrow"><i></i>${esc(x.name)} · 본사 차 배지${ib('term:배지 모델')}</div><h2>본사 차를 「${esc(x.name)}」 이름으로 내기</h2>
+      <p class="hint">본사가 판매 중인 차 가운데 ${esc(x.name)}${josa(x.name, '이/가')} 맡은 차급의 차만 낼 수 있습니다. 개발비 ${Math.round(SUBS.badge.costShare * 100)}%·기간 약 ${Math.round(1 / SUBS.badge.timeShare)}분의 1, 평론 −${Math.abs(SUBS.badge.critic)}점, 본사 원본의 판매가 일반 자회사 모델보다 많이 줄어듭니다.</p>
+      ${list.length ? `<div class="sub-badges">${list.map((b) => { const g = Q.generationById(s, b.generationId); return `<div class="sub-bd${b.ok ? '' : ' locked'}"><span class="g-th">${g ? thumb({ ...genLook(g), color: x.color }, -0.65, 140, 88) : ''}</span><span class="g-name"><b>${esc(b.name)}</b><small>${b.bodyName} · 본사 평론 ${score(b.hqCritic)} → ${score(b.critic)}${b.replaces ? ` · 「${esc(b.replaces)}」 다음 세대` : ''}</small><small>개발비 ${money(b.cost)} · ${b.months}개월</small>${b.reason ? `<small class="need">${esc(b.reason)}</small>` : ''}</span><button class="btn ink" data-act="subBadgeDo" data-id="${id}" data-v="${b.generationId}" ${b.ok ? '' : 'disabled'}>배지 모델로 내기</button></div>`; }).join('')}</div>` : '<div class="warnbox">맡은 차급에서 본사가 판매 중인 차가 없습니다.</div>'}
+      <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
+    sheet.hidden = false; renderTop();
+  }
+  /** 자회사 신차 기획 초안: 본사 기획 화면을 그대로 쓰고 차급·고객층은 그 자회사 영역 안, 개발팀은 가상 팀 */
+  function newSubDraft(id: number): Draft | null {
+    const s = game!.state, x = s.subs?.find((y) => y.id === id); if (!x) return null;
+    const body = Q.subDetail(s, id)!.areaReady.find((b) => !Q.subSlotError(s, x, b)); if (!body) { err(Q.subSlotError(s, x, Q.subDetail(s, id)!.areaReady[0] ?? '') ?? '새 차를 낼 수 있는 차급이 없습니다.'); return null; }
+    const sp = Q.subAutoSpec(s, x, body, x.kind === 'premium' ? 'luxury' : 'value', 'mid', Q.subModelName(s, x, body));
+    return { ...sp, color: x.color, nameplateId: 0, chassisSeed: Q.lookCandidates(s, 0, 'chassis')[0], faceSeed: Q.lookCandidates(s, 0, 'face', 'nextGen')[0], team: [], mode: 'sum', equipMode: 'rec', subId: id };
+  }
+  /** 그룹 종합(재무 화면) */
+  function groupCard(): string {
+    const s = game!.state, G = Q.groupSummary(s); if (!G) return '';
+    const T = G.total, share = (v: number) => (T.profit > 0 ? `${Math.round((v / T.profit) * 100)}%`.replace('-', '−') : '—'), shareS = (v: number) => (T.sold > 0 ? `${Math.round((v / T.sold) * 100)}%` : '—');
+    const rows = G.months.map((m) => ({ label: Q.monthLabel(m.month), short: `${(m.month % 12) + 1}월`, profit: m.profit, sold: m.sold }));
+    return `<div class="card group-card"><h3>그룹 종합${ib('term:그룹 종합')} <small class="hint">본사 + 자회사 ${G.companies.length - 1}곳</small></h3>
+      <div class="kpis">${kpi('최근 12개월 판매', `${num(T.sold)}<span>대</span>`)}${kpi('매출', money(T.revenue))}${kpi('이익', money(T.profit, true), T.profit >= 0 ? 'pos' : 'neg')}${kpi('지난달 이익', money(G.last.profit, true), G.last.profit >= 0 ? 'pos' : 'neg')}</div>
+      <div class="tblwrap"><table class="tbl" style="margin-top:8px"><tr><th>회사</th><th class="r">판매(12개월)</th><th class="r">매출</th><th class="r">이익</th><th class="r">이익 비중</th></tr>${G.companies.map((c) => `<tr><td>${c.kind === 'hq' ? '<b>본사</b> ' : subMark(c.name, c.color, 16) + ' '}${esc(c.name)}</td><td class="r">${c.kind === 'hq' || isBrandK(c.kind) ? `${num(c.sold)}대 <small class="hint">${shareS(c.sold)}</small>` : '—'}</td><td class="r">${money(c.revenue)}</td><td class="r ${c.profit >= 0 ? 'pos' : 'neg'}">${money(c.profit, true)}</td><td class="r">${share(c.profit)}</td></tr>`).join('')}</table></div>
+      <div class="pcols"><div class="pcol"><p class="lbl" style="margin-top:10px">그룹 월 이익</p>${V.barChart(rows, (r) => r.profit, '그룹 월 이익')}</div><div class="pcol"><p class="lbl" style="margin-top:10px">그룹 월 판매</p>${V.barChart(rows, (r) => r.sold, '그룹 월 판매', (v) => `${num(v)}대`, (v) => `${num(v)}대`)}</div></div>
+      <p class="note">본사 이익에서 자회사 배당은 빼고 자회사 설립·투자는 되돌려(그룹 안에서 옮겨 간 돈) 자회사 이익과 더했습니다. 이익 비중은 그룹 이익 대비입니다.</p></div>`;
+  }
+  /** 본사 차고의 자회사 차(구분 표시, 누르면 무대에 3D) */
+  function subCarsCard(): string {
+    const s = game!.state, list = (s.subs ?? []).flatMap((x) => (Q.subDetail(s, x.id)?.models ?? []).map((m) => ({ x, m })));
+    if (!list.length) return '';
+    return `<div class="card gsec sub-cars"><h3>자회사 차 ${list.length}대 <small class="hint">누르면 무대에서 봅니다</small></h3>${list.map(({ x, m }) => `<button class="gsr" data-act="gsubOpen" data-id="${x.id}" data-k="${m.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small><i class="sub-own">내 자회사</i> ${esc(x.name)} · ${m.bodyName} · ${m.number}세대</small></span><span>평론 ${score(m.critic)}</span><span>지난달 ${num(m.sold)}대</span><span aria-hidden="true">→</span></button>`).join('')}</div>`;
   }
 
   function hqTab(): string {
@@ -2487,7 +2657,8 @@ export function startApp(): void {
   }
   const slotName = (k: S.SlotKey) => (k === 'auto' ? '자동 저장' : k === 'backup' ? '연동 전 백업' : `저장 칸 ${k.slice(-1)}`);
   function adopt(g: Game, extra: S.UiExtra): void {
-    game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
+    game = g; ui = extra; screen = 'garage'; subView = null; garageSub = null; subSel = null; ordSet = null; // 3.1.0 운영 전환은 UI 상태(불러오면 본사 화면)
+    draft = null; launch = null; lift = null; draftNote = '';
     restorePlan(extra.plan); garageId = -1; garageSum = true; cmpSel.clear(); gameOverShown = false; officeEvents.length = 0; thumbs.clear();
     coTab = 'sum'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false; noteLog = []; noteSeen = noteId;
@@ -2753,7 +2924,12 @@ export function startApp(): void {
         if (!game || !draft) return;
         // 점수가 남았으면 문제 단계(개발 방향)로 데려가서 이유를 보여 준다
         if (dirLeft(draft) > 0) { planTab = 'dir'; lastPanel = ''; render(); panel.scrollTop = 0; return err(`개발 방향 점수가 ${dirLeft(draft)}점 남았습니다. ${config.dev.dirTotal}점을 모두 나눠야 합니다.`); }
-        const { color, nameplateId, team, year: _y, ...spec } = draft; void _y;
+        const { color, nameplateId, team, year: _y, subId, equipMode: _e, mode: _m, ...spec } = draft; void _y; void _e; void _m;
+        if (subId !== undefined) { // 3.1.0 자회사 신차 기획
+          const nm = spec.name.trim() || Q.subModelName(game.state, game.state.subs!.find((x) => x.id === subId)!, spec.body);
+          if (!run(game.command({ type: 'subPlanModel', subId, ...spec, name: nm }))) return;
+          void color; draft = null; toast(`「${nm}」 개발을 지시했습니다. 개발비는 ${game.state.subs!.find((x) => x.id === subId)?.name ?? '자회사'} 자본에서 나갑니다.`); subView = subId; go('dev'); return;
+        }
         let r: CommandResult = { ok: false, reason: '' };
         withMoved(team, () => { r = nameplateId ? game!.command({ type: 'startFullChange', nameplateId, body: spec.body, segment: spec.segment, powertrain: spec.powertrain, tier: spec.tier, options: spec.options, direction: spec.direction, budget: spec.budget, designWeeks: spec.designWeeks, chassisSeed: spec.chassisSeed, faceSeed: spec.faceSeed, team , ...{ equip: spec.equip }, ...(spec.battery ? { battery: spec.battery } : {}) })
           : game!.command({ type: 'startProject', ...spec, name: spec.name.trim() || defaultName(), team }); return r.ok; });
@@ -2870,6 +3046,36 @@ export function startApp(): void {
       // ---- 3.0.0 자회사 ----
       case 'subSel': subSel = Number(el.dataset.id); subPick = ''; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'subBack': subSel = null; subPick = ''; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      // ---- 3.1.0 운영 전환·직접 운영 ----
+      case 'subOpen': sheet.hidden = true; openSub(Number(el.dataset.id), (v || 'company') as Screen); return;
+      case 'subCarSel': subCar = el.dataset.k ?? ''; lastPanel = ''; render(); return;
+      case 'gsubOpen': garageSub = { id: Number(el.dataset.id), body: el.dataset.k ?? '' }; if (screen !== 'garage') { go('garage'); return; } lastPanel = ''; render(); panel.scrollTop = 0; return;
+      case 'gsubBack': garageSub = null; garageSum = true; lastPanel = ''; render(); return;
+      case 'subMode': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d || d.mode === v) return;
+        if (v === 'delegate' && !(await ask(`「${d.name}」${josa(d.name, '을/를')} 전반 위임으로 돌릴까요?\n정한 모델 가격은 풀리고, 앞으로는 전략이 모델을 늘리거나 줄입니다. 개발 중인 차는 그대로 출시합니다.`, '전반 위임으로'))) return;
+        if (run(game.command({ type: 'setSubMode', subId: id, mode: v as 'direct' | 'delegate' }))) { toast(v === 'direct' ? `「${d.name}」${josa(d.name, '을/를')} 직접 운영합니다. 개발 탭에서 신차를 기획할 수 있습니다.` : `「${d.name}」${josa(d.name, '을/를')} 전반 위임으로 돌렸습니다.`); render(); } return; }
+      case 'subPrice': if (game && run(game.command({ type: 'setSubModelPrice', subId: Number(el.dataset.id), body: el.dataset.k ?? '', pct: v === '' ? null : Number(v) }))) render(); return;
+      case 'subPlanNew': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d) return;
+        if (d.mode !== 'direct') return err('신차를 직접 기획하려면 먼저 직접 운영으로 바꾸세요.');
+        if (draft?.subId === id) { subView = id; go('plan'); return; }
+        if (!(await dropDraft())) return;
+        const nd = newSubDraft(id); if (!nd) return;
+        draft = nd; planTab = 'sum'; subView = id; go('plan'); return; }
+      case 'subOrderOpen': { if (!game) return; const id = Number(el.dataset.id), x = game.state.subs?.find((y) => y.id === id); if (!x) return;
+        ordSet = { id, body: '', character: x.kind === 'premium' ? 'luxury' : 'value', band: 'mid' }; showSubOrder(); return; }
+      case 'ordPick': if (ordSet) { (ordSet as Record<string, unknown>)[el.dataset.k ?? ''] = v; showSubOrder(); } return;
+      case 'subOrderDo': { if (!game || !ordSet) return; const o = ordSet, name = ($<HTMLInputElement>('#ord-name')?.value ?? '').trim();
+        if (run(game.command({ type: 'subOrderModel', subId: o.id, body: o.body, character: o.character, priceBand: o.band, ...(name ? { name } : {}) }))) { sheet.hidden = true; ordSet = null; const od = Q.subDetail(game.state, o.id)!.orders.at(-1); toast(`${bodyById(o.body).name} 제작을 지시했습니다. ${od ? `${od.monthsLeft}개월 뒤 출시합니다.` : ''}`); render(); } return; }
+      case 'subBadgeOpen': showSubBadge(Number(el.dataset.id)); return;
+      case 'subBadgeDo': { if (!game) return; const id = Number(el.dataset.id), g = Q.generationById(game.state, Number(v)); if (!g) return;
+        if (run(game.command({ type: 'subBadgeModel', subId: id, modelId: g.id }))) { sheet.hidden = true; const od = Q.subDetail(game.state, id)!.orders.at(-1); toast(`「${nameOf(g)}」${josa(nameOf(g), '을/를')} 배지 모델로 내기로 했습니다. ${od ? `${od.monthsLeft}개월 뒤 출시합니다.` : ''}`); render(); } return; }
+      case 'subCancelOrd': { if (!game) return; const id = Number(el.dataset.id), o = Q.subDetail(game.state, id)?.orders.find((x) => x.id === Number(v)); if (!o) return;
+        if (!(await ask(`${o.name ? `「${o.name}」` : `${o.bodyName} 신차`} 개발을 취소할까요?\n이미 낸 개발비 ${money(o.cost)}${josa(money(o.cost), '은/는')} 돌아오지 않습니다.`, '개발 취소', true))) return;
+        if (run(game.command({ type: 'subCancelOrder', subId: id, orderId: o.id }))) { toast('개발을 취소했습니다.'); render(); } return; }
+      case 'tgtKind': tgtKind = v === 'profit' ? 'profit' : 'sold'; lastPanel = ''; render(); return;
+      case 'tgtSet': { if (!game) return; const val = Math.round(Number($<HTMLInputElement>('#sub-tgt')?.value ?? ''));
+        if (run(game.command({ type: 'setSubTarget', subId: Number(el.dataset.id), target: { kind: v === 'profit' ? 'profit' : 'sold', value: val } }))) { toast(`올해 목표를 ${v === 'profit' ? `이익 ${money(val)}` : `판매 ${num(val)}대`}${josa(v === 'profit' ? money(val) : '대', '으로/로')} 정했습니다.`); lastPanel = ''; render(); } return; }
+      case 'tgtClear': if (game && run(game.command({ type: 'setSubTarget', subId: Number(el.dataset.id), target: null }))) { toast('목표를 지웠습니다.'); lastPanel = ''; render(); } return;
       case 'subFoundOpen': { if (!s) return; const f = Q.subsInfo(s).found; foundKind = (f.find((x) => x.ok) ?? f[0]).kind; foundColor = ''; showSubFound(); return; }
       case 'subFoundKind': if (Q.SUB_KINDS.includes(v as SubKind)) { foundKind = v as SubKind; foundColor = ''; showSubFound(); } return;
       case 'subColor': foundColor = v; for (const b of sheetBody.querySelectorAll<HTMLElement>('[data-act="subColor"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); return;
@@ -2906,7 +3112,7 @@ export function startApp(): void {
         if (run(game.command({ type: 'subDropModel', subId: id, body: m.body }))) { toast(`「${m.name}」${josa(m.name, '을/를')} 단종했습니다.`); render(); } return; }
       case 'subSell': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d) return;
         if (!(await ask(`「${d.name}」${josa(d.name, '을/를')} ${money(d.sellPrice)}에 매각할까요?\n매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없습니다. 모델과 실적 기록이 사라지고, 사장은 본사 직원으로 돌아옵니다.`, '매각하기', true))) return;
-        if (run(game.command({ type: 'sellSubsidiary', subId: id }))) { subSel = null; toast(`「${d.name}」${josa(d.name, '을/를')} 매각했습니다. ${money(d.sellPrice)}${josa(money(d.sellPrice), '이/가')} 들어왔습니다.`); lastPanel = ''; render(); } return; }
+        if (run(game.command({ type: 'sellSubsidiary', subId: id }))) { subSel = null; if (subView === id) { subView = null; screen = 'company'; } toast(`「${d.name}」${josa(d.name, '을/를')} 매각했습니다. ${money(d.sellPrice)}${josa(money(d.sellPrice), '이/가')} 들어왔습니다.`); lastPanel = ''; render(); } return; }
       // ---- 임원(0.7.0) ----
       case 'execPick': execPick = execPick === v ? null : v as ExecRole; render(); return;
       case 'execAppoint': { if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)), role = el.dataset.role as ExecRole; if (x && run(game.command({ type: 'appointExec', role, staffId: x.id }))) { execPick = null; toast(`${x.name}${josa(x.name, '을/를')} ${Q.EXEC_TITLE[role]}${josa(Q.EXEC_TITLE[role], '으로/로')} 임명했습니다.`); render(); } return; }
@@ -3165,6 +3371,7 @@ export function startApp(): void {
     }
   });
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
+  $('#hqback').addEventListener('click', () => { if (game && subView !== null) closeSub(); }); // 3.1.0 운영 전환에서 본사로
   for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; if (b.dataset.tab === 'garage') garageSum = true; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); }); // 차고를 누르면 전 차종 표부터
   $('#menubtn').addEventListener('click', () => void showMenu());
   $('#mutebtn').addEventListener('click', () => { sound.set({ muted: !sound.settings().muted }); renderMute(); });
