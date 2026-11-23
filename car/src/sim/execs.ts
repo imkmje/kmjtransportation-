@@ -8,7 +8,7 @@ import { allocate, capacityOf, costMultOf, devTeams, isAway, isDevRole, isTraini
 import { loanLimit, loanRate } from './finance';
 import { linesUsed, sellingGens } from './game';
 import { josa } from './josa';
-import { fullChangeEligibility, latestGen } from './lifecycle';
+import { compareToPrev, fullChangeEligibility, latestGen } from './lifecycle';
 import { faceliftWeekCost, fullChangeCostMult, withRequired } from './dev';
 import { derivativePlan, nameplateOfGen } from './derive';
 import { REGION, awarenessTarget, basePriceOf, carBasePrice, genBasePrice, currentEdition, monthlyDemand, toSaleCar } from './market';
@@ -653,16 +653,25 @@ export function nextGenSpec(s: CarState, nameplateId: number): Omit<ProjectSpec,
     direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] };
 }
 
-/** 위임 팀: 쉬는 개발 직원(전담 연구원·교육·휴식 중 제외). 빈 개발팀이 여럿이면 직무를 고르게 그 몫만 */
-function autoTeam(s: CarState): number[] {
-  const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !x.lab && !isAway(x, s.week)).sort((a, b) => a.id - b.id), free = devTeams(s) - s.projects.length;
-  if (free <= 1) return idle.map((x) => x.id);
-  const size = Math.ceil(idle.length / free), lists = (['designer', 'engineer', 'tester'] as Role[]).map((r) => idle.filter((x) => x.role === r)), out: number[] = [];
+/** 위임 팀: 쉬는 개발 직원(전담 연구원·교육·휴식 중 제외), 능력 높은 순으로 직무를 고르게. parts몫으로 나눈 한 몫(빈 개발팀 수가 상한, 1이면 전원) */
+function autoTeam(s: CarState, parts: number): number[] {
+  const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !x.lab && !isAway(x, s.week)).sort((a, b) => b.ability - a.ability || a.id - b.id);
+  parts = Math.min(parts, devTeams(s) - s.projects.length);
+  if (parts <= 1) return idle.map((x) => x.id).sort((a, b) => a - b);
+  const size = Math.ceil(idle.length / parts), lists = (['designer', 'engineer', 'tester'] as Role[]).map((r) => idle.filter((x) => x.role === r)), out: number[] = [];
   for (let i = 0; out.length < size; i++) { const x = lists[i % 3].shift(); if (x) out.push(x.id); }
   return out.sort((a, b) => a - b);
 }
+/** 위임 팀에 꼭 있어야 하는 직무(1.6.1: 빠지면 시작하지 않고 기다린다). 페이스리프트 설계는 디자이너만 한다 */
+const NEED_ROLES: Record<GenStep['kind'], Role[]> = { autoFullChange: ['designer', 'engineer', 'tester'], autoDerive: ['designer', 'engineer', 'tester'], autoFacelift: ['designer', 'tester'] };
+/** 풀체인지할 때가 된 차종(파생 제외, 판매 중, 진행 중인 개발 없음) */
+function fullChangeDue(s: CarState, n: Nameplate): boolean {
+  const g = latestGen(n), age = monthOf(s.week) - g.launchMonth;
+  return n.baseOf === undefined && g.status === 'onSale' && !s.projects.some((p) => (p.kind === 'fullchange' && p.targetId === n.id) || ((p.kind === 'facelift' || p.kind === 'fix') && p.targetId === g.id))
+    && (age >= GA.fullChangeAt || (age >= config.lifecycle.fullChange.afterMonths && lifeBar(s, g) < X.product.fullChangeLife));
+}
 
-interface GenStep { kind: 'autoFullChange' | 'autoFacelift' | 'autoDerive'; cmd: Command; cost: number; error: string | null; what: string; why: string; genId: number }
+interface GenStep { kind: 'autoFullChange' | 'autoFacelift' | 'autoDerive'; cmd: Command; cost: number; error: string | null; what: string; why: string; genId: number; team: number[]; worse?: boolean }
 /** 이 차종에서 지금 시작할 때가 된 일(없으면 null): 파생 차종의 다음 세대 → 풀체인지 → 페이스리프트 순 */
 function genAutoStep(s: CarState, n: Nameplate): GenStep | null {
   const g = latestGen(n), age = monthOf(s.week) - g.launchMonth, ed = currentEdition(g);
@@ -673,28 +682,33 @@ function genAutoStep(s: CarState, n: Nameplate): GenStep | null {
     if (bn && bg && bg.status === 'onSale' && bg.id !== g.fromGen && !s.projects.some((p) => p.kind === 'derivative' && p.variant === n.variant && nameplateOfGen(s, p.targetId)?.id === bn.id)) {
       const plan = derivativePlan(s, bg.id, n.variant!);
       return { kind: 'autoDerive', cmd: { type: 'startDerivative', generationId: bg.id, variant: n.variant! }, cost: typeof plan === 'string' ? 0 : plan.cost, error: typeof plan === 'string' ? plan : null,
-        what: `${g.number + 1}세대 개발`, why: `바탕 차 「${bn.name}」${J(bn.name, '이/가')} ${bg.number}세대로 바뀌었습니다`, genId: g.id };
+        what: `${g.number + 1}세대 개발`, why: `바탕 차 「${bn.name}」${J(bn.name, '이/가')} ${bg.number}세대로 바뀌었습니다`, genId: g.id, team: autoTeam(s, Infinity) };
     }
   } else {
-    const life = lifeBar(s, g), due = age >= GA.fullChangeAt || (age >= config.lifecycle.fullChange.afterMonths && life < X.product.fullChangeLife);
-    if (due) {
-      const spec = nextGenSpec(s, n.id)!, team = s.staff.filter((x) => autoTeam(s).includes(x.id));
-      return { kind: 'autoFullChange', cmd: { type: 'startFullChange', nameplateId: n.id, ...spec }, cost: planPreview(s, { ...spec, name: n.name }, team).cost * fullChangeCostMult(true), error: null,
+    const life = lifeBar(s, g);
+    if (fullChangeDue(s, n)) {
+      // 1.6.1 팀: 풀체인지 때가 된 위임 차종끼리 쉬는 직원을 나누되, 그 몫으로 전작보다 못한 차가 나오면(평론 감점) 전원, 전원으로도 못하면 직원이 돌아와 나아질 수 있을 때 기다린다(봇 pickTeam과 같은 기준)
+      const spec = nextGenSpec(s, n.id)!, worse = (ids: number[]) => compareToPrev(g, planPreview(s, { ...spec, name: n.name }, s.staff.filter((x) => ids.includes(x.id))).stats, spec.body) === 'worse';
+      const map = s.execs?.genAuto ?? {}, all = autoTeam(s, 1), share = autoTeam(s, s.nameplates.filter((x) => map[x.id] && fullChangeDue(s, x)).length);
+      const team = share.length < all.length && !worse(share) ? share : all, roster = s.staff.filter((x) => isDevRole(x.role) && !x.lab).map((x) => x.id);
+      return { kind: 'autoFullChange', cmd: { type: 'startFullChange', nameplateId: n.id, ...spec }, cost: planPreview(s, { ...spec, name: n.name }, s.staff.filter((x) => team.includes(x.id))).cost * fullChangeCostMult(true), error: null, team,
+        worse: team.length < roster.length && worse(team) && !worse(roster),
         what: `${g.number + 1}세대 풀체인지`, why: age >= GA.fullChangeAt ? `출시 ${age}개월째로, 노후가 시작되는 ${config.life.oldMonths}개월 전에 다음 세대가 나와야 합니다` : `출시 ${age}개월째에 수명이 ${pct(life)}까지 떨어졌습니다`, genId: g.id };
     }
   }
   if (!g.editions.some((e) => e.kind === 'facelift') && age >= GA.faceliftAt && (n.baseOf !== undefined || age < GA.fullChangeAt - GA.faceliftGap)) {
     const equip = recommendedEquip(s, g.body, g.segment, g.powertrain);
     return { kind: 'autoFacelift', cmd: { type: 'startFacelift', generationId: g.id, options: stdOf(equip), equip, tier: ed.tier }, cost: faceliftWeekCost(g.devCost) * (config.lifecycle.facelift.designWeeks + config.dev.minTestWeeks), error: null,
-      what: '페이스리프트', why: `출시 ${age}개월째로 판매 수명의 중간입니다`, genId: g.id };
+      what: '페이스리프트', why: `출시 ${age}개월째로 판매 수명의 중간입니다`, genId: g.id, team: autoTeam(s, Infinity) };
   }
   return null;
 }
 
 /** 지금 시작하지 못하는 이유(시작할 수 있으면 null) */
 function genAutoWait(s: CarState, step: GenStep): string | null {
-  const team = autoTeam(s), need = step.cost * GA.cashDevMult + monthlyFixed(s) * GA.cashMonths;
-  return step.error ?? (s.projects.length >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다'
+  const team = step.team, need = step.cost * GA.cashDevMult + monthlyFixed(s) * GA.cashMonths, lack = NEED_ROLES[step.kind].find((r) => !s.staff.some((x) => x.role === r && team.includes(x.id)));
+  return step.error ?? (s.projects.length >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다' : lack ? `쉬고 있는 ${ROLE_KO[lack]}${J(ROLE_KO[lack], '이/가')} 없습니다`
+    : step.worse ? `지금 쉬고 있는 개발 직원 ${team.length}명으로는 전작보다 못한 차가 나옵니다. 다른 일을 하는 직원이 돌아오면 시작합니다`
     : s.cash < need ? `현금이 ${won(need)}(예상 개발비 ${won(step.cost)}의 ${GA.cashDevMult}배와 운영비 ${GA.cashMonths}개월 치)에 못 미칩니다` : null);
 }
 
@@ -705,7 +719,7 @@ function autoGen(c: ExecCtx): void {
   for (const n of s.nameplates.filter((x) => map[x.id] && x.generations.length).sort((a, b) => a.id - b.id)) {
     const st = map[n.id], step = genAutoStep(s, n);
     if (!step) { st.waitSince = null; st.told = false; continue; }
-    const team = autoTeam(s), go: ExecGoto = { tab: 'garage', id: step.genId };
+    const team = step.team, go: ExecGoto = { tab: 'garage', id: step.genId };
     let why = genAutoWait(s, step);
     if (!why) {
       const r = c.run({ ...step.cmd, team } as Command);
