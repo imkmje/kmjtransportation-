@@ -1909,7 +1909,7 @@ export function startApp(): void {
   // ----- 시대 사건(11장) -----
   /** 뉴스 한 줄: 앞의 [사건 이름]은 본문이 그 이름으로 시작하거나 예고면 떼고, 아니면 "사건 이름: 본문" */
   const newsLine = (text: string) => { const m = text.match(/^\[([^\]]*)\]\s*/), rest = m ? text.slice(m[0].length) : text; return !m || m[1] === '예고' || rest.startsWith(m[1]) ? rest : `${m[1]}: ${rest}`; };
-  const NEWS_KIND: Record<NewsCategory, string> = { preview: '예고', start: '사건 시작', end: '사건 끝', regulation: '규제 시행', choice: '선택 사건', result: '결정 결과', research: '연구', rival: '경쟁사 신차', other: '모터 데일리' };
+  const NEWS_KIND: Record<NewsCategory, string> = { preview: '예고', start: '사건 시작', end: '사건 끝', regulation: '규제 시행', choice: '선택 사건', result: '결정 결과', research: '연구', rival: '경쟁사 신차', sub: '자회사', other: '모터 데일리' };
   /** 뉴스 한 줄 → 신문 한 장. 시작 기사면 지금 걸린 효과를 본문에 */
   function showNewsItem(text: string, week: number, k: NewsCategory = 'other'): void {
     const head = text.replace(/^\[[^\]]*\]\s*/, ''), tag = text.match(/^\[([^\]]*)\]/)?.[1] ?? '';

@@ -9,5 +9,6 @@
   {"id":"market","name":"시장 뉴스·사건","locked":false},
   {"id":"rival","name":"경쟁사 신차","locked":false},
   {"id":"factory","name":"공장·설비","locked":false},
+  {"id":"sub","name":"자회사","locked":false},
   {"id":"warning","name":"경고(파산 위험·규제·리콜)","locked":true}
 ]

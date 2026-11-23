@@ -65,7 +65,7 @@ describe('경쟁사와 저장 호환', () => {
   });
   it('0.5.1에서 만든 저장(중형 SUV를 팔던 2003년, 형식 4)을 그대로 연다: 옛 suv는 중형 SUV, 경쟁사 새 칸을 채운다, 이어서 3년 돌고 저장 왕복이 같다', () => {
     const raw = load('save-v4-suv.json');
-    expect(raw.saveVersion).toBe(4); expect(SAVE_VERSION).toBe(8);
+    expect(raw.saveVersion).toBe(4); expect(SAVE_VERSION).toBe(9);
     expect(raw.rivals[0].models.suvS).toBeUndefined();
     const g = Game.fromJSON(raw), s = g.state, m = monthOf(s.week);
     const suv = allGens(s).find((x) => x.body === 'suv' && x.status === 'onSale')!;
@@ -82,7 +82,7 @@ describe('경쟁사와 저장 호환', () => {
   it('옛 픽스처(형식 1~4)도 모두 열리고 경쟁사 칸이 12종 모두 찬다', () => {
     for (const f of ['save-v1.json', 'save-v2.json', 'save-v3.json', 'save-v4.json', 'save-v4b.json']) {
       const s = Game.fromJSON(load(f)).state;
-      expect(s.saveVersion).toBe(8);
+      expect(s.saveVersion).toBe(9);
       for (const r of s.rivals) expect(Object.keys(r.models).sort(), f).toEqual(BODIES.map((b) => b.id).sort());
     }
   });

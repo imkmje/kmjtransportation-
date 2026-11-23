@@ -143,7 +143,7 @@ describe('저장 형식 6(1.2.0)', () => {
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v5.json', 'utf8'));
     expect(raw.saveVersion).toBe(5); expect(raw.batteryPlant).toBeUndefined();
     const a = Game.fromJSON(raw);
-    expect(a.state.saveVersion).toBe(8); expect(a.state.batteryPlant).toEqual({ level: 0, build: null });
+    expect(a.state.saveVersion).toBe(9); expect(a.state.batteryPlant).toEqual({ level: 0, build: null });
     const b = Game.fromJSON(JSON.parse(JSON.stringify(a.toJSON())));
     for (let i = 0; i < 40; i++) { a.tick(); b.tick(); }
     expect(JSON.stringify(b.toJSON())).toBe(JSON.stringify(a.toJSON()));
