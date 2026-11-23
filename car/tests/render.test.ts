@@ -157,11 +157,12 @@ describe('3D 차 모양', { timeout: 60000 }, () => {
 describe('사무실·시대 분위기(1.0.0)', () => {
   it('본사 등급마다 임원 자리 수는 설정과 같고, 방은 등급이 오를수록 넓어지며, 모든 책상·서는 곳에서 탕비 공간까지 걸어갈 수 있다', () => {
     let lastArea = 0;
-    for (const lv of [1, 2, 3, 4, 5] as const) {
+    for (const lv of [1, 2, 3, 4, 5, 6, 7] as const) {
       const rm = roomFor(lv), coffee = rm.spots.find((q) => q.kind === 'coffee')!;
       expect(rm.execs.length).toBe(EXEC_SEATS[lv]);
       expect(EXEC_SEATS[lv]).toBe(config.exec.seats[lv - 1]);
       expect(rm.seats.length).toBe(CAPACITY[lv]);
+      if (lv >= 2) expect(CAPACITY[lv], `등급 ${lv} 자리가 정원보다 적다`).toBeGreaterThanOrEqual(config.hq.levels[lv - 1].staff); // 3.0.0 6·7등급 정원 30·40
       expect(rm.W * rm.D).toBeGreaterThan(lastArea); lastArea = rm.W * rm.D;
       for (const st of rm.seats) expect(findPath(rm.grid, st.access, [coffee.x, coffee.y]), `등급 ${lv} 자리 길 없음`).not.toBeNull();
       for (const sp of rm.spots) expect(findPath(rm.grid, [sp.x, sp.y], [coffee.x, coffee.y]), `등급 ${lv} ${sp.kind} 길 없음`).not.toBeNull();

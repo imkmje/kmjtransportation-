@@ -4,7 +4,7 @@ import { config } from '../config';
 import { RIVALS, bodyById } from '../data';
 import { addNews, rivalHitAdd } from './events';
 import { josa } from './josa';
-import { basePriceOf, bodyKey, cellMonthly, rivalBase, rivalCycle, updateRivals } from './market';
+import { basePriceOf, bodyKey, cellMonthly, rivalBase, rivalCycle, subPull, updateRivals } from './market';
 import { hash01 } from './rng';
 import { monthOf, monthTime, yearOfMonth } from './time';
 import { STATS, type CarState, type GameEvent, type RivalDef, type Stats } from './types';
@@ -42,7 +42,7 @@ export function rivalModelView(s: CarState, ri: number, body: string): RivalMode
   const r = s.rivals[ri], md = r.models[body], m = monthOf(s.week), def = defOf(r.id), g = rivalHistory(s, ri, body).at(-1)!;
   const now = g.critic - (1 - r.cells[body] / (md.base * (1 + config.rivals.fresh))) * V.criticPer; // 지금 세기: 출시 때 평론에서 낡은 만큼(새 모델 A 대비 줄어든 비율 × criticPer) 뺀다
   const grades = Object.fromEntries(STATS.map((k, i) => [k, r1(clamp(now + def.shape[k] + (hash01(s.seed, 9, ri, bodyKey(body), md.n, i) * 2 - 1) * V.statJitter, 0, 10))])) as Stats;
-  const e = config.market.shareExp, tot = s.rivals.reduce((a, q) => a + (q.cells[body] ?? 0) ** e, 0);
+  const e = config.market.shareExp, tot = s.rivals.reduce((a, q) => a + (q.cells[body] ?? 0) ** e, 0) + subPull(s, body); // 3.0.0 자회사 모델도 그 칸을 나눠 갖는다
   const share = tot > 0 ? (1 - myCellShare(s, body)) * (r.cells[body] ?? 0) ** e / tot : 0; // 내 몫을 뺀 나머지를 경쟁 차 A^지수로 나눈다(고객층·사건은 무시한 어림)
   return { ...g, hit: g.hit || rivalHitAdd(s, r.id, body, m) > 0, rivalId: r.id, company: r.name, body, name: rivalModelName(s.seed, ri, r.id, body), grades,
     price: Math.round(basePriceOf(s, body) * (1 + (g.critic - V.criticMid) * V.pricePer) / 10) * 10, share, seed: Math.floor(hash01(s.seed, 10, ri, bodyKey(body), md.n) * 2 ** 31) };

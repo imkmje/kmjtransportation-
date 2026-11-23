@@ -23,7 +23,9 @@ export const capacityOf = (s: CarState): number => factoryDef(s).capacity * prod
 export const linesOf = (s: CarState): number => factoryDef(s).lines;
 /** 원가 배수 = 공장 등급 × (1 − 연구 원가 인하) × 사건(원자재·환율). 1.2.0 powertrain이 전기면 × (1 − 배터리 자체 생산 절감) */
 export const costMultOf = (s: CarState, powertrain?: string): number => factoryDef(s).costMult * (1 - costCut(s)) * eventCostMult(s) * (1 + eraCostAdd(s.week / config.time.weeksPerMonth / config.time.monthsPerYear + config.time.startYear))
-  * (powertrain === config.events.charging.powertrain ? 1 - batteryPlantCut(s) : 1);
+  * (powertrain === config.events.charging.powertrain ? 1 - batteryPlantCut(s) : 1) * (1 - partsCut(s));
+/** 3.0.0 부품 자회사의 본사 대당 원가 절감(없으면 0) */
+export const partsCut = (s: CarState): number => (s.subs ?? []).reduce((a, x) => a + (x.kind === 'parts' ? x.effect : 0), 0);
 /** 1.2.0 배터리 자체 생산: 지금 등급의 전기차 대당 원가 절감(없으면 0) */
 export const batteryPlantCut = (s: CarState): number => config.ev.plant.levels[(s.batteryPlant?.level ?? 0) - 1]?.cut ?? 0;
 /** 배터리 공장 등급의 실제 월 유지비(연구 유지비 감면, 난이도의 큰 공장 배수). 0등급은 0 */

@@ -8,7 +8,7 @@ import { pickLine, type Mood } from './lines';
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
 export interface OfficeStaff { id: string; name: string; role: Role; condition: number /*0~1, 낮으면 지침*/; working: boolean /*프로젝트에 배치됨*/ }
 export interface OfficeView {
-  level: 1 | 2 | 3 | 4 | 5;
+  level: Level;
   staff: OfficeStaff[];
   phase: 'rest' | 'design' | 'test';
   budget: 'low' | 'normal' | 'high';
@@ -230,7 +230,7 @@ function windowView(lv: Level, w: number, h: number, seed: number): string {
   const r = (i: number) => (hash(`${lv}:${seed.toFixed(1)}:${i}`) % 1000) / 1000;
   let s = '';
   if (lv === 1) { s += `<rect y="${f(h * .25)}" width="${w}" height="${f(h * .75)}" fill="#b58b72"/>`; for (let yy = h * .3; yy < h; yy += 4) s += `<path d="M0,${f(yy)} H${w}" stroke="#a37a62" stroke-width=".8"/>`; return s; }
-  if (lv === 5) { // 지평선이 낮다(높은 층). 가늘고 높은 건물 여러 채
+  if (lv >= 5) { // 지평선이 낮다(높은 층). 가늘고 높은 건물 여러 채
     for (let i = 0; i < 7; i++) { const bw = w * (.1 + .08 * r(i)), x = (w * (i + r(i + 9) * .6)) / 7, bh = h * (.25 + .5 * r(i + 20)); s += `<rect x="${f(x)}" y="${f(h * .92 - bh)}" width="${f(bw)}" height="${f(bh)}" fill="${i % 2 ? '#aebdca' : '#9fb0bf'}"/>`; }
     return s + `<rect y="${f(h * .92)}" width="${w}" height="${f(h * .08)}" fill="#b9c3c9"/>`;
   }
@@ -276,6 +276,8 @@ const LV: Record<Level, LevelStyle> = {
   3: { base: '#d6d3cc', office: '#bfc6ce', wallL: '#e6e3dd', wallR: '#d8d4cd', seam: 'tile', light: 'panel' },
   4: { base: '#d9d5cd', office: '#c9b99d', wallL: '#e9e6e0', wallR: '#dcd8d0', seam: 'plank', light: 'pendant' },
   5: { base: '#e2dfd8', office: '#c4bba9', wallL: '#ecebe7', wallR: '#e0ddd6', seam: 'stone', light: 'pendant' },
+  6: { base: '#e2dfd8', office: '#bcc3c9', wallL: '#ecebe7', wallR: '#e0ddd6', seam: 'stone', light: 'pendant' },
+  7: { base: '#e5e2dc', office: '#c2b8a6', wallL: '#efeeea', wallR: '#e3e0da', seam: 'stone', light: 'pendant' },
 };
 /** 시대별 책상 집기 */
 type Kit = 'drafting' | 'terminal' | 'crt' | 'lcd' | 'slim';

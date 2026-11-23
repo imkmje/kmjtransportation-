@@ -285,24 +285,24 @@ describe('팀 배치와 영업(9.1)', () => {
 });
 
 describe('본사(9.2)와 동시 개발(6.4)', () => {
-  it('등급별 정원 6/8/12/16/20(0.5.0: 1등급 4 → 6), 개발팀 1/1/2/2/3, 옵션 슬롯 2/2/3/4/4, 승급비·평판 조건, 최고 등급', () => {
+  it('등급별 정원 6/8/12/16/20/30/40(0.5.0: 1등급 4 → 6, 3.0.0: 6·7등급), 개발팀 1/1/2/2/3/4/6, 옵션 슬롯 2/2/3/4/4/4/4, 승급비·평판 조건, 최고 등급', () => {
     const g = Game.create({ difficulty: 'normal', seed: 1 }), s = g.state;
     const got = [];
     s.cash = 0;
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('현금이 모자랍니다.');
     s.cash = 1e9;
-    for (let lv = 1; lv <= 5; lv++) {
+    for (let lv = 1; lv <= 7; lv++) {
       got.push([staffCap(s), devTeams(s), optionSlots(s)]);
-      if (lv === 5) break;
+      if (lv === 7) break;
       const next = config.hq.levels[lv];
       if (next.rep > 0) { s.reputation = next.rep - 1; expect(reason(g.command({ type: 'upgradeHQ' }))).toBe(`평판 ${next.rep} 이상이어야 합니다(지금 ${next.rep - 1}).`); s.reputation = next.rep; }
       const cash = s.cash;
       ok(g.command({ type: 'upgradeHQ' }));
       expect(cash - s.cash).toBe(next.cost); expect(s.hqLevel).toBe(lv + 1);
     }
-    expect(got).toEqual([[6, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4]]);
-    expect([50000, 400000, 3000000, 15000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억
-    expect([20, 55, 80]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
+    expect(got).toEqual([[6, 1, 2], [8, 1, 2], [12, 2, 3], [16, 2, 4], [20, 3, 4], [30, 4, 4], [40, 6, 4]]);
+    expect([50000, 400000, 3000000, 15000000, 80000000, 300000000]).toEqual(config.hq.levels.slice(1).map((x) => x.cost)); // 5억 / 40억 / 300억 / 1,500억 / 8,000억 / 3조
+    expect([20, 55, 80, 120, 170]).toEqual(config.hq.levels.slice(2).map((x) => x.rep));
     expect(reason(g.command({ type: 'upgradeHQ' }))).toBe('본사가 최고 등급입니다.');
   });
   it('1.1.0: 옵션 칸 수 제한이 없다(본사 1등급에서도 옵션 3개), 제한은 원가와 가격', () => {
@@ -478,7 +478,7 @@ describe('저장 형식 2 → 4', () => {
     const v2 = JSON.parse(readFileSync('car/tests/fixtures/save-v2.json', 'utf8'));
     expect(v2.saveVersion).toBe(2);
     const g = Game.fromJSON(v2), s = g.state;
-    expect(s.saveVersion).toBe(8);
+    expect(s.saveVersion).toBe(9);
     expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]); expect(s.pendingOneOff).toBe(0);
     for (const x of s.staff) { expect(x.potential).toBe(Math.max(60, x.ability)); expect(x.trainings).toEqual([]); expect(x.restUntil).toBeNull(); }
     for (const x of allGens(s)) { expect(x.allocShare).toBeNull(); expect(x.lostSales).toBe(0); }

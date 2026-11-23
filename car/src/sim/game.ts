@@ -23,13 +23,14 @@ import { applyLateStart, challengeError, eraStartOf, hasChallenge, startCash, st
 import { bestPrice } from './queries';
 import { ensureHist, newPnl, noteCar, pnlOf, startHist } from './history';
 import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
+import { presidents, subCommand, subsMonthStart, subsSettle } from './subs';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
 import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerCar, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty, type StartCondition, type Challenge } from './types';
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
-export const SAVE_VERSION = 8; // 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
+export const SAVE_VERSION = 9; // 9(3.0.0): 자회사(subs)·장부의 자회사 배당·투자. 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
 /** difficulty: 생략하면 'easy'(0.4.1 새 게임 기본) */
 export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty; startYear?: number; condition?: StartCondition; challenges?: Challenge[] } // 1.5.0 시작 연도(기본 1970)·조건(기본 보통)·도전 과제(기본 없음)
 
@@ -63,6 +64,8 @@ const marketingError = (m: number): string | null =>
 const UNDO_KIND: Record<string, string> = {
   fire: '해고', discontinue: '단종', expandFactory: '공장 증설', buildBatteryPlant: '배터리 공장 건설', upgradeHQ: '본사 승급', borrow: '대출', repay: '대출 상환',
   appointExec: '임원 임명', hireExec: '임원 채용', dismissExec: '임원 해임', hire: '채용', train: '교육', rest: '휴식',
+  foundSubsidiary: '자회사 설립', setSubStrategy: '자회사 전략', setSubArea: '자회사 영역', setSubDividend: '자회사 배당', investSub: '자회사 투자', setSubPresident: '자회사 사장', // 3.0.0
+  setSubShare: '자회사 공유 범위', subAddModel: '자회사 모델 추가', subDropModel: '자회사 모델 단종', renameSubModel: '자회사 모델 이름', sellSubsidiary: '자회사 매각',
   setPrice: '가격 변경', setPricePolicy: '가격 변경', renameNameplate: '이름 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
 };
 /** 명령 직전 상태(JSON)와 알림 이름. 상태 밖(WeakMap)에 두어 저장 파일에 들어가지 않는다(불러오면 되돌리기 없음) */
@@ -197,6 +200,7 @@ export class Game {
   private monthEnd(ev: GameEvent[]): void {
     const s = this.state, m = monthOf(s.week), year = yearOf(s.week), wpm = config.time.weeksPerMonth, LC = config.lifecycle;
     updateRivalsWithNews(s, ev, m); // 경쟁 차가 낡거나 새 모델로 바뀐다(2.0.0 세대교체 뉴스)
+    if (s.subs?.length) subsMonthStart(s, ev, m); // 3.0.0 자회사 라인업·이번 달 세기·사업 자회사 효과(본사 판매 계산 전)
     for (const g of sellingGens(s)) if (g.status === 'onSale' && g.pricePolicy) { const pr = policyPrice(s, g); if (pr !== null && !priceError(g.body, pr)) currentEdition(g).price = pr; } // 0.8.0 자동 가격(경쟁 차 갱신 뒤, 판매 계산 전)
     const gens = sellingGens(s), cars = gens.map((g) => toSaleCar(g, m));
     const demand = gens.map((g, i) => {
@@ -249,13 +253,15 @@ export class Game {
     });
     const xPay = execPay(s), salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + xPay; // 0.7.0 임원 월급 포함
     const upkeep = upkeepOf(s), upkeepHq = hqUpkeep(s, s.hqLevel), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
-    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff;
+    const sub = s.subs?.length || s.pendingSubInv ? subsSettle(s, ev, m, { revenue, cogs }) : null; // 3.0.0 자회사 판매·이익·배당(배당은 본사 이익에 더한다)
+    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff + (sub?.dividend ?? 0);
     const research = s.pendingResearch ?? 0;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; s.pendingResearch = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, cars: carRows, execPay: xPay, research };
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, ...(sub ? { subDiv: sub.dividend, subInv: s.pendingSubInv ?? 0 } : {}), cars: carRows, execPay: xPay, research };
+    if (sub) { s.pendingSubInv = 0; for (const r of sub.rep) this.addRep(r.value, `자회사 「${r.name}」의 명성`); }
     s.ledger.push(e);
     ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
-    const everyone = [...s.staff, ...Object.values(s.execs?.seats ?? {}).map((x) => x!.staff)];
+    const everyone = [...s.staff, ...Object.values(s.execs?.seats ?? {}).map((x) => x!.staff), ...presidents(s)];
     for (const x of everyone) ensureHist(x, s.week); // 0.10.0 성장 기록(예전 저장은 지금부터)
     if (e.monthOfYear === config.time.monthsPerYear) for (const x of everyone) x.hist!.years[year] = x.ability;
     if (e.monthOfYear === config.time.monthsPerYear) { ylog.staff = s.staff.length; ylog.execs = Object.entries(s.execs?.seats ?? {}).map(([r, x]) => `${EXEC_TITLE[r as keyof typeof EXEC_TITLE]} ${x!.staff.name}`); }
@@ -338,7 +344,8 @@ export class Game {
       case 'borrow': case 'repay': return Number.isFinite(cmd.amount) ? wonText(cmd.amount) : '';
       case 'startResearch': case 'cancelResearch': return TECHS.some((t) => t.id === cmd.techId) ? `「${techById(cmd.techId).name}」` : '';
       case 'renameNameplate': { const n = nameplateById(s, cmd.nameplateId); return n ? `「${n.name}」` : ''; }
-      default: return gen;
+      case 'foundSubsidiary': return '';
+      default: { const sub = 'subId' in cmd ? s.subs?.find((x) => x.id === cmd.subId) : undefined; return sub ? `「${sub.name}」` : gen; }
     }
   }
 
@@ -647,6 +654,8 @@ export class Game {
       }
       case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
       case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 위임
+      case 'foundSubsidiary': case 'setSubStrategy': case 'setSubArea': case 'setSubDividend': case 'investSub': case 'setSubPresident': case 'setSubShare':
+      case 'subAddModel': case 'subDropModel': case 'renameSubModel': case 'sellSubsidiary': return subCommand({ s, spend: (c) => this.spend(c) }, cmd, [])!; // 3.0.0 자회사
       case 'devCheat': { // 개발자 메뉴(개발 단계용)
         const ev: GameEvent[] = [];
         switch (cmd.kind) {
@@ -695,7 +704,7 @@ export class Game {
   private spend(cost: number): void { this.state.cash -= cost; this.state.pendingOneOff += cost; }
   /** 채용 후보 이름(성 + 이름, 지금 직원·후보와 겹치지 않게 최대 20번 다시 뽑는다) */
   private newName(): string {
-    const s = this.state, used = new Set([...s.staff, ...s.candidates, ...Object.values(s.execs?.seats ?? {}).map((x) => x.staff), ...(s.execs?.candidates ?? [])].map((x) => x.name));
+    const s = this.state, used = new Set([...s.staff, ...s.candidates, ...Object.values(s.execs?.seats ?? {}).map((x) => x.staff), ...(s.execs?.candidates ?? []), ...presidents(s)].map((x) => x.name));
     let name = '';
     for (let i = 0; i < 20 && (!name || used.has(name)); i++) name = NAMES.family[this.rng.intIn(0, NAMES.family.length - 1)] + NAMES.given[this.rng.intIn(0, NAMES.given.length - 1)];
     return name;
@@ -867,6 +876,7 @@ export class Game {
     if ((st.saveVersion as number) === 5) migrateV5(st);
     if ((st.saveVersion as number) === 6) migrateV6(st);
     if ((st.saveVersion as number) === 7) migrateV7(st);
+    if ((st.saveVersion as number) === 8) (st as { saveVersion: number }).saveVersion = 9; // 형식 8 → 9(3.0.0): 자회사 없음(subs 없음과 같다)
     fillRivalCells(st); // 0.6.0 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
     return new Game(st);
   }
@@ -958,7 +968,7 @@ function migrateV7(st: CarState): void {
     if (y < cur && log.months >= config.time.monthsPerYear) log.repEnd ??= rep;
     rep -= d; // rep: y년 초(= y − 1년 말) 평판
   }
-  st.saveVersion = 8;
+  (st as { saveVersion: number }).saveVersion = 8;
 }
 /** 경쟁사 자료에 있는데 저장에 없는 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다). 형식 3 변환과 0.6.0 새 차체 칸이 함께 쓴다 */
 function fillRivalCells(st: CarState): void {

@@ -100,6 +100,9 @@ export const config = {
       { name: '본사 빌딩', cost: 400000, rep: 20, staff: 12, teams: 2, options: 3, upkeep: 5000 },
       { name: '연구 단지', cost: 3000000, rep: 55, staff: 16, teams: 2, options: 4, upkeep: 15000 },
       { name: '글로벌 본사', cost: 15000000, rep: 80, staff: 20, teams: 3, options: 4, upkeep: 40000 },
+      // 3.0.0(사용자 지시: 차 6대에 직원 20명 상한은 모자라다). 유지비는 등급마다 약 2.5배(기존 3배·2.7배 추세)
+      { name: '그룹 본사', cost: 80000000, rep: 120, staff: 30, teams: 4, options: 4, upkeep: 100000 },
+      { name: '글로벌 캠퍼스', cost: 300000000, rep: 170, staff: 40, teams: 6, options: 4, upkeep: 250000 },
     ],
   },
   staff: { // 9.1 직원
@@ -169,6 +172,7 @@ export const config = {
     modelsPerBody: 1, // 차종 수 상한 = 쓸 수 있는 차체 수 × 이 값(생산 라인 수 이내)
     gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
+    subs: { cashMonths: 24, investShare: 0.2, keepCash: 50000000 }, // 3.0.0 자회사 봇(선택): 지난 1년 흑자이고 설립비 + 고정비 24개월 치가 있으면 설립, 해마다 1월에 현금이 keepCash(5,000억)와 고정비 24개월 치를 넘으면 그 넘는 몫의 20%를 투자가 가장 적은(설립비 대비) 브랜드 자회사에
     execCashMonths: 12, // 0.7.0 임원 봇: 지난 1년 흑자이고 현금이 고정비 12개월 치 이상일 때만 임원 자리를 채운다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
     clumsy: { priceMult: 1.1, changeMonths: 120, testWeeks: 5 }, // 0.4.1 더 서툰 봇: 기준가의 110%로 출시, 풀체인지 10년, 시험 5주(0.4.2 시간 척도 전의 최소 2주와 같은 양)
@@ -179,7 +183,7 @@ export const config = {
     pointsDiv: 10, // 교육·휴식 중이 아닌 엔지니어 1명이 매주 능력 / 10 점(개발에 배치되어 있으면 그 30%)
     projectShare: 0.3, // 0.5.0: 개발 중인 엔지니어도 연구 점수의 30%를 낸다(창업 직후 전원 개발이라 연구가 0이었다)
     labMult: 1.5, labHq: 4, // 전담 연구원(본사 4등급부터): 산출 × 1.5
-    slots: [3, 4, 5, 6, 6], // 본사 등급별 동시 연구 수. 0.4.2: 1/1/1/2/2 → 3/4/5/6/6(사용자 피드백: 연구 두 개는 박하다). 주간 점수는 시작 순으로 채우므로 칸이 늘어도 전체 속도는 같다
+    slots: [3, 4, 5, 6, 6, 6, 6], // 본사 등급별 동시 연구 수. 0.4.2: 1/1/1/2/2 → 3/4/5/6/6(사용자 피드백: 연구 두 개는 박하다). 주간 점수는 시작 순으로 채우므로 칸이 늘어도 전체 속도는 같다
     earlyRate: 0.25, earlyMax: 4, // 등장 연도보다 먼저: 비용 × (1 + 0.25 × 앞당긴 햇수), 최대 4년
     lateYears: 8, lateMult: 0.5, // 등장 연도 + 8년이 지나면 비용 × 0.5
     repeatGrowth: 1.5, // 반복 기술(차세대)은 할 때마다 비용 × 1.5
@@ -230,7 +234,7 @@ export const config = {
     hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0, repLossMult: 1, bigUpkeepMult: 1.1 },
   },
   exec: { // 0.7.0 임원(9.7). 금액 만원
-    seats: [1, 2, 4, 5, 6], // 본사 등급별 임원 자리 수
+    seats: [1, 2, 4, 5, 6, 6, 6], // 본사 등급별 임원 자리 수
     allowance: 300, // 직원을 임원으로 임명하면 월급에 더하는 수당(월)
     seatAllowance: [0, 0, 5000, 7000, 9000, 10000], // 0.8.0: 임원이 n명일 때 임원마다 더 붙는 수당(월). 2명까지(본사 1~2등급)는 0, 3명부터 누진. 임원이 정원 밖이 되어 균형을 여기와 replace(기준·폭·간격)로 맞춘다
     hiredPayMult: 1.6, // 외부에서 뽑은 임원의 월급 = 직원 월급 공식(능력) × 1.6
@@ -310,5 +314,57 @@ export const config = {
       { cost: 15000000, upkeep: 500000, cut: 0.06, buildMonths: 12 },
       { cost: 60000000, upkeep: 1500000, cut: 0.09, buildMonths: 15 },
     ] },
+  },
+  // 3.0.0 자회사(sim/subs.ts, 설계서 9.9). 금액 만원, 기간 개월. 자회사 모델은 경쟁 모델(rivals)과 같은 구조(세대·주기·기본 A)로 그 차급 수요를 나눠 갖는다
+  subs: {
+    hqMin: 4, maxByHq: [0, 0, 0, 1, 3, 4, 4], // 세울 수 있는 본사 등급, 본사 등급별 자회사 수 상한
+    kinds: {
+      // cost: 설립비, rep: 필요 평판, bodies·segments: 맡을 수 있는 차급·고객층(segment: 기본 고객층),
+      // price·unitCost·vol: 시장 기준가·대당 원가·판매 대수 배수, a: 모델 세기(기본 A) 가산, rep0: 설립 때 브랜드 평판 = 본사 평판 × rep0
+      premium: { name: '고급 브랜드', cost: 20000000, rep: 120, bodies: ['sedanM', 'sedanL', 'coupe', 'suv', 'suvL', 'sports'], segments: ['rich', 'enthusiast', 'youth'], segment: 'rich', price: 1.3, unitCost: 1.2, vol: 0.7, a: 0.03, rep0: 0.6, color: '#2b3a55' },
+      value: { name: '보급형 브랜드', cost: 15000000, rep: 100, bodies: ['kei', 'hatch', 'sedanS', 'suvS', 'minivan', 'sedanM'], segments: ['worker', 'family', 'youth', 'fleet'], segment: 'worker', price: 1, unitCost: 0.97, vol: 1.15, a: 0, rep0: 0.4, color: '#d9822b' },
+      parts: { name: '부품 회사', cost: 10000000, rep: 100, color: '#5b7f5a' },
+      finance: { name: '할부 금융', cost: 10000000, rep: 100, color: '#4a6fa5' },
+    },
+    defaultSub: { dividend: 50, share: 1 }, // 설립 때 배당 50%·공유 보통, 전략은 브랜드 growth·사업 stable
+    switchMonths: 6, // 전략 전환 기간(효과가 이 기간에 걸쳐 직선으로 바뀐다)
+    evFrom: 2010, // 전동화 전환을 고를 수 있는 해
+    capPerCar: 4000, // 월 생산 한도 = 자본 ÷ 이 값(대)
+    capitalPerModel: 10000000, // 모델 수 상한 = max(1, 자본 ÷ 이 값)(영역의 차급 수 이내)
+    upkeep: 0.002, // 월 유지비 = 쓰는 자본 × 이 값(브랜드: min(자본, 판매 대수 × capPerCar), 사업: 자본). 남는 자본(유보·과잉 투자)에는 유지비가 없다
+    dev: 20, // 모델 하나의 월 개발비 = 시장 기준가 × 이 값 × 전략·공유 배수
+    pricePe: 2, // 가격을 기준(종류 배수)보다 내리면 세기 × (기준/가격)^이 값
+    noise: 0.06, // 세대마다 기본 A ± 이 값(해시)
+    presA: 0.1, noPres: 0.25, presCost: 0.04, presAllowance: 300, // 사장 능력 q = 능력/100(없으면 noPres): 기본 A + presA × (q − 0.5), 원가 × (1 − presCost × (q − 0.5) × 2), 사장 월급 = 직원 월급 + 수당
+    techA: 0.16, // 본사 기술 수준(그해까지 나온 기술 중 연구한 몫 f): 기본 A + techA × (f − 1)(다 연구했으면 0)
+    investA: 0.04, investMax: 0.2, // 본사가 넣은 돈(설립비 + 추가 투자)이 설립비의 2배가 될 때마다 기본 A + investA(최대 investMax). 재투자(이익 유보)는 생산 한도·모델 수만 늘린다
+    repA: 0.05, repCap: 200, // 브랜드 평판: 기본 A + repA × (min(평판, repCap) − 100)/100
+    aw: { base: 0.45, repDiv: 250 }, // 인지도: 점유 점수 × min(1, base + min(평판, repCap)/repDiv)(새 브랜드는 덜 알려져 있다)
+    repDrift: 0.02, // 브랜드 평판은 해마다 본사 평판 × rep0 쪽으로 2%씩
+    shareFx: [{ a: 0.02, dev: 1.15, cost: 1.03 }, { a: 0, dev: 1, cost: 1 }, { a: -0.04, dev: 0.75, cost: 0.94 }], // 공유 범위 좁게·보통·넓게: 기본 A(추정 평론 × 10), 개발비, 대당 원가
+    cannibal: 0.25, // 제 살 깎기: 본사 차의 경쟁 합에 같은 차급 자회사 모델 A^지수 × 이 값을 더한다
+    sellShare: 0.7, // 매각 대금 = 자본 × 이 값
+    reportsMax: 40, monthsMax: 24,
+    // 전략별 효과(전환 중에는 비중대로 섞는다). a: 기본 A 가산(rival은 상대의 주력 차급에서만), price·cost·dev·vol: 배수, payout: 배당 비율 배수(최대 100%),
+    // cycle: 세대교체 주기(개월), max: 모델 수 상한(0 = 자본 상한까지, -1 = 지금 수 유지), subRep·hqRep: 해마다 자회사·본사 평판 가산
+    strat: {
+      growth: { name: '성장 중심', a: 0, price: 1, cost: 1, dev: 1.3, vol: 1, payout: 0.4, cycle: 54, max: 0, subRep: 0, hqRep: 0 },
+      share: { name: '점유율 중심', a: 0.06, price: 0.96, cost: 1, dev: 0.9, vol: 1.1, payout: 1, cycle: 60, max: 0, subRep: 0, hqRep: 0 },
+      profit: { name: '수익 중심', a: -0.03, price: 1.03, cost: 0.95, dev: 0.7, vol: 1, payout: 1.4, cycle: 78, max: -1, subRep: 0, hqRep: 0 },
+      rival: { name: '경쟁사 대응', a: 0.1, price: 0.96, cost: 1, dev: 1.2, vol: 1, payout: 1, cycle: 48, max: 0, subRep: 0, hqRep: 0, noise: 2.5 },
+      tech: { name: '기술 선도', a: 0.1, price: 1.04, cost: 1.02, dev: 1.7, vol: 1, payout: 1, cycle: 54, max: 0, subRep: 1.5, hqRep: 0.3 },
+      stable: { name: '안정 유지', a: -0.01, price: 1, cost: 0.98, dev: 0.75, vol: 1, payout: 1, cycle: 72, max: -1, subRep: 0, hqRep: 0 },
+      niche: { name: '틈새 공략', a: 0.02, price: 1.07, cost: 1, dev: 0.9, vol: 1, payout: 1, cycle: 66, max: 2, subRep: 0.5, hqRep: 0 },
+      prestige: { name: '명성 구축', a: 0.2, price: 1.5, cost: 1.15, dev: 0.6, vol: 0.45, payout: 1, cycle: 60, max: 1, subRep: 4, hqRep: 1 },
+      ev: { name: '전동화 전환', a: 0.02, price: 1, cost: 0.95, dev: 1.2, vol: 1, payout: 1, cycle: 60, max: 0, subRep: 0.5, hqRep: 0.2 },
+    },
+    business: ['growth', 'profit', 'stable'], // 사업 자회사가 고를 수 있는 전략
+    notFor: { premium: ['share'], value: ['prestige'] } as Record<string, string[]>, // 브랜드 종류에 맞지 않는 전략
+    // 사업 자회사: 규모 = min(scaleMax, (자본 ÷ 설립비)^0.5) × 사장 배수(0.75 + q/2) × 전략 배수(fx). 부품: 본사 원가 × (1 − cut × 규모)(최대 cutMax), 이익 = 본사 원가 × margin × 규모.
+    // 금융: 본사 판매 × (1 + boost × 규모)(최대 boostMax), 이익 = 본사 매출 × financed × spread × 규모
+    parts: { cut: 0.01, cutMax: 0.03, margin: 0.005 },
+    finance: { boost: 0.015, boostMax: 0.04, financed: 0.3, spread: 0.014 },
+    scaleMax: 3,
+    bizFx: { growth: { fx: 1, margin: 0.9 }, profit: { fx: 0.85, margin: 1.35 }, stable: { fx: 1, margin: 1 } } as Record<string, { fx: number; margin: number }>,
   },
 };

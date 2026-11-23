@@ -2,7 +2,7 @@
 // (0,0)이 뒤쪽 구석, x=0 면이 왼쪽 벽, y=0 면이 오른쪽 벽. 앞쪽 두 벽은 잘라 내고 그린다.
 // 등급 → 방 크기·구역·가구·자리·서서 일하는 곳(spot), 그리고 걷기용 격자와 길찾기.
 
-export type Level = 1 | 2 | 3 | 4 | 5;
+export type Level = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type Face = '+x' | '-x' | '+y' | '-y';
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
 export type ZoneKind = 'office' | 'studio' | 'test' | 'garage' | 'pantry' | 'meeting' | 'lab' | 'lobby' | 'lounge' | 'exec';
@@ -32,15 +32,15 @@ export interface Room {
 
 export const CELL = 0.5;                 // 걷기 격자 칸(m)
 const CLEAR = 0.12;                      // 가구에서 띄울 거리(m)
-export const CAPACITY: Record<Level, number> = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20 };
-export const EXEC_SEATS: Record<Level, number> = { 1: 1, 2: 2, 3: 4, 4: 5, 5: 6 }; // config.exec.seats와 같다(본사 등급별 임원 자리)
+export const CAPACITY: Record<Level, number> = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 32, 7: 40 }; // 4인 묶음 단위(6·7등급 정원 30·40을 담는다)
+export const EXEC_SEATS: Record<Level, number> = { 1: 1, 2: 2, 3: 4, 4: 5, 5: 6, 6: 6, 7: 6 }; // config.exec.seats와 같다(본사 등급별 임원 자리)
 const EXW = 2.2, BACKE = 3.2;            // 임원실 한 칸 폭, 깊이(오른쪽 벽 쪽 띠 안)
-const NAME: Record<Level, string> = { 1: '창고 공장', 2: '소형 사옥', 3: '본사 빌딩', 4: '연구 단지', 5: '글로벌 본사' };
+const NAME: Record<Level, string> = { 1: '창고 공장', 2: '소형 사옥', 3: '본사 빌딩', 4: '연구 단지', 5: '글로벌 본사', 6: '그룹 본사', 7: '글로벌 캠퍼스' };
 // 4인 책상 묶음: 책상 1.4×0.75 두 개씩 마주 보고, 가운데 낮은 칸막이
 const POD_W = 2.8, POD_D = 2.75;
 export const DESK_H = 0.75;
 
-const clampLevel = (l: number): Level => Math.max(1, Math.min(5, Math.round(l) || 1)) as Level;
+const clampLevel = (l: number): Level => Math.max(1, Math.min(7, Math.round(l) || 1)) as Level;
 const cache = new Map<Level, Room>();
 
 export function roomFor(level: number): Room {
@@ -48,9 +48,9 @@ export function roomFor(level: number): Room {
   const hit = cache.get(lv);
   if (hit) return hit;
   const nPods = CAPACITY[lv] / 4;
-  const pc = lv <= 2 ? nPods : lv === 5 ? 3 : 2, pr = Math.ceil(nPods / pc);
+  const pc = lv <= 2 ? nPods : lv >= 5 ? 3 : 2, pr = Math.ceil(nPods / pc);
   const BACK = 3.4;                                    // 오른쪽 벽 쪽 띠(탕비·회의실·임원실·수납장)
-  const studio = lv >= 2, glass = lv >= 3, lab = lv >= 4, lobby = lv === 5;
+  const studio = lv >= 2, glass = lv >= 3, lab = lv >= 4, lobby = lv >= 5;
   const ox = lv === 1 ? 2.6 : 6.2;                     // 사무 구역 시작 x(왼쪽에 디자인 스튜디오)
   const oy = BACK + 1.6;                               // 사무 구역 시작 y(첫 줄 의자 뒤 통로 포함)
   // 뒤쪽 띠: 탕비(0~4.8) → 회의실(3등급~) → 임원실(창가 유리방) → 간판·수납장. 임원실이 길면 건물이 넓어지고 넓어진 만큼 책상 묶음 사이 통로를 넓힌다
@@ -161,7 +161,7 @@ export function roomFor(level: number): Room {
     F('printer', rx + 0.8, 7.4, 1.0, 0.7, 1.0); F('cooler', rx + 2.4, 7.4, 0.5, 0.5, 1.2); F('plant', rx + 3.4, 7.4, 0.6, 0.6, 1.3);
   }
 
-  // ---- 로비(등급 5) ----
+  // ---- 로비(등급 5~) ----
   if (lobby) {
     zones.push({ kind: 'lobby', x: 0, y: D - 3.4, w: rx - 0.6, d: 3.4 });
     F('reception', 2.0, D - 2.5, 2.8, 0.7, 1.05); F('sofa', 6.6, D - 1.4, 2.0, 0.8, 0.8, { face: '-y' });

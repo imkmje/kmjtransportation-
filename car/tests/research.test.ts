@@ -132,7 +132,7 @@ describe('연구 진행(10장)', () => {
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_hatch' }))).toBe('이미 연구한 기술입니다.');
   });
   it('연구 칸은 본사 등급마다 3/4/5/6/6개(0.4.2). 진행 중 연구는 모두 매주 점수를 고르게 받고, 우선 연구가 절반을 받는다(0.5.1)', () => {
-    expect(config.research.slots).toEqual([3, 4, 5, 6, 6]);
+    expect(config.research.slots).toEqual([3, 4, 5, 6, 6, 6, 6]); // 3.0.0 6·7등급도 6칸
     const g = gameAt(1982); g.state.hqLevel = 5;
     ok(g.command({ type: 'startResearch', techId: 'bd_hatch' })); ok(g.command({ type: 'startResearch', techId: 'bd_sedanM' }));
     for (const t of TECHS.filter((x) => !researchError(g.state, x.id)).slice(0, 4)) ok(g.command({ type: 'startResearch', techId: t.id }));
@@ -426,11 +426,11 @@ describe('조합 노트(5.5)', () => {
 
 describe('저장 형식 3 → 4', () => {
   it('형식 3 파일(0.3.0 코드로 만든 픽스처)을 올리고 이어서 실행할 수 있다', () => {
-    expect(SAVE_VERSION).toBe(8);
+    expect(SAVE_VERSION).toBe(9);
     const v3 = JSON.parse(readFileSync('car/tests/fixtures/save-v3.json', 'utf8'));
     expect(v3.saveVersion).toBe(3);
     const g = Game.fromJSON(v3), s = g.state;
-    expect(s.saveVersion).toBe(8);
+    expect(s.saveVersion).toBe(9);
     // 이미 쓰던(판매·개발 중) 라디오·에어컨·중형 세단·파워 스티어링(선행 포함)을 연구 완료로, 소형 세단·가솔린은 원래 열려 있음
     expect(s.research.done).toEqual(['el_radio', 'el_aircon', 'bd_sedanM', 'el_powerSteering']); expect(s.research.active).toEqual([]); expect(s.research.early).toEqual([]);
     expect(s.knownCombos).toEqual(['sedanS:worker', 'sedanS:youth']);
@@ -450,7 +450,7 @@ describe('저장 형식 3 → 4', () => {
   it('형식 1·2 파일도 4로 올라간다', () => {
     for (const f of ['save-v1.json', 'save-v2.json']) {
       const s = Game.fromJSON(JSON.parse(readFileSync(`car/tests/fixtures/${f}`, 'utf8'))).state;
-      expect(s.saveVersion).toBe(8); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
+      expect(s.saveVersion).toBe(9); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
     }
   });
 });

@@ -98,10 +98,10 @@ describe('출시 뒤 이름 바꾸기(1.5.0)', () => {
   });
 
   it('저장·불러오기 왕복(저장 형식 8), 결정론(같은 시드·같은 명령이면 같은 결과)', () => {
-    expect(SAVE_VERSION).toBe(8);
+    expect(SAVE_VERSION).toBe(9);
     const run = () => { const { g, base, np } = world(3); ok(g.command({ type: 'renameNameplate', nameplateId: np(base).id, name: '세레나', withDerivatives: true })); return g; };
     const a = run(), b = Game.fromJSON(JSON.parse(JSON.stringify(a.toJSON())));
-    expect(b.state.saveVersion).toBe(8);
+    expect(b.state.saveVersion).toBe(9);
     expect(b.state.nameplates.map((n) => n.name)).toEqual(['세레나', '세레나 왜건', '패밀리', '보라']);
     for (let i = 0; i < 24; i++) { a.tick(); b.tick(); }
     expect(JSON.stringify(b.toJSON())).toBe(JSON.stringify(a.toJSON()));

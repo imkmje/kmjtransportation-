@@ -487,3 +487,9 @@ export { derivativeOptions, derivativesOf, derivativePlan, variantById, genCostM
 export { genAutoInfo, nextGenSpec } from './execs';
 export { eventTopic, newsTopic, topicLocked, NOTIFY_TOPICS } from './notify';
 export { VARIANTS, CRITICS } from '../data';
+
+// ---------- 3.0.0 자회사와 고급 브랜드 ----------
+export { subsInfo, subDetail, subModelsIn, subModelView, subOfModelName, cannibalInfo, strategyChoices, foundError as subFoundError, strategyError as subStrategyError, subHqEffects, presidentOf, presidents, switchProgress, subAwareness,
+  SUB_KINDS, SUB_STRATEGIES, SHARE_NAMES, type SubDetail, type SubModelView, type SubStrategyChoice } from './subs';
+export { partsCut } from './company';
+export { subSalesMult } from './market';

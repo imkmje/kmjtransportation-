@@ -273,7 +273,7 @@ check('확인하면 가격 1500만원·정책 수동', await G(() => { const g =
 
 // ---- 회사·기록 ----
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭(1.0.0): 안쪽 탭 5개(요약·직원·임원·본사·공장), 처음은 요약', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '요약,직원,임원,본사,공장' && (await page.locator('#panel [data-act="cotab"][data-v="sum"]').getAttribute('aria-selected')) === 'true');
+check('회사 탭(1.0.0): 안쪽 탭 6개(요약·직원·임원·본사·공장·자회사), 처음은 요약', (await page.locator('#panel .cotabs button').allInnerTexts()).join() === '요약,직원,임원,본사,공장,자회사' && (await page.locator('#panel [data-act="cotab"][data-v="sum"]').getAttribute('aria-selected')) === 'true');
 await page.click('#tabs button[data-tab="fin"]');
 const ctext = await page.locator('#panel').innerText();
 check('재무 화면(큰 메뉴): 재무·지난달 표·경쟁사', (await G(() => window.__car.screen)) === 'fin' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장'));
@@ -622,14 +622,14 @@ await page.click('#speeds button[data-speed="0"]');
 await page.click('#tabs button[data-tab="dev"]'); await page.waitForTimeout(300);
 const vb1 = await S3(() => document.querySelector('#office svg')?.getAttribute('viewBox') ?? '');
 await page.click('#tabs button[data-tab="company"]');
-check('회사 탭: 안쪽 탭 5개', (await page.locator('#panel .cotabs [role="tab"]').count()) === 5);
+check('회사 탭: 안쪽 탭 6개(3.0.0 자회사)', (await page.locator('#panel .cotabs [role="tab"]').count()) === 6);
 await act('cotab', '[data-v="staff"]');
 const st0 = await page.locator('#panel').innerText();
 check('직원 탭: 직원 4명 표(이름·직무·능력·월급·컨디션·하는 일), 정원 4/6(0.5.0 본사 1등급 정원 6)', (await page.locator('#panel .srow:not(.head)').count()) === 4 && st0.includes('4/6') && ['디자이너', '엔지니어', '테스터', '컨디션', '쉬는 중'].every((t) => st0.includes(t)));
 check('정원이 남았으면 채용 공고 3단계', (await page.locator('.hire-card [data-act="postJob"]').count()) === 3 && (await page.locator('.hire-full').count()) === 0);
 await act('cotab', '[data-v="hq"]');
 const hq0 = await page.locator('#panel').innerText();
-check('본사 탭: 5등급 단계·지금 등급(정원·개발 차 수·유지비, 1.1.0 옵션 칸 없음)·다음 등급 비교', (await page.locator('.lv5 li').count()) === 5 && (await page.locator('.lv5 li.on').innerText()).includes('창고 공장') && !hq0.includes('옵션 칸') && ['정원', '동시에 개발할 수 있는 차', '월 유지비', '승급 비용', '소형 사옥'].every((t) => hq0.includes(t)));
+check('본사 탭: 7등급 단계(3.0.0 6·7등급)·지금 등급(정원·개발 차 수·유지비, 1.1.0 옵션 칸 없음)·다음 등급 비교', (await page.locator('.lv5 li').count()) === 7 && (await page.locator('.lv5 li.on').innerText()).includes('창고 공장') && !hq0.includes('옵션 칸') && ['정원', '동시에 개발할 수 있는 차', '월 유지비', '승급 비용', '소형 사옥'].every((t) => hq0.includes(t)));
 await G(() => { const s = window.__car.game.state; s.cash = 5000000; s.reputation = 40; window.__car.render(); }); // 점검용: 현금 500억·평판 40
 await act('upgradeHQ');
 check('본사 키우기: 확인 창', (await page.locator('#ask').isVisible()) && (await page.locator('#ask-text').innerText()).includes('본사'));
@@ -1580,7 +1580,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await GG(() => { for (const g of window.__car.game.state.nameplates.flatMap((n) => n.generations)) delete g.clearance; document.getElementById('toasts').innerHTML = ''; window.__car.render(); });
   // U3 설정 화면 · U2 알림 종류 켜고 끄기, 묶기, 기록함
   await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.3.0 설정 알림: 유형 11개(2.0.0 경쟁사 신차) + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 11 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 14 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
+  check('1.3.0 설정 알림: 유형 12개(2.0.0 경쟁사 신차, 3.0.0 자회사) + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 12 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 15 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
   await mshot('settings-note-1180x820');
   await gp.click('#sheet [data-act="noteCat"][data-v="launch"]');
   check('1.0.0 알림 종류 끄기(출시·평론) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).launch)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="launch"]').getAttribute('aria-pressed')) === 'false');
@@ -1624,7 +1624,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   // L2 회사 요약
   await gp.click('#tabs button[data-tab="company"]'); await gp.click('#panel [data-act="cotab"][data-v="sum"]');
   const coT = await gp.locator('#panel .co-sum').innerText();
-  check('1.0.0 회사 요약: 직원·임원·본사·공장·월 고정비 칸', (await gp.locator('#panel .co-sum .co-box').count()) === 5 && ['직원', '임원', '본사', '공장', '월 고정비', '가동률', '생산 라인'].every((w) => coT.includes(w)));
+  check('1.0.0 회사 요약: 직원·임원·본사·공장·자회사(3.0.0)·월 고정비 칸', (await gp.locator('#panel .co-sum .co-box').count()) === 6 && ['직원', '임원', '본사', '공장', '자회사', '월 고정비', '가동률', '생산 라인'].every((w) => coT.includes(w)));
   await mshot('company-sum-1180x820');
   await gp.click('#panel .co-box[data-v="factory"]');
   check('1.0.0 회사 요약 칸 누르기 → 그 안쪽 탭(공장)', (await gp.locator('#panel [data-act="cotab"][data-v="factory"]').getAttribute('aria-selected')) === 'true');
@@ -1885,7 +1885,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await mp.locator('#sheet [data-act="closeReview"]').click().catch(() => {}); }
   // (d) 알림 유형: 교육 알림을 끄면 교육 보내기 알림이 뜨지 않고 기록에는 남음, 경고는 못 끔
   await mp.click('#menubtn'); await mp.click('#sheet [data-act="settings"]'); await mp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.3.0 알림 설정: 유형 11종(2.0.0 경쟁사 신차 포함), 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 11 && (await mp.locator('#sheet [data-act="noteCat"][data-v="rival"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
+  check('1.3.0 알림 설정: 유형 12종(2.0.0 경쟁사 신차, 3.0.0 자회사 포함), 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 12 && (await mp.locator('#sheet [data-act="noteCat"][data-v="sub"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="rival"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
   await mp.click('#sheet [data-act="noteCat"][data-v="training"]');
   check('1.3.0 교육 알림 끄기 → 기기 저장소', (await MG(() => JSON.parse(localStorage.getItem('car-company-notify')).training)) === false);
   await mshot3('settings-notify-1366x1024');
@@ -2129,7 +2129,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await A.p.fill('#sy-token', TOKEN); await A.p.click('[data-act="syncOn"]');
   const up1 = await until(() => meta()?.rev === 1);
   const wA1 = await where(A.p), m1 = meta();
-  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 8 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
+  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 9 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
   await until(async () => (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각'));
   check('1.6.0 A 상태 줄: 마지막으로 올린 시각, [지금 올리기]·[서버에서 불러오기]·[연동 끄기]', (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각') && (await A.p.locator('.sync-box [data-act="syncUp"],.sync-box [data-act="syncDown"],.sync-box [data-act="syncOff"]').count()) === 3);
   await shotS(A.p, 'menu-on-1366x1024');
@@ -2240,6 +2240,137 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await both('news');
   for (const [w, h] of [[1366, 1024], [800, 1200]]) { await vp.setViewportSize({ width: w, height: h }); await VG(() => { document.getElementById('toasts').innerHTML = ''; }); await vp.click('#tabs button[data-tab="fin"]'); await vp.waitForTimeout(150); await vp.locator('.rv-co').last().scrollIntoViewIfNeeded(); const o = await overflowOf(vp); await vshot(`fin-${w}x${h}`); check(`2.0.0 ${w}×${h}: 재무(경쟁사 카드) 넘침 없음`, o <= 0, String(o)); }
   await vctx.close(); }
+
+// ---- 3.0.0 자회사와 본사 6·7등급: 2005년 상태(본사 5등급·평판 150·현금 넉넉, 중형 세단 출시)를 직접 만들고 화면으로 설립 → 전략(전환 표시) → 영역·배당·투자·공유·사장 →
+// 모델 추가·이름 변경 → 비교 창 "내 자회사" → 월 결산 자회사 배당 줄 → 매각. 본사 6·7등급 건설·정원 30·40, 사무실·직원 목록 40명
+// CAR_SMOKE_300=폴더 를 주면 1366×1024·1024×768·800×1200 화면을 그 폴더에 찍는다
+{ const sctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const sp = await sctx.newPage(); sp.on('pageerror', (e) => errors.push(String(e))); sp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const SG = (fn, a) => sp.evaluate(fn, a), S3 = process.env.CAR_SMOKE_300 ?? '';
+  const sshot = async (n) => { if (S3) await sp.screenshot({ path: `${S3}/${n}.png` }); };
+  const SIZES = [[1366, 1024], [1024, 768], [800, 1200]];
+  /** 세 크기에서: 크기를 바꾸고 fn(보일 곳으로 스크롤)을 한 뒤 가로 넘침을 재고 찍는다 */
+  const three = async (n, fn) => { for (const [w, h] of SIZES) { await sp.setViewportSize({ width: w, height: h }); await SG(() => { document.getElementById('toasts').innerHTML = ''; }); await sp.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(sp); check(`3.0.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); await sshot(`${n}-${w}x${h}`); } await sp.setViewportSize({ width: 1366, height: 1024 }); };
+  const yes = async () => { await sp.waitForSelector('#ask:not([hidden])'); await sp.click('#ask-yes'); };
+  const sub = () => SG(() => window.__car.game.state.subs?.[0] ?? null);
+  /** 회사 > 자회사로 가서 첫 자회사 상세(이미 열려 있으면 그대로) */
+  const openSub = async () => { await sp.click('#tabs button[data-tab="company"]'); await sp.click('#panel [data-act="cotab"][data-v="sub"]'); if (await sp.locator('#panel [data-act="subSel"]').count()) await sp.locator('#panel [data-act="subSel"]').first().click(); await sp.waitForSelector('#panel .sub-strat'); };
+  await sp.goto(URL0); await sp.waitForSelector('#title:not([hidden])');
+  await sp.click('[data-act="titleNew"]'); await sp.fill('#t-co', '자회사 시험'); await sp.click('[data-act="startNew"]'); await SG(() => window.__car.setSpeed(0));
+  const gid = await SG(() => { const c = window.__car, g = c.game, s = g.state; s.week = (2005 - 1970) * 48; s.cash = 1e9; s.hqLevel = 5; s.reputation = 150;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2005 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id);
+    g.command({ type: 'startProject', name: '아리아', body: 'sedanM', segment: 'family', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    const p = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 });
+    s.events.pending.length = 0; c.render(); return s.nameplates[0].generations[0].id; });
+  await sp.click('#tabs button[data-tab="company"]'); await sp.click('#panel [data-act="cotab"][data-v="sub"]');
+  const l0 = await sp.locator('#panel .sub-list').innerText();
+  check('3.0.0 회사 탭 자회사 칸: 0/3곳, 안내, [자회사 설립], 자회사 ⓘ', l0.includes('0/3곳') && l0.includes('아직 자회사가 없습니다') && !(await sp.locator('[data-act="subFoundOpen"]').isDisabled()) && (await sp.locator('#panel [data-info="term:자회사"]').count()) === 1, l0.slice(0, 80));
+  // 설립 창
+  await sp.click('[data-act="subFoundOpen"]'); await sp.waitForSelector('#sheet .sub-found');
+  const ft = await sp.locator('#sheet .sub-found').innerText();
+  check('3.0.0 설립 창: 종류 4개(설명·설립비·조건), 기본 이름, 로고 색', (await sp.locator('#sheet [data-act="subFoundKind"]').count()) === 4 && ['고급 브랜드', '보급형 브랜드', '부품 회사', '할부 금융', '설립비', '평판 120 이상'].every((t) => ft.includes(t)) && (await sp.inputValue('#sub-name')) === '엘리온' && (await sp.locator('#sheet [data-act="subColor"]').count()) >= 8);
+  await three('found', async () => { await sp.locator('#sheet .sub-found .lg-sw').scrollIntoViewIfNeeded(); });
+  await sp.fill('#sub-name', '루미에르'); await sp.click('#sheet [data-act="subColor"][data-v="#7a1f2b"]');
+  await sp.click('#sheet [data-act="subFoundDo"]'); await yes(); await sp.waitForSelector('#panel .sub-strat');
+  const s0 = await sub();
+  check('3.0.0 설립: 이름·로고 색·설립비, 상세(전략 지시)로', s0?.name === '루미에르' && s0.color === '#7a1f2b' && (await SG(() => window.__car.game.state.cash)) === 1e9 - 20000000);
+  // 전략: 기술 선도 → 전환 표시
+  check('3.0.0 전략 카드 9개(고급 브랜드는 점유율 중심·전동화 전환이 흐리고 이유)', (await sp.locator('#panel .sub-st').count()) === 9 && (await sp.locator('#panel .sub-st.locked').count()) === 2 && (await sp.locator('#panel .sub-st.locked').first().innerText()).length > 20);
+  await sp.click('#panel [data-act="subStrat"][data-v="tech"]');
+  const tr = await sp.locator('#panel .sub-tr').innerText().catch(() => '');
+  check('3.0.0 전략 변경: 전환 중 · 남은 개월 · "전환 기간 동안 효과가 서서히 바뀝니다", 전환 기간 ⓘ', tr.includes('6개월 남았습니다') && tr.includes('전환 기간 동안 효과가 서서히 바뀝니다') && tr.includes('기술 선도') && (await sp.locator('#panel [data-info="term:전환 기간"]').count()) === 1, tr);
+  await sp.click('#panel [data-act="subStrat"][data-v="rival"]');
+  await sp.click('#panel [data-act="subRival"][data-v="toyoda"]');
+  check('3.0.0 경쟁사 대응: 상대 고르기(자동/지정)와 상대의 주력 차급', (await sub()).rivalId === 'toyoda' && (await sp.locator('#panel .sub-strat').innerText()).includes('주력 차급'));
+  await three('detail-strategy', async () => { await sp.locator('#panel .sub-strat').scrollIntoViewIfNeeded(); });
+  // 영역·배당·투자·공유·사장
+  await sp.click('#panel [data-act="subBody"][data-v="sports"]'); await sp.click('#panel [data-act="subSeg"][data-v="enthusiast"]');
+  const a1 = await sub();
+  check('3.0.0 맡을 영역: 차급 빼기·고객층 바꾸기', !a1.bodies.includes('sports') && a1.segment === 'enthusiast');
+  await sp.click('#panel .sub-div [data-act="subDivi"]:last-child');
+  check('3.0.0 배당 비율 +10 → 60%, 실제 배당률 표시', (await sub()).dividend === 60 && (await sp.locator('#panel .sub-set').innerText()).includes('실제 배당률'));
+  const invT = await sp.locator('#panel [data-act="subInvest"]').first().innerText();
+  await sp.click('#panel [data-act="subInvest"]'); await yes();
+  check('3.0.0 추가 투자: 투자 뒤 생산 한도·모델 상한 표시, 자본 +500억', invT.includes('생산 한도') && invT.includes('모델 상한') && (await sub()).capital === 25000000, invT);
+  await sp.click('#panel [data-act="subShare"][data-v="2"]');
+  check('3.0.0 공유 범위: 넓게(효과 표시)', (await sub()).share === 2 && (await sp.locator('#panel .sub-share').innerText()).includes('개발비'));
+  const n0 = await SG(() => window.__car.game.state.staff.length);
+  await sp.click('#panel [data-act="subPresPick"]'); await sp.locator('#panel .sub-pres [data-act="subPresSet"]').first().click();
+  check('3.0.0 사장 임명: 본사 직원에서 빠짐(직원 화면에 "자회사 사장 1명")', !!(await sub()).president && (await SG(() => window.__car.game.state.staff.length)) === n0 - 1 && (await sp.locator('#panel .sub-pres').innerText()).includes('능력'));
+  await sp.click('#panel [data-act="cotab"][data-v="staff"]');
+  check('3.0.0 직원 화면: 자회사 사장 n명 한 줄', (await sp.locator('#panel .sub-pres-n').innerText()).includes('자회사 사장 1명'));
+  // 한 달 뒤: 첫 모델, 모델 추가(중형 세단)·이름 변경
+  await SG(() => { const c = window.__car; c.game.state.events.pending.length = 0; c.tick(4); });
+  await openSub();
+  check('3.0.0 첫 월말에 첫 모델(라인업 썸네일·추정 평론·가격·점유)', (await sp.locator('#panel .sub-lineup .rv-model').count()) === 1 && (await sp.locator('#panel .sub-lineup').innerText()).includes('추정 평론'));
+  if (!(await sub()).models.some((m) => m.body === 'sedanM')) { await sp.click('#panel [data-act="subAddPick"]'); await sp.click('#panel [data-act="subAdd"][data-v="sedanM"]'); }
+  else { await sp.click('#panel [data-act="subAddPick"]'); await sp.locator('#panel [data-act="subAdd"]').first().click(); }
+  check('3.0.0 모델 추가: 2개, 중형 세단 포함', (await sub()).models.length === 2 && (await sub()).models.some((m) => m.body === 'sedanM'));
+  await sp.locator('#panel .sub-lineup .rv-model summary').first().click();
+  await sp.locator('#panel .sub-lineup .rv-model[open] [data-act="subRenameOpen"]').click(); await sp.fill('#sub-rn', '루미 세단'); await sp.click('#sheet [data-act="subRenameDo"]');
+  check('3.0.0 모델 이름 변경', (await sub()).models.some((m) => m.name === '루미 세단') && (await sp.locator('#panel .sub-lineup').innerText()).includes('루미 세단'));
+  await SG(() => { const c = window.__car; c.game.state.events.pending.length = 0; c.tick(12 * 4 + 4); }); // 1년여: 실적·분기 보고·자기 잠식
+  await sp.click('#panel [data-act="cotab"][data-v="sub"]').catch(() => {}); await SG(() => window.__car.render());
+  const rt = await sp.locator('#panel .sub-res').innerText();
+  check('3.0.0 실적: 지난달·최근 12개월·누적, 자기 잠식, 분기 보고', ['지난달', '최근 12개월', '설립 뒤 누적', '자기 잠식'].every((t) => rt.includes(t)) && (await sp.locator('#panel .sub-reports li').count()) >= 4, rt.slice(0, 120));
+  await three('detail-lineup', async () => { await sp.locator('#panel .sub-lineup').scrollIntoViewIfNeeded(); });
+  await three('detail-result', async () => { await sp.locator('#panel .sub-res').scrollIntoViewIfNeeded(); });
+  await sp.click('#panel [data-act="subBack"]');
+  const lt = await sp.locator('#panel .co-sub').innerText();
+  check('3.0.0 자회사 목록: 이름·종류·전략·모델 수·최근 12개월 이익과 배당·사장, 1/3곳, 본사에 준 것', (await sp.locator('#panel .sub-row').count()) === 1 && ['루미에르', '고급 브랜드', '경쟁사 대응', '모델 2개', '최근 12개월 이익', '사장', '1/3곳', '자회사가 본사에 준 것'].every((t) => lt.includes(t)), lt.slice(0, 160));
+  await three('company-sub');
+  // 비교 창: 내 자회사
+  await SG((id) => window.__car.goTarget({ tab: 'garage', id }), gid); await sp.waitForTimeout(150);
+  await sp.click('[data-act="rivalCmp"]'); await sp.waitForSelector('#sheet .rv-cmp');
+  const ct = await sp.locator('#sheet .rv-cmp').innerText();
+  check('3.0.0 비교 창: 같은 차급의 내 자회사 모델이 "내 자회사"로', (await sp.locator('#sheet .rv-cmp th.own-sub').count()) === 1 && ct.includes('내 자회사') && ct.includes('루미에르'), ct.slice(0, 100));
+  await three('compare', async () => { await sp.locator('#sheet th.own-sub').scrollIntoViewIfNeeded(); });
+  await sp.click('#sheet [data-act="closeSheet"]');
+  // 월 결산: 자회사 배당 줄, 설립한 달은 자회사 투자 줄. 재무의 자회사 요약
+  await sp.click('#tabs button[data-tab="fin"]'); await sp.waitForTimeout(150);
+  check('3.0.0 재무: 자회사 요약 카드', (await sp.locator('#panel .sub-hq').count()) === 1);
+  await sp.locator('#panel .mbtns [data-act="monthOpen"]').first().click(); await sp.waitForSelector('#sheet .mon');
+  const mt = await sp.locator('#sheet .mon').innerText();
+  check('3.0.0 월 결산: 자회사 배당 수입 줄', (await sp.locator('#sheet .mon-subdiv').count()) === 1 && mt.includes('자회사 배당'), mt.slice(0, 80));
+  const fi = await SG(() => window.__car.game.state.ledger.findIndex((e) => (e.subInv ?? 0) > 0));
+  await SG((i) => { document.querySelector('#sheet [data-act="monthOpen"]')?.setAttribute('data-v', String(i)); }, fi); await sp.locator('#sheet [data-act="monthOpen"]').first().click();
+  check('3.0.0 월 결산: 설립한 달 자회사 투자 지출 줄', (await sp.locator('#sheet .mon').innerText()).includes('자회사 투자'));
+  const prevSub = await SG(() => { const s = window.__car.game.state, i = s.ledger.findIndex((e) => e.subDiv !== undefined); return i > 0 ? i - 1 : -1; });
+  if (prevSub >= 0) { await SG((i) => { document.querySelector('#sheet [data-act="monthOpen"]')?.setAttribute('data-v', String(i)); }, prevSub); await sp.locator('#sheet [data-act="monthOpen"]').first().click(); check('3.0.0 월 결산: 자회사가 없던 달은 자회사 배당 줄 없음', (await sp.locator('#sheet .mon-subdiv').count()) === 0); }
+  await sp.click('#sheet [data-act="closeSheet"]');
+  // 뉴스 탭 '자회사' 분류, 용어 ⓘ
+  await sp.click('#tabs button[data-tab="records"]'); await sp.click('[data-act="rectab"][data-v="news"]'); await sp.waitForTimeout(150);
+  check('3.0.0 뉴스 탭: 자회사 분류', (await sp.locator('.nl.k-sub').count()) >= 3 && (await sp.locator('.nl.k-sub').first().innerText()).includes('자회사'));
+  // 매각(그 전에 상세의 용어 ⓘ: 자기 잠식)
+  await openSub();
+  check('3.0.0 용어 ⓘ: 배당·공유 범위·자기 잠식', (await sp.locator('#panel [data-info="term:배당"]').count()) === 1 && (await sp.locator('#panel [data-info="term:공유 범위"]').count()) === 1 && (await sp.locator('#panel [data-info="term:자기 잠식"]').count()) === 1);
+  await sp.locator('#panel [data-info="term:자기 잠식"]').click(); await sp.waitForSelector('#tip:not([hidden])');
+  const tipT = await sp.locator('#tip').innerText();
+  check('3.0.0 자기 잠식 ⓘ: 정식 용어와 "제 살 깎기" 풀이', tipT.includes('자기 잠식') && tipT.includes('제 살 깎기'), tipT.slice(0, 60));
+  await sp.keyboard.press('Escape'); await sp.locator('#panel .sub-head h2').click();
+  const c0 = await SG(() => window.__car.game.state.cash), n1 = await SG(() => window.__car.game.state.staff.length);
+  await sp.click('#panel [data-act="subSell"]'); await sp.waitForSelector('#ask:not([hidden])');
+  const askT = await sp.locator('#ask-text').innerText(); await sp.click('#ask-yes');
+  check('3.0.0 매각: 확인 창(대금·되돌릴 수 없음), 현금 +, 사장 복귀, 목록 0곳', askT.includes('매각할까요') && askT.includes('되돌릴 수 없습니다') && (await SG(() => window.__car.game.state.subs.length)) === 0 && (await SG(() => window.__car.game.state.cash)) > c0 && (await SG(() => window.__car.game.state.staff.length)) === n1 + 1);
+  // 본사 6·7등급: 건설·정원 30·40, 사무실 장면, 직원 목록 40명
+  const fill = (n) => SG((n) => { const s = window.__car.game.state, sur = '김이박최정강조윤장임', giv = ['민수', '서연', '지훈', '하은', '도윤', '수아', '예준', '지민'], roles = ['designer', 'engineer', 'engineer', 'tester', 'sales'];
+    for (let i = s.staff.length; s.staff.length < n; i++) s.staff.push({ ...s.staff[0], id: s.nextId++, name: `${sur[i % 10]}${giv[Math.floor(i / 10) % 8]}`, role: roles[i % 5], projectId: null, lab: false, ability: 30 + (i * 7) % 50, potential: 90 });
+    window.__car.render(); }, n);
+  await SG(() => { const s = window.__car.game.state; s.cash = 1e10; s.reputation = 180; window.__car.render(); });
+  for (const [lv, cap] of [[6, 30], [7, 40]]) {
+    await sp.click('#tabs button[data-tab="company"]'); await sp.click('#panel [data-act="cotab"][data-v="hq"]'); await sp.click('#panel [data-act="upgradeHQ"]'); await yes();
+    const ht = await sp.locator('#panel .hq-cur').innerText();
+    check(`3.0.0 본사 ${lv}등급 건설: 정원 ${cap}, 7단계 표`, (await SG(() => window.__car.game.state.hqLevel)) === lv && ht.includes(`/${cap}`) && ht.includes(lv === 6 ? '그룹 본사' : '글로벌 캠퍼스') && (await sp.locator('.lv5 li').count()) === 7, ht.slice(0, 80));
+    await fill(cap);
+    await sp.click('#tabs button[data-tab="dev"]'); await sp.waitForTimeout(600);
+    const ov = await SG(() => ({ lv: window.__car.office.view?.level, n: window.__car.office.view?.staff.length, torso: document.querySelectorAll('#office .torso').length }));
+    check(`3.0.0 사무실 ${lv}등급: 직원 ${cap}명이 모두 그려짐`, ov.lv === lv && ov.n === cap && ov.torso >= cap, JSON.stringify(ov));
+    await three(`office-${cap}`);
+  }
+  await sp.click('#tabs button[data-tab="company"]'); await sp.click('#panel [data-act="cotab"][data-v="staff"]');
+  check('3.0.0 직원 목록 40명(정원 40/40)', (await sp.locator('#panel .srow:not(.head):not(.s-exec)').count()) === 40 && (await sp.locator('.hire-card .cap-n').innerText()) === '40/40');
+  await three('staff-40', async () => { await sp.locator('#panel .staff-list .srow-w').nth(20).scrollIntoViewIfNeeded(); });
+  await sctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

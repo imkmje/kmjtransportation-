@@ -80,7 +80,7 @@ export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1,
  *  시대 사건(11장): 칸 규모 × 차체 수요 × 시장 규모, 고객층 비중 × 고객층 배수, 가중치 배수, 유행(차체 × 동력), 동력 수요 배수, 전기는 × 충전 인프라, 경쟁 차 히트작 */
 /** 0.10.0 판매 요인 분해용 바꿔 넣기(생략하면 실제 계산): noEra 시대 사건 효과(충전 인프라 포함) 없음, rivalA 경쟁 차마다 이 A(난이도 배수 전, 히트작 없음),
  *  noOthers 같은 차급의 우리 다른 차 없음, compatSeg 이 고객층의 궁합을 1로 */
-export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string; noExpect?: boolean; noEv?: boolean } // noExpect(1.1.0): 장비 기대 효과 없음, noEv(1.2.0): 주행 거리·충전 속도 효과 없음
+export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string; noExpect?: boolean; noEv?: boolean; noSubs?: boolean } // noExpect(1.1.0): 장비 기대 효과 없음, noEv(1.2.0): 주행 거리·충전 속도 효과 없음, noSubs(3.0.0): 자회사 효과(제 살 깎기·할부) 없음
 const NO_ERA: EraNow = { statW: {}, body: {}, pt: {}, seg: {}, market: {}, trendAdd: {}, loan: 1, production: 1 };
 export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number, alt: DemandAlt = {}): number {
   const m = Math.floor((year - config.time.startYear) * config.time.monthsPerYear + 1e-6), n = alt.noEra ? NO_ERA : eraNow(state.seed, m);
@@ -93,6 +93,8 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
   let total = 0, rivals = 0;
   const resp = alt.rivalA === undefined ? rivalResponse(state, car.body, year) : 1;
   for (const r of state.rivals) rivals += ((alt.rivalA ?? (r.cells[car.body] ?? 0) * resp + rivalHitAdd(state, r.id, car.body, m)) * rm) ** e; // 경쟁 차는 고객층과 무관(1.0.0 성능: 한 번만)
+  const subs = state.subs?.length && !alt.noSubs;
+  if (subs) rivals += config.subs.cannibal * subPull(state, car.body); // 3.0.0 제 살 깎기: 같은 차급 자회사 모델을 약하게 센다
   const carE = withExp(car), othersE = others.map(withExp);
   for (const seg of SEGMENTS) {
     const w = (mix[seg.id] ?? 0) * (n.seg[seg.id] ?? 1);
@@ -105,8 +107,13 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
   }
   if (car.powertrain) total *= (n.pt[car.powertrain] ?? 1) * (car.powertrain === config.events.charging.powertrain && !alt.noEra ? chargingInfra(state.seed, m) : 1);
   if (car.powertrain === EV && !alt.noEv) total *= evDemandMult(state, car, year); // 1.2.0 주행 거리(같은 단계 표준 배터리 대비)·충전 속도
+  if (subs) total *= subSalesMult(state); // 3.0.0 할부 금융
   return total;
 }
+/** 3.0.0 한 차급의 자회사 모델 점유 점수 합(A^지수, 이번 달 값). 경쟁 몫 계산(본사 제 살 깎기·경쟁 모델 점유·자회사 판매)이 함께 쓴다 */
+export const subPull = (s: CarState, body: string): number => (s.subs ?? []).reduce((a, x) => a + x.models.reduce((b, md) => b + (md.body === body ? md.a ** config.market.shareExp : 0), 0), 0);
+/** 3.0.0 할부 금융 자회사의 본사 판매 배수 */
+export const subSalesMult = (s: CarState): number => 1 + (s.subs ?? []).reduce((a, x) => a + (x.kind === 'finance' ? x.effect : 0), 0);
 
 /** 1.0.0 경쟁사의 대응(설계서 7.4 '쉬운 독점 방지'): 지난달 이 차급에서 우리 판매가 칸 월 규모의 share0를 넘으면 그 넘는 몫 × k만큼 경쟁 차 A가 세진다.
  *  시장이 성숙하는 from~to년에 0에서 1로 켜진다(창업 초기 작은 시장에서는 없음). 한 차급을 장악한 회사일수록 그 차급의 웃돈·판매가 줄어든다 */

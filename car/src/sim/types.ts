@@ -20,7 +20,7 @@ export interface VariantDef { id: string; name: string; suffix: string; info: st
 /** 1.3.0 평론가(critics.json): config.critics.list와 같은 id·순서 */
 export interface CriticDef { id: string; name: string; outlet: string; focus: Stat[]; open: Record<'high' | 'mid' | 'low', string[]> }
 /** 1.3.0 알림 유형(notify.json). locked: 끌 수 없음(경고) */
-export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning'; // rival(2.0.0): 경쟁사 신차
+export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning' | 'sub'; // rival(2.0.0): 경쟁사 신차, sub(3.0.0): 자회사
 export interface NotifyDef { id: NotifyTopic; name: string; locked: boolean }
 
 /** 연구 분야 5개(10장) */
@@ -191,6 +191,7 @@ export interface LedgerEntry {
   upkeepHq?: number; // 0.5.1: upkeep 중 본사 몫(공장 몫 = upkeep − upkeepHq). 예전 장부에는 없다
   oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
+  subDiv?: number; subInv?: number; // 3.0.0 자회사 배당(profit에 더한다)·자회사 설립·투자(oneOff에 들어 있음). 자회사가 없던 달에는 없다
   cars?: LedgerCar[]; execPay?: number; research?: number; // 0.9.0 월 결산 창용(예전 장부에는 없다): 차종별 한 줄, salaries 중 임원 몫, oneOff 중 연구 시작 비용
 }
 /** 0.9.0 장부의 차종별 한 줄(세대 ID). 이익 = 매출 − 원가 − 광고 − 리콜 */
@@ -208,7 +209,7 @@ export interface PendingChoice { id: number; eventId: string; text: string; week
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
 export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
 /** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
-export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'rival' | 'other'; // rival(2.0.0): 경쟁 모델 세대교체
+export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'rival' | 'sub' | 'other'; // rival(2.0.0): 경쟁 모델 세대교체, sub(3.0.0): 자회사
 export interface NewsItem { week: number; text: string; category?: NewsCategory; topic?: NotifyTopic } // topic(1.3.0): 알림 유형(없으면 notify.ts의 newsTopic이 정한다) // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
@@ -245,8 +246,32 @@ export interface GenAuto { launch: boolean; waitSince: number | null; told: bool
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type StartCondition = 'normal' | 'rich' | 'lean'; // 1.5.0 시작 조건
 export type Challenge = 'evOnly' | 'names3' | 'noLoan' | 'noExec'; // 1.5.0 도전 과제
+// ---------- 자회사(3.0.0, 설계서 9.9) ----------
+/** 브랜드 자회사(고급·보급형)와 사업 자회사(부품·금융) */
+export type SubKind = 'premium' | 'value' | 'parts' | 'finance';
+/** 자회사 전략 9가지(사업 자회사는 growth·profit·stable만) */
+export type SubStrategy = 'growth' | 'share' | 'profit' | 'rival' | 'tech' | 'stable' | 'niche' | 'prestige' | 'ev';
+/** 자회사 모델 한 대(차급 하나): 경쟁 모델(RivalModel)과 같은 n·start·cycle·base에 이름·동력·이번 달 점유 점수(a, 본사 판매의 제 살 깎기에 쓴다)·지난달 판매 */
+export interface SubModel extends RivalModel { body: string; name: string; ev?: true; keep?: true; a: number; sold: number } // keep: 플레이어가 추가를 지시한 모델(전략이 줄이지 않는다)
+/** 자회사 월 기록(최근 24개월) */
+export interface SubMonth { month: number; sold: number; demand: number; revenue: number; profit: number; dividend: number } // demand: 생산 한도 적용 전 수요
+export interface Subsidiary {
+  id: number; kind: SubKind; name: string; color: string; founded: number; // founded: 설립 달
+  strategy: SubStrategy; rivalId: string | null; // rivalId: 경쟁사 대응의 상대(null = 가장 큰 경쟁사)
+  mix: Partial<Record<SubStrategy, number>>; switchMonth: number; // 전략 전환: 바꾸던 때의 전략 비중(mix)에서 지금 전략으로 switchMonth부터 config.subs.switchMonths개월에 걸쳐 옮겨 간다
+  bodies: string[]; segment: string | null; dropped: string[]; // 맡을 영역: 차급(차체)과 고객층(브랜드 자회사). dropped: 단종을 지시한 차급(전략이 다시 내지 않는다)
+  dividend: number; share: 0 | 1 | 2; // 배당 비율(%), 기술·차대 공유 범위(좁게·보통·넓게)
+  president: Staff | null; // 사장(직원 목록에서 빠져 여기 있다)
+  capital: number; rep: number; effect: number; // 자본(설립비 + 투자 + 재투자), 브랜드 평판, 사업 자회사의 본사 효과(부품: 원가 절감 비율, 금융: 판매 가산 비율)
+  models: SubModel[];
+  months: SubMonth[];
+  total: { invested: number; profit: number; dividend: number; sold: number; hqRep: number }; // hqRep: 본사 평판에 더한 합
+  reports: { week: number; text: string }[];
+  lastPrice: number; // 지난 분기 보고 때의 가격 배수(가격을 바꿨다는 보고용)
+}
+
 export interface CarState {
-  saveVersion: 8;
+  saveVersion: 9;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -258,7 +283,7 @@ export interface CarState {
   status: 'playing' | 'gameOver';
   staff: Staff[];
   candidates: Candidate[]; // 채용 후보(공고를 내면 3명)
-  hqLevel: number; // 본사 등급 1~5(9.2)
+  hqLevel: number; // 본사 등급 1~7(9.2, 3.0.0에 6·7등급)
   factory: { level: number; build: { level: number; doneMonth: number } | null }; // 공장 등급 1~5, 증설 공사(doneMonth 달 초부터 새 등급)
   batteryPlant: { level: number; build: { level: number; doneMonth: number } | null }; // 1.2.0 배터리 자체 생산 등급(0 = 없음), 건설 공사(공장과 같은 방식)
   projects: Project[];
@@ -276,6 +301,8 @@ export interface CarState {
   execs?: ExecState; // 0.7.0 임원(처음 임원 명령을 쓸 때 생긴다. 없으면 임원 없음, 저장 형식은 그대로 4)
   devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
   start?: { year: number; condition: StartCondition; challenges: Challenge[] }; // 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
+  subs?: Subsidiary[]; // 3.0.0 자회사(형식 9). 없으면 자회사 없음
+  pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
 /** 한 해의 기록(0.8.0): 평판 이유별 합, 세대 ID별 이익, 연구 완료, 월 결산 합계(months개월), 연말(12월 결산) 현금·직원 수·임원 */
@@ -331,6 +358,18 @@ export type Command =
   | { type: 'approveReplacement'; id: number }
   | { type: 'rejectReplacement'; id: number }
   | { type: 'cancelReplacement'; id: number }
+  // ---------- 자회사(3.0.0) ----------
+  | { type: 'foundSubsidiary'; kind: SubKind; name?: string; color?: string }
+  | { type: 'setSubStrategy'; subId: number; strategy: SubStrategy; rivalId?: string | null }
+  | { type: 'setSubArea'; subId: number; bodies: string[]; segment?: string | null }
+  | { type: 'setSubDividend'; subId: number; pct: number }
+  | { type: 'investSub'; subId: number; amount: number }
+  | { type: 'setSubPresident'; subId: number; staffId: number | null }
+  | { type: 'setSubShare'; subId: number; share: 0 | 1 | 2 }
+  | { type: 'subAddModel'; subId: number; body: string }
+  | { type: 'subDropModel'; subId: number; body: string }
+  | { type: 'renameSubModel'; subId: number; body: string; name: string }
+  | { type: 'sellSubsidiary'; subId: number }
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';

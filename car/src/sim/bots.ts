@@ -16,6 +16,7 @@ import { planPreview } from './queries';
 import { rescueOptions } from './insight';
 import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
+import { SUB_KINDS, foundError } from './subs';
 import { monthOf, monthTime, yearOf } from './time';
 import type { Battery, Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
 
@@ -43,7 +44,8 @@ export interface SteadyOptions {
   best: boolean; // 0.10.0: 판매 중인 차마다 자동 가격 '최고 이익 매달'을 켠다
   rescue: boolean; // 0.10.0: 수습 대상(혹평·판매 부진)인 차에 긴급 개선, 후속 풀체인지를 개발 중인 혹평 차는 가격 인하 판매
   ptPick: 'auto' | 'gasoline' | 'newest';
-  optPick: 'fit' | 'none' | 'misfit'; // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
+  optPick: 'fit' | 'none' | 'misfit';
+  subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
 const STEADY: SteadyOptions = {
   budget: 'normal', designWeeks: config.dev.designWeeks[1], marketing: 1, launchDefects: 5, maxTestWeeks: 28, // 0.4.2: 시험 속도가 약 2.3배 느려져 12 → 28주
@@ -69,6 +71,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (turn) hireBest(g);
       if (o.research && turn) research(g, o.sloppy);
       if (o.rescue) rescue(g);
+      if (o.subs && g.state.week % config.time.weeksPerMonth === 0) manageSubs(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -133,6 +136,18 @@ function rescue(g: Game): void {
     const np = s.nameplates.find((n) => n.generations.includes(x))!;
     if (r.clearance.ok && x.reviewAvg <= config.rescue.reviewMax && s.projects.some((p) => p.kind === 'fullchange' && p.targetId === np.id)) g.command({ type: 'clearance', generationId: x.id });
   }
+}
+
+/** 3.0.0 자회사(선택): 지난 1년 흑자이고 설립비 + 고정비 cashMonths개월 치가 있으면 고급 → 보급형 → 부품 → 금융 순으로 한 달에 하나 세운다(전략은 기본값: 브랜드 성장·사업 안정).
+ *  해마다 1월에 남는 현금(keepCash와 고정비 cashMonths개월 치를 넘는 몫)의 investShare를 본사 투자가 가장 적은(설립비 대비) 브랜드 자회사에 넣는다 */
+function manageSubs(g: Game): void {
+  const s = g.state, BS = B.subs, floor = fixedCost(s) * BS.cashMonths;
+  if (s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0) <= 0) return;
+  for (const kind of SUB_KINDS) if (!foundError(s, kind) && s.cash >= config.subs.kinds[kind].cost + floor) { g.command({ type: 'foundSubsidiary', kind }); break; }
+  const spare = Math.floor((s.cash - Math.max(BS.keepCash, floor)) * BS.investShare);
+  if (spare <= 0 || monthOf(s.week) % config.time.monthsPerYear !== 0) return;
+  const to = (s.subs ?? []).filter((x) => x.kind === 'premium' || x.kind === 'value').sort((a, b) => a.total.invested / config.subs.kinds[a.kind].cost - b.total.invested / config.subs.kinds[b.kind].cost || a.id - b.id)[0];
+  if (to) g.command({ type: 'investSub', subId: to.id, amount: spare });
 }
 
 const RANDOM_DEFAULT = (eventId: string): number => RANDOM_EVENTS_BY_ID.get(eventId)!.defaultChoice;
