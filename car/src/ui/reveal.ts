@@ -44,7 +44,9 @@ export function playReveal(o: RevealOpts): void {
   at(t.sound + CHORD, () => { stage.setRevealLight('lit'); root.classList.add('lit'); phase('light'); });
   at(t.text, () => { root.classList.add('txt'); phase('title'); const b = root.querySelector<HTMLElement>('.rvl-skip')!; b.innerHTML = '평론 보기 <span aria-hidden="true">▸</span>'; b.focus(); });
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finish(true); } };
-  const onTap = () => finish(true);
+  let dx = 0, dy = 0; // 끌어서 차를 돌린 뒤 손을 뗄 때 생기는 click은 넘기기가 아니다
+  root.addEventListener('pointerdown', (e) => { dx = e.clientX; dy = e.clientY; });
+  const onTap = (e: MouseEvent) => { if (Math.hypot(e.clientX - dx, e.clientY - dy) < 8) finish(true); };
   root.addEventListener('click', onTap); document.addEventListener('keydown', onKey, true);
   root.querySelector<HTMLElement>('.rvl-skip')!.focus();
   function finish(skip: boolean) {
