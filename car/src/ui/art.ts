@@ -17,6 +17,8 @@ const LOGO: Record<string, string> = {
 };
 // rivals.json의 id → 데모 로고 도형
 const RIVAL_LOGO: Record<string, string> = { toyoda: 'toyotto', hyundae: 'hyundoy', porty: 'forty', bmv: 'bmv', tesler: 'tesler' };
+/** 2.0.0 경쟁 모델 썸네일의 회사별 차 색 경향(PAINT 안에서) */
+export const RIVAL_PAINT: Record<string, string[]> = { hyundae: ['#1f4fd1', '#eef0f2', '#3a3f47'], porty: ['#14213d', '#c8202f', '#eef0f2'], toyoda: ['#eef0f2', '#c9b38a', '#3a3f47'] };
 export const logo = (key: string, z = 26): string =>
   `<svg width="${z}" height="${z}" viewBox="0 0 32 32" aria-hidden="true" style="display:block;flex:none">${LOGO[key] ?? LOGO[RIVAL_LOGO[key]] ?? LOGO.other}</svg>`;
 
