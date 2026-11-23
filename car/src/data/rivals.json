@@ -1,5 +1,14 @@
 [
-  { "id": "hyundae", "name": "현다이", "trait": "가성비", "cells": { "sedanS": 0.1, "hatch": 0.1, "sedanM": 0, "coupe": -0.1, "sedanL": -0.15, "minivan": 0, "kei": 0.1, "suvS": 0.1, "suv": 0, "suvL": -0.15, "pickup": -0.2, "sports": -0.2 } },
-  { "id": "porty", "name": "포티", "trait": "픽업·대형", "cells": { "sedanS": -0.15, "hatch": -0.2, "sedanM": 0.05, "coupe": 0.05, "sedanL": 0.1, "minivan": 0, "kei": -0.25, "suvS": -0.15, "suv": 0.1, "suvL": 0.2, "pickup": 0.2, "sports": 0 } },
-  { "id": "toyoda", "name": "도요다", "trait": "전 차급·품질", "cells": { "sedanS": 0.1, "hatch": 0.05, "sedanM": 0.15, "coupe": 0, "sedanL": 0.1, "minivan": 0.1, "kei": 0, "suvS": 0.05, "suv": 0.05, "suvL": 0.05, "pickup": 0, "sports": 0.05 } }
+  { "id": "hyundae", "name": "현다이", "trait": "가성비", "cells": { "sedanS": 0.1, "hatch": 0.1, "sedanM": 0, "coupe": -0.1, "sedanL": -0.15, "minivan": 0, "kei": 0.1, "suvS": 0.1, "suv": 0, "suvL": -0.15, "pickup": -0.2, "sports": -0.2 },
+    "desc": "값에 비해 넉넉한 차를 낸다. 연비와 실용이 좋고 성능과 품질은 평범하다.",
+    "shape": { "P": -0.6, "E": 0.9, "U": 0.8, "D": 0, "Q": -0.4 },
+    "models": ["한빛", "누리", "다온", "미리내", "가람", "새벽", "아라", "별하", "온새", "해솔", "나래", "이음"] },
+  { "id": "porty", "name": "포티", "trait": "픽업·대형", "cells": { "sedanS": -0.15, "hatch": -0.2, "sedanM": 0.05, "coupe": 0.05, "sedanL": 0.1, "minivan": 0, "kei": -0.25, "suvS": -0.15, "suv": 0.1, "suvL": 0.2, "pickup": 0.2, "sports": 0 },
+    "desc": "큰 차와 픽업에 강하다. 힘과 적재를 앞세우고 연비는 뒤처진다.",
+    "shape": { "P": 0.9, "E": -0.9, "U": 0.7, "D": -0.1, "Q": -0.1 },
+    "models": ["메사", "오자크", "테톤", "엘크혼", "레드록", "스톤리지", "와일더", "노스포크", "블랙혼", "아이언빌", "하이플레인", "그래닛"] },
+  { "id": "toyoda", "name": "도요다", "trait": "전 차급·품질", "cells": { "sedanS": 0.1, "hatch": 0.05, "sedanM": 0.15, "coupe": 0, "sedanL": 0.1, "minivan": 0.1, "kei": 0, "suvS": 0.05, "suv": 0.05, "suvL": 0.05, "pickup": 0, "sports": 0.05 },
+    "desc": "거의 모든 차급에 차를 낸다. 품질이 높고 고장이 적으며 디자인은 무난하다.",
+    "shape": { "P": 0, "E": 0.4, "U": 0.2, "D": -0.4, "Q": 1 },
+    "models": ["아스텔라", "카렌시아", "라피엘", "에델", "세실리오", "오르비스", "루세로", "플로렌", "아르비아", "세레스", "미라벨", "벨카노"] }
 ]

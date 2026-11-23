@@ -14,13 +14,13 @@ export type EquipLevel = 'opt' | 'std'; // 1.1.0 선택 사양 / 기본 장비(�
 export type Equip = Record<string, EquipLevel>;
 export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
-export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number> }
+export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number>; desc: string; shape: Stats; models: string[] } // desc·shape·models(2.0.0): 한 줄 성격, 능력치 모양(등급 가감), 모델 이름 목록(차체 수 이상)
 /** 1.3.0 파생 모델(variants.json): 쓸 수 있는 차체, 기본 고객층, 능력치 배수, 시장 기준가·원가 배수, 개발비(바탕 세대 개발비의 몫)·설계 주, powertrain(전기차판), rep(출시 평판 가점) */
 export interface VariantDef { id: string; name: string; suffix: string; info: string; bodies: string[]; segment?: string; powertrain?: string; mult: Stats; price: number; cost: number; devShare: number; designWeeks: number; rep?: number }
 /** 1.3.0 평론가(critics.json): config.critics.list와 같은 id·순서 */
 export interface CriticDef { id: string; name: string; outlet: string; focus: Stat[]; open: Record<'high' | 'mid' | 'low', string[]> }
 /** 1.3.0 알림 유형(notify.json). locked: 끌 수 없음(경고) */
-export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'factory' | 'warning';
+export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning'; // rival(2.0.0): 경쟁사 신차
 export interface NotifyDef { id: NotifyTopic; name: string; locked: boolean }
 
 /** 연구 분야 5개(10장) */
@@ -208,7 +208,7 @@ export interface PendingChoice { id: number; eventId: string; text: string; week
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
 export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
 /** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
-export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'other';
+export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'rival' | 'other'; // rival(2.0.0): 경쟁 모델 세대교체
 export interface NewsItem { week: number; text: string; category?: NewsCategory; topic?: NotifyTopic } // topic(1.3.0): 알림 유형(없으면 notify.ts의 newsTopic이 정한다) // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 

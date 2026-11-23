@@ -13,6 +13,7 @@ import { criticScores, mean } from './reviews';
 import { diffOf } from './difficulty';
 import { regulationBlock, requiredOptions } from './events';
 export { difficultyInfo } from './difficulty';
+export { myCellShare, rivalHistory, rivalLineup, rivalModelsIn, type RivalGen, type RivalModelView } from './rivals';
 export { startYearOf, startOf, challengeInfo, startOptionsError, START_YEARS, CONDITIONS, CHALLENGES } from './start';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';

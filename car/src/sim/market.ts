@@ -157,8 +157,8 @@ export const rivalBase = (month: number): number => {
   const r = config.rivals;
   return Math.min(r.baseMax, r.base + (r.baseGrowth * month) / config.time.monthsPerYear);
 };
-const bodyKey = (body: string): number => [...body].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0), 7) >>> 0;
-const rivalCycle = (seed: number, ri: number, body: string, n: number): number =>
+export const bodyKey = (body: string): number => [...body].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0), 7) >>> 0;
+export const rivalCycle = (seed: number, ri: number, body: string, n: number): number =>
   config.rivals.cycleMin + Math.floor(hash01(seed, 1, ri, bodyKey(body), n) * (config.rivals.cycleMax - config.rivals.cycleMin + 1));
 /** 이미 있던 칸 값(base)으로 첫 모델을 만든다. 출시 달은 0 이전으로 흩어 둔다(모든 경쟁 차가 한꺼번에 낡지 않게) */
 export function firstRivalModel(seed: number, ri: number, body: string, base: number): RivalModel {

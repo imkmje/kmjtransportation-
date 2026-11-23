@@ -133,6 +133,8 @@ export const config = {
     fresh: 0.15, decay: 0.006, // 새 모델 A = 기본 × (1 + 0.15), 수명 나이 1개월마다 ×(1 − 0.006). 주기 평균이 약 1.0이 되도록
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
     response: { from: 1985, to: 1995, share0: 0.1, k: 3 }, // 1.0.0 경쟁사의 대응(market.rivalResponse)
+    // 2.0.0 경쟁 모델의 겉으로 보이는 값(표시용, 판매 계산에 쓰지 않는다. sim/rivals.ts). d = 모델 기본 A − 그때 경쟁 차 기본 A(rivalBase)
+    view: { criticMid: 6, criticPer: 10, hitAt: 0.6, statJitter: 0.6, pricePer: 0.02 }, // 추정 평론 = 6 + d × 10(1~10), 히트작 = 난수 몫이 noise의 60% 이상, 능력치 = 평론 + 회사 모양 ± 0.6, 가격 = 시장 기준가 × (1 + (평론 − 6) × 2%)
     lateCells: ['suvL', 'suvS'], // 0.6.0에 더한 칸: 새 게임의 첫 모델 강약 난수를 게임 난수 대신 해시로 뽑는다(기존 시드의 난수 순서가 그대로)
   },
   lifecycle: { // 8장
@@ -191,7 +193,7 @@ export const config = {
     randomFrom: 1971, randomPerYear: [0.3, 0.5, 0.2], // 무작위 사건: 1971년부터 해마다 0/1/2회 확률
     choiceWeeks: 4, // 답하지 않으면 4주 뒤 기본 선택
     revenueMonths: 12, // 선택지 비용의 "최근 월평균 매출" 기간
-    newsMax: 60, // 뉴스 기록 보관 개수
+    newsMax: 120, // 뉴스 기록 보관 개수(2.0.0 60 → 120: 경쟁 모델 세대교체 뉴스가 해마다 6~7건 더해진다)
     trendMin: 0.2, // 유행 계수 하한
     charging: { powertrain: 'ev', start: 0.05, perYear: 0.045 }, // 충전 인프라: 전기차 등장 사건부터 0.05, 해마다 +0.045(최대 1)
   },

@@ -326,8 +326,8 @@ describe('평론가별 시승기', () => {
 });
 
 describe('알림 유형', () => {
-  it('10가지, 경고만 끌 수 없음. 20년 봇 이벤트·뉴스가 모두 목록 안의 유형으로 나뉘고, 교육·성과·공장·결산·경고가 구분된다', () => {
-    expect(NOTIFY.map((x) => x.id)).toEqual(['training', 'hiring', 'research', 'dev', 'launch', 'exec', 'finance', 'market', 'factory', 'warning']);
+  it('11가지(2.0.0 경쟁사 신차 포함), 경고만 끌 수 없음. 20년 봇 이벤트·뉴스가 모두 목록 안의 유형으로 나뉘고, 교육·성과·공장·결산·경고가 구분된다', () => {
+    expect(NOTIFY.map((x) => x.id)).toEqual(['training', 'hiring', 'research', 'dev', 'launch', 'exec', 'finance', 'market', 'rival', 'factory', 'warning']);
     expect(NOTIFY.filter((x) => x.locked).map((x) => x.id)).toEqual(['warning']); expect(topicLocked('warning')).toBe(true);
     const g = big(1985, 1, { ability: 90 }), s = g.state, ev: GameEvent[] = [], ids = new Set(NOTIFY.map((x) => x.id));
     ok(g.command({ type: 'startProject', ...SPEC }));

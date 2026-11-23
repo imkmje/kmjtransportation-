@@ -10,7 +10,8 @@ import { allocate, batteryPlantError, factoryBuildMonths, hqUpkeep, capacityOf, 
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
 import { equipOf, expectEffect, optPerCar, optWeights, stdOf, syncOptions } from './equip';
-import { carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, updateRivals, rivalA, rivalBase } from './market';
+import { carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, rivalA, rivalBase } from './market';
+import { updateRivalsWithNews } from './rivals';
 import { addNews, choiceMoney, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
 import { criticScores, mean } from './reviews';
@@ -195,7 +196,7 @@ export class Game {
   /** 월말 정산: 판매·인지도·리콜·재무·장부·파산 */
   private monthEnd(ev: GameEvent[]): void {
     const s = this.state, m = monthOf(s.week), year = yearOf(s.week), wpm = config.time.weeksPerMonth, LC = config.lifecycle;
-    updateRivals(s.rivals, s.seed, m); // 경쟁 차가 낡거나 새 모델로 바뀐다
+    updateRivalsWithNews(s, ev, m); // 경쟁 차가 낡거나 새 모델로 바뀐다(2.0.0 세대교체 뉴스)
     for (const g of sellingGens(s)) if (g.status === 'onSale' && g.pricePolicy) { const pr = policyPrice(s, g); if (pr !== null && !priceError(g.body, pr)) currentEdition(g).price = pr; } // 0.8.0 자동 가격(경쟁 차 갱신 뒤, 판매 계산 전)
     const gens = sellingGens(s), cars = gens.map((g) => toSaleCar(g, m));
     const demand = gens.map((g, i) => {
