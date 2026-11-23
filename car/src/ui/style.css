@@ -1043,6 +1043,8 @@ button.co-box:hover{border-color:var(--ink)}
 @keyframes drawer-in{from{transform:translateX(40px);opacity:0}}
 @media (prefers-reduced-motion:reduce){.drawer{animation:none}}
 @media (max-width:640px){.drawer{width:100vw}}
+/* 1.3.1 할 일 창이 열려 있으면 알림이 창을 가리지 않게 창 왼쪽 옆으로(너비는 창 너비 min(420px,100vw-96px) 기준, 640px 이하는 창이 화면 전체라 비켜 줄 곳이 없다) */
+@media (min-width:641px){body:has(#drawer:not([hidden])) #toasts{right:calc(min(420px,100vw - 96px) + 12px)}body:has(#drawer:not([hidden])) #toasts:not(.corner):not(.inofc){width:auto}body:has(#drawer:not([hidden])) #toasts.corner,body:has(#drawer:not([hidden])) #toasts.inofc{right:calc(min(420px,100vw - 96px) + 16px)}}
 .drawer .todo-sheet{display:flex;flex-direction:column;min-height:0;flex:1}
 .drawer-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
 .drawer-x{min-height:44px;flex:none}
