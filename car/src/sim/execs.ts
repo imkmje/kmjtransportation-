@@ -32,7 +32,7 @@ const SKILL_KO: Record<Role, string> = { designer: '디자인', engineer: '기�
 const AS = config.exec.autoStaff;
 export const DELEGATIONS: Record<ExecRole, { key: string; label: string; note?: string; warn?: string }[]> = {
   hr: [{ key: 'autoRest', label: '지친 직원 자동 휴식' }, { key: 'autoTrain', label: '성장 여지가 있는 직원 자동 교육' },
-    { key: 'autoHire', label: '빈자리 자동 채용', note: '정원에 빈자리가 있고 현금에 여유가 있으면 가장 부족한 직무를 뽑습니다. 같은 직무 직원 평균 능력 이상인 후보만 뽑습니다.' },
+    { key: 'autoHire', label: '빈자리 자동 채용', note: '정원에 빈자리가 있고 현금에 여유가 있으면 가장 부족한 직무를 뽑습니다. 같은 직무 직원 평균 능력 이상인 후보를 뽑고, 공고로 평균에 닿기 어려우면 가장 높은 등급 공고에서 가장 나은 후보를 뽑습니다.' },
     { key: 'autoFire', label: '성장이 멈춘 직원 자동 해고', note: `성장 한계에 닿았고 같은 직무 평균보다 능력이 ${config.exec.hr.weakGap} 이상 낮은 직원을 한 달에 한 명까지 내보냅니다. 개발 중·교육·휴식 중이거나 입사 ${AS.tenureMonths}개월이 안 된 직원은 제외합니다.`,
       warn: '해고는 되돌릴 수 없습니다. 퇴직금이 나가고, 내보낸 직원은 다시 데려올 수 없습니다.' }],
   product: [], finance: [],
@@ -589,8 +589,11 @@ function delegate(c: ExecCtx, ev: GameEvent[]): void {
 function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
   const s = c.s, e = s.execs!, H = config.staff.hire, count = (r: Role) => s.staff.filter((y) => y.role === r).length;
   const log = (kind: string, text: string, facts: string[], go: ExecGoto, key = '') => { addReport(s, 'hr', kind, text, facts, go, true, null, key); ev.push({ kind: 'replacement', text }); };
+  const bonus = repBonus(s), topTier = s.reputation >= H.tier3Rep ? 3 : 2, topReach = H.abilityMax[topTier - 1] + bonus - 5; // 가장 높은 공고로 기대할 만한 능력(교체 기준과 같은 여유)
+  const hireOn = delegationOn(s, 'hr', 'autoHire');
   if (delegationOn(s, 'hr', 'autoFire') && s.staff.length > AS.minStaff) {
-    const x = s.staff.filter((y) => weakCapped(s, y) && y.projectId === null && !isAway(y, s.week) && !(y.hist?.join != null && s.week - y.hist.join < AS.tenureMonths * WPM) && count(y.role) > AS.minPerRole)
+    const x = s.staff.filter((y) => weakCapped(s, y) && y.projectId === null && !isAway(y, s.week) && !(y.hist?.join != null && s.week - y.hist.join < AS.tenureMonths * WPM) && count(y.role) > AS.minPerRole
+      && !(hireOn && (roleAvg(s, y) ?? 0) > topReach && y.ability >= H.abilityMin[topTier - 1] + bonus)) // 자동 채용을 켜 두고 같은 직무 평균에 공고로 닿지 않을 때는, 가장 높은 공고의 어느 후보보다도 낮은 사람만(평균 미달로 뽑은 사람을 다시 내보내는 왕복 방지)
       .sort((a, b) => a.ability - b.ability || a.id - b.id)[0];
     const sev = x ? severanceOf(salaryOf(x.ability)) : 0;
     if (x && s.cash - sev >= monthlyFixed(s) * AS.fireCashMonths) {
@@ -599,18 +602,17 @@ function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
     }
   }
   const retry = 'hr:autoHire:retry';
-  if (!delegationOn(s, 'hr', 'autoHire') || s.staff.length >= staffCap(s) || (e.cooldown[retry] ?? -1) > s.week) return;
-  const order = lackingRoles(s), bonus = repBonus(s);
-  const pick = order.map((o, i) => {
+  if (!hireOn || s.staff.length >= staffCap(s) || (e.cooldown[retry] ?? -1) > s.week) return;
+  const order = lackingRoles(s);
+  let pick: { role: Role; have: number; want: number; i: number; min: number; tier: number; basis: string; avg?: number } | undefined = order.map((o, i) => {
     const same = s.staff.filter((y) => y.role === o.role), mid = (t: number) => Math.round((H.abilityMin[t - 1] + H.abilityMax[t - 1]) / 2) + bonus;
     const min = same.length ? Math.ceil(mean(same.map((y) => y.ability))) : mid(2), tier = replaceTier(s, min);
     return { ...o, i, min, tier, basis: same.length ? `같은 직무 평균 ${min}` : `공고 후보 평균 ${min}`, reach: min <= H.abilityMax[tier - 1] + bonus - 5 }; // 교체 기준과 같은 여유(공고로 거의 닿지 않으면 공고비만 든다)
   }).find((o) => o.reach);
   const head = `정원 ${s.staff.length}/${staffCap(s)}명`;
-  if (!pick) { // 어느 직무도 공고로 기준에 닿지 않는다: 반년에 한 번 알린다
-    const ck = 'hr:autoHireHold:';
-    if ((e.cooldown[ck] ?? -1) <= s.week) { e.cooldown[ck] = s.week + X.reissueMonths * WPM; addReport(s, 'hr', 'autoHireFail', `${head}이지만 직원 능력이 높아 같은 직무 평균 이상인 후보를 공고로 찾기 어렵습니다. 빈자리는 그대로 둡니다.`, [], staffGoto(), true); }
-    return;
+  if (!pick) { // 어느 직무도 공고로 평균에 닿지 않는다: 가장 부족한 직무를 가장 높은 공고로 내 가장 나은 후보를 뽑는다(빈자리는 아무 일도 못 한다)
+    const o = order[0], avg = Math.ceil(mean(s.staff.filter((y) => y.role === o.role).map((y) => y.ability)));
+    pick = { ...o, i: 0, min: 0, tier: topTier, avg, basis: `같은 직무 평균 ${avg}에는 공고로 닿지 않아 ${topTier}등급 공고의 가장 나은 후보` };
   }
   const cost = H.postCost[pick.tier - 1], need = monthlyFixed(s) * X.replace.cashMonths + cost;
   if (s.cash <= need) return; // 현금이 늘면 다음 달에
@@ -618,7 +620,7 @@ function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
   const cands = rollCands(c, pick.tier), best = cands.filter((a) => a.ability >= pick.min).sort((a, b) => b.ability - a.ability || b.potential - a.potential)[0];
   const n = ROLE_KO[pick.role], sk = SKILL_KO[pick.role], seen = `후보 ${cands.map((a) => a.ability).sort((a, b) => b - a).join('·')}`;
   const why = `${head}에서 ${n}${J(n, '이/가')} ${pick.have}명(개발팀 구성 기준 ${pick.want}명)으로 ${pick.i ? '다음으로' : '가장'} 부족합니다`;
-  const facts = [`기준: ${pick.basis} 이상`, `${pick.tier}등급 공고비 ${won(cost)}, ${seen}`];
+  const facts = [pick.avg === undefined ? `기준: ${pick.basis} 이상` : `기준: ${pick.basis}`, `${pick.tier}등급 공고비 ${won(cost)}, ${seen}`];
   if (!best) {
     e.cooldown[retry] = s.week + X.replace.retryWeeks;
     log('autoHireFail', `${why}. ${n} 공고를 냈지만 기준(${sk} ${pick.min}) 이상인 후보가 없어 뽑지 않았습니다(${seen}). ${X.replace.retryWeeks}주 뒤 다시 공고합니다.`, facts, staffGoto());
@@ -626,7 +628,8 @@ function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
   }
   const id = s.nextId++, name = c.newName();
   s.staff.push(startHist({ id, name, role: pick.role, ability: best.ability, potential: best.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week));
-  log('autoHire', `${why}. ${n} 공고를 내 ${name}(${sk} ${best.ability}, 성장 한계 ${best.potential})${J(name + ')', '을/를')} 뽑았습니다. 월급 ${won(salaryOf(best.ability))}.`, facts, staffGoto(id), String(id));
+  const note = pick.avg === undefined ? '' : ` 같은 직무 평균(${pick.avg})에는 못 미치지만 지금 구할 수 있는 가장 나은 후보입니다.`;
+  log('autoHire', `${why}. ${n} 공고를 내 ${name}(${sk} ${best.ability}, 성장 한계 ${best.potential})${J(name + ')', '을/를')} 뽑았습니다.${note} 월급 ${won(salaryOf(best.ability))}.`, facts, staffGoto(id), String(id));
 }
 
 // ---------- 1.3.0 세대교체 위임(기획 임원) ----------

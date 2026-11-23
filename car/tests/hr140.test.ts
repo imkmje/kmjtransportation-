@@ -66,9 +66,10 @@ describe('자동 채용', () => {
     expect(r.text).toContain('기준(');
     expect(r.text).toContain(`${X.replace.retryWeeks}주 뒤 다시 공고합니다`);
     toMonthEnd(g!); expect(reps(g!, 'autoHireFail')).toHaveLength(1); expect(reps(g!, 'autoHire')).toHaveLength(0); expect(s.staff.length).toBe(n0); // 4주 뒤에는 공고하지 않는다
-    const u = base(); on(u, 'autoHire'); for (const x of u.state.staff) x.ability = 95; // 어떤 공고로도 닿지 않음: 공고비 없이 알리기만
+    const u = base(); on(u, 'autoHire'); for (const x of u.state.staff) x.ability = 95; // 어떤 공고로도 평균에 닿지 않음: 가장 높은 공고의 가장 나은 후보
     const m0 = u.state.staff.length; toMonthEnd(u);
-    expect(reps(u, 'autoHireFail')[0].text).toContain('빈자리는 그대로 둡니다'); expect(u.state.staff.length).toBe(m0);
+    const ur = reps(u, 'autoHire')[0];
+    expect(u.state.staff.length).toBe(m0 + 1); expect(ur.text).toContain('평균(95)에는 못 미치지만 지금 구할 수 있는 가장 나은 후보'); expect(ur.facts[1]).toContain('3등급');
     for (let i = 0; i < 60; i++) toMonthEnd(g!);
     expect(s.staff.length).toBeLessThanOrEqual(staffCap(s));
   });
@@ -80,6 +81,20 @@ describe('자동 채용', () => {
     expect(todoItems(s).some((t) => t.kind === 'hire')).toBe(false);
     s.cash = 0; toMonthEnd(g);
     expect(reps(g, 'hire')).toHaveLength(0);
+  });
+});
+
+describe('평균이 매우 높은 회사(1.4.0 보완)', () => {
+  it('빈자리가 있는데 6개월 넘게 아무도 뽑지 않는 일이 없고(처음 빈 7자리도 한 달에 한 명씩 채움), 자동 채용한 사람을 자동 해고로 다시 내보내는 왕복이 없다(시드 3개 × 10년, 해고·채용 켬, 성장 없음)', () => {
+    for (const seed of [1, 2, 3]) {
+      const g = base(seed), s = g.state; s.hqLevel = 3; s.cash = 1e10;
+      on(g, 'autoHire', 'autoFire');
+      for (const x of s.staff) { x.ability = x.potential = 95; x.hist!.join = -1000; }
+      let empty = 0, worst = 0;
+      for (let m = 0; m < 120; m++) { const n = s.staff.length; s.cash = 1e10; for (const x of s.staff) x.potential = x.ability; toMonthEnd(g); /* 성장을 막아 뽑은 사람이 곧바로 해고 판정(성장 한계)에 들게 한다 */ empty = s.staff.length < staffCap(s) && s.staff.length <= n ? empty + 1 : 0; worst = Math.max(worst, empty); } // 빈자리가 있는데 사람이 늘지 않은 달이 이어진 수
+      const hired = new Set(reps(g, 'autoHire').map((r) => r.key)), fired = reps(g, 'autoFire').filter((r) => hired.has(r.key));
+      expect(worst).toBeLessThanOrEqual(6); expect(fired).toHaveLength(0); expect(s.staff.length).toBe(staffCap(s));
+    }
   });
 });
 
