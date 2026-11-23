@@ -287,6 +287,7 @@ export type Command =
   | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }
   | { type: 'startDerivative'; generationId: number; variant: string; name?: string; segment?: string; battery?: Battery; team?: number[] } // 1.3.0 파생 모델(판매 중인 세대 바탕). 같은 종류의 파생 차종이 있으면 그 다음 세대가 된다
+  | { type: 'renameNameplate'; nameplateId: number; name: string; withDerivatives?: boolean } // 1.5.0 출시한 차종 이름 바꾸기. withDerivatives: 「바탕이름 접미사」 꼴인 파생 차종 이름도 함께
   | { type: 'setGenAuto'; nameplateId: number; on: boolean; launch?: boolean } // 1.3.0 세대교체 위임(기획 임원). launch 생략 = 출시도 자동
   | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
   | { type: 'discontinue'; generationId: number }

@@ -230,6 +230,7 @@ export const config = {
   // 노후(life.oldMonths 72개월) 전에 다음 세대가 나오도록 개발 기간(약 10~12개월)만큼 앞서 시작한다. 현금: 예상 개발비 × cashDevMult + 운영비 cashMonths개월 치 이상일 때만.
   // waitReportMonths개월 넘게 못 하면 이유를 한 번 보고. 자동 출시: 결함을 다 잡았거나 시험이 maxTestWeeks주를 넘으면
   genAuto: { faceliftAt: 30, fullChangeAt: 58, faceliftGap: 18, cashDevMult: 1.5, cashMonths: 6, waitReportMonths: 6, maxTestWeeks: 28 },
+  nameMax: 16, // 1.5.0 차종 이름 최대 글자 수(이름 바꾸기 검증, 화면 입력칸 maxlength와 같다)
   derivative: { defectRate: 0.5 }, // 1.3.0 파생 모델 설계 중 결함은 보통의 절반 속도(차대를 그대로 쓴다). 종류별 수치는 data/variants.json
   // 1.3.0 개발 중 직원 성과: 배치된 직원마다 주당 확률 = chance × 능력, 크기는 능력에 비례(size [능력 0, 능력 100]). 프로젝트당 최대 maxPerProject건, 종류별 합계 상한 caps
   // (stat: 능력치 배수 합, cost: 원가 인하 합, acclaim: 인지도 가산 합, time: 줄인 설계 주). 세대 원가 인하 합은 costCutMax까지

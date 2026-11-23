@@ -61,7 +61,7 @@ const marketingError = (m: number): string | null =>
 const UNDO_KIND: Record<string, string> = {
   fire: '해고', discontinue: '단종', expandFactory: '공장 증설', buildBatteryPlant: '배터리 공장 건설', upgradeHQ: '본사 승급', borrow: '대출', repay: '대출 상환',
   appointExec: '임원 임명', hireExec: '임원 채용', dismissExec: '임원 해임', hire: '채용', train: '교육', rest: '휴식',
-  setPrice: '가격 변경', setPricePolicy: '가격 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
+  setPrice: '가격 변경', setPricePolicy: '가격 변경', renameNameplate: '이름 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
 };
 /** 명령 직전 상태(JSON)와 알림 이름. 상태 밖(WeakMap)에 두어 저장 파일에 들어가지 않는다(불러오면 되돌리기 없음) */
 interface UndoRec { snap: string; week: number; kind: string; names: string[] }
@@ -325,6 +325,7 @@ export class Game {
       case 'dismissExec': return s.execs?.seats[cmd.role]?.staff.name ?? '';
       case 'borrow': case 'repay': return Number.isFinite(cmd.amount) ? wonText(cmd.amount) : '';
       case 'startResearch': case 'cancelResearch': return TECHS.some((t) => t.id === cmd.techId) ? `「${techById(cmd.techId).name}」` : '';
+      case 'renameNameplate': { const n = nameplateById(s, cmd.nameplateId); return n ? `「${n.name}」` : ''; }
       default: return gen;
     }
   }
@@ -381,6 +382,29 @@ export class Game {
         const p = this.addProject('derivative', plan.base.id, plan.spec, plan.base.chassisSeed, lookCandidates(s, plan.into?.id ?? 0, 'face', 'nextGen')[0], team as Staff[]);
         p.variant = plan.v.id;
         if (plan.into) p.into = plan.into.id;
+        return OK;
+      }
+      case 'renameNameplate': { // 1.5.0 출시 뒤 이름 바꾸기: 계보·판매·이름값·명예의 전당은 차종 ID로 이어져 그대로, 지난 뉴스·보고 문장은 그대로 둔다
+        const n = nameplateById(s, cmd.nameplateId);
+        if (!n || !n.generations.length) return fail('출시한 차종만 이름을 바꿀 수 있습니다.');
+        const old = n.name, name = typeof cmd.name === 'string' ? cmd.name.trim() : '';
+        if (name === old) return fail('지금 이름과 같습니다.');
+        // 함께 바꿀 파생: 이름이 「바탕이름 + 띄어쓰기 + 접미사」 꼴인 것만(직접 지은 이름은 그대로). 개발 중인 첫 파생 프로젝트도 같다
+        const kids = cmd.withDerivatives ? s.nameplates.filter((x) => x.baseOf === n.id && x.name.startsWith(`${old} `)) : [];
+        const ren = new Map<{ name: string }, string>([[n, name], ...kids.map((k): [{ name: string }, string] => [k, name + k.name.slice(old.length)])]);
+        const npOf = (p: Project) => p.kind === 'fullchange' ? p.targetId : p.kind === 'derivative' ? p.into : p.kind === 'new' ? undefined : nameplateOfGen(s, p.targetId)?.id; // execs.ts genAuto와 같은 규칙
+        for (const p of s.projects) {
+          const t = [n, ...kids].find((x) => x.id === npOf(p));
+          if (t) ren.set(p, ren.get(t)!); // 개발 중인 페이스리프트·풀체인지·다음 세대 파생도 새 이름으로 출시
+          else if (cmd.withDerivatives && p.kind === 'derivative' && p.into === undefined && nameplateOfGen(s, p.targetId)?.id === n.id && p.name.startsWith(`${old} `)) ren.set(p, name + p.name.slice(old.length));
+        }
+        const taken = new Set([...s.nameplates, ...s.projects.filter((p) => p.kind === 'new' || (p.kind === 'derivative' && p.into === undefined))].filter((x) => !ren.has(x)).map((x) => x.name));
+        for (const nm of new Set(ren.values())) {
+          if (!nm) return fail('이름을 입력하세요.');
+          if ([...nm].length > config.nameMax) return fail(`이름은 ${config.nameMax}자까지 쓸 수 있습니다${nm === name ? '' : `(「${nm}」)`}.`);
+          if (taken.has(nm)) return fail(`「${nm}」${josa(nm, '은/는')} 이미 있는 차종 이름입니다.`);
+        }
+        for (const [x, nm] of ren) x.name = nm;
         return OK;
       }
       case 'setProjectEquip': { // 1.1.0: 설계 단계에서만, 비용 없이

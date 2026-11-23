@@ -209,5 +209,27 @@ describe('외관 후보·직접 고르기(1.0.0)', () => {
       expect(r2.miss).toEqual([]); expect(chassisParts({ ...base, chassisSeed: r2.seed }).roofType).toBe(BODY[bodyId].deck ? 'fast' : 'notch');
     }
   });
-});
 
+  // 1.5.0 파생 모델 외관: 부품 목록(재질별 메시 수·삼각형 수)과 치수(길이·폭·높이·바퀴 위치)를 요약해 바탕 차와 비교한다
+  it('파생 4종의 형상 요약이 바탕 차와 다르다(고성능판·전기차판 8개 이상, 왜건·쿠페 3개 이상, 차체 4종 × 시대 4개 × 시드 2), 데칼 빠짐 0, 같은 차는 같은 모양', () => {
+    const KEY = new Map(Object.entries(M).map(([k, m]) => [m as THREE.Material, k]));
+    const summary = (l: CarLook) => {
+      const g = buildCar(l, M), out: Record<string, number> = {};
+      expect(g.userData.decalMiss).toBe(0);
+      expect(tris(g)).toBeLessThanOrEqual(24000);
+      g.traverse(o => { if (!(o instanceof THREE.Mesh)) return; const k = Array.isArray(o.material) ? 'body' : KEY.get(o.material) ?? '?'; out[`n:${k}`] = (out[`n:${k}`] ?? 0) + 1; out[`t:${k}`] = (out[`t:${k}`] ?? 0) + tris(o); });
+      const b = new THREE.Box3().setFromObject(g), w = g.children.find(o => o instanceof THREE.Group)!;
+      Object.assign(out, { L: Math.round((b.max.x - b.min.x) * 100), W: Math.round((b.max.z - b.min.z) * 100), H: Math.round((b.max.y - b.min.y) * 100), wheelZ: Math.round(Math.abs(w.position.z) * 100), wheelR: Math.round(w.position.y * 100) });
+      disposeCar(g); return out;
+    };
+    const diff = (a: Record<string, number>, b: Record<string, number>) => new Set([...Object.keys(a), ...Object.keys(b)]).size - [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => a[k] === b[k]).length;
+    let n = 0;
+    for (const bodyId of ['sedanM', 'hatch', 'suv', 'sports'] as BodyId[]) for (const era of [1985, 2005, 2025, 2035]) for (const cs of [7, 31]) {
+      const base = look({ bodyId, era, chassisSeed: cs, faceSeed: cs % 5 + 1 }), sb = summary(base), sedanish = bodyId === 'sedanM' || bodyId === 'hatch';
+      const vs: [string, CarLook][] = [['gt', { ...base, variant: 'gt', sporty: true, wheel: 2 }], ['ev', { ...base, powertrain: 'ev', variant: 'ev' }], ...(sedanish ? [['wagon', { ...base, variant: 'wagon' }], ['coupe', { ...base, bodyId: 'coupe' }]] as [string, CarLook][] : [])];
+      for (const [v, l] of vs) { const d = diff(sb, summary(l)); expect(d, `${bodyId} ${era} 시드${cs} ${v}: 바탕과 다른 항목 ${d}개`).toBeGreaterThanOrEqual(v === 'gt' || v === 'ev' ? 8 : 3); n++; }
+      expect(summary(vs[0][1])).toEqual(summary(vs[0][1])); // 결정론
+    }
+    expect(n).toBe(4 * 4 * 2 * 2 + 2 * 4 * 2 * 2);
+  });
+});

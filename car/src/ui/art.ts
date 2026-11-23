@@ -108,7 +108,7 @@ export function lookOf(v: { body: string; powertrain: string; tier: number; colo
   return {
     bodyId: (v.body in BODY ? v.body : 'sedanM') as BodyId,
     powertrain: (['gas', 'diesel', 'hybrid', 'ev'].includes(pt) ? pt : 'gas') as CarLook['powertrain'],
-    color: v.color, wheel: gt ? 2 : v.wheels, sporty: gt || v.tier >= 3, ...(gt || v.variant === 'wagon' ? { variant: v.variant as 'wagon' | 'gt' } : {}),
+    color: v.color, wheel: gt ? 2 : v.wheels, sporty: gt || v.tier >= 3, ...(gt || v.variant === 'wagon' || v.variant === 'ev' ? { variant: v.variant as 'wagon' | 'gt' | 'ev' } : {}),
     era: v.year as CarLook['era'], // 연도를 그대로 넘기면 render(eraOf)가 4시대로 나눈다
     chassisSeed: v.chassisSeed, faceSeed: v.faceSeed,
   };

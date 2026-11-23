@@ -90,6 +90,8 @@ h2,h3,p{margin:0}
 .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px #ff5a1f2e;flex:none}
 .model{font-weight:900;font-size:clamp(30px,4.6vw,60px);line-height:1.05;letter-spacing:-.04em;margin:8px 0 6px;overflow-wrap:anywhere}
 .model small{font-size:.38em;letter-spacing:-.01em;color:var(--ink2);margin-left:8px;font-weight:800}
+.model .rn-btn{pointer-events:auto;min-height:30px;padding:0 10px;font-size:12px;letter-spacing:0;margin-left:10px;vertical-align:middle;border-radius:10px;background:#fffd} /* 1.5.0 차고 상세 이름 옆 [이름 변경] */
+.rename-sheet .chk{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:700;margin-top:10px}
 .spec{font-size:14px;color:var(--ink2);font-weight:600}
 .ov.tr{right:18px;top:18px;text-align:right}
 .trend{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:6px 12px}

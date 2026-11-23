@@ -10,5 +10,5 @@ export interface CarLook {
   era?: number; // 출시 연도(그대로 넘기면 render가 1970·1980·1990·2010·2020 다섯 시대로 나눈다)
   chassisSeed?: number; // 세대마다 1개: 길이·지붕·객실 위치 등 옆모습(없으면 차체 기본값)
   faceSeed?: number; // 판(초기형/페이스리프트)마다 1개: 전조등·그릴·범퍼·후미등(없으면 시대 기본 얼굴)
-  variant?: 'wagon' | 'gt'; // 1.3.0 파생 모델 표시: 왜건은 지붕을 뒤 끝까지, 고성능판은 낮은 차고(쿠페판은 bodyId 'coupe', 전기차판은 powertrain 'ev'로 그린다)
+  variant?: 'wagon' | 'gt' | 'ev'; // 1.3.0 파생 모델 표시: 왜건은 지붕을 뒤 끝까지, 고성능판은 낮은 차고(쿠페판은 bodyId 'coupe'). 1.5.0 고성능판은 넓은 차폭·에어로 부품, 전기차판(powertrain 'ev'와 함께)은 전용 얼굴·청록 포인트
 }

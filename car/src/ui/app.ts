@@ -1153,7 +1153,7 @@ export function startApp(): void {
     garageId = g.id;
     const price = garagePrice.get(g.id) ?? e.price, up = Q.unitProfit(g.body, g.powertrain, e.tier, e.options, price, Q.genCostMult(s, g), Q.ptCostAdd(s, g.powertrain, e.battery, g.evPlatform)), lines = Q.linesOf(s);
     const lastSale = g.sales.length ? g.sales[g.sales.length - 1] : null, lb = Q.lifeBar(s, g), ending = g.status === 'ending';
-    const ovh = ovTop(`차고 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}`, `${esc(name)}<small>${editionName(g)}</small>`, `${derivLine(g) ? `${derivLine(g)} · ` : ''}${specLine(g.body, g.powertrain, e.tier, g.segment)} · ${paintName(e.color)}`, launchWhen(g))
+    const ovh = ovTop(`차고 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}`, `${esc(name)}<small>${editionName(g)}</small><button class="btn rn-btn" data-act="renameOpen" data-id="${Q.nameplateOf(s, g.id)?.id ?? -1}">이름 변경</button>`, `${derivLine(g) ? `${derivLine(g)} · ` : ''}${specLine(g.body, g.powertrain, e.tier, g.segment)} · ${paintName(e.color)}`, launchWhen(g))
       + ovHint
       + (gens.length > 1 ? `<button class="switch l" data-act="gprev" aria-label="이전 차">‹</button><button class="switch r" data-act="gnext" aria-label="다음 차">›</button><div class="ov tr gnav"><button class="btn" data-act="gsum">← 전 차종</button><span>${gi + 1}/${GL.length}</span></div>` : '');
     const sales = g.sales.slice(-12), mx = Math.max(1, ...sales);
@@ -1519,6 +1519,18 @@ export function startApp(): void {
 
   // ----- 0.8.0 기획 프리셋(게임마다 저장 칸의 UiExtra에) -----
   const presetLine = (p: S.PlanPreset) => [p.body ? BODIES.find((b) => b.id === p.body)?.name ?? p.body : '차체 제외', segName(p.segment), `${POWERTRAINS.find((x) => x.id === p.powertrain)?.name ?? p.powertrain} ${tierName(p.powertrain, p.tier)}`, `장비 ${Object.keys((p as { equip?: object }).equip ?? p.options).length}개`, `${p.designWeeks}주`, BUDGET[p.budget as Budget]?.name ?? ''].join(' · ');
+  // ----- 1.5.0 출시 뒤 이름 바꾸기(차고 상세의 [이름 변경]) -----
+  function showRename(id: number): void {
+    const s = game!.state, n = s.nameplates.find((x) => x.id === id); if (!n) return;
+    const kids = s.nameplates.filter((x) => x.baseOf === n.id && x.name.startsWith(`${n.name} `));
+    sheetBody.innerHTML = `<div class="rename-sheet"><div class="eyebrow"><i></i>차고 · 이름 변경</div><h2>「${esc(n.name)}」 이름 바꾸기</h2>
+      <p class="hint">계보·판매 기록·이름값·명예의 전당은 그대로 이어집니다. 지난 뉴스와 보고의 문장은 바뀌지 않습니다.</p>
+      <label class="lbl" for="rn-name">새 이름</label><input class="namein" id="rn-name" type="text" maxlength="${config.nameMax}" value="${esc(n.name)}" autocomplete="off">
+      ${kids.length ? `<label class="chk"><input type="checkbox" id="rn-kids" checked> 파생 모델 이름도 함께 바꾸기(${kids.map((k) => `「${esc(k.name)}」`).join(', ')})</label>` : ''}
+      <div class="row" style="margin-top:12px"><button class="btn ink" data-act="renameDo" data-id="${n.id}">이름 바꾸기</button><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
+    sheet.hidden = false; renderTop();
+    const inp = $<HTMLInputElement>('#rn-name'); inp?.focus(); inp?.select();
+  }
   function showPresets(): void {
     if (!draft) return;
     const list = ui.presets ?? [], bn = bodyById(draft.body).name;
@@ -2530,6 +2542,9 @@ export function startApp(): void {
       case 'setPrice': { if (!game) return; const id = Number(el.dataset.id), price = garagePrice.get(id), pol = Q.generationById(game.state, id)?.pricePolicy; if (price === undefined) return;
         if (pol && !(await ask(`가격을 직접 바꾸면 자동 가격(${policyName(pol)})이 꺼지고 수동으로 돌아갑니다.\n가격을 ${num(price)}만원으로 바꿀까요?`, '가격 바꾸기'))) return;
         if (run(game.command({ type: 'setPrice', generationId: id, price }))) { garagePrice.delete(id); toast(`가격을 ${num(price)}만원으로 바꿨습니다. 다음 결산부터 반영됩니다.`); render(); } return; }
+      case 'renameOpen': if (game) showRename(Number(el.dataset.id)); return;
+      case 'renameDo': { if (!game) return; const id = Number(el.dataset.id), name = ($<HTMLInputElement>('#rn-name')?.value ?? '').trim();
+        if (run(game.command({ type: 'renameNameplate', nameplateId: id, name, withDerivatives: !!$<HTMLInputElement>('#rn-kids')?.checked }))) { sheet.hidden = true; toast(`이름을 「${name}」${josa(name, '으로/로')} 바꿨습니다.`); render(); } return; }
       case 'setMk': if (game && run(game.command({ type: 'setMarketing', generationId: Number(el.dataset.id), marketing: Number(v) }))) render(); return;
       case 'quickFix': case 'clearance': { // 0.10.0 실패한 차의 수습(확인 창에 예상 효과)
         const id = Number(el.dataset.id), kind = a as 'quickFix' | 'clearance';
