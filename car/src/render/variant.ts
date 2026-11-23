@@ -63,8 +63,8 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
 /** 1.3.0 파생 모델 표시용 차체(sim의 차체는 바탕 그대로): 왜건은 트렁크 없이 지붕을 뒤 끝까지 늘리고 옆 창을 3장으로, 고성능판은 차고를 낮춘다 */
 function shapeOf(look: CarLook): BodyShape {
   const b = bodyOf(look.bodyId);
-  if (look.variant === 'wagon') { const cR = -b.L / 2 + .42; return { ...b, deck: false, cR, rr: .24, doors: [b.doors[0], b.doors[1], cR + .5], pil: [.3, .62], spoiler: false }; }
-  if (look.variant === 'gt') return { ...b, clr: Math.max(.08, b.clr - .05) };
+  if (look.variant === 'wagon') { const L = b.L + (b.deck ? 0 : .3), cR = -L / 2 + .42; return { ...b, L, deck: false, cR, rr: .24, doors: [b.doors[0], b.doors[1], cR + .5], pil: [.3, .62], spoiler: false }; } // 1.5.0 해치백 바탕 왜건은 뒤를 .3m 늘린다(바탕과 거의 같아 보여서)
+  if (look.variant === 'gt') return { ...b, clr: Math.max(.08, b.clr - .05), W: b.W + .08, archTrim: Math.max(b.archTrim, .05) }; // 1.5.0 넓은 차폭·두꺼운 검은 휠 아치(펜더는 carBuilder에서 더 부풀린다)
   return b;
 }
 
@@ -161,7 +161,7 @@ export function chassisWords(look: CarLook): string[] {
 /** 시대 + faceSeed로 얼굴 값. 시드가 없으면 시대 기본 얼굴(2020은 지금까지의 모습) */
 export function faceOf(look: CarLook): FaceSpec {
   const era = eraOf(look), T = ERA_FACE[era], ev = look.powertrain === 'ev';
-  let f: FaceSpec;
+  let f: FaceSpec, w0: WheelKind = T.def.wheel; // w0: 전기차 공력 휠로 바꾸기 전 휠(전기차판이 바탕 차와 다른 휠을 고르게)
   if (look.faceSeed == null) f = { ...T.def };
   else {
     const r = rng(Math.imul(look.faceSeed, 0x9e3779b1) ^ 0x5bd1e995);
@@ -176,11 +176,19 @@ export function faceOf(look: CarLook): FaceSpec {
       plateF: r() < .2 ? 'offset' : 'center', plateR: era === 1970 || r() < .5 ? 'high' : 'low', // 1970은 크롬 범퍼가 아래 번호판을 가린다
       wheel: pick(T.wheel),
     };
+    w0 = f.wheel;
     if (ev && r() < .5) f.wheel = 'aero';
   }
   if (f.lamp === 'popup' && look.bodyId !== 'sports' && look.bodyId !== 'coupe') f.lamp = 'rect'; // 팝업 램프는 스포츠카·쿠페만
   if (look.bodyId === 'kei' && f.lamp === 'swept') f.lamp = 'oval'; // 경차는 날 선 램프 대신 둥글고 순한 눈
   if (ev && f.grille !== 'panel') f.grille = 'none'; // 전기차는 막힌 그릴(2030년대 빛나는 패널은 그대로)
+  // 1.5.0 파생 모델 전용 얼굴(바탕 얼굴 위에 덮어쓴다): 고성능판은 큰 흡기구·그물 그릴·스포크 휠, 전기차판은 막힌 차체색 얼굴·가로 라이트 바·공력 휠
+  if (look.variant === 'gt') {
+    f.intake = 'three'; f.grilleW *= 1.15; f.grilleH *= 1.15;
+    if (f.grille === 'none' || f.grille === 'panel') f.grille = 'mesh';
+    if (f.wheel === 'aero' || f.wheel === 'cover' || f.wheel === 'turbine' || f.wheel === 'steel') f.wheel = 'twin5';
+  }
+  if (look.variant === 'ev') { f.grille = 'none'; f.bar = true; f.intake = 'none'; f.bumper = 'body'; f.wheel = w0 === 'aero' ? 'cover' : 'aero'; }
   return f;
 }
 

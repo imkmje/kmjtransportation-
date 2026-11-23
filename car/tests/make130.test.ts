@@ -346,11 +346,11 @@ describe('알림 유형', () => {
 });
 
 describe('저장 형식 7(1.3.0)', () => {
-  it('형식 6 fixture: 7로 올라오고 출시된 세대마다 시승기(점수 = 기존 평론)가 생기며, 이어서 돌린 결과와 저장 왕복이 같다', () => {
+  it('형식 6 fixture: 7(지금은 8)로 올라오고 출시된 세대마다 시승기(점수 = 기존 평론)가 생기며, 이어서 돌린 결과와 저장 왕복이 같다', () => {
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v6.json', 'utf8'));
     expect(raw.saveVersion).toBe(6);
     const a = Game.fromJSON(raw);
-    expect(a.state.saveVersion).toBe(7);
+    expect(a.state.saveVersion).toBe(8);
     const gens = allGens(a.state);
     expect(gens.length).toBeGreaterThan(2);
     for (const x of gens) { expect(x.critiques!.map((c) => c.score)).toEqual(x.reviews); for (const c of x.critiques!) expect(c.text.length).toBeGreaterThan(10); }

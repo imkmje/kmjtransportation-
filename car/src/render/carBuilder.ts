@@ -19,6 +19,7 @@ export interface CarMaterials {
   rotor: THREE.MeshStandardMaterial; caliper: THREE.MeshStandardMaterial; // 브레이크 디스크·캘리퍼(스포츠는 빨강)
   lens: THREE.MeshPhysicalMaterial; // 전조등 유리 덮개(안이 비치는 짙은 유리, 안쪽 발광체는 lamp)
   tailLens: THREE.MeshPhysicalMaterial; // 후미등 붉은 유리 덮개(안쪽 발광체는 tail)
+  accent: THREE.MeshStandardMaterial; // 1.5.0 전기차판 청록 포인트(옆 하단 줄·앞뒤 줄·충전구·휠 가운데)
 }
 
 // 단면 고리: 옆판 숄더 높이(u)와 그 점 번호, 창 띠 7점의 높이 비율(첫·끝 칸이 창틀)
@@ -46,6 +47,7 @@ export function createCarMaterials(color: string): CarMaterials {
     rotor: new std({ color: 0x8c9097, metalness: .85, roughness: .38 }), caliper: new std({ color: 0xb3201c, roughness: .4, metalness: .2 }),
     lens: new THREE.MeshPhysicalMaterial({ color: 0x3a4048, metalness: .85, roughness: .12, clearcoat: 1, clearcoatRoughness: .04, ...decalOpts }),
     tailLens: new THREE.MeshPhysicalMaterial({ color: 0x7a0a10, emissive: 0x5a0004, metalness: .3, roughness: .1, clearcoat: 1, clearcoatRoughness: .04, ...decalOpts }),
+    accent: new std({ color: 0x00b8d4, emissive: 0x0092b0, emissiveIntensity: .8, roughness: .35, side: THREE.DoubleSide, ...decalOpts }),
   };
 }
 
@@ -59,7 +61,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const carG = new THREE.Group();
   const p = chassisOf(look), fc = faceOf(look), sd = p.side, era = eraOf(look), id = look.bodyId;
   const E0 = eraStyle(look), ek = p.edge ?? 1, E = { ...E0, re: E0.re * ek, rpF: E0.rpF * ek, rpR: E0.rpR * ek };
-  const ev = look.powertrain === 'ev', F = FACE;
+  const ev = look.powertrain === 'ev', F = FACE, gt = look.variant === 'gt', evV = look.variant === 'ev' && ev; // 1.5.0 파생 모델 전용 부품
   let decalMiss = 0; // 데칼 점이 차체 곡면을 못 찾은 횟수(검사용, 0이어야 정상)
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], x = 0, y = 0, z = 0) => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; carG.add(m); return m;
@@ -110,7 +112,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     const y0 = ym - (ym - p.clr) * e; // 옆판 최소 높이는 아치가 아닌 차체 바닥 기준(아치 위 창틀이 솟지 않게)
     ys = Math.max(Math.min(ys, T - .09 * e), y0 + .35 * (T - y0), fen);
     const rp = x > 0 ? E.rpF : E.rpR;
-    let w = hw * (1 - E.taper * (x / h) ** 4) + .018 * Math.exp(-(((Math.abs(x) - p.wb) / .4) ** 2));
+    let w = hw * (1 - E.taper * (x / h) ** 4) + (gt ? .045 : .018) * Math.exp(-(((Math.abs(x) - p.wb) / .4) ** 2)); // 바퀴 위 펜더 부풂(고성능판은 크게)
     if (d < rp) w -= rp - Math.sqrt(rp * rp - (rp - d) ** 2);
     w = Math.max(w, .05);
     // wS: 옆판 윗끝 폭(배부른 옆판이면 안쪽), 그 위 옆 유리는 시대별 텀블홈만큼 안쪽으로 눕는다
@@ -442,14 +444,14 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
       default: framed(-gz, gz, g0, g1);
     }
   }
-  const iy0 = p.clr + F.intakeY0, iy1 = p.clr + F.intakeY1;
+  const iy0 = p.clr + F.intakeY0 - (gt ? .03 : 0), iy1 = p.clr + F.intakeY1 + (gt ? .04 : 0); // 고성능판은 큰 흡기구
   switch (fc.intake) {
     case 'wide': { const iz = fw * (ev ? F.evIntakeZ : F.intakeZ); decal(rect(-iz, iz, iy0, iy1, 8, 2), M.trim, 1, L2); break; }
     case 'slim': decal(rect(-fw * F.evIntakeZ, fw * F.evIntakeZ, iy0, iy1 - .02, 8, 2), M.trim, 1, L2); break;
     case 'three': decal(rect(-fw * .22, fw * .22, iy0, iy1, 6, 2), M.trim, 1, L2); pair(g => decal(rect(g * fw * .5, g * fw * .76, iy0 - .01, iy1 + .03, 4, 2), M.trim, 1, L2)); break;
     case 'fog': decal(rect(-fw * .3, fw * .3, iy0, iy1 - .01, 8, 2), M.trim, 1, L2); pair(g => { decal(circle(g * fw * .66, (iy0 + iy1) / 2 + .01, .05), M.trim, 1, L2); decal(circle(g * fw * .66, (iy0 + iy1) / 2 + .01, .034), M.lamp, 1, L3); }); break;
   }
-  const emblem = (s: 1 | -1, y: number) => { decal(circle(0, y, .03), M.chrome, s, F.lift * 4); decal(circle(0, y, .021), M.trim, s, F.lift * 5); decal(circle(0, y, .01), M.chrome, s, F.lift * 6); };
+  const emblem = (s: 1 | -1, y: number) => { decal(circle(0, y, .03), evV ? M.accent : M.chrome, s, F.lift * 4); decal(circle(0, y, .021), M.trim, s, F.lift * 5); decal(circle(0, y, .01), M.chrome, s, F.lift * 6); };
   if (!E.classic) emblem(1, ev || fc.grille === 'none' ? lampY : Math.min(lampY + .01, lampTop - .03));
   const pz = fc.plateF === 'offset' ? fw * .4 : 0;
   decal(rect(pz - F.plateW / 2, pz + F.plateW / 2, p.clr + F.plateY, plateTop, 4, 2), M.plate, 1, L3);
@@ -516,11 +518,32 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   const well = new THREE.CylinderGeometry(ar - .02, ar - .02, .22, 16, 1, true, Math.PI / 2, Math.PI);
   for (const xw of [-p.wb, p.wb]) pair(sgn => { const wl = add(well, M.dark, xw, ay, sgn * (hw - .22)); wl.rotation.x = Math.PI / 2; wl.castShadow = false; });
   if (look.sporty || p.spoiler) {
-    // 실제 윗면 높이(topY)에 맞춰 붙인다: 트렁크 날개는 다리가 덱에 닿고, 지붕 스포일러는 지붕 끝에 얹힌다
-    const sx = p.deck ? -h + .2 : p.cR - .06, zl = hw - .42, sy = p.deck ? topY(sx, 0) + .08 : Math.max(topY(sx, 0), topY(sx, zl)); // 고리 사이 면은 곡선보다 조금 낮아 살짝 묻는다
-    add(new THREE.BoxGeometry(.2, .028, p.W - .42), M.dark, sx, sy, 0);
+    // 실제 윗면 높이(topY)에 맞춰 붙인다: 트렁크 날개는 다리가 덱에 닿고, 지붕 스포일러는 지붕 끝에 얹힌다. 고성능판은 높고 넓은 날개 + 양끝 판
+    const sx = p.deck ? -h + (gt ? .24 : .2) : p.cR - (gt ? .1 : .06), zl = hw - .42, sy = p.deck ? topY(sx, 0) + (gt ? .17 : .08) : Math.max(topY(sx, 0), topY(sx, zl)); // 고리 사이 면은 곡선보다 조금 낮아 살짝 묻는다
+    const ww = p.W - (gt ? .26 : .42), wc = gt ? .3 : .2;
+    add(new THREE.BoxGeometry(wc, gt ? .035 : .028, ww), M.dark, sx, sy, 0);
+    if (gt) pair(sgn => add(new THREE.BoxGeometry(wc + .02, .09, .014), M.dark, sx, sy - .02, sgn * ww / 2));
     if (p.deck) pair(sgn => { const y0 = topY(sx + .03, zl) - .01; add(new THREE.BoxGeometry(.05, sy - y0, .04), M.dark, sx + .03, (sy + y0) / 2, sgn * zl); });
-    if (!ev) pair(sgn => { const ex = add(new THREE.CylinderGeometry(.04, .04, .16, 16), M.chrome, -h + .1, p.clr + .03, sgn * .48); ex.rotation.z = Math.PI / 2; });
+    // 배기구: 고성능판은 좌우 2개씩 굵게(4개)
+    if (!ev) pair(sgn => { for (const z of gt ? [.36, .5] : [.48]) { const r = gt ? .046 : .04, ex = add(new THREE.CylinderGeometry(r, r, .16, 16), M.chrome, -h + .1, p.clr + .03, sgn * z); ex.rotation.z = Math.PI / 2; } });
+  }
+  if (gt) { // 1.5.0 고성능판 에어로 부품: 앞 립(턱 아래 검은 판), 사이드 스커트, 뒤 디퓨저(지느러미), 보닛 통풍구
+    const fx = surfX(p.clr + .05, 0, 1), rx = surfX(p.clr + .05, 0, -1);
+    add(new THREE.BoxGeometry(.16, .022, 2 * fw * .94), M.dark, fx - .05, p.clr - .004, 0);
+    const sx0 = -p.wb + ar + .03, sx1 = p.wb - ar - .03, sz = sideZ(0, p.clr + .05);
+    if (sx1 > sx0) pair(sgn => add(new THREE.BoxGeometry(sx1 - sx0, .05, .045), M.gloss, (sx0 + sx1) / 2, p.clr + .02, sgn * (sz + .005)));
+    add(new THREE.BoxGeometry(.2, .05, 2 * fw * .62), M.dark, rx + .08, p.clr + .005, 0);
+    for (let i = -2; i <= 2; i++) add(new THREE.BoxGeometry(.22, .1, .014), M.dark, rx + .07, p.clr + .03, i * fw * .14);
+    const vx1 = h - E.re - .12, vx0 = Math.max(p.cF + p.rf + .12, vx1 - .32);
+    if (vx1 - vx0 > .12 && p.bed == null) pair(g => topDecal(rect(vx0, vx1, g * hw * .2, g * hw * .34, 4, 1), M.gloss, .005));
+  }
+  if (evV) { // 1.5.0 전기차판: 옆 하단 청록 줄, 앞뒤 아래 청록 줄, 막힌 얼굴 아래 테, 충전구(앞 펜더)
+    sideBand(-h + E.re + .08, h - E.re - .08, () => sill + (sd.clad ? .1 : .06), .02, M.accent, .005); // 검은 클래딩 위로
+    for (const s of [1, -1] as const) decal(rect(-fw * .62, fw * .62, p.clr + .09, p.clr + .115, 12, 1), M.accent, s, L2);
+    decal(rect(-lampIn * .9, lampIn * .9, lampY - .075, lampY - .066, 10, 1), M.accent, 1, L2);
+    const cx = p.wb - ar - .14, cy = p.belt - .1, cz = sideZ(cx, cy);
+    add(new THREE.BoxGeometry(.13, .09, .006), M.trim, cx, cy, cz + .002);
+    add(new THREE.BoxGeometry(.05, .03, .008), M.accent, cx, cy, cz + .003);
   }
   // ── 지붕: 선루프(유리 판), 루프랙(레일 2줄 + 다리) ──
   const rx0 = p.cR + .12, rx1 = p.cF - .1;
@@ -572,9 +595,9 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     : new THREE.CylinderGeometry(rimR * .24, rimR * .3, .03, 16);
   const rotor = open ? new THREE.CylinderGeometry(rimR * .8, rimR * .8, .016, 24) : null, caliper = open ? new THREE.BoxGeometry(rimR * .5, .045, rimR * .2) : null;
   for (const x of [-p.wb, p.wb]) for (const sgn of [1, -1]) {
-    const w = new THREE.Group(); w.position.set(x, p.wr, sgn * (hw - .15)); w.rotation.x = sgn * Math.PI / 2; carG.add(w);
+    const w = new THREE.Group(); w.position.set(x, p.wr, sgn * (hw - (gt ? .12 : .15))); w.rotation.x = sgn * Math.PI / 2; carG.add(w); // 고성능판은 바퀴가 바깥으로
     const part = (g: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const mm = new THREE.Mesh(g, mat); mm.position.y = y; mm.castShadow = true; w.add(mm); return mm; };
-    part(tire, M.tire); part(disc, wk === 'steel' ? rimMat : M.dark, .06); part(lip, rimMat, .1);
+    part(tire, M.tire); part(disc, wk === 'steel' ? rimMat : M.dark, .06); part(lip, evV ? M.accent : rimMat, .1); // 전기차판은 청록 휠 테
     part(plate, wk === 'steel' ? M.chrome : M.rim, wk === 'steel' ? .1 : open ? .1 : .085);
     if (rotor && caliper) { part(rotor, M.rotor, .072); const cp = part(caliper, look.sporty ? M.caliper : M.dark, .085); cp.position.set(-rimR * .2, .085, -sgn * rimR * .62); } // 캘리퍼는 디스크 위쪽 뒤
     if (spoke) for (let i = 0; i < nSp; i++) {
@@ -583,7 +606,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
       const dark = covered, r0 = dark ? rimR * (1 - spL / 2 - .08) : rimR * .5;
       for (const off of offs) { const sp = new THREE.Mesh(spoke, dark ? M.dark : M.rim); sp.position.set(r0, 0, off); if (wk === 'turbine') sp.rotation.y = .5; sp.castShadow = true; pv.add(sp); }
     }
-    part(hub, M.chrome, .115);
+    part(hub, evV ? M.accent : M.chrome, .115);
   }
   for (const [mat, S] of strips) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(S.pos, 3)); g.setIndex(S.idx); g.computeVertexNormals();

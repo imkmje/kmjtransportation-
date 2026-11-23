@@ -18,6 +18,7 @@ import { ptCostAdd } from './research';
 import { mean } from './reviews';
 import { monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { genCostMult } from './derive';
+import { startYearOf } from './start';
 import { STATS, type CarState, type ExecRole, type Generation, type ProjectKind, type Role, type Staff, type StaffWin, type Stats } from './types';
 
 const MPY = config.time.monthsPerYear, WPY = MPY * config.time.weeksPerMonth;
@@ -225,7 +226,7 @@ export interface DecadeReview {
   events: string[]; next: string[]; headline: string;
 }
 /** 끝난 10년(1970, 1980, …): 지금 해가 그 10년 + 10 이상인 것, 최근이 앞 */
-export const decadeYears = (s: CarState): number[] => { const out: number[] = []; for (let d = config.time.startYear; d + 10 <= yearOf(s.week); d += 10) out.unshift(d); return out; };
+export const decadeYears = (s: CarState): number[] => { const out: number[] = []; for (let d = Math.floor(startYearOf(s) / 10) * 10; d + 10 <= yearOf(s.week); d += 10) out.unshift(d); return out; };
 export function decadeReview(s: CarState, decade: number): DecadeReview {
   const m0 = (decade - config.time.startYear) * MPY, m1 = Math.min(m0 + 10 * MPY, monthOf(s.week)), inD = (m: number) => m >= m0 && m < m1, gens = allGens(s);
   let sold = 0;
