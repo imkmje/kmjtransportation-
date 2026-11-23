@@ -1171,3 +1171,7 @@ span.g-auto{border-color:transparent;background:transparent}.g-auto.hd{min-heigh
 .ns-cols{display:grid;gap:12px}.ns-col{display:flex;flex-direction:column;gap:12px;min-width:0}
 .ns-col .seg{margin-bottom:0}
 @media (min-width:900px){.ns-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}}
+/* 1.6.0 메뉴의 기기 연동 칸 */
+.sync-box{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 12px;margin-top:10px}
+.sync-box .lbl{margin:4px 0 0}.sync-box .sync-h{display:flex;align-items:center;gap:6px;margin:0}
+.sync-box .sync-line{margin:2px 0}.sync-box > .btn{width:100%}

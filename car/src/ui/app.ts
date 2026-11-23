@@ -1,7 +1,7 @@
 // 카 컴퍼니 화면(바닐라 TS + DOM, 에어 게임 방식). sim 상태는 읽기만 하고 바꿀 때는 game.command(...)만 쓴다.
 import { config } from '../config';
 import { BODIES, OPTIONS, POWERTRAINS, RIVALS, SEGMENTS, TECHS, bodyById, optionById, powertrainById } from '../data';
-import { Game, allGens, sellingGens } from '../sim/game';
+import { Game, SAVE_VERSION, allGens, sellingGens } from '../sim/game';
 import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
 import { monthOf, yearOf, yearOfMonth } from '../sim/time';
@@ -18,6 +18,7 @@ import { REVEAL_KEY, playReveal, revealWanted } from './reveal';
 import { CAR_VERSION } from '../version';
 import * as S from '../io/saves';
 import * as PN from '../io/pastnames';
+import * as CL from '../io/cloud';
 import { BUDGET, MARKETING, ROLE_NAME, ROLE_SKILL, STAT_NAME, TIER_SUB, esc, josa, longCls, money, moneyText, num, qty, score } from './fmt';
 import { DEFAULT_LOGO, LOGO_BG, LOGO_FG, LOGO_MARKS, LOGO_SHAPES, PAINT, WHEELS, cleanLogo, logo, logoSvg, lookOf, paintName, ring, type LogoSpec } from './art';
 import { infoOf } from './glossary';
@@ -492,8 +493,67 @@ export function startApp(): void {
     const g = game; if (!g) return;
     notePast(g);
     const week = g.state.week, ok = await S.put('auto', S.makeSave(g, uiSnap()));
-    if (ok) { if (g === game) lastAuto = week; return; }
+    if (ok) { if (g === game) lastAuto = week; if (sync?.id) syncSoon(); return; }
     if (!saveFailNoted) { saveFailNoted = true; toast('자동 저장에 실패했습니다. 브라우저 저장 공간이 부족하거나 저장이 막혀 있습니다. 메뉴에서 파일로 내보내 두세요.', 'bad', '자동 저장', 12000, 'savefail', undefined, 'warning'); }
+  }
+  // ----- 1.6.0 기기 연동(GitHub 비밀 Gist): 자동 저장 뒤 60초에 한 번까지 올리고, 처음 화면에서 서버 rev가 다르면 불러올지 묻는다. 실패는 메뉴의 한 줄과 알림으로만 -----
+  let sync = CL.loadCfg(), syncBusy = false, syncConflict: CL.CloudMeta | null = null, syncChecked = false, syncDev = '';
+  const net = (u: string, i?: RequestInit) => fetch(u, i);
+  const guessDevice = () => (matchMedia('(pointer: coarse)').matches ? '태블릿' : 'PC');
+  const syncTime = (iso: string) => { const t = new Date(iso), p = (n: number) => String(n).padStart(2, '0'); return Number.isNaN(t.getTime()) ? '' : `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`; };
+  const metaLine = (m: CL.CloudMeta) => `${m.company}, ${m.date}, ${syncTime(m.at)} 저장`;
+  const syncLine = () => !sync ? '연동하지 않았습니다.'
+    : syncConflict ? `서버에 다른 기기(${syncConflict.device})의 저장이 있어 올리기를 멈췄습니다(${metaLine(syncConflict)}). 아래에서 고르세요.`
+    : syncBusy ? '서버와 주고받는 중입니다.'
+    : sync.fail ? `실패: ${sync.fail}. 저장은 이 기기에 남아 있습니다.${sync.last ? ` 마지막으로 올린 시각 ${syncTime(sync.last)}.` : ''}`
+    : sync.last ? `마지막으로 올린 시각 ${syncTime(sync.last)}` : '아직 올리지 않았습니다.';
+  function syncShow(): void { const b = document.querySelector('.sync-box'); if (b) b.outerHTML = syncBox(); }
+  function syncFail(e: unknown): void {
+    const why = CL.failText(e);
+    if (sync && sync.fail !== why) toast(`${why}. 게임은 그대로 진행되고 저장은 이 기기에 남습니다.`, 'bad', '기기 연동', 9000, 'sync', { label: '메뉴', fn: () => void showMenu() }, 'warning'); // 같은 실패는 한 번만 알린다
+    if (sync) { sync.fail = why; CL.saveCfg(sync); }
+  }
+  /** 자동 저장 칸의 판을 올린다(force: 서버 rev가 달라도 덮어씀) */
+  async function syncUp(force = false): Promise<void> {
+    if (!sync?.id || syncBusy || (syncConflict && !force)) return;
+    syncBusy = true; syncShow();
+    try {
+      const save = await S.get('auto'); if (!save?.game) return;
+      const r = await CL.upload(net, sync, { save, past: PN.loadPast() }, { date: Q.dateLabel(save.game.week), gameVersion: CAR_VERSION }, new Date(), force);
+      if (r.conflict) { syncConflict = r.meta; toast(`서버에 다른 기기(${r.meta.device})의 저장이 있어 올리지 않았습니다. 메뉴의 기기 연동에서 고르세요.`, 'alert', '기기 연동', 12000, 'sync', { label: '메뉴', fn: () => void showMenu() }, 'warning'); }
+      else syncConflict = null;
+      CL.saveCfg(sync);
+    } catch (e) { syncFail(e); } finally { syncBusy = false; syncShow(); }
+  }
+  const syncSoon = CL.throttle(() => void syncUp());
+  /** 서버 저장 확인 → 불러올지 묻기. manual: 메뉴의 [서버에서 불러오기](rev가 같아도 묻는다) */
+  async function syncCheck(manual: boolean): Promise<void> {
+    if (!sync?.id || syncBusy) return;
+    let m: CL.CloudMeta;
+    try { m = await CL.peek(net, sync); } catch (e) { syncFail(e); syncShow(); return; }
+    if (m.rev === 0) { if (manual) toast('서버에 아직 올린 저장이 없습니다.', '', '기기 연동'); return; }
+    if (!manual && m.rev === (sync.rev ?? 0)) return;
+    if (m.saveVersion > SAVE_VERSION) { toast(CL.NEWER_TEXT, 'bad', '기기 연동', 15000, 'sync'); return; }
+    const q = manual ? `서버의 저장(${m.device}: ${metaLine(m)})을 불러올까요?` : `다른 기기(${m.device})의 저장이 더 최신입니다(${metaLine(m)}). 불러올까요?`;
+    if (!(await ask(`${q}\n이 기기의 자동 저장은 '연동 전 백업'으로 한 벌 남깁니다.${game && title.hidden && dirty ? ' 지금 판에서 저장하지 않은 진행은 사라집니다.' : ''}`, '불러오기'))) return;
+    syncBusy = true; syncShow();
+    try {
+      const d = await CL.download(net, sync), r = S.parse(d.body.save);
+      if (!r.ok) throw new CL.CloudError(r.error);
+      const cur = await S.get('auto'); if (cur) await S.put('backup', cur);
+      await S.put('auto', d.body.save); PN.mergePast(d.body.past);
+      sync.rev = d.meta.rev; sync.fail = undefined; syncConflict = null; CL.saveCfg(sync);
+      syncBusy = false; adopt(r.game, r.ui); toast(`${d.meta.device}의 저장을 불러왔습니다(${metaLine(d.meta)}).`, '', '기기 연동', 6000);
+    } catch (e) { syncFail(e); }
+    syncBusy = false; syncShow();
+  }
+  /** 메뉴의 기기 연동 칸 */
+  function syncBox(): string {
+    const dev = `<label class="lbl" for="sy-dev">이 기기 이름</label><input class="namein" id="sy-dev" type="text" maxlength="12" value="${esc(sync?.device ?? (syncDev || guessDevice()))}" autocomplete="off">`;
+    return `<div class="sync-box"><p class="lbl sync-h">기기 연동 ${ib('term:기기 연동')}</p>${sync ? `${dev}<p class="hint sync-line">${esc(syncLine())}</p>
+      ${syncConflict ? '<div class="row"><button class="btn danger" data-act="syncForce">이 기기 것으로 덮어쓰기</button><button class="btn ink" data-act="syncDown">서버 것 불러오기</button></div>' : ''}
+      <div class="row"><button class="btn ink" data-act="syncUp" ${syncBusy ? 'disabled' : ''}>지금 올리기</button><button class="btn" data-act="syncDown" ${syncBusy ? 'disabled' : ''}>서버에서 불러오기</button><button class="btn" data-act="syncOff">연동 끄기</button></div>`
+      : `<label class="lbl" for="sy-token">GitHub 토큰(gist 권한)</label><input class="namein" id="sy-token" type="password" autocomplete="off" spellcheck="false">${dev}<button class="btn ink" data-act="syncOn" ${syncBusy ? 'disabled' : ''}>연동 켜기</button><p class="hint sync-line">${esc(syncLine())}</p>`}</div>`;
   }
   const hideSave = () => { if (game && title.hidden && saveSet.every !== 'off') autoSave(true); }; // 탭을 숨기거나 닫을 때
   document.addEventListener('visibilitychange', () => { if (document.hidden) hideSave(); });
@@ -2266,8 +2326,7 @@ export function startApp(): void {
   // ---------- 처음 화면 ----------
   async function showTitle(): Promise<void> {
     sheet.hidden = true;
-    const saves = await S.list(), newest = [...saves].sort((a, b) => b.when.localeCompare(a.when))[0];
-    const slotName = (k: S.SlotKey) => (k === 'auto' ? '자동 저장' : `저장 칸 ${k.slice(-1)}`);
+    const saves = await S.list(), newest = saves.filter((x) => x.key !== 'backup').sort((a, b) => b.when.localeCompare(a.when))[0];
     const info = (x: S.SlotInfo) => `${esc(x.company)} · ${esc(diffName(x.difficulty))} · ${esc(Q.dateLabel(x.week))} · 차 ${x.cars}종`;
     const home = `<div class="row">${newest ? `<button class="go" data-act="continue" data-v="${newest.key}">이어 하기 <small style="font-weight:600;font-size:12px">${info(newest)}</small></button>` : ''}<button class="go ${newest ? 'dark' : ''}" data-act="titleNew">새 게임</button></div>
       ${saves.length ? `<p class="lbl" style="margin-top:8px">저장된 게임</p><div class="menu-slots">${saves.map((x) => `<div class="slot wl">${logoSvg(x.logo, 32)}<div><b>${slotName(x.key)}</b><small>${info(x)} · ${esc(x.when.slice(0, 16).replace('T', ' '))}</small></div><button class="btn" data-act="loadSlot" data-v="${x.key}">불러오기</button></div>`).join('')}</div>` : ''}
@@ -2283,7 +2342,9 @@ export function startApp(): void {
     title.className = 'cover'; title.hidden = false; markMore(title);
     if (titleMode === 'new') $('#t-co').focus();
     renderTop();
+    if (!syncChecked && sync?.id) { syncChecked = true; void syncCheck(false); } // 1.6.0 게임을 열 때 한 번
   }
+  const slotName = (k: S.SlotKey) => (k === 'auto' ? '자동 저장' : k === 'backup' ? '연동 전 백업' : `저장 칸 ${k.slice(-1)}`);
   function adopt(g: Game, extra: S.UiExtra): void {
     game = g; ui = extra; screen = 'garage'; draft = null; launch = null; lift = null; draftNote = '';
     restorePlan(extra.plan); garageId = -1; garageSum = true; cmpSel.clear(); gameOverShown = false; officeEvents.length = 0; thumbs.clear();
@@ -2299,7 +2360,7 @@ export function startApp(): void {
     const d = await S.get(k);
     const r = d ? S.parse(d) : { ok: false as const, error: '빈 칸입니다' };
     if (!r.ok) return err(r.error);
-    adopt(r.game, r.ui); { const n = k === 'auto' ? '자동 저장' : `저장 칸 ${k.slice(-1)}`; toast(`${n}${josa(n, '을/를')} 불러왔습니다.`); }
+    adopt(r.game, r.ui); { const n = slotName(k); toast(`${n}${josa(n, '을/를')} 불러왔습니다.`); }
   }
   function importFile(): void {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
@@ -2324,6 +2385,7 @@ export function startApp(): void {
       <div class="slot"><div><b>자동 저장</b><small>${esc(saveWhen())} · ${line('auto')}</small></div><button class="btn" data-act="loadSlot" data-v="auto" ${by.has('auto') ? '' : 'disabled'}>불러오기</button></div></div>
       <div class="row" style="margin-top:10px"><button class="btn" data-act="export">파일로 내보내기</button><button class="btn" data-act="import">파일에서 가져오기</button></div>
       <p class="note">브라우저 저장소는 지워질 수 있으니 파일로 내보내 두는 것이 안전합니다.</p>
+      ${syncBox()}
       ${undoLine()}
       <button class="btn menu-set" data-act="settings" style="width:100%;margin-top:10px">설정 <small>시간·알림·소리·저장·화면</small></button>
       <p class="note help-line">이 게임의 역사 사건과 시장 수치는 게임에 맞게 어림한 것이라 실제와 다를 수 있습니다.</p>
@@ -2785,6 +2847,21 @@ export function startApp(): void {
       }
       case 'export': if (game) { download(saveFileName(), JSON.stringify(S.makeSave(game, uiSnap()))); dirty = false; toast('파일로 내보냈습니다'); } return;
       case 'import': importFile(); return;
+      case 'syncOn': { // 1.6.0 연동 켜기: 보관함을 찾거나 만들고, 서버에 저장이 있으면 불러올지 묻는다. 없으면 지금 판을 올린다
+        const token = $<HTMLInputElement>('#sy-token').value.trim(), device = $<HTMLInputElement>('#sy-dev').value.trim() || guessDevice();
+        if (!token || /\s/.test(token)) return err('GitHub에서 만든 토큰을 붙여 넣으세요.');
+        syncBusy = true; syncShow();
+        try { const id = await CL.findBox(net, token); sync = { token, device, id }; syncConflict = null; CL.saveCfg(sync); toast('기기 연동을 켰습니다.', '', '기기 연동', 4000, 'sync'); }
+        catch (e) { syncBusy = false; syncShow(); toast(`연동을 켜지 못했습니다: ${CL.failText(e)}.`, 'bad', '기기 연동', 9000, 'sync'); return; }
+        syncBusy = false; syncShow();
+        const m = await CL.peek(net, sync).catch(() => null);
+        if (m && m.rev > 0) await syncCheck(false); else if (game && game.state.status === 'playing') { await saveAuto(); await syncUp(); }
+        return;
+      }
+      case 'syncUp': if (game && game.state.status === 'playing') { clearTimeout(saveTimer); saveTimer = 0; await saveAuto(); } await syncUp(); return; // 지금 판을 먼저 자동 저장 칸에
+      case 'syncForce': if (await ask('서버의 저장을 이 기기의 자동 저장으로 덮어쓸까요?\n다른 기기에서 한 진행은 서버에서 사라집니다.', '덮어쓰기', true)) await syncUp(true); return;
+      case 'syncDown': await syncCheck(true); return;
+      case 'syncOff': if (await ask('이 기기의 기기 연동을 끌까요?\n이 기기에 넣은 토큰을 지웁니다. 서버의 보관함과 이 기기의 저장은 그대로 남습니다.', '연동 끄기')) { CL.clearCfg(); sync = null; syncConflict = null; syncShow(); toast('기기 연동을 껐습니다.', '', '기기 연동'); } return;
       case 'debug': debugOn = !debugOn; try { localStorage.setItem(DEBUG_KEY, debugOn ? '1' : '0'); } catch { /* 저장 불가 */ } renderDebug(); showSettings(); return;
       case 'saveEvery': if (SAVE_EVERY.some(([k]) => k === v)) { saveSet.every = v as SaveEvery; keep(SAVE_SET_KEY, saveSet); showSettings(); } return;
       case 'saveBig': saveSet.big = !saveSet.big; keep(SAVE_SET_KEY, saveSet); showSettings(); return;
@@ -2858,6 +2935,7 @@ export function startApp(): void {
     const t = e.target as HTMLInputElement;
     if (t.id === 'lg-text') { logoTarget().text = [...t.value.trim()].slice(0, 2).join(''); logoChanged(true); return; }
     if (t.id === 'lg-border') { logoTarget().border = t.checked; logoChanged(); return; }
+    if (t.id === 'sy-dev') { const d = t.value.trim(); if (sync) { sync.device = d || guessDevice(); CL.saveCfg(sync); } else syncDev = d; return; } // 1.6.0 기기 이름
     if (t.dataset.ch) { const k = t.dataset.ch as Challenge; if (t.checked) nsChal.add(k); else nsChal.delete(k); return; } // 1.5.0 새 게임 도전 과제
     if (t.id === 'dname' && derive) { derive.name = t.value; const o = document.getElementById('dname-ov'); if (o) o.textContent = t.value.trim() || (t.placeholder ?? ''); return; } // 1.3.0 파생 모델 이름
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }
