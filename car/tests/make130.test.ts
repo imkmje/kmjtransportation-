@@ -1,4 +1,4 @@
-// 1.3.0 차 만들기: 세대교체 맡기기, 개발 중 직원 성과, 파생 모델, 평론가별 시승기, 알림 유형, 저장 형식 7
+// 1.3.0 차 만들기: 세대교체 위임, 개발 중 직원 성과, 파생 모델, 평론가별 시승기, 알림 유형, 저장 형식 7
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Game, allGens, linesUsed, sellingGens } from '../src/sim/game';
@@ -57,7 +57,7 @@ function product(g: Game, skill = 80): void {
 }
 const ticks = (g: Game, n: number, ev: GameEvent[] = []) => { for (let i = 0; i < n; i++) ev.push(...g.tick()); return ev; };
 
-describe('세대교체 맡기기(기획 임원)', () => {
+describe('세대교체 위임(기획 임원)', () => {
   it('기획 임원(능력 기준 이상)이 있어야 켤 수 있고, 차종별로 켜고 끈다(기본 꺼짐, 출시도 자동이 기본)', () => {
     const g = big(), car = quick(g, { type: 'startProject', ...SPEC }), n = npOf(g.state, car);
     expect(genAutoInfo(g.state)).toMatchObject({ available: false, cars: [{ nameplateId: n.id, on: false }] });
@@ -74,7 +74,7 @@ describe('세대교체 맡기기(기획 임원)', () => {
     expect(g.command({ type: 'setGenAuto', nameplateId: 99999, on: true }).ok).toBe(false);
   });
 
-  it('6차종 + 파생 1종을 맡겨 20년: 끊기지 않고 세대교체(세대 나이 84개월 미만, 차종마다 3세대 이상·리프트), 출시까지 자동, 보고가 남는다', () => {
+  it('6차종 + 파생 1종을 위임해 20년: 끊기지 않고 세대교체(세대 나이 84개월 미만, 차종마다 3세대 이상·리프트), 출시까지 위임, 보고가 남는다', () => {
     const g = big(1990, 3, { staff: 18 }), s = g.state;
     const bodies = ['sedanS', 'sedanM', 'sedanL', 'hatch', 'suv', 'minivan'], segs = ['worker', 'family', 'rich', 'youth', 'family', 'family'];
     const firsts = bodies.map((body, i) => { const x = quick(g, { type: 'startProject', ...SPEC, name: `차${i}`, body, segment: segs[i] }); ticks(g, 4 * 4); return x; });
@@ -126,7 +126,7 @@ describe('세대교체 맡기기(기획 임원)', () => {
     expect(nextGenSpec(s, n.id)).toMatchObject({ body: 'sedanM', segment: 'family', powertrain: car.powertrain });
   });
 
-  it('출시까지 맡긴 개발의 출시 대기는 할 일에 잡히지 않고(다음 일까지가 멈추지 않음), 직접 출시일 때만 잡힌다', () => {
+  it('출시까지 위임한 개발의 출시 대기는 할 일에 잡히지 않고(다음 일까지가 멈추지 않음), 직접 출시일 때만 잡힌다', () => {
     const g = big(1995, 4), s = g.state, car = quick(g, { type: 'startProject', ...SPEC }), n = npOf(s, car);
     product(g);
     ok(g.command({ type: 'setGenAuto', nameplateId: n.id, on: true }));
@@ -136,7 +136,7 @@ describe('세대교체 맡기기(기획 임원)', () => {
     const p = s.projects[0], ready = () => todoItems(s).some((x) => x.kind === 'ready');
     expect(p.waiting).toBe(true);
     expect(ready()).toBe(true); // 직접 시작한 개발
-    p.auto = true; expect(ready()).toBe(false); // 출시까지 맡긴 개발
+    p.auto = true; expect(ready()).toBe(false); // 출시까지 위임한 개발
     ok(g.command({ type: 'setGenAuto', nameplateId: n.id, on: true, launch: false })); expect(ready()).toBe(true);
   });
 
@@ -359,7 +359,7 @@ describe('저장 형식 7(1.3.0)', () => {
     for (let i = 0; i < 96; i++) { a.tick(); b.tick(); }
     expect(JSON.stringify(b.toJSON())).toBe(JSON.stringify(a.toJSON()));
   });
-  it('결정론: 같은 시드·같은 조작이면 맡기기·파생·성과까지 같은 결과, 저장 왕복 뒤에도 같다', () => {
+  it('결정론: 같은 시드·같은 조작이면 위임·파생·성과까지 같은 결과, 저장 왕복 뒤에도 같다', () => {
     const run = () => {
       const g = big(1992, 9, { staff: 12 }), base = quick(g, { type: 'startProject', ...SPEC, body: 'sedanM', segment: 'family' });
       quick(g, { type: 'startDerivative', generationId: base.id, variant: 'gt' });

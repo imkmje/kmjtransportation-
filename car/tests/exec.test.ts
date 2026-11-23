@@ -1,4 +1,4 @@
-// 0.7.0 임원: 자리·임명·채용, 제안(보고함) 일치, 맡기기 조건, 교체 고용, 결정론·저장
+// 0.7.0 임원: 자리·임명·채용, 제안(보고함) 일치, 위임 조건, 교체 고용, 결정론·저장
 import { equipOf, expectEffect } from '../src/sim/equip';
 import { yearOf } from '../src/sim/time';
 import { describe, it, expect, vi } from 'vitest';
@@ -91,7 +91,7 @@ describe('임원 자리·임명·채용', () => {
     expect(g.state.staff).toHaveLength(n);
     expect(c1 - g.state.cash).toBe(pay * config.staff.severanceMonths);
   });
-  it('능력 → 구체성 3단계, 맡기기는 능력 문턱 이상일 때만 켤 수 있고 기본은 꺼짐', () => {
+  it('능력 → 구체성 3단계, 위임은 능력 문턱 이상일 때만 켤 수 있고 기본은 꺼짐', () => {
     expect([execTier(X.tiers[0] - 1), execTier(X.tiers[0]), execTier(X.tiers[1])]).toEqual([1, 2, 3]);
     const g = Game.create({ seed: 1, difficulty: 'normal' }), x = hireExec(g, 'hr', X.delegateSkill - 1);
     const d = execInfo(g.state).roles.find((r) => r.role === 'hr')!.delegations;
@@ -100,7 +100,7 @@ describe('임원 자리·임명·채용', () => {
     x.ability = X.delegateSkill;
     ok(g.command({ type: 'setDelegation', role: 'hr', key: 'autoTrain', on: true }));
     expect(execInfo(g.state).roles.find((r) => r.role === 'hr')!.delegations.find((k) => k.key === 'autoTrain')!.on).toBe(true);
-    expect(reason(g.command({ type: 'setDelegation', role: 'hr', key: 'autoAlloc', on: true }))).toContain('그런 맡기기가 없습니다');
+    expect(reason(g.command({ type: 'setDelegation', role: 'hr', key: 'autoAlloc', on: true }))).toContain('그런 위임 항목이 없습니다');
   });
 });
 
@@ -216,7 +216,7 @@ describe('제안(보고함)', () => {
   });
 });
 
-describe('맡기기', () => {
+describe('위임', () => {
   it('자동 교육: 개발 중인 직원은 보내지 않고, 현금이 운영비 N개월 치 아래면 보내지 않으며, 동시 인원 제한', () => {
     const g = Game.create({ seed: 1, difficulty: 'normal' }); hireExec(g, 'hr', 90);
     ok(g.command({ type: 'setDelegation', role: 'hr', key: 'autoTrain', on: true }));

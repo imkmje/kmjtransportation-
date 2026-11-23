@@ -27,7 +27,7 @@ import { STATS, type CarState, type Command, type CommandResult, type Edition, t
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
-export const SAVE_VERSION = 7; // 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 맡기기
+export const SAVE_VERSION = 7; // 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
 /** difficulty: 생략하면 'easy'(0.4.1 새 게임 기본) */
 export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty }
 
@@ -278,7 +278,7 @@ export class Game {
         ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
       }
     } else s.negMonths = 0;
-    if (s.status === 'playing') execMonth(this.execCtx(), ev); // 0.7.0 맡기기 실행, 임원 제안(보고함)
+    if (s.status === 'playing') execMonth(this.execCtx(), ev); // 0.7.0 위임 실행, 임원 제안(보고함)
   }
   /** 임원 모듈(execs.ts)에 넘기는 손잡이 */
   private execCtx(): ExecCtx { return { s: this.state, rng: this.rng, spend: (c) => this.spend(c), run: (cmd) => this.exec(cmd), newName: () => this.newName() }; }
@@ -610,7 +610,7 @@ export class Game {
         return { ok: true, events };
       }
       case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
-      case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 맡기기
+      case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 위임
       case 'devCheat': { // 개발자 메뉴(개발 단계용)
         const ev: GameEvent[] = [];
         switch (cmd.kind) {
@@ -902,7 +902,7 @@ function migrateV5(st: CarState): void {
   (st as { saveVersion: number }).saveVersion = 6;
 }
 /** 저장 형식 6 → 7(1.3.0): 출시된 세대에 평론가별 시승기를 붙인다(점수는 기존 평론 그대로, 글은 출시 때 능력치·가격으로 결정론적으로).
- *  시장 기준가는 지금 기준으로 어림한다. 파생 모델·직원 성과·세대교체 맡기기는 없음으로 읽힌다(필드를 채우지 않아도 같다) */
+ *  시장 기준가는 지금 기준으로 어림한다. 파생 모델·직원 성과·세대교체 위임은 없음으로 읽힌다(필드를 채우지 않아도 같다) */
 function migrateV6(st: CarState): void {
   for (const n of st.nameplates) for (const g of n.generations) {
     if (g.critiques) continue;

@@ -449,7 +449,7 @@ export function startApp(): void {
   let weekReports = 0; // 이번 주(월 결산)에 새로 온 임원 보고 수
   function tickOnce(): GameEvent[] {
     if (!game) return [];
-    const eds = new Set(allGens(game.state).flatMap((g) => g.editions.map((x) => x.id))); // 1.3.0 맡긴 차의 자동 출시를 알아보려고
+    const eds = new Set(allGens(game.state).flatMap((g) => g.editions.map((x) => x.id))); // 1.3.0 위임한 차의 자동 출시를 알아보려고
     const ev = game.tick();
     weekReports = ev.reduce((a, e) => a + (e.kind === 'execReport' ? e.count : 0), 0);
     logDev(); weekFresh = true; sfx('weekTick'); dirty = true;
@@ -459,12 +459,12 @@ export function startApp(): void {
     if (saveSet.every === 'week') autoSave();
     return ev;
   }
-  /** 1.3.0 이 개발이 '출시까지 맡김'인가(sim의 autoLaunch와 같은 차종 기준) */
+  /** 1.3.0 이 개발이 '출시까지 위임'인가(sim의 autoLaunch와 같은 차종 기준) */
   const autoLaunchOn = (p: Project): boolean => { const s = game!.state, id = p.kind === 'fullchange' ? p.targetId : p.kind === 'derivative' ? p.into : Q.nameplateOf(s, p.targetId ?? -1)?.id; return id !== undefined && id !== null && !!s.execs?.genAuto?.[id]?.launch && Q.genAutoInfo(s).available; };
-  /** 1.3.0 세대교체 맡기기로 자동 출시된 차: 게임을 끊지 않고 알림만. 누르면 그 차의 공개 장면·시승기(페이스리프트는 신문) */
+  /** 1.3.0 세대교체 위임으로 자동 출시된 차: 게임을 끊지 않고 알림만. 누르면 그 차의 공개 장면·시승기(페이스리프트는 신문) */
   function autoLaunched(g: Generation, ed: Generation['editions'][number]): void {
     const lift = ed.kind === 'facelift', what = `「${nameOf(g)}」 ${g.number}세대${lift ? ' 페이스리프트' : ''}`;
-    toast(`${what}${josa(what, '을/를')} 기획 임원이 출시했습니다(세대교체 맡기기).${lift ? '' : ` 평론 평균 ${score(g.reviewAvg)}.`}`, 'alert', '맡긴 차 출시', 12000, '', { label: lift ? '신문 보기' : '공개 장면·시승기', fn: () => {
+    toast(`${what}${josa(what, '을/를')} 기획 임원이 출시했습니다(세대교체 위임).${lift ? '' : ` 평론 평균 ${score(g.reviewAvg)}.`}`, 'alert', '위임한 차 출시', 12000, '', { label: lift ? '신문 보기' : '공개 장면·시승기', fn: () => {
       if (!sellingGens(game!.state).includes(g)) { if (lift) showNews(ed.headline ?? '', '', monthOf(ed.launchWeek)); else showReview(g); return; }
       garageAt(g.id); const k = lift ? `e${ed.id}` : g.id; if (!ui.photos[k]) snapPhoto(k);
       launchScene(g, lift ? ed : undefined);
@@ -592,7 +592,7 @@ export function startApp(): void {
         break;
       case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
         const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
-        if (w?.auto && autoLaunchOn(w)) { waitSeen.add(w.id); break; } // 1.3.0 출시까지 맡긴 개발: 다음 주에 기획 임원이 출시하므로 멈추지 않는다
+        if (w?.auto && autoLaunchOn(w)) { waitSeen.add(w.id); break; } // 1.3.0 출시까지 위임한 개발: 다음 주에 기획 임원이 출시하므로 멈추지 않는다
         if (w) { waitSeen.add(w.id); sfx('readyToLaunch'); autoPause('ready', e.text, `「${w.name}」 출시 대기`, { label: '출시 준비', fn: () => openLaunch(w.id) }); }
         else toast(e.text, 'alert', '조언', 9000, '', undefined, tp);
         break;
@@ -681,7 +681,7 @@ export function startApp(): void {
       rp?.status === 'proposed' ? `<button class="btn ink" data-act="repOk" data-id="${rp.id}">승인</button><button class="btn" data-act="repNo" data-id="${rp.id}">거절</button>` : '',
       rp && (rp.status === 'approved' || rp.status === 'waiting') ? `<button class="btn danger" data-act="repCancel" data-id="${rp.id}">예약 취소</button>` : '',
       `<button class="btn" data-act="repClose" data-id="${r.id}">이 보고 닫기</button>`].join('');
-    return `<div class="rep-card${r.auto ? ' auto' : ''}${repFresh.has(r.id) ? ' unread' : ''}" data-id="${r.id}"><div class="rep-h"><b>${esc(execTitle(r.role))} ${esc(r.execName)}</b><small>${esc(when)}${r.auto ? ' · 맡긴 일 기록' : ''}${repFresh.has(r.id) ? ' · 새 보고' : ''}</small></div>
+    return `<div class="rep-card${r.auto ? ' auto' : ''}${repFresh.has(r.id) ? ' unread' : ''}" data-id="${r.id}"><div class="rep-h"><b>${esc(execTitle(r.role))} ${esc(r.execName)}</b><small>${esc(when)}${r.auto ? ' · 위임한 일 기록' : ''}${repFresh.has(r.id) ? ' · 새 보고' : ''}</small></div>
       <h3>${esc(r.title)}</h3><p>${esc(r.text)}</p>${r.facts.length ? `<ul class="rep-facts">${r.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}${st}<div class="row">${btns}</div></div>`;
   }
   // ----- 1.0.0 할 일 서랍: 급한 일 / 지금 할 수 있는 일 / 참고(접힘), '나중에'(다음 달까지 숨김), '다시 알리지 않기'(종류별, 설정 → 알림에서 되돌림) -----
@@ -1011,16 +1011,16 @@ export function startApp(): void {
   /** 1.3.0 파생 차 한 줄 설명: "왜건 · 「아리아」 2세대 바탕" */
   const derivLine = (g: Generation): string => { const s = game!.state, n = Q.nameplateOf(s, g.id), b = n?.baseOf !== undefined ? s.nameplates.find((x) => x.id === n.baseOf) : undefined, fg = g.fromGen !== undefined ? Q.generationById(s, g.fromGen) : undefined;
     return b ? `${Q.variantById(g.variant)?.name ?? '파생'} · 「${b.name}」${fg ? ` ${fg.number}세대` : ''} 바탕` : ''; };
-  // ----- 1.3.0 세대교체 맡기기(기획 임원): 한 주·명령마다 한 번 계산 -----
+  // ----- 1.3.0 세대교체 위임(기획 임원): 한 주·명령마다 한 번 계산 -----
   let gaMemo: { g: Game; k: string; v: ReturnType<typeof Q.genAutoInfo> } | null = null;
   const gaInfo = () => { const s = game!.state, k = `${s.week}:${s.history.length}:${s.projects.length}:${s.cash}:${JSON.stringify(s.execs?.genAuto ?? {})}:${JSON.stringify(s.execs?.seats.product ?? null)}`; if (gaMemo?.g !== game || gaMemo.k !== k) gaMemo = { g: game!, k, v: Q.genAutoInfo(s) }; return gaMemo.v; };
   const gaCar = (npId: number) => gaInfo().cars.find((c) => c.nameplateId === npId);
-  /** 맡김 상태 한 줄: 다음 예정·기다림 */
+  /** 위임 상태 한 줄: 다음 예정·기다림 */
   const gaLine = (c: ReturnType<typeof gaCar>): string => { if (!c) return ''; const w = c.waitingSince !== null ? Math.floor((game!.state.week - c.waitingSince) / config.time.weeksPerMonth) : 0;
-    return !c.on ? (c.next ? `지금 할 때: ${c.next}` : '꺼짐') : !c.active ? '멈춤 · 기획 임원이 맡을 수 없습니다' : c.next ? `다음: ${c.next}${w >= 1 ? ` · ${w}개월째 기다림${c.why ? ` · ${c.why}` : '(이유는 임원 보고)'}` : c.why ? ` · ${c.why}` : c.waitingSince !== null ? ' · 조건을 기다림' : ''}` : `지금은 할 일 없음${c.launch ? ' · 출시까지 맡김' : ' · 출시는 직접'}`; };
-  /** 맡김 켜기/끄기 버튼(차고 요약 표·상세·임원 화면 공용) */
-  const gaBtn = (npId: number, small = false) => { const c = gaCar(npId), A = gaInfo(); if (!c) return ''; return `<button class="${small ? 'g-auto' : 'btn'}" data-act="genAuto" data-np="${npId}" data-v="${c.on ? 0 : 1}" aria-pressed="${c.on}" ${A.available || c.on ? '' : 'disabled'} aria-label="${esc(c.name)} 세대교체 맡기기 ${c.on ? '끄기' : '켜기'}"${small ? ` title="${esc(gaLine(c))}"` : ''}>${small ? '맡김' : c.on ? '켜짐' : '꺼짐'}</button>`; };
-  const gaLaunchBtn = (npId: number) => { const c = gaCar(npId); return c?.on ? `<button class="btn ga-launch" data-act="genAutoLaunch" data-np="${npId}" data-v="${c.launch ? 0 : 1}" aria-pressed="${c.launch}">출시까지 ${c.launch ? '자동' : '직접'}</button>` : ''; };
+    return !c.on ? (c.next ? `지금 할 때: ${c.next}` : '꺼짐') : !c.active ? '멈춤 · 기획 임원에게 위임할 수 없습니다' : c.next ? `다음: ${c.next}${w >= 1 ? ` · ${w}개월째 기다림${c.why ? ` · ${c.why}` : '(이유는 임원 보고)'}` : c.why ? ` · ${c.why}` : c.waitingSince !== null ? ' · 조건을 기다림' : ''}` : `지금은 할 일 없음${c.launch ? ' · 출시까지 위임' : ' · 출시는 직접'}`; };
+  /** 위임 켜기/끄기 버튼(차고 요약 표·상세·임원 화면 공용) */
+  const gaBtn = (npId: number, small = false) => { const c = gaCar(npId), A = gaInfo(); if (!c) return ''; return `<button class="${small ? 'g-auto' : 'btn'}" data-act="genAuto" data-np="${npId}" data-v="${c.on ? 0 : 1}" aria-pressed="${c.on}" ${A.available || c.on ? '' : 'disabled'} aria-label="${esc(c.name)} 세대교체 위임 ${c.on ? '끄기' : '켜기'}"${small ? ` title="${esc(gaLine(c))}"` : ''}>${small ? '위임' : c.on ? '켜짐' : '꺼짐'}</button>`; };
+  const gaLaunchBtn = (npId: number) => { const c = gaCar(npId); return c?.on ? `<button class="btn ga-launch" data-act="genAutoLaunch" data-np="${npId}" data-v="${c.launch ? 0 : 1}" aria-pressed="${c.launch}">${c.launch ? '출시까지 위임' : '출시는 직접'}</button>` : ''; };
   /** 그 차의 상세로(없는 ID면 전 차종 표) */
   const garageAt = (id?: number) => { const ok = id !== undefined && sellingGens(game!.state).some((g) => g.id === id); garageId = ok ? id! : -1; garageSum = !ok; go('garage'); };
   const ageText = (g: Generation) => { const m = monthOf(game!.state.week) - g.launchMonth, y = Math.floor(m / 12), mo = m % 12; return m <= 0 ? '이번 달 출시' : `${[y ? `${y}년` : '', mo ? `${mo}개월` : ''].filter(Boolean).join(' ')} 지남`; };
@@ -1030,7 +1030,7 @@ export function startApp(): void {
     const s = game!.state, T = new Map(todos().map((t) => [t.key, t])), np = Q.nameplateOf(s, g.id), b: [string, string][] = [];
     if (g.status === 'ending') b.push(['이번 달 단종', 'bad']);
     if (s.projects.some((p) => (p.targetId === (p.kind === 'fullchange' ? np?.id : g.id) && (p.kind === 'facelift' || p.kind === 'fullchange')) || (p.kind === 'derivative' && p.into === np?.id))) b.push(['개발 중', 'dev']);
-    if (np && gaCar(np.id)?.on) b.push(['맡김', 'on']); // 1.3.0 세대교체 맡기기
+    if (np && gaCar(np.id)?.on) b.push(['위임', 'on']); // 1.3.0 세대교체 위임
     if (s.projects.some((p) => p.kind === 'fix' && p.targetId === g.id)) b.push(['개선 중', 'dev']);
     if (g.clearance) b.push(['가격 인하 판매 중', 'warn']);
     else { const R = Q.rescueOptions(s, g.id); if (R && R.target === null && (R.fix.ok || R.clearance.ok)) b.push(['수습 가능', 'bad']); } // 0.10.0 혹평·부진 차의 긴급 개선·가격 인하 판매
@@ -1046,10 +1046,10 @@ export function startApp(): void {
   const lifeMini = (v: number) => `<span class="g-life g-opt"><i class="life"><u style="width:${(v * 100).toFixed(1)}%"></u></i><small>${Math.round(v * 100)}%</small></span>`;
   /** 전 차종 한 줄 요약 표 + 개발 중·단종 구역 + 비교 줄 */
   function garageTable(): View {
-    const s = game!.state, L = garageList(), all = allGens(s), gaCol = gaInfo().available || gaInfo().cars.some((c) => c.on); // 1.3.0 맡김 칸(맡길 수 있거나 맡긴 차가 있을 때)
+    const s = game!.state, L = garageList(), all = allGens(s), gaCol = gaInfo().available || gaInfo().cars.some((c) => c.on); // 1.3.0 위임 칸(위임할 수 있거나 위임한 차가 있을 때)
     for (const id of cmpSel) if (!L.some((g) => g.id === id)) cmpSel.delete(id);
     const H = (k: GSort | '', label: string, cls = '') => k ? `<button class="sh${cls ? ` ${cls}` : ''}" data-act="gSort" data-v="${k}" aria-pressed="${gSort.k === k}">${label}${gSort.k === k ? `<i aria-hidden="true">${gSort.desc ? '▼' : '▲'}</i>` : ''}</button>` : `<span class="${cls}">${label}</span>`;
-    const head = `<div class="gtr-w head"><span class="s-pick"></span><div class="gtr head"><span></span>${H('name', '차종')}${H('launch', '출시', 'g-opt')}${H('price', '가격', 'r g-opt')}${H('sold', '지난달 판매', 'r')}${H('unit', '대당 이익', 'r g-opt')}${H('profit', '월 이익', 'r')}${H('life', '수명', 'g-opt')}${H('review', '평론', 'r g-opt')}${H('', '상태', 'g-opt')}</div>${gaCol ? `<span class="g-auto hd">맡김${ib('term:세대교체 맡기기')}</span>` : ''}</div>`;
+    const head = `<div class="gtr-w head"><span class="s-pick"></span><div class="gtr head"><span></span>${H('name', '차종')}${H('launch', '출시', 'g-opt')}${H('price', '가격', 'r g-opt')}${H('sold', '지난달 판매', 'r')}${H('unit', '대당 이익', 'r g-opt')}${H('profit', '월 이익', 'r')}${H('life', '수명', 'g-opt')}${H('review', '평론', 'r g-opt')}${H('', '상태', 'g-opt')}</div>${gaCol ? `<span class="g-auto hd">위임${ib('term:세대교체 위임')}</span>` : ''}</div>`;
     const row = (g: Generation) => {
       const e = currentEdition(g), up = Q.generationUnitProfit(g, s), mp = carMonthProfit(g), name = nameOf(g);
       const dl = derivLine(g), np = Q.nameplateOf(s, g.id)!;
@@ -1181,7 +1181,7 @@ export function startApp(): void {
     const card3 = `<div class="card next-step"><p class="lbl">이 차의 다음 단계 <span class="lblterms">페이스리프트${ib('term:페이스리프트')} 풀체인지${ib('term:풀체인지')}</span></p><div class="row"><button class="btn" data-act="goLift" data-id="${g.id}" ${fl.ok ? '' : 'disabled'}>페이스리프트</button>${dn ? `<button class="btn" data-act="goDerive" data-id="${bg?.id ?? -1}" data-v="${np.variant}" ${dn.ok ? '' : 'disabled'}>다음 세대(파생)</button>` : `<button class="btn" data-act="goFull" data-id="${np.id}" ${fc.ok ? '' : 'disabled'}>풀체인지</button><button class="btn" data-act="goDerive" data-id="${g.id}" ${g.status === 'onSale' && !busy ? '' : 'disabled'}>파생 모델</button>`}${ib('term:파생 모델')}</div>
       ${why('페이스리프트', fl)}${dn ? why('다음 세대(파생)', dn) : why('풀체인지', fc)}${blk ? `<div class="warnbox reg-block" style="margin-top:10px">${esc(blk)}<button class="btn" data-act="goCo" data-v="research" style="width:100%;margin-top:8px">연구 화면</button></div>` : ''}
       ${rf.needed ? `<hr><div class="retrofit"><p class="lbl">의무 장비${ib('term:유예 기간')}</p><p class="hint">규제로 의무가 된 <b>${rfNames}</b>${josa(rfNames, '을/를')} 판매 중인 이 차에 넣습니다. 한 번에 ${money(rf.cost)}, 대당 원가 +${num(rf.unitCostAdd)}만원.</p><button class="btn ink" data-act="retrofit" data-id="${g.id}" ${rf.ok ? '' : 'disabled'} style="width:100%;margin-top:8px">의무 장비 넣기</button>${rf.ok || rf.reason === blk ? '' : `<p class="note why">${esc(rf.reason ?? '')}</p>`}</div>` : ''}
-      <hr><div class="toggle ga-one"><span>세대교체 맡기기${ib('term:세대교체 맡기기')}<small>${esc(gaLine(gaCar(np.id)))}</small></span><span class="ga-btns">${gaLaunchBtn(np.id)}${gaBtn(np.id)}</span></div>${!gaInfo().available && !gaCar(np.id)?.on ? `<p class="note why">${esc(gaInfo().whyNot ?? '')}</p>` : ''}
+      <hr><div class="toggle ga-one"><span>세대교체 위임${ib('term:세대교체 위임')}<small>${esc(gaLine(gaCar(np.id)))}</small></span><span class="ga-btns">${gaLaunchBtn(np.id)}${gaBtn(np.id)}</span></div>${!gaInfo().available && !gaCar(np.id)?.on ? `<p class="note why">${esc(gaInfo().whyNot ?? '')}</p>` : ''}
       ${I.rescueBlock(s, g.id)}
       <hr><button class="btn danger" data-act="discontinue" data-id="${g.id}" ${ending ? 'disabled' : ''} style="width:100%">${ending ? '이번 달 말에 단종됩니다' : '단종하기'}</button></div>`;
     const planCard = s.projects.length < Q.devTeams(s) ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
@@ -1929,7 +1929,7 @@ export function startApp(): void {
 
   // ----- 임원(0.7.0) -----
   const EXEC_DESC: Record<Q.ExecInfo['roles'][number]['role'], string> = {
-    hr: '해고·교육·휴식·채용을 권하고, 교체 고용을 제안합니다.', product: '페이스리프트·풀체인지 적기와 단종을 권하고, 맡기면 세대교체를 대신 합니다.',
+    hr: '해고·교육·휴식·채용을 권하고, 교체 고용을 제안합니다. 위임하면 휴식·교육·채용·해고를 대신 합니다.', product: '페이스리프트·풀체인지 적기와 단종을 권하고, 위임하면 세대교체를 대신 합니다.',
     finance: '현금 부족을 미리 알리고 대출 상환·가격 조정을 권합니다.', production: '공장 증설·생산 라인·생산 배분을 권합니다.',
     research: '규제 대비 연구와 다음 연구를 권합니다.', market: '무엇을 만들지(차급·고객층·예상 판매)와 광고 수준을 권합니다.',
   };
@@ -1938,16 +1938,16 @@ export function startApp(): void {
     const s = game!.state, e = Q.execInfo(s);
     const sum = `<div class="card exec-sum"><p class="lbl">임원</p><h2>임원 자리 ${e.used}/${e.seats}석</h2>
       <p class="hint" style="margin-top:6px">임원은 월 결산 때 분야별로 제안을 보고함에 올립니다(임원마다 한 달 최대 ${config.exec.perExec}건). 화면에 튀어나오지 않으니 상단의 할 일 버튼에서 보고를 확인하세요. 임원은 직원 정원 밖이라, 직원을 임원으로 임명하면 그 자리에 한 명을 더 뽑을 수 있습니다.${e.used >= e.seats && e.nextSeatHq ? ` 본사 ${e.nextSeatHq}등급이 되면 자리가 늘어납니다.` : ''}</p>
-      <p class="note">임원 능력${ib('term:임원 능력')}이 높을수록 제안이 구체적입니다${ib('term:제안의 구체성')}. 능력 ${e.delegateSkill} 이상이면 일부 일을 맡길 수 있습니다(맡긴 일도 보고함에 기록됩니다). 해고·가격·출시 같은 큰 결정은 맡기지 않습니다.</p></div>`;
-    // 1.3.0 기획 임원 카드의 세대교체 맡기기: 차종별 켜기/끄기, 출시까지 자동, 전체 켜기/끄기, 다음 예정·기다림
-    const GA = gaInfo(), gaSec = GA.cars.length || GA.whyNot ? `<div class="ga-sec"><p class="lbl" style="margin-top:12px">세대교체 맡기기${ib('term:세대교체 맡기기')}</p>${GA.whyNot ? `<p class="note why ga-why">${esc(GA.whyNot)}</p>` : ''}
+      <p class="note">임원 능력${ib('term:임원 능력')}이 높을수록 제안이 구체적입니다${ib('term:제안의 구체성')}. 능력 ${e.delegateSkill} 이상이면 일부 일을 위임할 수 있습니다(위임한 일도 보고함에 기록됩니다). 가격은 차마다 자동 가격 정책으로 정하고, 해고·출시는 따로 켠 경우에만 임원이 합니다.</p></div>`;
+    // 1.3.0 기획 임원 카드의 세대교체 위임: 차종별 켜기/끄기, 출시까지 자동, 전체 켜기/끄기, 다음 예정·기다림
+    const GA = gaInfo(), gaSec = GA.cars.length || GA.whyNot ? `<div class="ga-sec"><p class="lbl" style="margin-top:12px">세대교체 위임${ib('term:세대교체 위임')}</p>${GA.whyNot ? `<p class="note why ga-why">${esc(GA.whyNot)}</p>` : ''}
       ${GA.cars.length ? `<div class="row ga-all"><button class="btn" data-act="genAutoAll" data-v="1" ${GA.available && GA.cars.some((c) => !c.on) ? '' : 'disabled'}>모두 켜기</button><button class="btn" data-act="genAutoAll" data-v="0" ${GA.cars.some((c) => c.on) ? '' : 'disabled'}>모두 끄기</button></div>
       ${GA.cars.map((c) => `<div class="toggle ga-row${c.derivative ? ' deriv' : ''}" data-np="${c.nameplateId}"><span>${c.derivative ? '↳ ' : ''}${esc(c.name)}<small>${esc(gaLine(c))}</small></span><span class="ga-btns">${gaLaunchBtn(c.nameplateId)}${gaBtn(c.nameplateId)}</span></div>`).join('')}
-      <p class="note">켜 둔 차종은 때가 되면 기획 임원이 전작 그대로의 기획으로 페이스리프트·풀체인지(파생 차종은 바탕 차의 새 세대로 다음 세대)를 시작하고 보고합니다. '출시까지 자동'이면 개발이 끝난 뒤 출시도 하며, 출시 장면 없이 알림으로만 알립니다.</p>` : '<p class="hint">아직 낸 차종이 없습니다.</p>'}</div>` : '';
+      <p class="note">켜 둔 차종은 때가 되면 기획 임원이 전작 그대로의 기획으로 페이스리프트·풀체인지(파생 차종은 바탕 차의 새 세대로 다음 세대)를 시작하고 보고합니다. '출시까지 위임'이면 개발이 끝난 뒤 출시도 하며, 출시 장면 없이 알림으로만 알립니다.</p>` : '<p class="hint">아직 낸 차종이 없습니다.</p>'}</div>` : '';
     const card = (r: Q.ExecInfo['roles'][number]) => {
       const h = r.holder, head = `<p class="lbl">${esc(r.title)}</p>`, desc = `<p class="hint">${esc(EXEC_DESC[r.role])}</p>`, ga = r.role === 'product' ? gaSec : '';
       if (h) {
-        const del = r.delegations.length ? `<p class="lbl" style="margin-top:12px">맡기기</p>${r.delegations.map((d) => `<div class="toggle" style="margin-top:6px"><span>${esc(d.label)}</span><button class="btn" data-act="execDeleg" data-role="${r.role}" data-k="${d.key}" data-v="${d.on ? '0' : '1'}" aria-pressed="${d.on}" ${d.available ? '' : 'disabled'}>${d.on ? '켜짐' : '꺼짐'}</button></div>${d.whyNot ? `<p class="note why">${esc(d.whyNot)}</p>` : ''}`).join('')}` : r.role === 'product' ? '' : '<p class="note">이 자리는 제안만 합니다(맡길 일이 없습니다).</p>';
+        const del = r.delegations.length ? `<p class="lbl" style="margin-top:12px">위임</p>${r.delegations.map((d) => `<div class="toggle deleg" data-k="${d.key}" style="margin-top:6px"><span>${esc(d.label)}${d.note ? `<small>${esc(d.note)}</small>` : ''}${d.warn ? `<small class="deleg-warn">${esc(d.warn)}</small>` : ''}</span><button class="btn" data-act="execDeleg" data-role="${r.role}" data-k="${d.key}" data-v="${d.on ? '0' : '1'}" aria-pressed="${d.on}" aria-label="${esc(d.label)} ${d.on ? '끄기' : '켜기'}" ${d.available ? '' : 'disabled'}>${d.on ? '켜짐' : '꺼짐'}</button></div>${d.whyNot ? `<p class="note why">${esc(d.whyNot)}</p>` : ''}`).join('')}` : r.role === 'product' ? '' : '<p class="note">이 자리는 제안만 합니다(위임할 일이 없습니다).</p>';
         return `<div class="card exec-card filled" data-role="${r.role}">${head}<h2>${esc(h.name)}<small>${h.hired ? '외부 임원' : `${ROLE_NAME[h.staffRole]} 출신`}</small></h2>${desc}
           <div class="kpis" style="margin-top:8px">${kpi(`임원 능력${ib('term:임원 능력')}`, String(h.skill))}${kpi(`제안${ib('term:제안의 구체성')}`, TIER_WORD[h.tier], '', 'kpi-word')}${kpi('월급', money(h.pay))}</div>${del}${ga}
           <button class="btn danger" data-act="execDismiss" data-role="${r.role}" style="width:100%;margin-top:12px">해임${h.hired ? ` · 퇴직금 ${money(h.pay * config.staff.severanceMonths)}` : ' · 원래 직무로 복귀'}</button></div>`;
@@ -2371,17 +2371,17 @@ export function startApp(): void {
         ui.colors[p.id] = currentEdition(g).color; devPrev.set(p.id, 0); derive = null; devSel = p.id;
         toast(`「${p.name}」(${o.name}) 개발을 시작했습니다. ${o.weeks}주쯤 걸립니다.`); go('dev'); return;
       }
-      // ---- 1.3.0 세대교체 맡기기 ----
+      // ---- 1.3.0 세대교체 위임 ----
       case 'genAuto': case 'genAutoLaunch': {
         if (!game) return; const id = Number(el.dataset.np), c = gaCar(id); if (!c) return;
         const on = a === 'genAuto' ? v === '1' : true, launch = a === 'genAutoLaunch' ? v === '1' : c.launch;
-        if (run(game.command({ type: 'setGenAuto', nameplateId: id, on, launch }))) { if (a === 'genAuto') toast(on ? `「${c.name}」 세대교체를 기획 임원에게 맡겼습니다.${launch ? ' 개발이 끝나면 출시까지 합니다.' : ' 출시는 직접 합니다.'}` : `「${c.name}」 세대교체 맡기기를 껐습니다.`); render(); }
+        if (run(game.command({ type: 'setGenAuto', nameplateId: id, on, launch }))) { if (a === 'genAuto') toast(on ? `「${c.name}」 세대교체를 기획 임원에게 위임했습니다.${launch ? ' 개발이 끝나면 출시까지 합니다.' : ' 출시는 직접 합니다.'}` : `「${c.name}」 세대교체 위임을 껐습니다.`); render(); }
         return;
       }
       case 'genAutoAll': {
         if (!game) return; const on = v === '1'; let n = 0;
         for (const c of gaInfo().cars.filter((x) => x.on !== on)) if (run(game.command({ type: 'setGenAuto', nameplateId: c.nameplateId, on, launch: c.launch }, n > 0))) n++;
-        if (n) toast(on ? `차종 ${n}개의 세대교체를 기획 임원에게 맡겼습니다.` : `차종 ${n}개의 세대교체 맡기기를 껐습니다.`); render(); return;
+        if (n) toast(on ? `차종 ${n}개의 세대교체를 기획 임원에게 위임했습니다.` : `차종 ${n}개의 세대교체 위임을 껐습니다.`); render(); return;
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
       case 'autoTeam': autoTeam(v); return;
@@ -2586,7 +2586,7 @@ export function startApp(): void {
       case 'execDeleg': if (game && run(game.command({ type: 'setDelegation', role: el.dataset.role as ExecRole, key: el.dataset.k!, on: v === '1' }))) render(); return;
       case 'execDismiss': {
         if (!game) return; const role = el.dataset.role as ExecRole, h = Q.execInfo(game.state).roles.find((r) => r.role === role)?.holder; if (!h) return;
-        if (!(await ask(`${h.name}${josa(h.name, '을/를')} ${Q.EXEC_TITLE[role]}에서 해임할까요?\n${h.hired ? `외부 임원이라 회사를 떠납니다. 퇴직금 ${money(h.pay * config.staff.severanceMonths)}이 나갑니다.` : `원래 직무(${ROLE_NAME[h.staffRole]})로 돌아갑니다.`} 맡긴 일은 모두 꺼집니다.`, '해임', true))) return;
+        if (!(await ask(`${h.name}${josa(h.name, '을/를')} ${Q.EXEC_TITLE[role]}에서 해임할까요?\n${h.hired ? `외부 임원이라 회사를 떠납니다. 퇴직금 ${money(h.pay * config.staff.severanceMonths)}이 나갑니다.` : `원래 직무(${ROLE_NAME[h.staffRole]})로 돌아갑니다.`} 위임한 일은 모두 꺼집니다.`, '해임', true))) return;
         if (run(game.command({ type: 'dismissExec', role }))) { toast(`${h.name}${josa(h.name, '을/를')} 해임했습니다.`); render(); }
         return;
       }
