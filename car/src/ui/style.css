@@ -1140,3 +1140,34 @@ span.g-auto{border-color:transparent;background:transparent}.g-auto.hd{min-heigh
 @media (max-width:700px){.gtr-w.deriv{padding-left:10px}.lineage-card.deriv{margin-left:10px}.ga-row.deriv{margin-left:8px}}
 /* 1.4.0 위임 항목 설명·해고 안내(경고색 대신 기울임) */
 .exec-card .toggle.deleg span{min-width:0}.exec-card .toggle.deleg small{overflow-wrap:anywhere}.exec-card .toggle small.deleg-warn{font-style:italic;color:var(--ink)}
+
+/* 1.5.0 통계·새 게임 선택지·지난 판의 차 */
+.rectabs{max-width:820px}
+.rectabs button{font-size:12.5px}
+.st-sum .kpi b{font-size:clamp(16px,1.8vw,22px)}
+.st-sum .kpi b span{font-size:11.5px;font-weight:700}
+.st-bars td{padding:5px 6px;vertical-align:middle}
+.st-bars td:first-child{max-width:9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-bar{width:45%}.st-bar i{display:block;height:12px;border-radius:6px;background:var(--pos);min-width:2px}.st-bar i.neg{background:var(--neg)}
+.st-mix th,.st-mix td{white-space:nowrap}
+.st-start p{margin:2px 0}
+.ch-list{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:6px}
+.ch-list small{display:block;color:var(--ink2);font-size:12px}
+.ns-chal{margin:4px 0 8px}.ns-chal summary{font-weight:800;min-height:40px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.ns-chal summary small{font-weight:600;color:var(--ink3)}
+.ns-cg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px}
+.ns-c{display:block;padding:4px 0;letter-spacing:0}.ns-c small{display:block;color:var(--ink2);font-size:11.5px;font-weight:600;line-height:1.35;margin-left:24px;letter-spacing:0}.ns-c.off{opacity:.5}
+.ns-line{margin:-6px 0 8px}
+.name-row{display:flex;gap:8px;align-items:stretch}.name-row .namein{flex:1;min-width:0}
+.past-btn{flex:none;min-height:46px;white-space:nowrap}
+.pastpick{max-width:520px;width:calc(100vw - 32px)}
+.past-scroll{max-height:min(60vh,520px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.past-list{display:grid;gap:6px}
+.past-it{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:8px 12px;min-height:48px;font:inherit;color:var(--ink)}
+.past-it small{display:block;color:var(--ink2);font-size:12px}
+.past-it:disabled{opacity:.45}
+.past-run{margin-top:8px}.past-run summary{min-height:40px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.cover .inner.wide{width:min(980px,100%)}
+.ns-cols{display:grid;gap:12px}.ns-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.ns-col .seg{margin-bottom:0}
+@media (min-width:900px){.ns-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}}

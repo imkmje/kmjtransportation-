@@ -243,8 +243,10 @@ export interface GenAuto { launch: boolean; waitSince: number | null; told: bool
 
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
 export type Difficulty = 'easy' | 'normal' | 'hard';
+export type StartCondition = 'normal' | 'rich' | 'lean'; // 1.5.0 시작 조건
+export type Challenge = 'evOnly' | 'names3' | 'noLoan' | 'noExec'; // 1.5.0 도전 과제
 export interface CarState {
-  saveVersion: 7;
+  saveVersion: 8;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -273,10 +275,11 @@ export interface CarState {
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
   execs?: ExecState; // 0.7.0 임원(처음 임원 명령을 쓸 때 생긴다. 없으면 임원 없음, 저장 형식은 그대로 4)
   devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
+  start?: { year: number; condition: StartCondition; challenges: Challenge[] }; // 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
 /** 한 해의 기록(0.8.0): 평판 이유별 합, 세대 ID별 이익, 연구 완료, 월 결산 합계(months개월), 연말(12월 결산) 현금·직원 수·임원 */
-export interface YearLog { rep: Record<string, number>; cars: Record<string, number>; research: string[]; revenue: number; profit: number; sold: number; months: number; cash?: number; staff?: number; execs?: string[] }
+export interface YearLog { rep: Record<string, number>; cars: Record<string, number>; research: string[]; revenue: number; profit: number; sold: number; months: number; cash?: number; staff?: number; execs?: string[]; repEnd?: number } // repEnd(1.5.0): 12월 결산 뒤 평판
 
 // ---------- 명령 ----------
 export type Command =

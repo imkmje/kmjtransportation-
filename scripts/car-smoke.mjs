@@ -1998,6 +1998,81 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   }
   await rctx.close(); }
 
+// ---- 1.5.0 새 게임 선택지·통계·지난 판의 차 이름: 첫 판에서 차를 내고 자동 저장 → 새 판(2000년·넉넉한 자금·대출 없이)에서 [지난 이름]으로 이름 채움, 바로 기획·개발,
+// 기록 탭 통계 그래프·도전 과제 표시·지난 판의 차, 세 화면 크기 넘침 없음. CAR_SMOKE_150=폴더 를 주면 화면을 그 폴더에 찍는다
+{ const nctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const np = await nctx.newPage(); np.on('pageerror', (e) => errors.push(String(e))); np.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const NG = (fn, a) => np.evaluate(fn, a), N5 = process.env.CAR_SMOKE_150 ?? '';
+  const nshot = async (n) => { if (N5) await np.screenshot({ path: `${N5}/${n}.png` }); };
+  const ovAll = () => NG(() => { const p = document.getElementById('panel'), t = document.getElementById('title'); return Math.max(document.documentElement.scrollWidth - innerWidth, p ? p.scrollWidth - p.clientWidth : 0, t && !t.hidden ? t.scrollWidth - t.clientWidth : 0); });
+  const quickCar = (name) => NG((nm) => { const c = window.__car, g = c.game, s = g.state;
+    g.command({ type: 'startProject', name: nm, body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    const p = s.projects.at(-1); g.devCheat('finishDev'); return g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 }).ok; }, name);
+  await np.goto(URL0); await np.waitForSelector('#title:not([hidden])');
+  await np.click('[data-act="titleNew"]'); await np.fill('#t-co', '지난판 모터스'); await np.click('[data-act="startNew"]'); await NG(() => window.__car.setSpeed(0));
+  check('1.5.0 첫 판(기본 선택): start 없음, 1970년', await NG(() => { const s = window.__car.game.state; return s.start === undefined && s.week === 0; }));
+  const launchedOk = await quickCar('누리'); await NG(() => window.__car.tick(4)); await np.waitForTimeout(1500);
+  const past = await NG(() => JSON.parse(localStorage.getItem('car-company-past-names') ?? '[]'));
+  check('1.5.0 자동 저장 때 이 기기에 지난 판의 차 이름 기록', launchedOk && past.length === 1 && past[0].company === '지난판 모터스' && past[0].cars[0]?.name === '누리', JSON.stringify(past).slice(0, 160));
+  await np.goto(URL0); await np.waitForSelector('#title:not([hidden])');
+  await np.click('[data-act="titleNew"]'); await np.fill('#t-co', '통계 시험');
+  check('1.5.0 새 게임: 시작 연도 4개(기본 1970)·시작 조건 3개(기본 보통)·도전 과제 4개(기본 없음)', (await np.locator('[data-act="nsYear"]').count()) === 4 && (await np.locator('[data-act="nsYear"][data-v="1970"]').getAttribute('aria-pressed')) === 'true'
+    && (await np.locator('[data-act="nsCond"]').count()) === 3 && (await np.locator('[data-act="nsCond"][data-v="normal"]').getAttribute('aria-pressed')) === 'true' && (await np.locator('input[data-ch]').count()) === 4 && (await np.locator('input[data-ch]:checked').count()) === 0);
+  await np.click('.ns-chal summary');
+  check('1.5.0 전기차만: 1970년 시작에서는 고를 수 없음', await np.locator('input[data-ch="evOnly"]').isDisabled());
+  await np.click('[data-act="nsYear"][data-v="2015"]'); await np.check('input[data-ch="evOnly"]');
+  await np.click('[data-act="nsYear"][data-v="2000"]'); await np.click('[data-act="nsCond"][data-v="rich"]'); await np.check('input[data-ch="noLoan"]');
+  check('1.5.0 연도를 2000년으로 바꾸면 전기차만은 풀리고 막힘, 이름은 그대로, 한 줄 안내가 바뀜', (await np.locator('input[data-ch="evOnly"]').isDisabled()) && !(await np.locator('input[data-ch="evOnly"]').isChecked()) && (await np.inputValue('#t-co')) === '통계 시험' && (await np.locator('#ns-line').innerText()).includes('2000년 1월'));
+  for (const [w, h] of [[1366, 1024], [1024, 768], [800, 1200]]) {
+    await np.setViewportSize({ width: w, height: h }); await np.waitForTimeout(150);
+    const o = await ovAll(), vis = await NG(() => { const r = document.querySelector('[data-act="startNew"]').getBoundingClientRect(); return r.bottom <= innerHeight; });
+    if (w !== 1366) await nshot(`new-game-${w}x${h}`);
+    check(`1.5.0 새 게임 ${w}×${h}: 가로 넘침 없음${w === 1024 ? ', [회사 세우기]가 스크롤 없이' : ''}`, o <= 0 && (w !== 1024 || vis), String(o));
+  }
+  await np.setViewportSize({ width: 1366, height: 1024 });
+  await np.click('[data-act="startNew"]'); await NG(() => window.__car.setSpeed(0));
+  const st = await NG(() => { const s = window.__car.game.state; return { start: s.start, year: window.__car.Q.dateOf(s.week).year, block: window.__car.Q.regulationBlock(s) }; });
+  check('1.5.0 2000년·넉넉한 자금·대출 없이로 시작(저장되는 상태에 선택 포함), 규제 막힘 없음', st.year === 2000 && st.start?.condition === 'rich' && st.start?.challenges.join() === 'noLoan' && st.block === null, JSON.stringify(st));
+  await np.click('#tabs button[data-tab="dev"]'); await np.locator('[data-act="plan"]').first().click(); await np.waitForTimeout(150);
+  if ((await NG(() => window.__car.screen)) === 'start') await np.locator('[data-act="pickNew"]').first().click();
+  if ((await NG(() => window.__car.planTab)) === 'sum') await np.locator('[data-act="ptab"][data-v="body"]').first().click();
+  await np.locator('[data-act="pastOpen"][data-v="pname"]').click(); await np.waitForTimeout(100);
+  const pick = await np.locator('#pick').innerText();
+  check('1.5.0 [지난 이름]: 지난 판 목록(회사·이름·차체)', (await np.locator('#pick').isVisible()) && pick.includes('지난판 모터스') && pick.includes('누리') && pick.includes('소형 세단'), pick.slice(0, 120));
+  await nshot('past-pick-1366x1024');
+  await np.click('[data-act="pastSort"][data-v="sold"]');
+  check('1.5.0 [지난 이름]: 많이 팔린 순으로 바꿔도 목록', (await np.locator('#pick [data-act="pastSort"][data-v="sold"]').getAttribute('aria-pressed')) === 'true' && (await np.locator('#pick .past-it').count()) >= 1);
+  await np.locator('#pick .past-it', { hasText: '누리' }).first().click();
+  check('1.5.0 지난 이름을 누르면 입력칸에 채워지고 창이 닫힘', (await np.inputValue('#pname')) === '누리' && (await np.locator('#pick').isHidden()) && (await NG(() => window.__car.draft?.name)) === '누리');
+  await np.locator('[data-act="ptab"][data-v="budget"]').first().click(); await np.locator('[data-act="startDev"]').first().click(); await np.waitForTimeout(150);
+  check('1.5.0 2000년 시작: 바로 기획해 개발 시작(이름 누리)', await NG(() => { const p = window.__car.game.state.projects; return p.length === 1 && p[0].name === '누리'; }));
+  await NG(() => { const c = window.__car, g = c.game, s = g.state, p = s.projects[0]; for (let i = 0; i < 120 && !p.waiting && (p.phase === 'design' || p.testWeeks < 30); i++) c.tick(1); // 실제로 개발(판매가 쌓이게)
+    g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 }); });
+  await NG(() => { document.getElementById('sheet').hidden = true; window.__car.tick(4 * 48 - window.__car.game.state.week % 48); document.getElementById('sheet').hidden = true; document.getElementById('toasts').innerHTML = ''; });
+  check('1.5.0 대출 없이: 대출 명령 거절(도전 과제 안내)', await NG(() => { const r = window.__car.game.command({ type: 'borrow', amount: 1000 }); return !r.ok && r.reason.includes('도전 과제'); }));
+  await np.click('#tabs button[data-tab="records"]'); await np.click('[data-act="rectab"][data-v="hall"]'); await np.waitForTimeout(150);
+  const hall = await np.locator('.st-start').innerText().catch(() => '');
+  check('1.5.0 명예의 전당: 이 판의 시작·도전 과제(지켜지는 중, 햇수)', hall.includes('2000년 시작') && hall.includes('넉넉한 자금') && hall.includes('대출 없이') && /지켜지는 중 · [45]년째/.test(hall), hall.replace(/\n/g, ' ').slice(0, 120));
+  await np.click('[data-act="rectab"][data-v="stats"]'); await np.waitForTimeout(150);
+  const stx = await np.locator('#panel').innerText(), svgs = await np.locator('#panel .st-card svg.fin-chart').count();
+  check('1.5.0 통계 탭: 요약 숫자·연도별 그래프 6개·차종별·시대별 비중·도전 과제', svgs >= 6 && stx.includes('누적 판매') && stx.includes('최다 판매 차') && (await np.locator('.st-sum .kpi').last().innerText()).includes('누리') && stx.includes('2000년대') && stx.includes('대출 없이') && (await np.locator('.st-bars').count()) === 2, `svg ${svgs}`);
+  check('1.5.0 통계 그래프: 손가락을 대면 그해 값(제목)', await NG(() => [...document.querySelectorAll('#panel .st-card svg rect title')].some((t) => /^2002년 판매 [\d,]+대$/.test(t.textContent) && !/ 0대$/.test(t.textContent))));
+  await np.click('[data-act="statsRange"][data-v="10y"]');
+  check('1.5.0 통계 기간: 최근 10년으로 바꿈', (await np.locator('[data-act="statsRange"][data-v="10y"]').getAttribute('aria-selected')) === 'true');
+  await nshot('stats-1366x1024');
+  for (const [w, h] of [[1024, 768], [800, 1200]]) {
+    await np.setViewportSize({ width: w, height: h }); await np.waitForTimeout(150);
+    const o1 = await ovAll(); await nshot(`stats-${w}x${h}`);
+    await np.click('[data-act="rectab"][data-v="past"]'); await np.waitForTimeout(100); const o2 = await ovAll(); if (w === 800) await nshot('past-tab-800x1200');
+    await np.click('[data-act="rectab"][data-v="stats"]');
+    check(`1.5.0 ${w}×${h}: 통계·지난 판의 차 넘침 없음, 기록 탭 줄이 넘치지 않음`, o1 <= 0 && o2 <= 0 && await NG(() => { const t = document.querySelector('.rectabs'); return t.scrollWidth <= t.clientWidth + 1; }), `${o1}/${o2}`);
+  }
+  await np.setViewportSize({ width: 1366, height: 1024 }); await np.click('[data-act="rectab"][data-v="past"]');
+  check('1.5.0 지난 판의 차: 지난 판 목록(지금 판은 빼고)·[목록 비우기]', (await np.locator('.past-card').innerText()).includes('지난판 모터스') && !(await np.locator('.past-card').innerText()).includes('통계 시험') && (await np.locator('[data-act="pastClear"]').count()) === 1);
+  await np.click('[data-act="pastClear"]'); await np.click('#ask-yes'); await np.waitForTimeout(100);
+  check('1.5.0 [목록 비우기] 확인 뒤 목록이 빔', (await NG(() => localStorage.getItem('car-company-past-names'))) === null && (await np.locator('.past-card').innerText()).includes('아직 모아 둔 이름이 없습니다'));
+  await nctx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에
 await done(fails.length ? 1 : 0);

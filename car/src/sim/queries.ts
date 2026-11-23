@@ -13,6 +13,7 @@ import { criticScores, mean } from './reviews';
 import { diffOf } from './difficulty';
 import { regulationBlock, requiredOptions } from './events';
 export { difficultyInfo } from './difficulty';
+export { startYearOf, startOf, challengeInfo, startOptionsError, START_YEARS, CONDITIONS, CHALLENGES } from './start';
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { platformUMult, projectPlatform } from './ev';
@@ -399,7 +400,7 @@ import { execInfo as execInfoQ } from './execs';
 export { execInfo, execReports, execUnread, marketIdea, profitAlloc, recommendTech, execSkill, execTier, execPay, monthlyFixed, seatsOf, EXEC_ROLES, EXEC_TITLE, DELEGATIONS, type ExecInfo } from './execs';
 
 // ---------- 0.8.0 연 보고서·되돌리기 ----------
-export { yearReport, reportYears, type YearReport, type YearCarRow, type YearMoney } from './report';
+export { yearReport, reportYears, statsData, type YearReport, type YearCarRow, type YearMoney, type StatsRange, type StatsData } from './report';
 export { undoInfo } from './game';
 
 // ---------- 0.10.0 정보와 수습 수단 ----------

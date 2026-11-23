@@ -18,18 +18,19 @@ import { josa } from './josa';
 import { Rng, hash32 } from './rng';
 import { EV, chargeMinutes, expectedRange, platformUMult, projectPlatform, rangeKm } from './ev';
 import { DIFFICULTIES, diffOf } from './difficulty';
+import { applyLateStart, challengeError, eraStartOf, hasChallenge, startCash, startOptionsError } from './start';
 import { bestPrice } from './queries';
 import { ensureHist, newPnl, noteCar, pnlOf, startHist } from './history';
 import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
-import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerCar, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty } from './types';
+import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerCar, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty, type StartCondition, type Challenge } from './types';
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
-export const SAVE_VERSION = 7; // 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
+export const SAVE_VERSION = 8; // 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
 /** difficulty: 생략하면 'easy'(0.4.1 새 게임 기본) */
-export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty }
+export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty; startYear?: number; condition?: StartCondition; challenges?: Challenge[] } // 1.5.0 시작 연도(기본 1970)·조건(기본 보통)·도전 과제(기본 없음)
 
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 const OK: CommandResult = { ok: true };
@@ -94,23 +95,31 @@ export class Game {
     const difficulty = opts.difficulty ?? 'easy';
     if (!DIFFICULTIES.includes(difficulty)) throw new Error(`없는 난이도: ${difficulty}`);
     const D = config.difficulty[difficulty];
+    const startYear = opts.startYear ?? config.time.startYear, condition = opts.condition ?? 'normal', challenges = [...(opts.challenges ?? [])];
+    const se = startOptionsError(startYear, condition, challenges);
+    if (se) throw new Error(se);
+    const Y = eraStartOf(startYear);
     const rng = new Rng(opts.seed);
     const pool = [...NAMES.staff];
-    const staff: Staff[] = config.start.roles.map((role, i) => ({
+    const staff: Staff[] = [...config.start.roles, ...Y.roles].map((role, i) => ({
       id: i + 1, name: pool.splice(rng.intIn(0, pool.length - 1), 1)[0], role,
       ability: rng.intIn(config.start.abilityMin, config.start.abilityMax), potential: 0, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false,
     }));
     const rivals = initRivals(rng, opts.seed);
-    for (const x of staff) { x.potential = rng.intIn(config.start.potentialMin, config.start.potentialMax); startHist(x, 0); } // 경쟁사 뒤에 뽑아 2단계까지의 난수 순서를 지킨다
+    for (const x of staff) { x.potential = rng.intIn(config.start.potentialMin, config.start.potentialMax); x.ability += Y.ability; x.potential = Math.min(100, x.potential + Y.ability); } // 경쟁사 뒤에 뽑아 2단계까지의 난수 순서를 지킨다
     const state: CarState = {
       saveVersion: SAVE_VERSION, difficulty, seed: opts.seed, rng: rng.getState(), week: 0,
       companyName: opts.companyName?.trim() || NAMES.defaultCompany,
-      reputation: config.start.reputation, cash: D.cash,
+      reputation: config.start.reputation, cash: 0,
       loan: { balance: 0, limitMult: 1, bailoutUsed: D.bailouts <= 0, bailouts: 0 }, negMonths: 0, status: 'playing',
-      staff, candidates: [], hqLevel: 1, factory: { level: 1, build: null }, batteryPlant: { level: 0, build: null },
+      staff, candidates: [], hqLevel: Y.hq, factory: { level: Y.factory, build: null }, batteryPlant: { level: 0, build: null },
       projects: [], nameplates: [], rivals, ledger: [], pendingDev: 0, pendingOneOff: 0, nextId: staff.length + 1,
       research: { done: [], active: [], early: [] }, events: { pending: [], mods: [], news: [] }, knownCombos: [], history: [],
+      ...(startYear !== config.time.startYear || condition !== 'normal' || challenges.length ? { start: { year: startYear, condition, challenges } } : {}),
     };
+    state.cash = startCash(state); // 1.5.0 난이도 × 시작 연도 × 시작 조건
+    applyLateStart(state, startYear);
+    for (const x of staff) startHist(x, state.week);
     return new Game(state);
   }
 
@@ -258,6 +267,7 @@ export class Game {
       if (gain > 0) this.addRep(gain, `올해 판매 ${yearSold.toLocaleString()}대`);
       const on = sellingGens(s).filter((x) => x.status === 'onSale');
       if (on.length && mean(on.map((x) => x.reviewAvg)) >= R.yearGoodReview) this.addRep(R.yearGoodRep, '판매 중인 차들의 좋은 평판');
+      ylog.repEnd = s.reputation; // 1.5.0 통계용 연말 평판
     }
     const b = s.factory.build; // 9.3 증설 공사: doneMonth 달부터 새 등급
     if (b && m + 1 >= b.doneMonth) {
@@ -275,7 +285,7 @@ export class Game {
       if (s.negMonths >= diffOf(s).bankruptcyMonths) { s.status = 'gameOver'; ev.push({ kind: 'gameOver', text: `현금 부족이 ${diffOf(s).bankruptcyMonths}개월 이어져 회사가 파산했습니다.` }); }
       else {
         const room = Math.max(0, loanLimit(s) - s.loan.balance); // 남은 대출 한도를 함께 알린다(0.4.1)
-        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
+        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${hasChallenge(s, 'noLoan') ? '' : room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
       }
     } else s.negMonths = 0;
     if (s.status === 'playing') execMonth(this.execCtx(), ev); // 0.7.0 위임 실행, 임원 제안(보고함)
@@ -291,7 +301,8 @@ export class Game {
     const s = this.state, kind = UNDO_KIND[cmd?.type], prev = undos.get(s);
     const keep = !!kind && chain && prev?.week === s.week && prev.kind === kind;
     const snap = kind && !keep ? JSON.stringify(s) : '', name = kind ? this.undoTarget(cmd) : '';
-    let r = this.exec(cmd);
+    const ce = challengeError(s, cmd); // 1.5.0 도전 과제
+    let r = ce ? fail(ce) : this.exec(cmd);
     if (r.ok) {
       s.history.push({ week: s.week, cmd: JSON.parse(JSON.stringify(cmd)) });
       if (!kind) undos.delete(s);
@@ -854,6 +865,7 @@ export class Game {
     if ((st.saveVersion as number) === 4) migrateV4(st);
     if ((st.saveVersion as number) === 5) migrateV5(st);
     if ((st.saveVersion as number) === 6) migrateV6(st);
+    if ((st.saveVersion as number) === 7) migrateV7(st);
     fillRivalCells(st); // 0.6.0 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
     return new Game(st);
   }
@@ -934,7 +946,18 @@ function migrateV6(st: CarState): void {
     g.critiques = writeCritiques(st, { name: n.name, genId: g.id, stats: ed.stats, year, reviews: g.reviews, price: ed.price, base: carBasePrice(st, { body: g.body, segment: g.segment, powertrain: g.powertrain, options: ed.options, battery: ed.battery }), missing: fx.missing, fresh: fx.fresh,
       ev: g.powertrain === EV ? { km: rangeKm(ed.level, ed.battery, !!g.evPlatform), exp: expectedRange(g.body, year) } : null });
   }
-  st.saveVersion = 7;
+  (st as { saveVersion: number }).saveVersion = 7;
+}
+/** 저장 형식 7 → 8(1.5.0): 새 게임 선택지는 1970년·보통·도전 없음(start 없음과 같다), 지난 해의 연말 평판(repEnd)은 해마다의 평판 변화로 거꾸로 셈해 채운다 */
+function migrateV7(st: CarState): void {
+  let rep = st.reputation;
+  const cur = yearOf(st.week);
+  for (const y of Object.keys(st.years ?? {}).map(Number).sort((a, b) => b - a)) {
+    const log = st.years![y], d = Object.values(log.rep).reduce((a, x) => a + x, 0);
+    if (y < cur && log.months >= config.time.monthsPerYear) log.repEnd ??= rep;
+    rep -= d; // rep: y년 초(= y − 1년 말) 평판
+  }
+  st.saveVersion = 8;
 }
 /** 경쟁사 자료에 있는데 저장에 없는 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다). 형식 3 변환과 0.6.0 새 차체 칸이 함께 쓴다 */
 function fillRivalCells(st: CarState): void {

@@ -4,9 +4,9 @@ import { BODIES, OPTIONS, POWERTRAINS, RIVALS, SEGMENTS, TECHS, bodyById, option
 import { Game, allGens, sellingGens } from '../sim/game';
 import * as Q from '../sim/queries';
 import { currentEdition } from '../sim/market';
-import { monthOf, yearOf } from '../sim/time';
+import { monthOf, yearOf, yearOfMonth } from '../sim/time';
 import { diffOf } from '../sim/difficulty';
-import { STATS, type ExecRole, type Battery, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type NotifyTopic, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type StaffWin, type Stat, type Stats } from '../sim/types';
+import { STATS, type Challenge, type StartCondition, type ExecRole, type Battery, type Budget, type CommandResult, type Difficulty, type NewsCategory, type DevWeekEvent, type GameEvent, type Generation, type NotifyTopic, type PricePolicy, type Project, type ProjectSpec, type Role, type Staff, type StaffWin, type Stat, type Stats } from '../sim/types';
 import { Stage } from '../render/stage';
 import { silhouetteSvg } from '../render/silhouette';
 import { describeLook } from '../render/variant';
@@ -17,6 +17,7 @@ import { applyEra } from './era';
 import { REVEAL_KEY, playReveal, revealWanted } from './reveal';
 import { CAR_VERSION } from '../version';
 import * as S from '../io/saves';
+import * as PN from '../io/pastnames';
 import { BUDGET, MARKETING, ROLE_NAME, ROLE_SKILL, STAT_NAME, TIER_SUB, esc, josa, longCls, money, moneyText, num, qty, score } from './fmt';
 import { DEFAULT_LOGO, LOGO_BG, LOGO_FG, LOGO_MARKS, LOGO_SHAPES, PAINT, WHEELS, cleanLogo, logo, logoSvg, lookOf, paintName, ring, type LogoSpec } from './art';
 import { infoOf } from './glossary';
@@ -33,7 +34,7 @@ type PlanTab = 'sum' | 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir
 type Draft = ProjectSpec & { equip?: EQ.Equip; equipMode?: 'rec' | 'prev' | 'custom'; color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step' }; // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
 /** 페이스리프트 기획 */
 interface LiftSet { genId: number; faceSeed: number; options: string[]; tier: number; team: number[]; equip?: EQ.Equip } // 1.1.0 equip: 장비 구성(options는 sim에 넘기는 파생값)
-type RecTab = 'cars' | 'hall' | 'combo' | 'news' | 'years';
+type RecTab = 'cars' | 'hall' | 'combo' | 'news' | 'years' | 'stats' | 'past'; // stats·past: 1.5.0 통계·지난 판의 차
 type CoTab = 'sum' | 'staff' | 'hq' | 'factory' | 'exec'; // 1.0.0 첫 화면 'sum'(요약 칸)
 type GSort = 'name' | 'launch' | 'price' | 'sold' | 'unit' | 'profit' | 'life' | 'review'; // 0.9.0 차고 요약 표 정렬
 type View = { ov: string; panel: string; look?: CarLook | null; office?: OfficeView; keys?: string }; // keys: 0.9.0 무대 아래 핵심 수치 띠
@@ -114,6 +115,8 @@ export function startApp(): void {
   let coTab: CoTab = 'sum', staffSel: number | null = null, hireRole: Role = 'designer', allocWhy = ''; // 회사 탭 안쪽 탭, 고른 직원, 채용 직무, 배분 거부 이유
   let staffPick = new Set<number>(); // 일괄 교육·휴식용으로 체크한 직원
   let recTab: RecTab = 'cars'; // 기록 탭 안쪽 탭
+  let statsRange: Q.StatsRange = 'all', pastSort: 'recent' | 'sold' = 'recent'; // 1.5.0 통계 기간, 지난 이름 정렬
+  let nsYear: number = config.time.startYear, nsCond: StartCondition = 'normal', nsChal = new Set<Challenge>(); // 1.5.0 새 게임 화면의 시작 연도·조건·도전 과제
   let devSel: number | null = null; // 개발 탭에서 고른 프로젝트(동시 개발)
   let officeSent = -Infinity; // 마지막으로 점수·결함 연출을 보낸 시각
   let office: Office | null = null, officeOn = false, officeLast: OfficeView | null = null, officeScores = 0; // officeLast·officeScores: 점검용
@@ -484,8 +487,10 @@ export function startApp(): void {
     if (now) { clearTimeout(saveTimer); saveTimer = 0; void saveAuto(); return; }
     if (!saveTimer) saveTimer = window.setTimeout(() => { saveTimer = 0; void saveAuto(); }, 700);
   }
+  const notePast = (g: Game) => PN.recordPast(g.state, Q.startYearOf(g.state), yearOfMonth, Date.now()); // 1.5.0 지난 판의 차 이름(이 기기)
   async function saveAuto(): Promise<void> {
     const g = game; if (!g) return;
+    notePast(g);
     const week = g.state.week, ok = await S.put('auto', S.makeSave(g, uiSnap()));
     if (ok) { if (g === game) lastAuto = week; return; }
     if (!saveFailNoted) { saveFailNoted = true; toast('자동 저장에 실패했습니다. 브라우저 저장 공간이 부족하거나 저장이 막혀 있습니다. 메뉴에서 파일로 내보내 두세요.', 'bad', '자동 저장', 12000, 'savefail', undefined, 'warning'); }
@@ -1432,7 +1437,7 @@ export function startApp(): void {
       <p class="lbl" style="margin-top:14px">설계 기간</p><div class="opts">${config.dev.designWeeks.map((w, i) => `<button class="opt" data-act="pick" data-k="designWeeks" data-v="${w}" aria-pressed="${d.designWeeks === w}"><b>${w}주</b><small>${['빠르지만 점수가 적음', '보통', '오래 걸리지만 점수가 많음'][i] ?? ''}</small></button>`).join('')}</div>${bodyWarn}${teamPicker(d.team, 'teamPick', d)}`;
     const ti = tabs.findIndex(([k]) => k === planTab), last = ti === tabs.length - 1 && !sumMode, left = dirLeft(d), dirNo = tabs.findIndex(([k]) => k === 'dir') + 1;
     const nameBox = full ? `<p class="lbl">차 이름(이어받음)</p><p class="namefix">${esc(name)} <small>${(prev?.number ?? 0) + 1}세대</small></p>`
-      : `<p class="lbl">차 이름</p><input class="namein" id="pname" type="text" maxlength="12" value="${esc(d.name)}" placeholder="${esc(defaultName())}" aria-label="차 이름">`;
+      : `<p class="lbl">차 이름</p><div class="name-row"><input class="namein" id="pname" type="text" maxlength="12" value="${esc(d.name)}" placeholder="${esc(defaultName())}" aria-label="차 이름">${pastBtn('pname')}</div>`;
     const card1 = `<div class="card">${nameBox}
       ${onSum ? '' : `<div class="seg steps" role="tablist" style="margin-top:12px">${sumMode ? '<button role="tab" data-act="ptab" data-v="sum" aria-selected="false">≡<small>요약</small></button>' : ''}${tabs.map(([k, l], i) => `<button role="tab" data-act="ptab" data-v="${k}" aria-selected="${planTab === k}">${i + 1}<small>${l}</small></button>`).join('')}</div>`}
       ${noteBox()}${regBox(d)}${onSum ? '' : `<h3>${tabs[ti][1]}</h3>`}${body}
@@ -1525,7 +1530,7 @@ export function startApp(): void {
     const kids = s.nameplates.filter((x) => x.baseOf === n.id && x.name.startsWith(`${n.name} `));
     sheetBody.innerHTML = `<div class="rename-sheet"><div class="eyebrow"><i></i>차고 · 이름 변경</div><h2>「${esc(n.name)}」 이름 바꾸기</h2>
       <p class="hint">계보·판매 기록·이름값·명예의 전당은 그대로 이어집니다. 지난 뉴스와 보고의 문장은 바뀌지 않습니다.</p>
-      <label class="lbl" for="rn-name">새 이름</label><input class="namein" id="rn-name" type="text" maxlength="${config.nameMax}" value="${esc(n.name)}" autocomplete="off">
+      <label class="lbl" for="rn-name">새 이름</label><div class="name-row"><input class="namein" id="rn-name" type="text" maxlength="${config.nameMax}" value="${esc(n.name)}" autocomplete="off">${pastBtn('rn-name')}</div>
       ${kids.length ? `<label class="chk"><input type="checkbox" id="rn-kids" checked> 파생 모델 이름도 함께 바꾸기(${kids.map((k) => `「${esc(k.name)}」`).join(', ')})</label>` : ''}
       <div class="row" style="margin-top:12px"><button class="btn ink" data-act="renameDo" data-id="${n.id}">이름 바꾸기</button><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
@@ -1620,7 +1625,7 @@ export function startApp(): void {
       <p class="note">바탕 차(「${esc(np.name)}」 ${g.number}세대)의 차대·장비를 그대로 쓰고 일부만 바꿔 짧게 개발합니다. 별도 차종으로 팔리며 바탕 차와 생산 라인을 함께 씁니다.</p></div>`;
     if (!o) return { ov: ovh, panel: card1 + `<div class="card"><div class="row"><button class="btn" data-act="dvCancel">그만두기</button></div></div>`, look };
     const spec = deriveSpec(D), into = o.into !== null ? s.nameplates.find((n) => n.id === o.into) : undefined;
-    const nameBox = into ? `<p class="hint">「${esc(into.name)}」의 다음 세대로 개발합니다(이름은 그대로).</p>` : `<label class="lbl" for="dname">이름</label><input class="namein" id="dname" type="text" maxlength="16" value="${esc(D.name)}" placeholder="${esc(o.defaultName)}" autocomplete="off"><p class="note">비우면 「${esc(o.defaultName)}」${josa(o.defaultName, '으로/로')} 합니다.</p>`;
+    const nameBox = into ? `<p class="hint">「${esc(into.name)}」의 다음 세대로 개발합니다(이름은 그대로).</p>` : `<label class="lbl" for="dname">이름</label><div class="name-row"><input class="namein" id="dname" type="text" maxlength="16" value="${esc(D.name)}" placeholder="${esc(o.defaultName)}" autocomplete="off">${pastBtn('dname')}</div><p class="note">비우면 「${esc(o.defaultName)}」${josa(o.defaultName, '으로/로')} 합니다.</p>`;
     const bat = o.powertrain === 'ev' ? batteryBox({ body: g.body, powertrain: 'ev', tier: currentEdition(g).tier, battery: D.battery }, 'dvBattery') : '';
     const busy = busyReason();
     const card2 = `<div class="card dv-go"><p class="lbl">2. ${into ? '다음 세대' : '이름'}</p>${nameBox}${bat}
@@ -2087,7 +2092,7 @@ export function startApp(): void {
   }
 
   // ----- 기록 -----
-  const REC_TABS: [RecTab, string][] = [['cars', '차종 계보'], ['hall', '명예의 전당'], ['combo', '조합 노트'], ['news', '뉴스'], ['years', '연 보고서']];
+  const REC_TABS: [RecTab, string][] = [['cars', '차종 계보'], ['hall', '명예의 전당'], ['stats', '통계'], ['years', '연 보고서'], ['combo', '조합 노트'], ['news', '뉴스'], ['past', '지난 판의 차']];
   const LIN_KEY = 'car-company-lineage';
   const LIN_SORTS = [['launch', '출시 순'], ['sold', '많이 팔린 순'], ['profit', '이익 큰 순'], ['review', '평론 높은 순'], ['long', '판매 기간 긴 순']] as const;
   const linView = ((): { sort: typeof LIN_SORTS[number][0]; filter: '' | 'on' | 'off' } => {
@@ -2097,19 +2102,53 @@ export function startApp(): void {
   /** 1.0.0 명예의 전당: 우리 회사 역대 기록(누르면 그 차종 계보로). 불명예는 접어 둔다 */
   function hallTab(): string {
     const s = game!.state, h = Q.hallOfFame(s);
-    if (h.empty) return '<div class="card hall"><h3>명예의 전당</h3><p class="hint">아직 낸 차가 없습니다. 차를 출시하면 가장 많이 팔린 차, 가장 비싼 차 같은 기록이 여기 쌓입니다.</p></div>';
+    if (h.empty) return startCard() + '<div class="card hall"><h3>명예의 전당</h3><p class="hint">아직 낸 차가 없습니다. 차를 출시하면 가장 많이 팔린 차, 가장 비싼 차 같은 기록이 여기 쌓입니다.</p></div>';
     const fmtV = (k: string, v: number, m?: number) => k === 'sold' || k === 'soldName' ? `${num(v)}대` : k === 'pricey' || k === 'cheap' ? `${num(v)}만원` : k === 'review' || k === 'worstReview' || k === 'grade' ? `${score(v)}점`
       : k === 'profit' || k === 'loss' ? money(v, true) : k === 'payback' ? `출시 ${v}개월째` : k === 'long' ? `${v}개월` : k === 'month' ? `${num(v)}대 · ${Q.monthLabel(m ?? 0)}` : String(v);
     const card = (x: Q.HallCar) => { const g = Q.generationById(s, x.genId), n = s.nameplates.find((y) => y.id === x.nameplateId);
       return g ? `<button class="hall-it" data-act="hallGo" data-v="${x.nameplateId}"><span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="hall-t"><small>${esc(x.label)}</small><b>${esc(n?.name ?? '')}${x.key === 'soldName' ? '' : ` <em>${g.number}세대</em>`}</b><span>${x.key === 'soldName' ? `${n?.generations.length ?? 0}세대 합계` : `${genYear(g)}년 출시`}</span></span><span class="hall-v ${x.key === 'loss' ? 'neg' : x.key === 'profit' ? 'pos' : ''}">${fmtV(x.key, x.value, x.month)}</span></button>` : ''; };
     const co = h.company.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${r.key === 'yearRev' || r.key === 'yearProfit' ? money(r.value, r.key === 'yearProfit') : r.key === 'rep' ? Math.round(r.value) : r.key === 'totalSold' ? `${num(r.value)}대` : r.key === 'names' ? `${r.value}개` : r.key === 'staff' ? `${esc(r.text ?? '')} · ${Math.floor(r.value / 12) ? `${Math.floor(r.value / 12)}년 ` : ''}${r.value % 12}개월` : num(r.value)}${r.year ? ` <small class="hint">${r.year}년</small>` : ''}</td></tr>`).join('');
-    return `<div class="card hall"><h3>명예의 전당 <small class="hint">누르면 그 차종 계보로 갑니다</small></h3><div class="hall-grid">${h.cars.map(card).join('')}</div>
+    return `${startCard()}<div class="card hall"><h3>명예의 전당 <small class="hint">누르면 그 차종 계보로 갑니다</small></h3><div class="hall-grid">${h.cars.map(card).join('')}</div>
       ${h.shame.length ? `<details class="hall-shame"><summary><span class="lbl">불명예 ${h.shame.length}</span></summary><div class="hall-grid">${h.shame.map(card).join('')}</div></details>` : ''}</div>
       <div class="card"><h3>회사 기록</h3><table class="tbl hall-co">${co}</table><p class="note">연 매출·이익은 연 기록과 장부로 셉니다. 최고 평판은 해마다의 평판 변화로 거꾸로 셈한 연말 값과 지금 값 중 가장 높은 값입니다.</p></div>`;
   }
+  /** 1.5.0 이 판의 시작 선택(시작 연도·조건)과 도전 과제 진행. 기본 선택(1970년·보통·도전 없음)이면 비운다 */
+  function startCard(): string {
+    const s = game!.state, st = Q.startOf(s), ch = Q.challengeInfo(s);
+    if (!s.start) return '';
+    const cond = config.newGame.conditions[st.condition].name;
+    return `<div class="card st-start"><p class="lbl">이 판의 시작</p><p><b>${st.year}년 시작</b> · ${esc(diffName(s.difficulty))} · ${esc(cond)}</p>
+      ${ch.length ? `<p class="lbl" style="margin-top:8px">도전 과제</p><ul class="ch-list">${ch.map((c) => `<li><b>${esc(c.name)}</b> <span class="chip on">지켜지는 중 · ${c.years ? `${c.years}년째` : '첫해'}</span><small>${esc(c.desc)}</small></li>`).join('')}</ul>` : '<p class="hint">도전 과제 없음</p>'}</div>`;
+  }
+  function statsTab(): string {
+    const nm = <T extends { id: string; name: string }>(list: T[]) => (id: string) => list.find((x) => x.id === id)?.name ?? id;
+    return V.statsMain(game!.state, statsRange, { pt: nm(POWERTRAINS), body: nm(BODIES) }, startCard());
+  }
+  /** 1.5.0 지난 판의 차(이 기기에 모아 둔 목록) */
+  const pastRuns = () => { const id = game ? PN.runId(game.state) : ''; return PN.loadPast().filter((r) => r.id !== id); };
+  const pastLine = (c: PN.PastCar) => `${esc(BODIES.find((b) => b.id === c.body)?.name ?? c.body)} · ${esc(segName(c.segment))} · ${c.year}년 출시 · ${num(c.sold)}대`;
+  function pastTab(): string {
+    const runs = pastRuns();
+    return `<div class="card past-card"><h3>지난 판의 차 ${ib('term:지난 판의 차')} <small class="hint">${runs.length}판</small></h3>
+      ${runs.length ? runs.map((r) => `<details class="past-run" open><summary><b>${esc(r.company)}</b> <small class="hint">${r.startYear}년 시작 · 차종 ${r.cars.length}개</small></summary><div class="tblwrap"><table class="tbl"><tr><th>이름</th><th>차체 · 고객층 · 출시 · 누적 판매</th></tr>${[...r.cars].sort((a, b) => b.sold - a.sold).map((c) => `<tr><td><b>${esc(c.name)}</b></td><td>${pastLine(c)}</td></tr>`).join('')}</table></div></details>`).join('')
+        : '<p class="hint" style="margin-top:8px">아직 모아 둔 이름이 없습니다. 차를 출시한 판을 저장하면 그 판의 차 이름이 이 기기에 모입니다.</p>'}
+      ${runs.length ? '<div class="row end" style="margin-top:10px"><button class="btn danger" data-act="pastClear">목록 비우기</button></div>' : ''}</div>`;
+  }
+  /** [지난 이름] 고르기 창: 판별로 묶음(최근 판 순) 또는 전부 많이 팔린 순. 지금 판에서 쓰는 이름은 흐리게(고를 수 없음) */
+  function showPastPick(target: string): void {
+    const s = game!.state, used = new Set([...s.nameplates.map((n) => n.name), ...s.projects.map((p) => p.name)]), runs = pastRuns();
+    const item = (c: PN.PastCar, co = '') => { const u = used.has(c.name); return `<button class="past-it" data-act="pastPick" data-k="${esc(target)}" data-v="${esc(c.name)}" ${u ? 'disabled aria-disabled="true"' : ''}><b>${esc(c.name)}</b><small>${pastLine(c)}${co ? ` · ${esc(co)}` : ''}${u ? ' · 지금 판에서 쓰는 중' : ''}</small></button>`; };
+    const body = !runs.length ? '<p class="hint">아직 모아 둔 이름이 없습니다.</p>' : pastSort === 'sold'
+      ? `<div class="past-list">${runs.flatMap((r) => r.cars.map((c) => ({ c, co: r.company }))).sort((a, b) => b.c.sold - a.c.sold).map((x) => item(x.c, x.co)).join('')}</div>`
+      : runs.map((r) => `<p class="lbl" style="margin-top:8px">${esc(r.company)} <small class="hint">${r.startYear}년 시작</small></p><div class="past-list">${r.cars.map((c) => item(c)).join('')}</div>`).join('');
+    $('#pick-body').innerHTML = `<h3>지난 판의 차 이름 ${ib('term:지난 판의 차')}</h3><div class="seg" role="group" aria-label="정렬" style="margin:8px 0">${([['recent', '최근 판 순'], ['sold', '많이 팔린 순']] as const).map(([k, l]) => `<button data-act="pastSort" data-k="${esc(target)}" data-v="${k}" aria-pressed="${pastSort === k}">${l}</button>`).join('')}</div>
+      <div class="past-scroll">${body}</div><div class="row end" style="margin-top:10px"><button class="btn" data-act="pastClose">닫기</button></div>`;
+    $('#pick').hidden = false; renderTop();
+  }
+  const pastBtn = (target: string) => `<button class="btn past-btn" data-act="pastOpen" data-v="${target}">지난 이름</button>`;
   function recordsView(): string {
     const tabs = `<div class="seg cotabs rectabs" role="tablist" aria-label="기록">${REC_TABS.map(([k, l]) => `<button role="tab" data-act="rectab" data-v="${k}" aria-selected="${recTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (recTab === 'combo' ? comboTab() : recTab === 'news' ? newsTab() : recTab === 'years' ? yearsTab() : recTab === 'hall' ? hallTab() : carsTab());
+    return tabs + (recTab === 'combo' ? comboTab() : recTab === 'news' ? newsTab() : recTab === 'years' ? yearsTab() : recTab === 'hall' ? hallTab() : recTab === 'stats' ? statsTab() : recTab === 'past' ? pastTab() : carsTab());
   }
   /** 지난 연 보고서 목록(0.8.0): 누르면 그해 보고서 창 */
   function yearsTab(): string {
@@ -2202,6 +2241,28 @@ export function startApp(): void {
     sheet.hidden = false; renderTop();
   }
 
+  // ---------- 1.5.0 새 게임 선택지(시작 연도·조건·도전 과제) ----------
+  /** 고른 시작 연도·조건으로 시작할 때의 한 줄(시작 현금은 고른 난이도 기준) */
+  const nsLine = () => {
+    const Y = config.newGame.byYear[String(nsYear) as keyof typeof config.newGame.byYear], cash = config.difficulty[diffSel].cash * Y.cash * config.newGame.conditions[nsCond].cash;
+    return `${nsYear}년 1월 시작 · 시작 현금 ${money(cash)} · 본사 ${Y.hq}등급 · 공장 ${Y.factory}등급 · 직원 ${config.start.roles.length + Y.roles.length}명${nsYear > config.time.startYear ? ` · ${nsYear - config.newGame.techSlackYears}년까지 나온 기술은 연구를 마친 상태` : ''}`;
+  };
+  function newGameOpts(): string {
+    const C = config.newGame;
+    return `<div id="ns-box"><p class="lbl" style="margin-top:6px">시작 연도</p><div class="seg ns-year" role="group" aria-label="시작 연도">${Q.START_YEARS.map((y) => `<button data-act="nsYear" data-v="${y}" aria-pressed="${nsYear === y}">${y}년${y === config.time.startYear ? '<small>기본</small>' : ''}</button>`).join('')}</div>
+      <p class="lbl">시작 조건</p><div class="seg ns-cond" role="group" aria-label="시작 조건">${Q.CONDITIONS.map((k) => `<button data-act="nsCond" data-v="${k}" aria-pressed="${nsCond === k}">${esc(C.conditions[k].name)}<small>현금 ×${C.conditions[k].cash}</small></button>`).join('')}</div>
+      <p class="hint ns-line" id="ns-line">${esc(nsLine())}</p>
+      <details class="ns-chal"${nsChal.size ? ' open' : ''}><summary>도전 과제 <small>(선택, 여러 개 가능 · 보상 없이 기록에만 남습니다)</small></summary><div class="ns-cg">${Q.CHALLENGES.map((k) => { const c = C.challenges[k], off = !!c.minYear && nsYear < c.minYear;
+        return `<label class="chk ns-c${off ? ' off' : ''}"><input type="checkbox" data-ch="${k}" ${nsChal.has(k) && !off ? 'checked' : ''} ${off ? 'disabled' : ''}> <b>${esc(c.name)}</b><small>${esc(c.desc)}</small></label>`; }).join('')}</div></details></div>`;
+  }
+  /** 연도·조건을 바꾼 뒤: 입력 중인 회사 이름·시드는 그대로 두고 선택지 칸만 다시 그린다 */
+  function nsChanged(): void {
+    for (const k of Q.CHALLENGES) { const m = config.newGame.challenges[k].minYear; if (m && nsYear < m) nsChal.delete(k); }
+    const box = document.getElementById('ns-box'), open = !!box?.querySelector<HTMLDetailsElement>('.ns-chal')?.open;
+    if (box) box.outerHTML = newGameOpts();
+    if (open) document.querySelector<HTMLDetailsElement>('.ns-chal')!.open = true; // 펼친 도전 과제는 펼친 채로
+  }
+
   // ---------- 처음 화면 ----------
   async function showTitle(): Promise<void> {
     sheet.hidden = true;
@@ -2212,12 +2273,13 @@ export function startApp(): void {
       ${saves.length ? `<p class="lbl" style="margin-top:8px">저장된 게임</p><div class="menu-slots">${saves.map((x) => `<div class="slot wl">${logoSvg(x.logo, 32)}<div><b>${slotName(x.key)}</b><small>${info(x)} · ${esc(x.when.slice(0, 16).replace('T', ' '))}</small></div><button class="btn" data-act="loadSlot" data-v="${x.key}">불러오기</button></div>`).join('')}</div>` : ''}
       <button class="btn" data-act="import" style="margin-top:4px">파일에서 불러오기</button>`;
     // 이름·난이도·[회사 세우기]가 첫 화면에 보이게 로고 꾸미기는 접어 둔다
-    const form = `<label for="t-co">회사 이름</label><input class="namein" id="t-co" type="text" maxlength="16" placeholder="새 회사" autocomplete="off">
+    const form = `<div class="ns-cols"><div class="ns-col"><label for="t-co">회사 이름</label><input class="namein" id="t-co" type="text" maxlength="16" placeholder="새 회사" autocomplete="off">
       <details class="logo-det"><summary><span class="lg-mini">${logoSvg(logoDraft, 30)}</span>회사 로고 꾸미기 <small>(나중에 메뉴에서도 바꿀 수 있습니다)</small></summary>${logoMaker(logoDraft)}</details>
-      <p class="lbl" style="margin-top:6px">난이도</p><div class="opts diffs">${Q.difficultyInfo().map((d) => `<button class="opt diff" data-act="diff" data-v="${d.id}" aria-pressed="${diffSel === d.id}"><b>${esc(d.name)}${d.isDefault ? ' <small>(기본)</small>' : ''}</b><small>${esc(d.desc)}</small><small>시작 현금 ${money(d.cash)} · 대출 기본 한도 ${money(d.loanBase)}</small><small>파산까지 ${d.bankruptcyMonths}개월 · 구제 금융 ${d.bailouts ? `${d.bailouts}번` : '없음'}</small></button>`).join('')}</div>
+      <p class="lbl" style="margin-top:6px">난이도</p><div class="opts diffs">${Q.difficultyInfo().map((d) => `<button class="opt diff" data-act="diff" data-v="${d.id}" aria-pressed="${diffSel === d.id}"><b>${esc(d.name)}${d.isDefault ? ' <small>(기본)</small>' : ''}</b><small>${esc(d.desc)}</small><small>시작 현금 ${money(d.cash)} · 대출 기본 한도 ${money(d.loanBase)}</small><small>파산까지 ${d.bankruptcyMonths}개월 · 구제 금융 ${d.bailouts ? `${d.bailouts}번` : '없음'}</small></button>`).join('')}</div></div>
+      <div class="ns-col">${newGameOpts()}
       <details class="seed-det"><summary>자세히: 시드(같은 시드면 같은 판)</summary><input class="namein" id="t-seed" type="text" inputmode="numeric" placeholder="비우면 무작위" autocomplete="off"></details>
-      <button class="go" data-act="startNew">회사 세우기 <span aria-hidden="true">→</span></button><button class="btn" data-act="titleHome">돌아가기</button>`;
-    title.innerHTML = `<div class="inner"><div class="gname">${logoSvg(DEFAULT_LOGO, 64)}카 컴퍼니</div><p class="tag">1970년, 직원 4명의 작은 공장에서 시작합니다. 차를 기획·개발·출시해 판매하며 회사를 키웁니다.</p>${titleMode === 'new' ? form : home}<p class="note">게임 이름은 가칭입니다. 경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것입니다.</p></div><div class="ver">v${CAR_VERSION}</div>`;
+      <button class="go" data-act="startNew">회사 세우기 <span aria-hidden="true">→</span></button><button class="btn" data-act="titleHome">돌아가기</button></div></div>`;
+    title.innerHTML = `<div class="inner${titleMode === 'new' ? ' wide' : ''}"><div class="gname">${logoSvg(DEFAULT_LOGO, 64)}카 컴퍼니</div><p class="tag">${titleMode === 'new' ? '작은 자동차 회사를 세워 차를 기획·개발·출시해 판매하며 회사를 키웁니다. 1970년부터 시작하거나, 더 늦은 해를 골라 그 시대에 맞는 자금·기술로 시작할 수 있습니다.' : '1970년, 직원 4명의 작은 공장에서 시작합니다. 차를 기획·개발·출시해 판매하며 회사를 키웁니다.'}</p>${titleMode === 'new' ? form : home}<p class="note">게임 이름은 가칭입니다. 경쟁사 이름과 로고는 실제 브랜드를 본뜬 가상의 것입니다.</p></div><div class="ver">v${CAR_VERSION}</div>`;
     title.className = 'cover'; title.hidden = false; markMore(title);
     if (titleMode === 'new') $('#t-co').focus();
     renderTop();
@@ -2578,6 +2640,13 @@ export function startApp(): void {
       case 'linFilter': if (v === '' || v === 'on' || v === 'off') { linView.filter = v; keep(LIN_KEY, linView); render(); } return;
       case 'hallGo': recTab = 'cars'; linView.filter = ''; lastPanel = ''; render(); document.getElementById(`np-${v}`)?.scrollIntoView({ block: 'start' }); return;
       case 'rectab': recTab = v as RecTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      case 'statsRange': statsRange = v as Q.StatsRange; lastPanel = ''; render(); return;
+      case 'pastOpen': showPastPick(v); return;
+      case 'pastSort': pastSort = v === 'sold' ? 'sold' : 'recent'; showPastPick(el.dataset.k ?? ''); return;
+      case 'pastClose': $('#pick').hidden = true; renderTop(); return;
+      case 'pastPick': { const inp = document.getElementById(el.dataset.k ?? '') as HTMLInputElement | null; $('#pick').hidden = true; renderTop();
+        if (inp) { inp.value = v; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.focus(); } return; }
+      case 'pastClear': if (await ask('이 기기에 모아 둔 지난 판의 차 이름을 모두 지울까요? 게임 저장은 그대로입니다.', '지우기', true)) { PN.clearPast(); lastPanel = ''; render(); } return;
       case 'goResearch': go('research'); if (v) showTech(v); return;
       case 'backPlan': go(draft ? 'plan' : lift ? 'lift' : 'garage'); return;
       case 'startResearch': {
@@ -2693,14 +2762,14 @@ export function startApp(): void {
         if (gameOverShown) { gameOverShown = false; title.hidden = true; title.className = 'cover'; screen = 'garage'; lastPanel = ''; lastOv = ''; }
         toast('구제 금융을 받았습니다. 현금이 0이 되었습니다.', 'alert'); render(); return;
       }
-      case 'titleNew': titleMode = 'new'; logoDraft = { ...DEFAULT_LOGO }; diffSel = Q.difficultyInfo().find((d) => d.isDefault)?.id ?? 'easy'; void showTitle(); return;
+      case 'titleNew': titleMode = 'new'; logoDraft = { ...DEFAULT_LOGO }; diffSel = Q.difficultyInfo().find((d) => d.isDefault)?.id ?? 'easy'; nsYear = config.time.startYear; nsCond = 'normal'; nsChal.clear(); void showTitle(); return;
       case 'titleHome': titleMode = 'home'; void showTitle(); return;
       case 'newGame': titleMode = 'new'; logoDraft = { ...DEFAULT_LOGO }; void showTitle(); return;
       case 'home': if (game && game.state.status === 'playing' && dirty && !(await ask('처음 화면으로 갈까요? 저장하지 않은 진행은 마지막 자동 저장까지만 남습니다.', '처음 화면'))) return; titleMode = 'home'; sheet.hidden = true; void showTitle(); return;
       case 'startNew': {
         const co = $<HTMLInputElement>('#t-co').value.trim(), sd = ($<HTMLInputElement>('#t-seed').value || '').trim();
         const seed = /^\d+$/.test(sd) ? Number(sd) % 4294967296 : Math.floor(Math.random() * 1e9);
-        adopt(Game.create({ seed, companyName: co, difficulty: diffSel }), { photos: {}, colors: {}, logo: cleanLogo(logoDraft) }); toast(`「${game!.state.companyName}」${josa(game!.state.companyName, '을/를')} 세웠습니다. 첫 차를 기획할 차례입니다.`); return;
+        adopt(Game.create({ seed, companyName: co, difficulty: diffSel, startYear: nsYear, condition: nsCond, challenges: Q.CHALLENGES.filter((k) => nsChal.has(k)) }), { photos: {}, colors: {}, logo: cleanLogo(logoDraft) }); toast(`「${game!.state.companyName}」${josa(game!.state.companyName, '을/를')} 세웠습니다(${nsYear}년). 첫 차를 기획할 차례입니다.`); return;
       }
       case 'continue': case 'loadSlot': {
         if (a === 'loadSlot' && game && title.hidden && dirty && !(await ask('마지막 저장 뒤의 진행은 사라집니다. 불러올까요?', '불러오기'))) return;
@@ -2710,6 +2779,7 @@ export function startApp(): void {
         if (!game) return;
         const has = (await S.list()).some((x) => x.key === v);
         if (has && !(await ask(`저장 칸 ${v.slice(-1)}${josa(v.slice(-1), '을/를')} 덮어쓸까요?`, '덮어쓰기'))) return;
+        notePast(game);
         if (await S.put(v as S.SlotKey, S.makeSave(game, uiSnap()))) dirty = false, toast(`저장 칸 ${v.slice(-1)}에 저장했습니다`); else err('저장하지 못했습니다(브라우저 저장 공간 부족)');
         void showMenu(); return;
       }
@@ -2762,7 +2832,9 @@ export function startApp(): void {
         try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = skipping = false; }
         toast('48주를 건너뛰었습니다.', '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
-      case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); return;
+      case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); { const l = document.getElementById('ns-line'); if (l) l.textContent = nsLine(); } return;
+      case 'nsYear': nsYear = Number(v); nsChanged(); return;
+      case 'nsCond': nsCond = v as StartCondition; nsChanged(); return;
       case 'lg': { const L = logoTarget(), k = el.dataset.k as 'shape' | 'mark' | 'bg' | 'fg'; (L as unknown as Record<string, string>)[k] = v; if (k === 'mark' && v === 'text' && !L.text) L.text = [...(game?.state.companyName || ($<HTMLInputElement>('#t-co')?.value ?? '')).trim()][0] ?? '가'; logoChanged(); return; }
       case 'lgRand': {
         const L = logoTarget(), pick = <T>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)]; // 화면 전용 무작위(sim과 무관)
@@ -2786,6 +2858,7 @@ export function startApp(): void {
     const t = e.target as HTMLInputElement;
     if (t.id === 'lg-text') { logoTarget().text = [...t.value.trim()].slice(0, 2).join(''); logoChanged(true); return; }
     if (t.id === 'lg-border') { logoTarget().border = t.checked; logoChanged(); return; }
+    if (t.dataset.ch) { const k = t.dataset.ch as Challenge; if (t.checked) nsChal.add(k); else nsChal.delete(k); return; } // 1.5.0 새 게임 도전 과제
     if (t.id === 'dname' && derive) { derive.name = t.value; const o = document.getElementById('dname-ov'); if (o) o.textContent = t.value.trim() || (t.placeholder ?? ''); return; } // 1.3.0 파생 모델 이름
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }
     else if (t.id === 'lprice' && launch) { launch.price = Number(t.value); render(); }

@@ -195,6 +195,29 @@ export const config = {
     trendMin: 0.2, // 유행 계수 하한
     charging: { powertrain: 'ev', start: 0.05, perYear: 0.045 }, // 충전 인프라: 전기차 등장 사건부터 0.05, 해마다 +0.045(최대 1)
   },
+  // 1.5.0 새 게임 선택지(설계서 9.8). 시작 연도: 그 해 1월에 시작, 시작 연도 − techSlackYears까지 나온 기술은 연구 완료.
+  // byYear: 시작 연도별 시작 현금 배수(난이도 현금에 곱한다)·본사/공장 등급·직원 능력 가산·더 두는 직원 직무(그 시대 개발비 devEra·원가에 맞춤.
+  // 보통 신중 봇 시드 8개 20년 파산 0, 맨손 포함. 2000년 ×300·2015년 ×500에서는 2015년 1판이 19년째에, 맨손 2000년 4판이 6~10년째에 파산해 올렸다)
+  newGame: {
+    years: [1970, 1985, 2000, 2015] as const, techSlackYears: 3,
+    byYear: {
+      '1970': { cash: 1, hq: 1, factory: 1, ability: 0, roles: [] as const },
+      '1985': { cash: 12, hq: 2, factory: 2, ability: 15, roles: ['designer', 'tester'] as const },
+      '2000': { cash: 400, hq: 2, factory: 3, ability: 35, roles: ['designer', 'engineer', 'tester', 'sales'] as const },
+      '2015': { cash: 600, hq: 2, factory: 3, ability: 40, roles: ['designer', 'engineer', 'tester', 'sales'] as const },
+    },
+    conditions: { // 시작 현금 배수(난이도와 별개)
+      normal: { name: '보통', cash: 1 },
+      rich: { name: '넉넉한 자금', cash: 1.5 },
+      lean: { name: '맨손', cash: 0.7 },
+    },
+    challenges: { // 고르면 해당 명령을 거절한다. 보상 없음(기록에만 남는다)
+      evOnly: { name: '전기차만', desc: '전기 외 동력으로는 신차·풀체인지 개발을 시작할 수 없습니다. 2010년 이후 시작에서만.', minYear: 2010, powertrain: 'ev', max: 0 },
+      names3: { name: '차종 세 개까지', desc: '차종(파생 포함)은 세 개까지. 풀체인지·페이스리프트는 됩니다.', minYear: 0, powertrain: '', max: 3 },
+      noLoan: { name: '대출 없이', desc: '은행 대출을 받을 수 없습니다(구제 금융은 됩니다).', minYear: 0, powertrain: '', max: 0 },
+      noExec: { name: '임원 없이', desc: '임원을 임명하거나 채용할 수 없습니다.', minYear: 0, powertrain: '', max: 0 },
+    },
+  },
   // 0.4.1 난이도(설계자 결정): 새 게임에서 고른다(인자를 빼면 easy). 예전 저장은 normal로 본다. 공식은 그대로, 아래 값을 읽는 자리에서 바꾼다.
   // cash: 시작 현금, loanBase: 대출 기본 한도, bankruptcyMonths: 파산 유예, rivalMult: 경쟁 차 A 배수, upkeepMult: 본사·공장 유지비 배수,
   // prototypeMult: 시제차 비용 배수, recallMult: 리콜 비용 배수(무상 수리 선택 포함), manyDefects: 평론 감점 결함 기준, bailouts: 구제 금융 횟수, repLossMult: 평판 감점 배수(혹평·리콜·단종, 0.5.1),
