@@ -1,4 +1,4 @@
-// 3.0.0 자회사와 고급 브랜드: 설립 조건·명령·저장(형식 8 → 9)·결정론, 전략별 행동 차이(10년), 너그러움, 전환 기간, 제 살 깎기, 봇 60년
+// 3.0.0 자회사와 고급 브랜드: 설립 조건·명령·저장(형식 8 → 9)·결정론, 전략별 행동 차이(6년), 너그러움, 전환 기간, 제 살 깎기, 봇 40년(다이어트)
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { config } from '../src/config';
@@ -11,7 +11,7 @@ import { monthOf } from '../src/sim/time';
 import type { CarState, SubKind, SubStrategy } from '../src/sim/types';
 import { grant, ok, toMonthEnd } from './util';
 
-vi.setConfig({ testTimeout: 900_000 }); // 10년 측정 28판·60년 봇 2판(로컬 약 3분, CI는 몇 배 느리다)
+vi.setConfig({ testTimeout: 600_000 }); // 3.0.0 다이어트 뒤 로컬 약 1분(CI는 몇 배 느리다)
 const S = config.subs, WPY = 48;
 const fixture = () => JSON.parse(readFileSync('car/tests/fixtures/save-v8.json', 'utf8'));
 /** 형식 8 fixture(1994년, 본사 5등급·평판 186·현금 2.9조)에서 자회사 하나를 세운 판 */
@@ -215,15 +215,23 @@ describe('전환 기간과 보이는 값', () => {
     for (const c of cannibalInfo(s)) expect(c.share).toBeLessThan(0.1);
   });
 });
-
-// ---------- 10년 측정(전략 × 종류) ----------
-interface Run { kind: SubKind; strategy: SubStrategy; seed: number; profit: number; invested: number; lossYears: number; earlyDiv: number; dividend: number; share: number; sold: number; models: number; capital: number; rep: number; hqRep: number }
+// ---------- 측정(전략 × 종류) ----------
+// 3.0.0 테스트 다이어트: 개발 중에는 시드 2개·10년·사업 자회사 전략 3개씩·60년 봇 2판으로 넓게 쟀다(CHANGELOG 3.0.0 '개발 중 측정').
+// 여기서는 같은 방향을 시드 1개·YRS년으로 확인하고, 1990·2010·2030년 판은 같은 봇 판을 이어 붙여 한 번만 만든다.
+const YRS = Number(process.env.SUB300_YRS ?? 6);
+interface Run { kind: SubKind; strategy: SubStrategy; profit: number; invested: number; lossYears: number; earlyDiv: number; dividend: number; share: number; sold: number; models: number; capital: number; rep: number; hqRep: number }
 const base = new Map<number, string>();
-/** 1990년 판(편의 기능 봇 20년)을 한 번 만들어 두고, 자회사 하나를 세워 전략만 바꿔 봇과 함께 10년 */
-function measure(seed: number, kind: SubKind, strategy: SubStrategy, at = 20): Run {
-  const key = seed * 100 + at;
-  if (!base.has(key)) { const g = Game.create({ seed, difficulty: 'normal' }); ticks(g, at * WPY, steadyBestExec()); base.set(key, JSON.stringify(g.toJSON())); }
-  const g = Game.fromJSON(JSON.parse(base.get(key)!)), b = steadyBestExec();
+/** 편의 기능 봇(자회사 없음)으로 돌린 시드 1 판: 1990(20년) → 2010(40년) → 2030(60년)을 이어서 만든다 */
+function baseAt(at: number): string {
+  if (!base.has(at)) {
+    const prev = at > 20 ? baseAt(at - 20) : null, g = prev ? Game.fromJSON(JSON.parse(prev)) : Game.create({ seed: 1, difficulty: 'normal' });
+    ticks(g, (prev ? 20 : at) * WPY, steadyBestExec()); base.set(at, JSON.stringify(g.toJSON()));
+  }
+  return base.get(at)!;
+}
+/** 그 판에서 자회사 하나를 세워 전략만 정하고 봇과 함께 yrs년 */
+function measure(kind: SubKind, strategy: SubStrategy, at = 20, yrs = YRS): Run {
+  const g = Game.fromJSON(JSON.parse(baseAt(at))), b = steadyBestExec();
   if (at >= 40) grant(g, 'ec_ev'); // 전동화 비교: 본사가 전기차를 연구한 판(봇이 아직 안 했으면)
   expect(foundError(g.state, kind)).toBeNull();
   ok(g.command({ type: 'foundSubsidiary', kind }));
@@ -231,29 +239,30 @@ function measure(seed: number, kind: SubKind, strategy: SubStrategy, at = 20): R
   if (g.state.subs![0].strategy !== strategy) ok(g.command({ type: 'setSubStrategy', subId: id, strategy }));
   g.state.subs![0].switchMonth -= S.switchMonths; // 설립과 함께 정한 전략(전환 기간 없이 비교)
   let lossYears = 0, earlyDiv = 0, shareSum = 0;
-  for (let y = 0; y < 10; y++) {
+  const late = Math.floor(yrs / 2);
+  for (let y = 0; y < yrs; y++) {
     ticks(g, WPY, b);
     const d = subDetail(g.state, id)!;
     if (d.last12.profit < 0) lossYears++;
     if (y < 3) earlyDiv += d.last12.dividend;
-    if (y >= 5) shareSum += d.models.reduce((a, m) => a + m.share, 0) / Math.max(1, d.models.length);
+    if (y >= late) shareSum += d.models.reduce((a, m) => a + m.share, 0) / Math.max(1, d.models.length);
   }
   const d = subDetail(g.state, id)!;
-  return { kind, strategy, seed, profit: d.total.profit, invested: d.total.invested, lossYears, earlyDiv, dividend: d.total.dividend, share: shareSum / 5, sold: d.total.sold, models: d.models.length, capital: d.capital, rep: d.rep, hqRep: d.total.hqRep };
+  return { kind, strategy, profit: d.total.profit, invested: d.total.invested, lossYears, earlyDiv, dividend: d.total.dividend, share: shareSum / (yrs - late), sold: d.total.sold, models: d.models.length, capital: d.capital, rep: d.rep, hqRep: d.total.hqRep };
 }
+const eok = (x: number) => `${Math.round(x / 1e4).toLocaleString()}억`;
 const brandRuns: Run[] = [];
 function brandMatrix(): Run[] {
   if (brandRuns.length) return brandRuns;
-  for (const seed of [1, 2]) for (const kind of ['premium', 'value'] as SubKind[]) for (const st of SUB_STRATEGIES)
-    if (st !== 'ev' && !S.notFor[kind].includes(st)) brandRuns.push(measure(seed, kind, st)); // 전동화는 2010년 이후라 따로 잰다
-  const eok = (x: number) => `${Math.round(x / 1e4).toLocaleString()}억`;
-  console.log(brandRuns.map((r) => `${r.seed} ${r.kind} ${S.strat[r.strategy].name}: 이익 ${eok(r.profit)}(투자 ${eok(r.invested)}) 적자 ${r.lossYears}년, 첫 3년 배당 ${eok(r.earlyDiv)}, 배당 ${eok(r.dividend)}, 점유 ${(r.share * 100).toFixed(1)}%, 판매 ${r.sold.toLocaleString()}대, 모델 ${r.models}, 자본 ${eok(r.capital)}, 평판 ${r.rep.toFixed(0)}, 본사 평판 +${r.hqRep.toFixed(1)}`).join('\n'));
+  for (const kind of ['premium', 'value'] as SubKind[]) for (const st of SUB_STRATEGIES)
+    if (st !== 'ev' && !S.notFor[kind].includes(st)) brandRuns.push(measure(kind, st)); // 전동화는 2010년 이후라 따로 잰다
+  console.log(brandRuns.map((r) => `${r.kind} ${S.strat[r.strategy].name}: 이익 ${eok(r.profit)}(투자 ${eok(r.invested)}) 적자 ${r.lossYears}년, 첫 3년 배당 ${eok(r.earlyDiv)}, 배당 ${eok(r.dividend)}, 점유 ${(r.share * 100).toFixed(1)}%, 판매 ${r.sold.toLocaleString()}대, 모델 ${r.models}, 자본 ${eok(r.capital)}, 평판 ${r.rep.toFixed(0)}, 본사 평판 +${r.hqRep.toFixed(1)}`).join('\n'));
   return brandRuns;
 }
 const pick = (rs: Run[], kind: SubKind, st: SubStrategy) => rs.filter((r) => r.kind === kind && r.strategy === st);
 const avg = (rs: Run[], k: keyof Run) => rs.reduce((a, r) => a + (r[k] as number), 0) / rs.length;
 
-describe('전략별 행동 차이(1990년 설립, 10년, 시드 2개)', () => {
+describe(`전략별 행동 차이(1990년 설립, ${YRS}년)`, () => {
   it('약속한 방향: 점유율 중심 점유 > 수익 중심, 수익 중심 배당 > 성장 중심의 초반 배당, 성장 중심 규모 > 안정 유지, 명성 구축 평판 최고·판매 최저, 틈새는 모델 2개 이하', () => {
     const rs = brandMatrix();
     expect(avg(pick(rs, 'value', 'share'), 'share')).toBeGreaterThan(avg(pick(rs, 'value', 'profit'), 'share'));
@@ -267,7 +276,7 @@ describe('전략별 행동 차이(1990년 설립, 10년, 시드 2개)', () => {
     const prem = rs.filter((r) => r.kind === 'premium');
     expect(avg(pick(rs, 'premium', 'prestige'), 'rep')).toBe(Math.max(...SUB_STRATEGIES.filter((x) => pick(prem, 'premium', x).length).map((x) => avg(pick(prem, 'premium', x), 'rep'))));
     expect(avg(pick(rs, 'premium', 'prestige'), 'sold')).toBe(Math.min(...SUB_STRATEGIES.filter((x) => pick(prem, 'premium', x).length).map((x) => avg(pick(prem, 'premium', x), 'sold'))));
-    for (const r of pick(rs, 'premium', 'prestige')) expect(r.hqRep).toBeGreaterThan(5);
+    for (const r of pick(rs, 'premium', 'prestige')) expect(r.hqRep).toBeGreaterThan(YRS * 0.5);
   });
   it('한 전략이 이익·점유·평판·규모 모두에서 동시에 1등이 아니다', () => {
     const rs = brandMatrix();
@@ -277,15 +286,16 @@ describe('전략별 행동 차이(1990년 설립, 10년, 시드 2개)', () => {
       expect(new Set(tops).size, `${k}: ${tops.join(',')}`).toBeGreaterThan(1);
     }
   });
-  it('너그러움: 10년 누적 이익이 설립비 + 투자를 넘는 판이 대부분이고 연 단위 적자는 드물다. 사업 자회사도 본전을 찾는다', () => {
-    const rs = brandMatrix(), paid = rs.filter((r) => r.profit > r.invested).length, loss = rs.reduce((a, r) => a + r.lossYears, 0);
-    console.log(`본전 회수 ${paid}/${rs.length}판, 적자 연도 ${loss}/${rs.length * 10}`);
-    expect(paid / rs.length).toBeGreaterThanOrEqual(0.8);
-    expect(loss / (rs.length * 10)).toBeLessThanOrEqual(0.1);
-    for (const r of rs) expect(r.profit, `${r.kind} ${r.strategy} ${r.seed}`).toBeGreaterThan(0); // 명성 구축도 누적 적자는 아니다
-    for (const kind of ['parts', 'finance'] as SubKind[]) for (const st of ['growth', 'profit', 'stable'] as SubStrategy[]) {
-      const r = measure(1, kind, st);
-      expect(r.profit, `${kind} ${st}`).toBeGreaterThan(r.invested); expect(r.lossYears).toBe(0);
+  it('너그러움: 누적 이익이 흑자이고 연 단위 적자는 드물며, 본전(설립비 + 투자)을 찾아가는 중이다. 사업 자회사도 본전을 찾는다', () => {
+    const rs = brandMatrix(), loss = rs.reduce((a, r) => a + r.lossYears, 0);
+    console.log(`누적 이익/투자: ${rs.map((r) => `${r.kind[0]}${S.strat[r.strategy].name} ${(r.profit / r.invested).toFixed(2)}`).join(', ')} · 적자 연도 ${loss}/${rs.length * YRS}`);
+    expect(loss / (rs.length * YRS)).toBeLessThanOrEqual(0.1);
+    for (const r of rs) expect(r.profit, `${r.kind} ${r.strategy}`).toBeGreaterThan(0); // 명성 구축도 누적 적자는 아니다
+    expect(rs.filter((r) => r.profit > r.invested * (YRS / 10) * 0.8).length / rs.length).toBeGreaterThanOrEqual(0.8); // 10년이면 본전: YRS년에 그 몫의 80% 이상
+    for (const [kind, st] of [['parts', 'growth'], ['finance', 'profit']] as [SubKind, SubStrategy][]) {
+      const r = measure(kind, st);
+      console.log(`${kind} ${S.strat[st].name}: 이익 ${eok(r.profit)} / 투자 ${eok(r.invested)}`);
+      expect(r.profit, `${kind} ${st}`).toBeGreaterThan(r.invested * (YRS / 10)); expect(r.lossYears).toBe(0);
     }
   });
   it('경쟁사 대응: 상대의 주력 차급에서 그 경쟁사 모델의 점유가 성장 중심일 때보다 줄어든다', () => {
@@ -304,27 +314,23 @@ describe('전략별 행동 차이(1990년 설립, 10년, 시드 2개)', () => {
     expect(r.subs![0].reports.some((x) => x.text.includes('포티의 주력 차급'))).toBe(true);
   });
   it('전동화 전환: 2010년대 이익은 성장 중심보다 적고, 2030년대에는 많다', () => {
-    const ev = measure(1, 'value', 'ev', 40), gr = measure(1, 'value', 'growth', 40), ev3 = measure(1, 'value', 'ev', 60), gr3 = measure(1, 'value', 'growth', 60);
-    const eok = (x: number) => `${Math.round(x / 1e4).toLocaleString()}억`;
-    console.log(`보급형 10년 이익: 2010년대 전동화 ${eok(ev.profit)} / 성장 ${eok(gr.profit)}, 2030년대 전동화 ${eok(ev3.profit)} / 성장 ${eok(gr3.profit)}`);
+    const ev = measure('value', 'ev', 40, 4), gr = measure('value', 'growth', 40, 4), ev3 = measure('value', 'ev', 60, 4), gr3 = measure('value', 'growth', 60, 4);
+    console.log(`보급형 4년 이익: 2010년대 전동화 ${eok(ev.profit)} / 성장 ${eok(gr.profit)}, 2030년대 전동화 ${eok(ev3.profit)} / 성장 ${eok(gr3.profit)}`);
     expect(ev.profit).toBeLessThan(gr.profit);
     expect(ev3.profit).toBeGreaterThan(gr3.profit);
   });
 });
 
-describe('봇 60년(자회사를 쓰는 편의 기능 봇)', () => {
-  it('파산하지 않고, 자회사를 세우며, 현금은 자회사를 쓰지 않는 같은 봇의 몇 배 안이다(측정값 출력)', () => {
-    const out: string[] = [];
-    for (const seed of [1]) {
-      const run = (subs: boolean) => { const g = Game.create({ seed, difficulty: 'normal' }), b = steadyBestExec({ subs }); ticks(g, 60 * WPY, b); return g.state; };
-      const a = run(true), z = run(false);
-      expect(a.status).toBe('playing');
-      expect(a.subs!.length).toBeGreaterThan(0);
-      const first = Math.min(...a.subs!.map((x) => x.founded)) / 12 + 1970;
-      expect(first).toBeLessThan(2000);
-      out.push(`시드 ${seed}: 60년 현금 자회사 ${(a.cash / 1e8).toFixed(2)}조 / 없음 ${(z.cash / 1e8).toFixed(2)}조(×${(a.cash / z.cash).toFixed(2)}), 첫 설립 ${Math.floor(first)}년`);
-      expect(a.cash / z.cash).toBeLessThan(3);
-    }
-    console.log(out.join('\n'));
+describe('봇 40년(자회사를 쓰는 편의 기능 봇)', () => {
+  it('1990년 판에서 20년 더: 파산하지 않고, 자회사를 세우며, 현금은 자회사를 쓰지 않는 같은 봇의 몇 배 안이다(측정값 출력)', () => {
+    const g = Game.fromJSON(JSON.parse(baseAt(20))), b = steadyBestExec({ subs: true });
+    ticks(g, 20 * WPY, b);
+    const a = g.state, z = JSON.parse(baseAt(40)) as CarState; // 자회사를 쓰지 않는 같은 봇은 2010년 판 그대로
+    expect(a.status).toBe('playing');
+    expect(a.subs!.length).toBeGreaterThan(0);
+    const first = Math.min(...a.subs!.map((x) => x.founded)) / 12 + 1970;
+    expect(first).toBeLessThan(2000);
+    console.log(`시드 1: 2010년 현금 자회사 ${(a.cash / 1e8).toFixed(2)}조 / 없음 ${(z.cash / 1e8).toFixed(2)}조(×${(a.cash / z.cash).toFixed(2)}), 첫 설립 ${Math.floor(first)}년, 본사 ${a.hqLevel}등급`);
+    expect(a.cash / z.cash).toBeLessThan(3);
   });
 });

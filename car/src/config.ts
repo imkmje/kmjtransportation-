@@ -100,6 +100,9 @@ export const config = {
       { name: '본사 빌딩', cost: 400000, rep: 20, staff: 12, teams: 2, options: 3, upkeep: 5000 },
       { name: '연구 단지', cost: 3000000, rep: 55, staff: 16, teams: 2, options: 4, upkeep: 15000 },
       { name: '글로벌 본사', cost: 15000000, rep: 80, staff: 20, teams: 3, options: 4, upkeep: 40000 },
+      // 3.0.0(사용자 지시: 차 6대에 직원 20명 상한은 모자라다). 유지비는 등급마다 약 2.5배(기존 3배·2.7배 추세)
+      { name: '그룹 본사', cost: 80000000, rep: 120, staff: 30, teams: 4, options: 4, upkeep: 100000 },
+      { name: '글로벌 캠퍼스', cost: 300000000, rep: 170, staff: 40, teams: 6, options: 4, upkeep: 250000 },
     ],
   },
   staff: { // 9.1 직원
@@ -180,7 +183,7 @@ export const config = {
     pointsDiv: 10, // 교육·휴식 중이 아닌 엔지니어 1명이 매주 능력 / 10 점(개발에 배치되어 있으면 그 30%)
     projectShare: 0.3, // 0.5.0: 개발 중인 엔지니어도 연구 점수의 30%를 낸다(창업 직후 전원 개발이라 연구가 0이었다)
     labMult: 1.5, labHq: 4, // 전담 연구원(본사 4등급부터): 산출 × 1.5
-    slots: [3, 4, 5, 6, 6], // 본사 등급별 동시 연구 수. 0.4.2: 1/1/1/2/2 → 3/4/5/6/6(사용자 피드백: 연구 두 개는 박하다). 주간 점수는 시작 순으로 채우므로 칸이 늘어도 전체 속도는 같다
+    slots: [3, 4, 5, 6, 6, 6, 6], // 본사 등급별 동시 연구 수. 0.4.2: 1/1/1/2/2 → 3/4/5/6/6(사용자 피드백: 연구 두 개는 박하다). 주간 점수는 시작 순으로 채우므로 칸이 늘어도 전체 속도는 같다
     earlyRate: 0.25, earlyMax: 4, // 등장 연도보다 먼저: 비용 × (1 + 0.25 × 앞당긴 햇수), 최대 4년
     lateYears: 8, lateMult: 0.5, // 등장 연도 + 8년이 지나면 비용 × 0.5
     repeatGrowth: 1.5, // 반복 기술(차세대)은 할 때마다 비용 × 1.5
@@ -231,7 +234,7 @@ export const config = {
     hard: { name: '어려움', desc: '자금이 빠듯하고 경쟁이 강하며, 구제 금융이 없습니다.', cash: 220000, loanBase: 200000, bankruptcyMonths: 6, rivalMult: 1.05, upkeepMult: 1.1, prototypeMult: 1, recallMult: 1, manyDefects: 15, bailouts: 0, repLossMult: 1, bigUpkeepMult: 1.1 },
   },
   exec: { // 0.7.0 임원(9.7). 금액 만원
-    seats: [1, 2, 4, 5, 6], // 본사 등급별 임원 자리 수
+    seats: [1, 2, 4, 5, 6, 6, 6], // 본사 등급별 임원 자리 수
     allowance: 300, // 직원을 임원으로 임명하면 월급에 더하는 수당(월)
     seatAllowance: [0, 0, 5000, 7000, 9000, 10000], // 0.8.0: 임원이 n명일 때 임원마다 더 붙는 수당(월). 2명까지(본사 1~2등급)는 0, 3명부터 누진. 임원이 정원 밖이 되어 균형을 여기와 replace(기준·폭·간격)로 맞춘다
     hiredPayMult: 1.6, // 외부에서 뽑은 임원의 월급 = 직원 월급 공식(능력) × 1.6
@@ -314,7 +317,7 @@ export const config = {
   },
   // 3.0.0 자회사(sim/subs.ts, 설계서 9.9). 금액 만원, 기간 개월. 자회사 모델은 경쟁 모델(rivals)과 같은 구조(세대·주기·기본 A)로 그 차급 수요를 나눠 갖는다
   subs: {
-    hqMin: 4, maxByHq: [0, 0, 0, 1, 3], // 세울 수 있는 본사 등급, 본사 등급별 자회사 수 상한
+    hqMin: 4, maxByHq: [0, 0, 0, 1, 3, 4, 4], // 세울 수 있는 본사 등급, 본사 등급별 자회사 수 상한
     kinds: {
       // cost: 설립비, rep: 필요 평판, bodies·segments: 맡을 수 있는 차급·고객층(segment: 기본 고객층),
       // price·unitCost·vol: 시장 기준가·대당 원가·판매 대수 배수, a: 모델 세기(기본 A) 가산, rep0: 설립 때 브랜드 평판 = 본사 평판 × rep0

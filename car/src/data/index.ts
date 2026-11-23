@@ -40,7 +40,7 @@ export const STAFF_WINS = staffWinsJson as unknown as { roles: Record<Exclude<Ro
 /** 1.3.0 알림 유형 목록(화면의 알림 설정용) */
 export const NOTIFY = notifyJson as unknown as NotifyDef[];
 /** 3.0.0 자회사: 종류별 기본 이름({회사} = 본사 이름)·설명, 전략 설명, 브랜드의 능력치 모양, 자회사 모델 이름 목록 */
-export const SUB_DATA = subsJson as { names: Record<string, string>; kinds: Record<string, string>; strategies: Record<string, string>; shape: Record<string, Record<string, number>>; models: string[] };
+export const SUB_DATA = subsJson as { names: Record<string, string>; kinds: Record<string, string>; strategies: Record<string, string>; gain: Record<string, string>; cost: Record<string, string>; biz: Record<string, { desc: string; gain: string; cost: string }>; shape: Record<string, Record<string, number>>; models: string[] };
 export const NAMES = namesJson as { defaultCompany: string; staff: string[]; cars: string[]; family: string[]; given: string[] }; // family·given: 채용 후보 이름(성 + 이름)
 
 const find = <T extends { id: string }>(list: T[], id: string, what: string): T => { const x = list.find((v) => v.id === id); if (!x) throw new Error(`없는 ${what}: ${id}`); return x; };

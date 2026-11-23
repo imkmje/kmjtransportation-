@@ -283,7 +283,7 @@ export interface CarState {
   status: 'playing' | 'gameOver';
   staff: Staff[];
   candidates: Candidate[]; // 채용 후보(공고를 내면 3명)
-  hqLevel: number; // 본사 등급 1~5(9.2)
+  hqLevel: number; // 본사 등급 1~7(9.2, 3.0.0에 6·7등급)
   factory: { level: number; build: { level: number; doneMonth: number } | null }; // 공장 등급 1~5, 증설 공사(doneMonth 달 초부터 새 등급)
   batteryPlant: { level: number; build: { level: number; doneMonth: number } | null }; // 1.2.0 배터리 자체 생산 등급(0 = 없음), 건설 공사(공장과 같은 방식)
   projects: Project[];

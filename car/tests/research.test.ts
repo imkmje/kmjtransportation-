@@ -132,7 +132,7 @@ describe('연구 진행(10장)', () => {
     expect(reason(g.command({ type: 'startResearch', techId: 'bd_hatch' }))).toBe('이미 연구한 기술입니다.');
   });
   it('연구 칸은 본사 등급마다 3/4/5/6/6개(0.4.2). 진행 중 연구는 모두 매주 점수를 고르게 받고, 우선 연구가 절반을 받는다(0.5.1)', () => {
-    expect(config.research.slots).toEqual([3, 4, 5, 6, 6]);
+    expect(config.research.slots).toEqual([3, 4, 5, 6, 6, 6, 6]); // 3.0.0 6·7등급도 6칸
     const g = gameAt(1982); g.state.hqLevel = 5;
     ok(g.command({ type: 'startResearch', techId: 'bd_hatch' })); ok(g.command({ type: 'startResearch', techId: 'bd_sedanM' }));
     for (const t of TECHS.filter((x) => !researchError(g.state, x.id)).slice(0, 4)) ok(g.command({ type: 'startResearch', techId: t.id }));
