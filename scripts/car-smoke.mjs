@@ -1259,7 +1259,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('[이 보고 닫기] → 카드 하나 줄어듦', (await ep.locator('.rep-card').count()) === c0 - 1);
   await ectx.close(); }
 
-// ---- 0.7.0 임원 화면(회사 탭): 임명 → 월 결산 보고 → 맡기기 켬 → 해임 ----
+// ---- 0.7.0 임원 화면(회사 탭): 임명 → 월 결산 보고 → 위임 켬 → 해임 ----
 { const xctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
   const xp = await xctx.newPage(); xp.on('pageerror', (e) => errors.push(String(e))); xp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   const XG = (fn, a) => xp.evaluate(fn, a), xshot = (n) => process.argv[2] ? xp.screenshot({ path: process.argv[2].replace('.png', `-${n}.png`) }) : Promise.resolve();
@@ -1279,10 +1279,10 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const nrep = await XG(() => window.__car.game.state.execs.reports.length);
   check('월 결산 → 임원 보고가 보고함에 쌓임(창은 뜨지 않음)', nrep > 0 && !(await xp.locator('#sheet .rep-card').isVisible()), `${nrep}건`);
   await xp.click('#panel [data-act="cotab"][data-v="exec"]');
-  check('맡기기: 능력이 모자라면 스위치가 잠기고 이유 표시', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').isDisabled()) && (await xp.locator('.exec-card[data-role="research"] .why').innerText()).includes('이상이어야'));
+  check('위임: 능력이 모자라면 스위치가 잠기고 이유 표시', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').isDisabled()) && (await xp.locator('.exec-card[data-role="research"] .why').innerText()).includes('이상이어야'));
   await XG(() => { window.__car.game.state.execs.seats.research.staff.ability = 70; window.__car.render(); });
   await xp.click('.exec-card[data-role="research"] [data-act="execDeleg"]');
-  check('맡기기 켬: 스위치 켜짐·상태 반영', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').getAttribute('aria-pressed')) === 'true' && await XG(() => window.__car.game.state.execs.delegations.research.includes('autoResearch')));
+  check('위임 켬: 스위치 켜짐·상태 반영', (await xp.locator('.exec-card[data-role="research"] [data-act="execDeleg"]').getAttribute('aria-pressed')) === 'true' && await XG(() => window.__car.game.state.execs.delegations.research.includes('autoResearch')));
   await xp.setViewportSize({ width: 1024, height: 768 }); await xp.waitForTimeout(200);
   check('임원 화면(1024×768): 가로 넘침 없음, 버튼 44px 이상', await XG(() => { const p = document.getElementById('panel'); return p.scrollWidth <= p.clientWidth + 1 && [...document.querySelectorAll('.exec-card .btn')].every((b) => b.getBoundingClientRect().height >= 44); }));
   await xshot('exec-1024x768');
@@ -1793,7 +1793,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await eshot('research-1024x768', '[data-field="eco"]');
   await ectx.close(); }
 
-// ---- 1.3.0 차 만들기: 출시 화면 유지·시승기, 파생 모델, 세대교체 맡기기, 알림 유형 ----
+// ---- 1.3.0 차 만들기: 출시 화면 유지·시승기, 파생 모델, 세대교체 위임, 알림 유형 ----
 // CAR_SMOKE_130=폴더 를 주면 화면을 그 폴더에 찍는다
 { const mctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
   const mp = await mctx.newPage(); mp.on('pageerror', (e) => errors.push(String(e))); mp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -1854,31 +1854,31 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
       const cell = (look, t) => `<div style="background:#fff;border-radius:12px;padding:6px;text-align:center"><img src="${st.renderThumb(look, 420, 260, -0.65)}" style="width:100%"><div>${t}</div></div>`;
       box.innerHTML = cell(base, '바탕: 아리아(세단)') + O.map((o) => cell({ ...base, ...(o.id === 'coupe' ? { bodyId: 'coupe' } : {}), ...(o.id === 'gt' ? { variant: 'gt', sporty: true, wheel: 2 } : {}), ...(o.id === 'wagon' ? { variant: 'wagon' } : {}), ...(o.id === 'ev' ? { powertrain: 'ev' } : {}) }, o.name)).join('') + cell(c.genLook(c.game.state.nameplates.at(-1).generations[0].id), '출시한 「아리아 투어러」(왜건)'); document.body.append(box); void g; }, gid);
     await mshot3('derive-4-looks'); await MG(() => document.getElementById('vcmp').remove()); }
-  // (b) 세대교체 맡기기: 기획 임원이 없으면 이유, 임명하면 켜고 끔
+  // (b) 세대교체 위임: 기획 임원이 없으면 이유, 임명하면 켜고 끔
   await MG(() => window.__car.goTarget({ tab: 'company', sub: 'exec' })); await mp.waitForTimeout(150);
-  check('1.3.0 맡기기: 기획 임원이 없으면 이유', (await mp.locator('.exec-card[data-role="product"] .ga-why').innerText()).includes('기획 임원이 없습니다') && (await mp.locator('.exec-card[data-role="product"] [data-act="genAuto"]:not([disabled])').count()) === 0);
+  check('1.3.0 위임: 기획 임원이 없으면 이유', (await mp.locator('.exec-card[data-role="product"] .ga-why').innerText()).includes('기획 임원이 없습니다') && (await mp.locator('.exec-card[data-role="product"] [data-act="genAuto"]:not([disabled])').count()) === 0);
   await MG(() => { const c = window.__car, s = c.game.state, x = s.staff.find((y) => y.role === 'designer'); x.ability = x.potential = 90; c.game.command({ type: 'appointExec', role: 'product', staffId: x.id }); c.render(); });
   const npA = await MG(() => window.__car.game.state.nameplates[0].id);
   await mp.click(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`);
   const on1 = await MG((id) => window.__car.game.state.execs?.genAuto?.[id] ?? null, npA);
-  check('1.3.0 맡기기 켜짐(출시까지 자동이 기본)', on1?.launch === true && (await mp.locator(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`).getAttribute('aria-pressed')) === 'true', JSON.stringify(on1));
+  check('1.3.0 위임 켜짐(출시까지 위임이 기본)', on1?.launch === true && (await mp.locator(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`).getAttribute('aria-pressed')) === 'true', JSON.stringify(on1));
   await mp.click(`.exec-card[data-role="product"] [data-act="genAutoLaunch"][data-np="${npA}"]`);
-  check('1.3.0 맡기기: 출시는 직접으로 바꿈', (await MG((id) => window.__car.game.state.execs.genAuto[id].launch, npA)) === false);
+  check('1.3.0 위임: 출시는 직접으로 바꿈', (await MG((id) => window.__car.game.state.execs.genAuto[id].launch, npA)) === false);
   await mp.click('.exec-card[data-role="product"] [data-act="genAutoAll"][data-v="1"]');
-  check('1.3.0 맡기기: 모두 켜기', (await MG(() => Object.keys(window.__car.game.state.execs.genAuto).length)) === 2);
+  check('1.3.0 위임: 모두 켜기', (await MG(() => Object.keys(window.__car.game.state.execs.genAuto).length)) === 2);
   await mp.locator('.exec-card[data-role="product"] .ga-sec').scrollIntoViewIfNeeded(); await mshot3('exec-genauto-1366x1024');
   await mp.click(`.exec-card[data-role="product"] [data-act="genAuto"][data-np="${npA}"]`);
-  check('1.3.0 맡기기 꺼짐', (await MG((id) => window.__car.game.state.execs.genAuto[id] ?? null, npA)) === null);
+  check('1.3.0 위임 꺼짐', (await MG((id) => window.__car.game.state.execs.genAuto[id] ?? null, npA)) === null);
   await MG((id) => window.__car.goTarget({ tab: 'garage', id }), gid);
-  check('1.3.0 차고 상세: 맡김 토글', (await mp.locator('.ga-one [data-act="genAuto"]').count()) === 1);
-  // 맡긴 차의 자동 출시: 공개 장면으로 게임을 끊지 않고 알림만, 알림을 누르면 시승기
+  check('1.3.0 차고 상세: 위임 토글', (await mp.locator('.ga-one [data-act="genAuto"]').count()) === 1);
+  // 위임한 차의 자동 출시: 공개 장면으로 게임을 끊지 않고 알림만, 알림을 누르면 시승기
   await mp.click(`.ga-one [data-act="genAuto"][data-np="${npA}"]`);
   const auto = await MG((id) => { const c = window.__car, s = c.game.state, g = s.nameplates.find((n) => n.id === id).generations[0]; g.launchMonth -= 60; g.lifeMonth -= 60; s.cash = 1e9;
     for (let i = 0; i < 160 && s.nameplates.find((n) => n.id === id).generations.length < 2; i++) c.tick(1);
     return { gens: s.nameplates.find((n) => n.id === id).generations.length, sheet: !document.getElementById('sheet').hidden, rvl: !!document.querySelector('#sheet .rvl'), screen: c.screen }; }, npA);
   await mp.click('#todobtn'); await mp.click('#drawer [data-act="todoTab"][data-v="notes"]'); // 알림은 12초 뒤 닫히므로(느린 렌더) 알림 기록에서 누른다
   const autoNote = await mp.locator('#drawer .note-it', { hasText: '기획 임원이 출시했습니다' }).count();
-  check('1.3.0 맡긴 차 자동 출시: 공개 장면·창 없이 알림만', auto.gens === 2 && !auto.sheet && !auto.rvl && autoNote >= 1, JSON.stringify({ ...auto, autoNote }));
+  check('1.3.0 위임한 차 자동 출시: 공개 장면·창 없이 알림만', auto.gens === 2 && !auto.sheet && !auto.rvl && autoNote >= 1, JSON.stringify({ ...auto, autoNote }));
   if (autoNote) { await mp.locator('#drawer .note-it', { hasText: '기획 임원이 출시했습니다' }).first().click(); await mp.waitForSelector('#sheet .critic', { timeout: 5000 }).catch(() => {});
     check('1.3.0 자동 출시 알림을 누르면 평론 창(시승기)', (await mp.locator('#sheet .crit-t').count()) === 4);
     await mp.locator('#sheet [data-act="closeReview"]').click().catch(() => {}); }
@@ -1908,9 +1908,56 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     check(`1.3.0 ${w}×${h}: 파생 고르기 화면`, dsc === 'derive', dsc);
     await mact('dvCancel').catch(() => {}); await MG(() => window.__car.goTarget({ tab: 'company', sub: 'exec' })); await mp.waitForTimeout(150);
     const o3 = await overflowOf(mp); if (w === 800) { await mp.locator('.exec-card[data-role="product"] .ga-sec').scrollIntoViewIfNeeded(); await mshot3('exec-genauto-800x1200'); }
-    check(`1.3.0 ${w}×${h}: 차고 표·파생 고르기·임원 맡기기 넘침 없음`, o1 <= 0 && o2 <= 0 && o3 <= 0, `${o1}/${o2}/${o3}`);
+    check(`1.3.0 ${w}×${h}: 차고 표·파생 고르기·임원 위임 넘침 없음`, o1 <= 0 && o2 <= 0 && o3 <= 0, `${o1}/${o2}/${o3}`);
   }
+  // 1.4.0 용어 '위임': 차고(표·상세)·임원 화면(기획 임원 카드 포함)·설정의 글자에 "맡기기"·"맡김"이 없다
+  { const OLD = /맡기기|맡김/, bad = [], gl = await MG(() => window.__car.game.state.nameplates[0].generations.at(-1).id);
+    for (const t of [{ tab: 'garage' }, { tab: 'garage', id: gl }, { tab: 'company', sub: 'exec' }]) { await MG((x) => window.__car.goTarget(x), t); await mp.waitForTimeout(150); if (OLD.test(await MG(() => document.body.innerText))) bad.push(JSON.stringify(t)); }
+    const prod = await mp.locator('.exec-card[data-role="product"]').innerText();
+    if (!prod.includes('세대교체 위임')) bad.push('기획 임원 카드에 세대교체 위임 없음');
+    await mp.click('#menubtn'); await mp.click('#sheet [data-act="settings"]');
+    for (const v of await mp.locator('#sheet [data-act="setTab"]').evaluateAll((l) => l.map((b) => b.dataset.v))) { await mp.click(`#sheet [data-act="setTab"][data-v="${v}"]`); if (OLD.test(await mp.locator('#sheet').innerText())) bad.push(`설정 ${v}`); }
+    await mp.click('#sheet [data-act="closeSheet"]');
+    check('1.4.0 용어: 차고·임원 화면·기획 임원 카드·설정에 "맡기기"·"맡김" 없음', bad.length === 0, bad.join(', ')); }
   await mctx.close(); }
+
+// ---- 1.4.0 인사 임원 자동 채용·자동 해고(위임) ----
+{ const hctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const hp = await hctx.newPage(); hp.on('pageerror', (e) => errors.push(String(e))); hp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const HG = (fn, a) => hp.evaluate(fn, a), H4 = process.env.CAR_SMOKE_140 ?? '';
+  const hrCard = hp.locator('.exec-card[data-role="hr"]');
+  const hshot = async (n) => { if (H4) { await hrCard.scrollIntoViewIfNeeded(); await hp.screenshot({ path: `${H4}/${n}.png` }); } };
+  const pressed = async (k) => (await hrCard.locator(`[data-act="execDeleg"][data-k="${k}"]`).getAttribute('aria-pressed')) === 'true';
+  const dels = () => HG(() => window.__car.game.state.execs.delegations.hr ?? []);
+  await hp.goto(URL0); await hp.waitForSelector('#title:not([hidden])');
+  await hp.click('[data-act="titleNew"]'); await hp.fill('#t-co', '인사 시험'); await hp.click('[data-act="startNew"]'); await HG(() => window.__car.setSpeed(0));
+  await HG(() => { const c = window.__car, g = c.game, s = g.state; s.cash = 1e8; g.command({ type: 'postExecJob', role: 'hr' }); g.command({ type: 'hireExec', role: 'hr', candidateId: s.execs.candidates[0].id });
+    const x = s.execs.seats.hr.staff; x.ability = x.potential = 90; for (const y of s.staff) y.ability = 20; c.goTarget({ tab: 'company', sub: 'exec' }); });
+  await hp.waitForTimeout(150);
+  check('1.4.0 인사 임원 위임 목록: 자동 채용·자동 해고(기본 꺼짐, 한 줄 설명, 해고는 되돌릴 수 없다는 안내)', !(await pressed('autoHire')) && !(await pressed('autoFire')) && (await hrCard.locator('.deleg[data-k="autoHire"] small').count()) === 1
+    && (await hrCard.locator('.deleg[data-k="autoFire"] .deleg-warn').innerText()).includes('되돌릴 수 없습니다'));
+  for (const k of ['autoHire', 'autoFire']) await hrCard.locator(`[data-act="execDeleg"][data-k="${k}"]`).click();
+  check('1.4.0 두 항목 켬: 스위치·상태 반영', (await pressed('autoHire')) && (await pressed('autoFire')) && (await dels()).includes('autoHire') && (await dels()).includes('autoFire'));
+  await hshot('hr-card-1366x1024');
+  await hrCard.locator('[data-act="execDeleg"][data-k="autoFire"]').click();
+  check('1.4.0 자동 해고 끔', !(await pressed('autoFire')) && !(await dels()).includes('autoFire'));
+  const n0 = await HG(() => window.__car.game.state.staff.length);
+  await HG(() => window.__car.tick(4));
+  const hired = await HG(() => { const s = window.__car.game.state, r = s.execs.reports.find((x) => x.kind === 'autoHire'); return r ? { n: s.staff.length, name: s.staff.find((x) => x.id === r.goto.id)?.name } : null; });
+  check('1.4.0 자동 채용: 월 결산에 한 명을 뽑고 보고', !!hired && hired.n === n0 + 1 && !!hired.name, JSON.stringify(hired));
+  await hp.click('#todobtn'); await hp.click('[data-act="todoTab"][data-v="reports"]');
+  const card = hp.locator('.rep-card', { hasText: '뽑았습니다' }).first(), ct = await card.innerText();
+  check('1.4.0 보고함: 자동 채용 보고(위임한 일 기록, 기준)', ct.includes('위임한 일 기록') && ct.includes(hired?.name ?? '?') && ct.includes('기준'), ct.slice(0, 200));
+  await card.locator('[data-act="repGo"]').click(); await hp.waitForTimeout(200);
+  check('1.4.0 보고 → 해당 화면으로: 직원 화면에 새 직원', (await HG(() => window.__car.screen)) !== 'title' && (await hp.locator('#panel').innerText()).includes(hired?.name ?? '?'));
+  await HG(() => window.__car.goTarget({ tab: 'company', sub: 'exec' })); await hp.waitForTimeout(150);
+  check('1.4.0 임원 화면에 "맡기기"·"맡김" 없음', !/맡기기|맡김/.test(await HG(() => document.body.innerText)));
+  for (const [w, h] of [[1024, 768], [800, 1200]]) {
+    await hp.setViewportSize({ width: w, height: h }); await HG(() => { document.getElementById('toasts').innerHTML = ''; window.__car.goTarget({ tab: 'company', sub: 'exec' }); }); await hp.waitForTimeout(150);
+    const o = await overflowOf(hp); if (w === 800) await hshot('hr-card-800x1200');
+    check(`1.4.0 ${w}×${h}: 인사 임원 카드 넘침 없음`, o <= 0, String(o));
+  }
+  await hctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

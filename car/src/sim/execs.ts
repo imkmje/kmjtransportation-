@@ -1,4 +1,4 @@
-// 임원(0.7.0, 설계서 9.7): 자리·임명·채용, 월 결산 제안(보고함), 맡기기, 교체 고용.
+// 임원(0.7.0, 설계서 9.7): 자리·임명·채용, 월 결산 제안(보고함), 위임, 교체 고용.
 // 제안 수치는 화면이 쓰는 조회(queries·research·company)와 같은 함수로 계산한다. 상태를 바꾸는 것은 execCommand·execWeek·execMonth뿐
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById, optionById, segmentById, techById } from '../data';
@@ -28,9 +28,13 @@ export const EXEC_TITLE: Record<ExecRole, string> = { hr: '인사 임원', produ
 const EXEC_BASE_ROLE: Record<ExecRole, Role> = { hr: 'sales', product: 'designer', finance: 'sales', production: 'tester', research: 'engineer', market: 'sales' };
 const ROLE_KO: Record<Role, string> = { designer: '디자이너', engineer: '엔지니어', tester: '테스터', sales: '영업' };
 const SKILL_KO: Record<Role, string> = { designer: '디자인', engineer: '기술', tester: '꼼꼼함', sales: '영업력' };
-/** 맡기기 항목(자리별). 해고·가격·출시 같은 큰 결정은 없다 */
-export const DELEGATIONS: Record<ExecRole, { key: string; label: string }[]> = {
-  hr: [{ key: 'autoRest', label: '지친 직원 자동 휴식' }, { key: 'autoTrain', label: '성장 여지가 있는 직원 자동 교육' }],
+/** 위임 항목(자리별). note: 화면의 한 줄 설명, warn: 되돌리기 어려운 결정이라는 안내. 가격은 자동 가격 정책, 출시는 세대교체 위임(1.3.0), 해고는 자동 해고(1.4.0)로만 위임한다 */
+const AS = config.exec.autoStaff;
+export const DELEGATIONS: Record<ExecRole, { key: string; label: string; note?: string; warn?: string }[]> = {
+  hr: [{ key: 'autoRest', label: '지친 직원 자동 휴식' }, { key: 'autoTrain', label: '성장 여지가 있는 직원 자동 교육' },
+    { key: 'autoHire', label: '빈자리 자동 채용', note: '정원에 빈자리가 있고 현금에 여유가 있으면 가장 부족한 직무를 뽑습니다. 같은 직무 직원 평균 능력 이상인 후보를 뽑고, 공고로 평균에 닿기 어려우면 가장 높은 등급 공고에서 가장 나은 후보를 뽑습니다.' },
+    { key: 'autoFire', label: '성장이 멈춘 직원 자동 해고', note: `성장 한계에 닿았고 같은 직무 평균보다 능력이 ${config.exec.hr.weakGap} 이상 낮은 직원을 한 달에 한 명까지 내보냅니다. 개발 중·교육·휴식 중이거나 입사 ${AS.tenureMonths}개월이 안 된 직원은 제외합니다.`,
+      warn: '해고는 되돌릴 수 없습니다. 퇴직금이 나가고, 내보낸 직원은 다시 데려올 수 없습니다.' }],
   product: [], finance: [],
   production: [{ key: 'autoAlloc', label: '생산 배분 자동 조정' }],
   research: [{ key: 'autoResearch', label: '빈 연구 칸에 추천 연구 시작' }],
@@ -44,7 +48,7 @@ const KIND_TITLE: Record<string, string> = {
   expand: '공장 증설', lines: '생산 라인 부족', alloc: '생산 배분',
   regulation: '규제 대비 연구', emptySlot: '빈 연구 칸',
   build: '새 차종 제안', adUp: '광고 늘리기', adDown: '광고 줄이기',
-  autoRest: '자동 휴식', autoTrain: '자동 교육', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
+  autoRest: '자동 휴식', autoTrain: '자동 교육', autoHire: '자동 채용', autoHireFail: '자동 채용 보류', autoFire: '자동 해고', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
   autoFullChange: '자동 풀체인지', autoFacelift: '자동 페이스리프트', autoDerive: '파생 모델 세대교체', autoGenWait: '세대교체 대기', autoLaunch: '자동 출시', autoLaunchFail: '자동 출시 보류',
   replaceDone: '교체 고용 완료', replaceFail: '교체 고용 실패', replaceHold: '교체 고용 보류', replaceCancel: '교체 고용 취소', replaceWait: '교체 고용 대기',
 };
@@ -67,11 +71,11 @@ export const seatAllowance = (n: number): number => X.seatAllowance[Math.min(n, 
 /** 임원 월급: 임명한 직원은 원래 월급 + 수당, 외부 임원은 직원 월급 공식 × 1.6. 둘 다 임원 수에 따른 수당이 더 붙는다 */
 export const execPayOf = (s: CarState, x: Staff, hired: boolean): number => (hired ? Math.round(salaryOf(x.ability) * X.hiredPayMult) : salaryOf(x.ability) + X.allowance) + seatAllowance(seated(s).length);
 export const execPay = (s: CarState): number => seated(s).reduce((a, [, x, h]) => a + execPayOf(s, x, h), 0);
-/** 운영비(월): 직원 월급 + 임원 월급 + 본사·공장 유지비. 맡기기·교체 고용의 현금 기준 */
+/** 운영비(월): 직원 월급 + 임원 월급 + 본사·공장 유지비. 위임·교체 고용의 현금 기준 */
 export const monthlyFixed = (s: CarState): number => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s) + upkeepOf(s);
 
 const holder = (s: CarState, r: ExecRole) => s.execs?.seats[r];
-const delegationOn = (s: CarState, r: ExecRole, key: string): boolean => !!holder(s, r) && !!s.execs?.delegations[r]?.includes(key) && execSkill(r, holder(s, r)!.staff) >= X.delegateSkill;
+export const delegationOn = (s: CarState, r: ExecRole, key: string): boolean => !!holder(s, r) && !!s.execs?.delegations[r]?.includes(key) && execSkill(r, holder(s, r)!.staff) >= X.delegateSkill;
 const emptyExecs = (): ExecState => ({ seats: {}, delegations: {}, candidates: [], reports: [], cooldown: {}, replacements: [], rejected: {} });
 
 // ---------- 조회(화면) ----------
@@ -86,8 +90,8 @@ export function execInfo(s: CarState) {
         holder: seat ? { staffId: seat.staff.id, name: seat.staff.name, skill, tier: execTier(skill), hired: seat.hired, pay: execPayOf(s, seat.staff, seat.hired), staffRole: seat.staff.role } : null,
         canFill: !seat && used < seats, // 빈 자리(임명·채용 가능). 자리가 다 찼으면 false(잠김)
         delegations: DELEGATIONS[role].map((d) => {
-          const whyNot = !seat ? '임원이 없습니다.' : skill < X.delegateSkill ? `임원 능력이 ${X.delegateSkill} 이상이어야 맡길 수 있습니다(지금 ${skill}).` : null;
-          return { key: d.key, label: d.label, on: !!s.execs?.delegations[role]?.includes(d.key) && !whyNot, available: !whyNot, whyNot };
+          const whyNot = !seat ? '임원이 없습니다.' : skill < X.delegateSkill ? `임원 능력이 ${X.delegateSkill} 이상이어야 위임할 수 있습니다(지금 ${skill}).` : null;
+          return { key: d.key, label: d.label, note: d.note ?? null, warn: d.warn ?? null, on: !!s.execs?.delegations[role]?.includes(d.key) && !whyNot, available: !whyNot, whyNot };
         }),
         internal: [...s.staff].map((x) => ({ staffId: x.id, name: x.name, role: x.role, skill: execSkill(role, x), busyWith: x.projectId !== null ? `「${s.projects.find((p) => p.id === x.projectId)?.name ?? ''}」 개발 중` : x.lab ? '전담 연구원' : null }))
           .sort((a, b) => b.skill - a.skill || a.staffId - b.staffId),
@@ -170,6 +174,17 @@ export function replaceMin(s: CarState, x: Staff): number | null {
 const recentReplace = (s: CarState, role: Role): boolean => !!s.execs?.replacements.some((r) => r.status === 'done' && r.staffRole === role && s.week < r.nextWeek + X.replace.gapMonths * config.time.weeksPerMonth);
 const openReplacement = (s: CarState): Replacement | undefined => s.execs?.replacements.find((r) => r.status === 'proposed' || r.status === 'approved' || r.status === 'waiting');
 
+/** 부족한 직무 순서(채용 권유·자동 채용): 개발팀 구성(디자이너 1·엔지니어 2·테스터 1, 본사 2등급부터 영업 1) 대비 인원 비율이 낮은 순 */
+function lackingRoles(s: CarState): { role: Role; have: number; want: number }[] {
+  const want: Record<Role, number> = { designer: 1, engineer: 2, tester: 1, sales: s.hqLevel >= 2 ? 1 : 0 }, have = (r: Role) => s.staff.filter((x) => x.role === r).length;
+  return (['designer', 'engineer', 'tester', 'sales'] as Role[]).filter((k) => want[k] > 0).sort((a, b) => have(a) / want[a] - have(b) / want[b]).map((role) => ({ role, have: have(role), want: want[role] }));
+}
+/** 인사 임원이 낸 공고의 후보(교체 고용·자동 채용). 후보는 채용 화면에 오지 않고 임원이 바로 고른다 */
+function rollCands(c: ExecCtx, tier: number): { ability: number; potential: number }[] {
+  const H = config.staff.hire, bonus = repBonus(c.s);
+  return Array.from({ length: H.candidates }, () => { const ability = Math.min(100, c.rng.intIn(H.abilityMin[tier - 1], H.abilityMax[tier - 1]) + bonus); return { ability, potential: Math.min(100, ability + c.rng.intIn(H.potentialMin, H.potentialMax)) }; });
+}
+
 // ---------- 제안 만들기 ----------
 interface Idea { kind: string; key: string; text: [string, string, string]; facts: string[]; goto: ExecGoto | null; issue?: () => number }
 const gName = (s: CarState, g: Generation) => s.nameplates.find((n) => n.generations.includes(g))?.name ?? '';
@@ -178,7 +193,7 @@ const staffGoto = (id?: number): ExecGoto => (id === undefined ? { tab: 'company
 function hrIdeas(s: CarState): Idea[] {
   const out: Idea[] = [], fixed = monthlyFixed(s), C = config.staff.condition, T = config.staff.train;
   const weak = s.staff.filter((x) => weakCapped(s, x)).sort((a, b) => a.ability - b.ability || a.id - b.id);
-  const canReplace = !openReplacement(s) && s.cash > fixed * X.replace.cashMonths;
+  const autoFire = delegationOn(s, 'hr', 'autoFire'), canReplace = !openReplacement(s) && s.cash > fixed * X.replace.cashMonths && !(autoFire && delegationOn(s, 'hr', 'autoHire')); // 1.4.0 자동 채용·해고를 둘 다 켜면 교체 제안은 겹치므로 내지 않는다
   for (const x of weak) {
     const avg = Math.round(roleAvg(s, x)!), sk = SKILL_KO[x.role], min = replaceMin(s, x);
     const facts = [`${x.name}: ${ROLE_KO[x.role]}, ${sk} ${x.ability}(성장 한계 ${x.potential})`, `${x.name}: ${staffBrief(s, x)}`, `같은 직무 평균 ${avg}`, `월급 ${won(salaryOf(x.ability))}, 내보내면 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}`];
@@ -190,6 +205,7 @@ function hrIdeas(s: CarState): Idea[] {
         issue: () => { const r: Replacement = { id: s.nextId++, staffId: x.id, staffName: x.name, staffRole: x.role, ability: x.ability, minAbility: min, status: 'proposed', tries: 0, nextWeek: s.week, waitingFor: null, held: false }; s.execs!.replacements.push(r); return r.id; } });
       break; // 교체 제안은 한 번에 한 건
     }
+    if (autoFire) break; // 자동 해고가 처리한다
     out.push({ kind: 'fire', key: String(x.id), goto: staffGoto(x.id), facts,
       text: ['직원 가운데 더 성장하기 어려운 사람이 있습니다. 인원 정리를 검토해 보시죠.',
         `${x.name}${J(x.name, '은/는')} 더 성장하기 어렵습니다. 해고를 검토해 보시죠.`,
@@ -207,11 +223,10 @@ function hrIdeas(s: CarState): Idea[] {
       text: ['교육으로 더 클 수 있는 직원이 있습니다.', `${x.name}${J(x.name, '은/는')} 교육으로 더 클 수 있습니다. 교육을 보내 보시죠.`,
         `${x.name}(${sk} ${x.ability})${J(x.name + ')', '은/는')} 성장 한계까지 ${x.potential - x.ability} 남았고 지금 개발에 들어가 있지 않습니다. 교육비 ${won(trainCost(x.ability))}로 능력이 ${T.gainMin}~${T.gainMax} 오릅니다.`] });
   }
-  if (s.staff.length < staffCap(s)) {
-    const want: Record<Role, number> = { designer: 1, engineer: 2, tester: 1, sales: s.hqLevel >= 2 ? 1 : 0 }, have = (r: Role) => s.staff.filter((x) => x.role === r).length;
-    const r = (['designer', 'engineer', 'tester', 'sales'] as Role[]).filter((k) => want[k] > 0).sort((a, b) => have(a) / want[a] - have(b) / want[b])[0], n = ROLE_KO[r];
-    out.push({ kind: 'hire', key: r, goto: staffGoto(), facts: [`정원 ${s.staff.length}/${staffCap(s)}명`, `${n} ${have(r)}명`],
-      text: ['정원에 여유가 있습니다. 채용을 검토해 보시죠.', `${n} 쪽 인력이 부족합니다. 채용을 권합니다.`, `정원 ${s.staff.length}/${staffCap(s)}명입니다. ${n}${J(n, '이/가')} ${have(r)}명뿐이라 가장 부족합니다. ${n} 채용 공고를 권합니다.`] });
+  if (s.staff.length < staffCap(s) && !delegationOn(s, 'hr', 'autoHire')) { // 자동 채용을 켜면 임원이 직접 뽑는다
+    const { role: r, have } = lackingRoles(s)[0], n = ROLE_KO[r];
+    out.push({ kind: 'hire', key: r, goto: staffGoto(), facts: [`정원 ${s.staff.length}/${staffCap(s)}명`, `${n} ${have}명`],
+      text: ['정원에 여유가 있습니다. 채용을 검토해 보시죠.', `${n} 쪽 인력이 부족합니다. 채용을 권합니다.`, `정원 ${s.staff.length}/${staffCap(s)}명입니다. ${n}${J(n, '이/가')} ${have}명뿐이라 가장 부족합니다. ${n} 채용 공고를 권합니다.`] });
   }
   return out;
 }
@@ -417,9 +432,9 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
     }
     case 'setDelegation': {
       const err = roleErr(cmd.role); if (err) return fail(err);
-      if (!DELEGATIONS[cmd.role].some((d) => d.key === cmd.key)) return fail('이 자리에는 그런 맡기기가 없습니다.');
+      if (!DELEGATIONS[cmd.role].some((d) => d.key === cmd.key)) return fail('이 자리에는 그런 위임 항목이 없습니다.');
       const seat = s.execs?.seats[cmd.role];
-      if (cmd.on) { if (!seat) return fail('임원이 없습니다.'); const k = execSkill(cmd.role, seat.staff); if (k < X.delegateSkill) return fail(`임원 능력이 ${X.delegateSkill} 이상이어야 맡길 수 있습니다(지금 ${k}).`); }
+      if (cmd.on) { if (!seat) return fail('임원이 없습니다.'); const k = execSkill(cmd.role, seat.staff); if (k < X.delegateSkill) return fail(`임원 능력이 ${X.delegateSkill} 이상이어야 위임할 수 있습니다(지금 ${k}).`); }
       s.execs ??= emptyExecs();
       const list = (s.execs.delegations[cmd.role] ?? []).filter((k) => k !== cmd.key);
       s.execs.delegations[cmd.role] = cmd.on ? [...list, cmd.key] : list;
@@ -433,7 +448,7 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       return OK;
     }
     case 'markReportsRead': for (const r of s.execs?.reports ?? []) r.unread = false; return OK;
-    case 'setGenAuto': { // 1.3.0 차종별 세대교체 맡기기(기획 임원이 없거나 능력이 모자라면 켤 수 없고, 켜 둔 설정은 그동안 멈춘다)
+    case 'setGenAuto': { // 1.3.0 차종별 세대교체 위임(기획 임원이 없거나 능력이 모자라면 켤 수 없고, 켜 둔 설정은 그동안 멈춘다)
       const n = s.nameplates.find((x) => x.id === cmd.nameplateId);
       if (!n || !n.generations.length) return fail('없는 차종입니다.');
       if (cmd.on) { const w = genAutoWhyNot(s); if (w) return fail(w); }
@@ -489,8 +504,7 @@ function runReplacement(c: ExecCtx, rp: Replacement, ev: GameEvent[]): void {
   }
   rp.held = false;
   c.spend(cost); // 인사 임원이 공고를 낸다(후보는 채용 화면에 오지 않고 바로 고른다)
-  const bonus = repBonus(s);
-  const cands = Array.from({ length: H.candidates }, () => { const ability = Math.min(100, c.rng.intIn(H.abilityMin[tier - 1], H.abilityMax[tier - 1]) + bonus); return { ability, potential: Math.min(100, ability + c.rng.intIn(H.potentialMin, H.potentialMax)) }; });
+  const cands = rollCands(c, tier);
   const top = rp.minAbility + X.replace.capGain, best = cands.filter((a) => a.ability >= rp.minAbility && a.ability <= top).sort((a, b) => b.ability - a.ability)[0]; // 0.8.0: 기준 + capGain을 넘는 후보는 이 자리 조건으로 오지 않는다(교체로 얻는 능력 폭 제한)
   const why = `${sk} ${rp.minAbility}~${top}에 맞는 후보가 없어`, seen = `후보 ${cands.map((a) => a.ability).sort((a, b) => b - a).join('·')}`;
   rp.tries++;
@@ -510,12 +524,12 @@ function runReplacement(c: ExecCtx, rp: Replacement, ev: GameEvent[]): void {
   end('failed', 'replaceFail', `두 번 공고했지만 ${why} ${x.name} 교체를 그만둡니다(${seen}, 공고비 ${won(cost)}).`);
 }
 
-/** 월 결산 뒤: 맡기기 실행 → 임원별 제안(최대 2건, 재발행 간격) */
+/** 월 결산 뒤: 위임 실행 → 임원별 제안(최대 2건, 재발행 간격) */
 export function execMonth(c: ExecCtx, ev: GameEvent[]): void {
   const s = c.s, e = s.execs;
   if (!e || !seated(s).length) return;
   const before = e.reports.length ? e.reports[e.reports.length - 1].id : -1;
-  delegate(c);
+  delegate(c, ev);
   for (const r of e.replacements) if (r.status === 'proposed' && !s.staff.some((x) => x.id === r.staffId)) { r.status = 'cancelled'; r.waitingFor = null; }
   for (const [role, x] of seated(s)) {
     const tier = execTier(execSkill(role, x));
@@ -535,9 +549,10 @@ export function execMonth(c: ExecCtx, ev: GameEvent[]): void {
   if (count) ev.push({ kind: 'execReport', count, text: `임원 보고 ${count}건이 보고함에 들어왔습니다.` });
 }
 
-/** 맡기기: 인사(자동 휴식·자동 교육) → 생산(배분) → 연구소장(빈 칸 연구). 실행 내역은 보고함에(auto) */
-function delegate(c: ExecCtx): void {
+/** 위임: 인사(자동 휴식·자동 교육) → 생산(배분) → 연구소장(빈 칸 연구). 실행 내역은 보고함에(auto) */
+function delegate(c: ExecCtx, ev: GameEvent[]): void {
   const s = c.s, fixed = () => monthlyFixed(s);
+  autoStaff(c, ev); // 1.4.0 자동 해고 → 자동 채용(내보낸 자리를 같은 달에 채운다)
   if (delegationOn(s, 'hr', 'autoRest'))
     for (const x of [...s.staff].sort((a, b) => a.id - b.id).filter((y) => y.condition < config.staff.condition.low && !isAway(y, s.week))) {
       const w = X.hr.restWeeks;
@@ -560,7 +575,7 @@ function delegate(c: ExecCtx): void {
       addReport(s, 'production', 'autoAlloc', a.shares.every((x) => x === null) ? '주문이 생산 한도 안이라 배분을 주문 비례(자동)로 돌렸습니다.' : `대당 이익이 큰 차부터 만들도록 배분을 바꿨습니다: ${a.gens.map((g, i) => `「${gName(s, g)}」 ${pct(a.shares[i] ?? 0)}`).join(', ')}.`, [], { tab: 'company', sub: 'factory' }, true);
     }
   }
-  autoGen(c); // 1.3.0 세대교체 맡기기
+  autoGen(c); // 1.3.0 세대교체 위임
   if (delegationOn(s, 'research', 'autoResearch'))
     for (let t = recommendTech(s, fixed() * X.research.cashMonths); t && s.research.active.length < researchSlots(s); t = recommendTech(s, fixed() * X.research.cashMonths)) {
       if (!c.run({ type: 'startResearch', techId: t.id }).ok) break;
@@ -568,16 +583,65 @@ function delegate(c: ExecCtx): void {
     }
 }
 
-// ---------- 1.3.0 세대교체 맡기기(기획 임원) ----------
-// 차종별로 켜면 기획 임원이 때가 된 차종의 페이스리프트·풀체인지(파생 차종은 바탕 차의 새 세대로 다음 세대)를 스스로 시작하고, 맡김 옵션이면 출시까지 한다.
+// ---------- 1.4.0 자동 채용·해고(인사 임원) ----------
+/** 자동 해고: 성장 한계·같은 직무 평균보다 weakGap 낮음(해고 권유와 같은 판정), 개발 중·교육·휴식 중·입사 tenureMonths개월 미만 제외, 한 달 1명, 직무별·전체 최소 인원 유지, 퇴직금 뒤 운영비 fireCashMonths개월 치.
+ *  자동 채용: 정원에 빈자리, 부족한 직무 순으로 기준(같은 직무 평균, 직원이 없으면 그 공고 후보 평균)에 공고로 닿는 첫 직무, 현금 = 교체 고용과 같은 기준. 기준 이상 후보 중 가장 나은 사람(상한 없음), 없으면 retryWeeks 뒤 */
+function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
+  const s = c.s, e = s.execs!, H = config.staff.hire, count = (r: Role) => s.staff.filter((y) => y.role === r).length;
+  const log = (kind: string, text: string, facts: string[], go: ExecGoto, key = '') => { addReport(s, 'hr', kind, text, facts, go, true, null, key); ev.push({ kind: 'replacement', text }); };
+  const bonus = repBonus(s), topTier = s.reputation >= H.tier3Rep ? 3 : 2, topReach = H.abilityMax[topTier - 1] + bonus - 5; // 가장 높은 공고로 기대할 만한 능력(교체 기준과 같은 여유)
+  const hireOn = delegationOn(s, 'hr', 'autoHire');
+  if (delegationOn(s, 'hr', 'autoFire') && s.staff.length > AS.minStaff) {
+    const x = s.staff.filter((y) => weakCapped(s, y) && y.projectId === null && !isAway(y, s.week) && !(y.hist?.join != null && s.week - y.hist.join < AS.tenureMonths * WPM) && count(y.role) > AS.minPerRole
+      && !(hireOn && (roleAvg(s, y) ?? 0) > topReach && y.ability >= H.abilityMin[topTier - 1] + bonus)) // 자동 채용을 켜 두고 같은 직무 평균에 공고로 닿지 않을 때는, 가장 높은 공고의 어느 후보보다도 낮은 사람만(평균 미달로 뽑은 사람을 다시 내보내는 왕복 방지)
+      .sort((a, b) => a.ability - b.ability || a.id - b.id)[0];
+    const sev = x ? severanceOf(salaryOf(x.ability)) : 0;
+    if (x && s.cash - sev >= monthlyFixed(s) * AS.fireCashMonths) {
+      const avg = Math.round(roleAvg(s, x)!), sk = SKILL_KO[x.role], who = `${x.name}(${ROLE_KO[x.role]}, ${sk} ${x.ability}, 성장 한계 ${x.potential})`, facts = [`${x.name}: ${staffBrief(s, x)}`, `월급 ${won(salaryOf(x.ability))}이 줄어듭니다`];
+      if (c.run({ type: 'fire', staffId: x.id }).ok) log('autoFire', `${who}${J(x.name, '을/를')} 내보냈습니다. 같은 직무 평균 ${avg}보다 ${avg - x.ability} 낮고 더 성장하기 어렵습니다. 퇴직금 ${won(sev)}.`, facts, staffGoto(), String(x.id));
+    }
+  }
+  const retry = 'hr:autoHire:retry';
+  if (!hireOn || s.staff.length >= staffCap(s) || (e.cooldown[retry] ?? -1) > s.week) return;
+  const order = lackingRoles(s);
+  let pick: { role: Role; have: number; want: number; i: number; min: number; tier: number; basis: string; avg?: number } | undefined = order.map((o, i) => {
+    const same = s.staff.filter((y) => y.role === o.role), mid = (t: number) => Math.round((H.abilityMin[t - 1] + H.abilityMax[t - 1]) / 2) + bonus;
+    const min = same.length ? Math.ceil(mean(same.map((y) => y.ability))) : mid(2), tier = replaceTier(s, min);
+    return { ...o, i, min, tier, basis: same.length ? `같은 직무 평균 ${min}` : `공고 후보 평균 ${min}`, reach: min <= H.abilityMax[tier - 1] + bonus - 5 }; // 교체 기준과 같은 여유(공고로 거의 닿지 않으면 공고비만 든다)
+  }).find((o) => o.reach);
+  const head = `정원 ${s.staff.length}/${staffCap(s)}명`;
+  if (!pick) { // 어느 직무도 공고로 평균에 닿지 않는다: 가장 부족한 직무를 가장 높은 공고로 내 가장 나은 후보를 뽑는다(빈자리는 아무 일도 못 한다)
+    const o = order[0], avg = Math.ceil(mean(s.staff.filter((y) => y.role === o.role).map((y) => y.ability)));
+    pick = { ...o, i: 0, min: 0, tier: topTier, avg, basis: `같은 직무 평균 ${avg}에는 공고로 닿지 않아 ${topTier}등급 공고의 가장 나은 후보` };
+  }
+  const cost = H.postCost[pick.tier - 1], need = monthlyFixed(s) * X.replace.cashMonths + cost;
+  if (s.cash <= need) return; // 현금이 늘면 다음 달에
+  c.spend(cost);
+  const cands = rollCands(c, pick.tier), best = cands.filter((a) => a.ability >= pick.min).sort((a, b) => b.ability - a.ability || b.potential - a.potential)[0];
+  const n = ROLE_KO[pick.role], sk = SKILL_KO[pick.role], seen = `후보 ${cands.map((a) => a.ability).sort((a, b) => b - a).join('·')}`;
+  const why = `${head}에서 ${n}${J(n, '이/가')} ${pick.have}명(개발팀 구성 기준 ${pick.want}명)으로 ${pick.i ? '다음으로' : '가장'} 부족합니다`;
+  const facts = [pick.avg === undefined ? `기준: ${pick.basis} 이상` : `기준: ${pick.basis}`, `${pick.tier}등급 공고비 ${won(cost)}, ${seen}`];
+  if (!best) {
+    e.cooldown[retry] = s.week + X.replace.retryWeeks;
+    log('autoHireFail', `${why}. ${n} 공고를 냈지만 기준(${sk} ${pick.min}) 이상인 후보가 없어 뽑지 않았습니다(${seen}). ${X.replace.retryWeeks}주 뒤 다시 공고합니다.`, facts, staffGoto());
+    return;
+  }
+  const id = s.nextId++, name = c.newName();
+  s.staff.push(startHist({ id, name, role: pick.role, ability: best.ability, potential: best.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week));
+  const note = pick.avg === undefined ? '' : ` 같은 직무 평균(${pick.avg})에는 못 미치지만 지금 구할 수 있는 가장 나은 후보입니다.`;
+  log('autoHire', `${why}. ${n} 공고를 내 ${name}(${sk} ${best.ability}, 성장 한계 ${best.potential})${J(name + ')', '을/를')} 뽑았습니다.${note} 월급 ${won(salaryOf(best.ability))}.`, facts, staffGoto(id), String(id));
+}
+
+// ---------- 1.3.0 세대교체 위임(기획 임원) ----------
+// 차종별로 켜면 기획 임원이 때가 된 차종의 페이스리프트·풀체인지(파생 차종은 바탕 차의 새 세대로 다음 세대)를 스스로 시작하고, 위임 옵션이면 출시까지 한다.
 // 기획 값은 플레이어가 '전작 그대로'로 만들 때와 같고(보너스·불이익 없음), 판단 기준은 제안(productIdeas)과 같은 수명 막대에 시간 기준을 더했다
 const GA = config.genAuto, WPM = config.time.weeksPerMonth;
-/** 맡길 수 없는 이유(맡기기 공통 기준: 기획 임원 능력 delegateSkill 이상). 맡길 수 있으면 null */
+/** 위임할 수 없는 이유(위임 공통 기준: 기획 임원 능력 delegateSkill 이상). 위임할 수 있으면 null */
 const genAutoWhyNot = (s: CarState): string | null => {
   const h = holder(s, 'product');
   if (!h) return '기획 임원이 없습니다.';
   const k = execSkill('product', h.staff);
-  return k < X.delegateSkill ? `기획 임원 능력이 ${X.delegateSkill} 이상이어야 맡길 수 있습니다(지금 ${k}).` : null;
+  return k < X.delegateSkill ? `기획 임원 능력이 ${X.delegateSkill} 이상이어야 위임할 수 있습니다(지금 ${k}).` : null;
 };
 
 /** 전작 그대로 다음 세대 기획(0.8.0 화면의 '전작 그대로'와 같은 값): 차체·고객층·동력·동력 등급(연구한 최신 단계 기준)·개발 방향·예산·설계 기간은 전작, 장비는 추천 구성, 전기차 배터리는 전작 */
@@ -589,7 +653,7 @@ export function nextGenSpec(s: CarState, nameplateId: number): Omit<ProjectSpec,
     direction: pl ? { ...pl.direction } : { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: pl?.budget ?? 'normal', designWeeks: pl?.designWeeks ?? config.dev.designWeeks[1] };
 }
 
-/** 맡기기 팀: 쉬는 개발 직원(전담 연구원·교육·휴식 중 제외). 빈 개발팀이 여럿이면 직무를 고르게 그 몫만 */
+/** 위임 팀: 쉬는 개발 직원(전담 연구원·교육·휴식 중 제외). 빈 개발팀이 여럿이면 직무를 고르게 그 몫만 */
 function autoTeam(s: CarState): number[] {
   const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !x.lab && !isAway(x, s.week)).sort((a, b) => a.id - b.id), free = devTeams(s) - s.projects.length;
   if (free <= 1) return idle.map((x) => x.id);
@@ -634,7 +698,7 @@ function genAutoWait(s: CarState, step: GenStep): string | null {
     : s.cash < need ? `현금이 ${won(need)}(예상 개발비 ${won(step.cost)}의 ${GA.cashDevMult}배와 운영비 ${GA.cashMonths}개월 치)에 못 미칩니다` : null);
 }
 
-/** 월 결산 뒤(맡기기): 켠 차종마다 때가 되면 시작. 현금(예상 개발비 × cashDevMult + 운영비 cashMonths개월 치)·빈 개발팀·쉬는 직원이 있어야 하고, 오래 못 하면 이유를 한 번 보고 */
+/** 월 결산 뒤(위임): 켠 차종마다 때가 되면 시작. 현금(예상 개발비 × cashDevMult + 운영비 cashMonths개월 치)·빈 개발팀·쉬는 직원이 있어야 하고, 오래 못 하면 이유를 한 번 보고 */
 function autoGen(c: ExecCtx): void {
   const s = c.s, map = s.execs?.genAuto;
   if (!map || genAutoWhyNot(s)) return;
@@ -661,13 +725,13 @@ function autoGen(c: ExecCtx): void {
   }
 }
 
-/** 맡긴 개발(auto)이고 출시까지 맡겼으며 맡기기가 유효하면 true: 출시 대기여도 곧 저절로 출시되므로 할 일에서 뺀다 */
+/** 위임한 개발(auto)이고 출시까지 위임했으며 위임이 유효하면 true: 출시 대기여도 곧 저절로 출시되므로 할 일에서 뺀다 */
 export function autoLaunching(s: CarState, p: Project): boolean {
   const id = p.kind === 'fullchange' ? p.targetId : p.kind === 'derivative' ? p.into : nameplateOfGen(s, p.targetId)?.id;
   return !!p.auto && id !== undefined && id !== null && !!s.execs?.genAuto?.[id]?.launch && !genAutoWhyNot(s);
 }
 
-/** 매주: 맡기기로 시작한 개발이 끝나면(결함을 다 잡았거나 시험 maxTestWeeks주) 출시. 가격은 자동 가격 정책이 있으면 그 정책(페이스리프트는 지금 값), 없으면 시장 기준가(추천가) */
+/** 매주: 위임으로 시작한 개발이 끝나면(결함을 다 잡았거나 시험 maxTestWeeks주) 출시. 가격은 자동 가격 정책이 있으면 그 정책(페이스리프트는 지금 값), 없으면 시장 기준가(추천가) */
 function autoLaunch(c: ExecCtx, ev: GameEvent[]): void {
   const s = c.s, map = s.execs?.genAuto;
   if (!map || genAutoWhyNot(s)) return;
@@ -687,7 +751,7 @@ function autoLaunch(c: ExecCtx, ev: GameEvent[]): void {
   }
 }
 
-/** 화면용: 세대교체 맡기기 상태(맡길 수 있는지, 차종별 켜짐·출시 자동·지금 할 때가 된 일·기다리기 시작한 주) */
+/** 화면용: 세대교체 위임 상태(위임할 수 있는지, 차종별 켜짐·출시 자동·지금 할 때가 된 일·기다리기 시작한 주) */
 export function genAutoInfo(s: CarState) {
   const whyNot = genAutoWhyNot(s), map = s.execs?.genAuto ?? {};
   return {

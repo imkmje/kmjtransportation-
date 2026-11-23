@@ -214,16 +214,19 @@ export const config = {
     match: 0.75, // 직원을 임명할 때 관련 직무가 아니면 임원 능력 = 직원 능력 × 0.75(관련 직무는 아래 related 배수)
     related: { hr: { sales: 1, tester: 0.85 }, product: { designer: 1, tester: 0.85 }, finance: { sales: 1 }, production: { tester: 1, engineer: 0.9 }, research: { engineer: 1 }, market: { sales: 1, designer: 0.9 } } as Record<string, Record<string, number>>,
     tiers: [40, 60], // 임원 능력 40 미만: 뭉뚱그린 말(1단계), 60 미만: 대상만 짚음(2단계), 60 이상: 수치까지(3단계)
-    delegateSkill: 45, // 맡기기를 켤 수 있는 임원 능력
+    delegateSkill: 45, // 위임을 켤 수 있는 임원 능력
     perExec: 2, reissueMonths: 6, ignoredMonths: 18, reportsMax: 60, // 월 결산 때 임원별 제안 최대 2건, 같은 제안은 6개월(지운 제안은 18개월) 뒤에 다시, 보고함 60건 보관
     hr: { growGap: 15, weakGap: 12, restWeeks: 2, trainCashMonths: 6, trainMax: 2 }, // 교육 권유: 성장 여지 15 이상, 해고 권유: 성장 한계 + 같은 직무 평균보다 12 낮음, 자동 교육: 현금이 운영비 6개월 치 이상, 동시에 2명까지
     replace: { cashMonths: 6, minGain: 25, capGain: 5, gapMonths: 24, rejectYears: 2, retryWeeks: 8, maxTries: 2 }, // 교체 고용: 현금이 운영비 6개월 치 초과, 기준 = max(대상 능력 + 25, 같은 직무 평균), 기준 + 5를 넘는 후보는 오지 않음, 같은 직무는 교체를 마친 뒤 24개월 동안 다시 제안하지 않음(0.8.0: 임원이 정원 밖이 되어 교체의 폭·빈도를 줄인다. 기준은 15 → 25), 거절하면 2년, 기준 미달이면 8주 뒤 한 번 더
+    // 1.4.0 자동 채용·해고(인사 임원). 자동 채용: 현금 기준은 replace.cashMonths, 기준 미달이면 replace.retryWeeks 뒤 다시. 자동 해고: 판정은 hr.weakGap(성장 한계 + 같은 직무 평균보다 12 낮음),
+    // 입사 tenureMonths개월 미만 제외, 한 달 1명, 직무별 minPerRole명·전체 minStaff명은 남김, 퇴직금을 내고도 운영비 fireCashMonths개월 치가 남을 때만
+    autoStaff: { tenureMonths: 12, minPerRole: 1, minStaff: 4, fireCashMonths: 1 },
     research: { cashMonths: 6 }, // 자동 연구: 연구비를 내고도 운영비 6개월 치가 남을 때
     finance: { warnMonths: 6, avgMonths: 3, repayMonths: 6 }, // 현금 부족 예고: 최근 3개월 평균 손실이면 6개월 안에 바닥날 때, 대출 상환 권유: 갚고도 운영비 6개월 치가 남을 때
     product: { fullChangeLife: 0.55, faceliftPayback: 24 }, // 풀체인지 권유: 수명 막대 55% 아래, 페이스리프트 권유: 비용 회수 24개월 이내
     market: { minSales: 30, lowAwareness: 0.35 }, // 새 차급 권유: 예상 월 판매 30대 이상, 광고 권유: 인지도 35% 아래
   },
-  // 1.3.0 세대교체 맡기기(기획 임원): 판매 중 세대 나이(개월) faceliftAt부터 페이스리프트(fullChangeAt − faceliftGap 전까지만), fullChangeAt부터(또는 수명 막대가 exec.product.fullChangeLife 아래로) 풀체인지.
+  // 1.3.0 세대교체 위임(기획 임원): 판매 중 세대 나이(개월) faceliftAt부터 페이스리프트(fullChangeAt − faceliftGap 전까지만), fullChangeAt부터(또는 수명 막대가 exec.product.fullChangeLife 아래로) 풀체인지.
   // 노후(life.oldMonths 72개월) 전에 다음 세대가 나오도록 개발 기간(약 10~12개월)만큼 앞서 시작한다. 현금: 예상 개발비 × cashDevMult + 운영비 cashMonths개월 치 이상일 때만.
   // waitReportMonths개월 넘게 못 하면 이유를 한 번 보고. 자동 출시: 결함을 다 잡았거나 시험이 maxTestWeeks주를 넘으면
   genAuto: { faceliftAt: 30, fullChangeAt: 58, faceliftGap: 18, cashDevMult: 1.5, cashMonths: 6, waitReportMonths: 6, maxTestWeeks: 28 },

@@ -124,7 +124,7 @@ export interface Project extends ProjectSpec {
   variant?: string; // 1.3.0 파생 모델 종류(파생 개발·파생 차의 페이스리프트)
   into?: number; // 1.3.0 파생의 다음 세대: 이어 갈 파생 차종 ID(없으면 새 파생 차종)
   wins?: StaffWin[]; // 1.3.0 개발 중 직원 성과
-  auto?: true; // 1.3.0 세대교체 맡기기로 기획 임원이 시작한 개발(맡김 옵션에 따라 출시도 자동)
+  auto?: true; // 1.3.0 세대교체 위임으로 기획 임원이 시작한 개발(위임 옵션에 따라 출시도 자동)
 }
 
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */
@@ -220,7 +220,7 @@ export interface ExecSeat { staff: Staff; hired: boolean; since: number }
 export interface ExecCandidate { id: number; name: string; role: ExecRole; skill: number; pay: number; expiresWeek: number }
 /** 이동할 화면(tab: 회사·차고 등, sub: 회사 탭 안쪽, id: 직원·세대 ID 등) */
 export interface ExecGoto { tab: string; sub?: string; id?: number }
-/** 보고 한 건. key: 제안 대상(직원·차·기술 ID 등, 재발행 금지에 쓴다). auto: 맡기기·교체 고용이 실행한 일의 기록 */
+/** 보고 한 건. key: 제안 대상(직원·차·기술 ID 등, 재발행 금지에 쓴다). auto: 위임·교체 고용이 실행한 일의 기록 */
 export interface ExecReport { id: number; week: number; role: ExecRole; execName: string; kind: string; key: string; text: string; facts: string[]; goto: ExecGoto | null; unread: boolean; auto: boolean; replacementId: number | null }
 /** 교체 고용(인사): 제안 → 승인(예약) → 대상이 개발 중이면 대기 → 실행(완료·실패) / 취소 */
 export interface Replacement {
@@ -230,15 +230,15 @@ export interface Replacement {
 }
 export interface ExecState {
   seats: Partial<Record<ExecRole, ExecSeat>>;
-  delegations: Partial<Record<ExecRole, string[]>>; // 켠 맡기기 키
+  delegations: Partial<Record<ExecRole, string[]>>; // 켠 위임 키
   candidates: ExecCandidate[];
   reports: ExecReport[]; // 오래된 것이 앞
   cooldown: Record<string, number>; // "자리:종류:대상" → 다시 제안할 수 있는 주
   replacements: Replacement[];
   rejected: Record<string, number>; // 직원 ID → 교체를 다시 제안할 수 있는 주
-  genAuto?: Record<string, GenAuto>; // 1.3.0 세대교체 맡기기(차종 ID → 설정). 없으면 모두 꺼짐
+  genAuto?: Record<string, GenAuto>; // 1.3.0 세대교체 위임(차종 ID → 설정). 없으면 모두 꺼짐
 }
-/** 1.3.0 차종별 세대교체 맡기기: launch = 개발이 끝나면 출시까지 자동, waitSince = 조건이 안 돼 기다리기 시작한 주, told = 기다림을 보고했음 */
+/** 1.3.0 차종별 세대교체 위임: launch = 개발이 끝나면 출시까지 자동, waitSince = 조건이 안 돼 기다리기 시작한 주, told = 기다림을 보고했음 */
 export interface GenAuto { launch: boolean; waitSince: number | null; told: boolean }
 
 /** 난이도(0.4.1). 새 게임 기본 easy, 필드가 없는 예전 저장은 normal */
@@ -287,7 +287,7 @@ export type Command =
   | ({ type: 'startFullChange'; nameplateId: number; chassisSeed?: number; faceSeed?: number; team?: number[] } & Omit<ProjectSpec, 'name'>)
   | { type: 'cancelProject'; projectId: number }
   | { type: 'startDerivative'; generationId: number; variant: string; name?: string; segment?: string; battery?: Battery; team?: number[] } // 1.3.0 파생 모델(판매 중인 세대 바탕). 같은 종류의 파생 차종이 있으면 그 다음 세대가 된다
-  | { type: 'setGenAuto'; nameplateId: number; on: boolean; launch?: boolean } // 1.3.0 세대교체 맡기기(기획 임원). launch 생략 = 출시도 자동
+  | { type: 'setGenAuto'; nameplateId: number; on: boolean; launch?: boolean } // 1.3.0 세대교체 위임(기획 임원). launch 생략 = 출시도 자동
   | { type: 'launch'; projectId: number; price: number; marketing: number; color: string; wheels: 0 | 1 | 2 }
   | { type: 'discontinue'; generationId: number }
   | { type: 'setPrice'; generationId: number; price: number } // 다음 월말 정산부터 반영

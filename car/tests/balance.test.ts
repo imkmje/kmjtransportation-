@@ -227,14 +227,14 @@ describe('0.7.0 임원 봇·60년 생존', () => {
     for (let w = 1; w <= years * 48 && g.state.status === 'playing'; w++) { b.step(g); g.tick(); if (w % 480 === 0) cash.push(g.state.cash); }
     return { g, alive: g.state.status === 'playing', worth: g.state.status === 'playing' ? snapOf(g).worth : 0, cash, hi: allGens(g.state).map(launchAvgGrade) };
   });
-  it.each(['easy', 'normal'] as const)('임원 봇(steadyExec)은 신중보다 유리: 40년 자산 중앙값 +5% 이상, 출시 등급 9 초과 15% 미만(%s, 1.0.0: 60초를 넘어 난이도별로 나눔)', (d) => {
+  it.each(['easy', 'normal'] as const)('임원 봇(steadyExec)은 신중보다 유리: 40년 자산 중앙값 +5% 이상, 출시 등급 9 초과 30% 미만(%s, 1.0.0: 60초를 넘어 난이도별로 나눔)', (d) => {
     {
       const a = run(() => steady(), d, 40), b = run(() => steadyExec(), d, 40);
       const wa = median(a.map((r) => r.worth)), wb = median(b.map((r) => r.worth)), hi = b.flatMap((r) => r.hi), hiShare = hi.filter((x) => x > 9).length / hi.length;
       console.log(`${d} 40년: 신중 생존 ${a.filter((r) => r.alive).length}/20 자산 ${eok(wa)}억, 임원 생존 ${b.filter((r) => r.alive).length}/20 자산 ${eok(wb)}억(${((wb / wa - 1) * 100).toFixed(1)}%), 임원 봇 출시 등급 9 초과 ${(hiShare * 100).toFixed(1)}%`);
       expect(b.filter((r) => r.alive).length).toBeGreaterThanOrEqual(a.filter((r) => r.alive).length);
       expect(wb / wa).toBeGreaterThanOrEqual(1.05); // 1.0.0: 편의 기능 이득의 위쪽 한도(1.35)는 없앴다(사용자 지시: 자동 가격·임원의 이득을 깎지 않는다, 측정해 보고만). 측정 쉬움 +35.8%·보통 +24.8%
-      expect(hiShare).toBeLessThan(0.15); // 1.0.0: 2010년부터 기준 상승을 2.5% → 1.5%로 늦춰(후반 등급 하락으로 기준가 판매 봇이 무너져서) 후반 출시 등급이 올라 측정 10.0~11.3%. 10% → 15%
+      expect(hiShare).toBeLessThan(0.3); // 1.4.0: 15% → 30%(자동 채용·해고로 직원 능력이 올라 출시 등급이 좋아졌다. 시드 20개 측정 끔 12.0%/12.0% → 켬 24.9%/23.5%(쉬움/보통)). 1.0.0: 2010년부터 기준 상승을 2.5% → 1.5%로 늦춰(후반 등급 하락으로 기준가 판매 봇이 무너져서) 후반 출시 등급이 올라 측정 10.0~11.3%. 10% → 15%
     }
   });
   it('보통 신중 60년 생존 18/20 이상(0.7.0 시장 포화 상한 6% → 3.5%), 40년 현금 중앙값 4조 미만(1.0.0)', () => {
