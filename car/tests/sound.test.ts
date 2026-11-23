@@ -68,13 +68,16 @@ describe('사운드 모듈', () => {
 
   it('같은 소리 40ms 안 중복 무시, 꺼진 weekTick·음소거는 소리를 안 만든다', () => {
     vi.stubGlobal('localStorage', memStore());
-    const { ctx, made } = fakeCtx();
-    const s = createSound(() => ctx as unknown as BaseAudioContext);
-    s.set({ music: 0 }); s.unlock();
-    const n0 = made.osc; s.play('tap'); const n1 = made.osc; s.play('tap');
-    expect(n1).toBeGreaterThan(n0); expect(made.osc).toBe(n1);
-    s.play('weekTick'); expect(made.osc).toBe(n1);
-    s.set({ muted: true }); s.play('launch'); expect(made.osc).toBe(n1);
+    vi.useFakeTimers(); // 느린 CI에서 두 번의 play 사이가 실제로 40ms를 넘은 적이 있다(1.5.0 PR)
+    try {
+      const { ctx, made } = fakeCtx();
+      const s = createSound(() => ctx as unknown as BaseAudioContext);
+      s.set({ music: 0 }); s.unlock();
+      const n0 = made.osc; s.play('tap'); const n1 = made.osc; s.play('tap');
+      expect(n1).toBeGreaterThan(n0); expect(made.osc).toBe(n1);
+      s.play('weekTick'); expect(made.osc).toBe(n1);
+      s.set({ muted: true }); s.play('launch'); expect(made.osc).toBe(n1);
+    } finally { vi.useRealTimers(); }
   });
 
   it('음악: 잠금 해제 후 마디를 예약하고 시대 전환·일시정지·정리에서 예외가 없다', () => {
