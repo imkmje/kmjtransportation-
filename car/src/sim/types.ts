@@ -302,7 +302,7 @@ export interface Subsidiary {
 }
 // ---------- 3.5.0 경쟁 2부(설계서 7.4) ----------
 /** 대응 신차: 플레이어가 점유율 상위인 차급에 경쟁사가 맞불 모델을 예고하고 launch 달에 낸다 */
-export interface Counter { id: number; rivalId: string; body: string; announced: number; launch: number; target: string } // target: 예고 때 그 차급의 내 차 이름
+export interface Counter { id: number; rivalId: string; body: string; announced: number; launch: number; target: string; quiet?: true } // target: 예고 때 그 차급의 내 차 이름. quiet(3.6.0): 같은 차를 겨냥한 예고가 전에 있어 알림 없이 뉴스로만 낸 것(출시도 뉴스로만)
 /** 가격 전쟁: rivalId가 body 차급에서 from~until(이 달 전까지) cut만큼 가격을 내린다. follow: 내가 따라 내렸는가(null = 아직 답 없음) */
 export interface PriceWar { id: number; rivalId: string; body: string; from: number; until: number; cut: number; follow: boolean | null }
 /** 경쟁사 인재(영입 후보) */
@@ -323,6 +323,7 @@ export interface RivalryState {
   out: string[]; // 인수해 경쟁사 목록에서 빠진 회사
   awards: Award[]; // 시상식 이력(오래된 것이 앞)
   log: { week: number; text: string }[]; // 경쟁사 관계 기록(최근 것이 뒤)
+  told?: string[]; // 3.6.0 대응 신차 예고를 알림으로 띄운 내 차 이름(같은 차를 겨냥한 다음 예고부터는 뉴스로만. 없으면 빈 목록)
 }
 
 export interface CarState {

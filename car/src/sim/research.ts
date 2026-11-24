@@ -14,7 +14,15 @@ type UnlockType = 'body' | 'option' | 'powertrain';
 const lockedBy: Record<UnlockType, Set<string>> = { body: new Set(), option: new Set(), powertrain: new Set() };
 for (const t of TECHS) for (const e of t.effects) if (e.type === 'body' || e.type === 'option' || e.type === 'powertrain') lockedBy[e.type].add(e.id);
 
-const effectsOf = (s: CarState): TechEffect[] => s.research.done.flatMap((id) => techById(id).effects);
+// 3.6.0 성능: 자동 가격 계산이 달마다 수천 번 부른다. done 배열·길이·끝 ID가 같으면 다시 셈하지 않는다(done은 push로만 늘고, 지우면 새 배열이 된다)
+const effCache = new WeakMap<string[], { n: number; last: string | undefined; fx: TechEffect[] }>();
+const effectsOf = (s: CarState): TechEffect[] => {
+  const d = s.research.done, c = effCache.get(d);
+  if (c && c.n === d.length && c.last === d[d.length - 1]) return c.fx;
+  const fx = d.flatMap((id) => techById(id).effects);
+  effCache.set(d, { n: d.length, last: d[d.length - 1], fx });
+  return fx;
+};
 export const isDone = (s: CarState, id: string): boolean => s.research.done.includes(id);
 export const doneCount = (s: CarState, id: string): number => s.research.done.filter((x) => x === id).length;
 

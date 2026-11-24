@@ -427,6 +427,7 @@ button.s-pick[aria-pressed="true"]::before{content:"✓";border-color:var(--ink)
 
 /* ---- 4단계: 알림 접기(최대 2개 + "+N") ---- */
 #toasts .toast.folded{display:none}
+#toasts .toast[data-grp]>div{white-space:pre-line} /* 3.6.0 묶은 알림: 항목마다 한 줄 */
 #toasts .more{pointer-events:auto;align-self:stretch;border:1px dashed var(--ink3);background:#fff;border-radius:12px;min-height:36px;font-size:12px;font-weight:800;color:var(--ink2)}
 @media (min-width:900px){
   #toasts.corner{left:auto;right:16px;top:var(--ct,72px);bottom:auto;width:min(300px,28vw);align-items:stretch;flex-direction:column-reverse} /* 무대 없는 화면: 오른쪽 위(상단바 아래), 새 알림이 위 */

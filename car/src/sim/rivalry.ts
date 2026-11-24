@@ -1,9 +1,11 @@
 // 3.5.0 경쟁 2부(설계서 7.4): 경쟁사가 플레이어에게 반응하고(대응 신차·가격 전쟁·이직 제안), 플레이어도 경쟁사에 손을 쓴다(인재 영입·기술 제휴·인수),
 // 해마다 시상식, 자회사 상장. 무작위는 모두 시드 해시(게임 난수를 쓰지 않는다). 수치는 config.rivalry, 균형은 "쓰면 이득, 당하는 쪽은 약하게"
+import { won } from './won';
 import { config } from '../config';
 import { NAMES, RIVALS, TECHS, bodyById, techById } from '../data';
 import { grade, payOf, salaryOf } from './cars';
-import { staffCap } from './company';
+import { allocate, capacityOf, staffCap } from './company';
+import { generationUnitProfit } from './queries';
 import { addNews } from './events';
 import { startHist } from './history';
 import { josa } from './josa';
@@ -19,7 +21,6 @@ import { type Award, type CarState, type Command, type CommandResult, type GameE
 const R = config.rivalry, MPY = config.time.monthsPerYear;
 const defOf = (id: string): RivalDef => RIVALS.find((x) => x.id === id)!;
 const ROLE_KO: Record<Role, string> = { designer: '디자이너', engineer: '엔지니어', tester: '테스터', sales: '영업' };
-const won = (x: number): string => { const v = Math.abs(x), k = (n: number, d = 0) => n.toLocaleString('ko-KR', { maximumFractionDigits: d }); if (v >= 1e8) { const e = Math.round(v / 1e4), jo = Math.floor(e / 1e4), eok = e % 1e4; return `${jo.toLocaleString('ko-KR')}조${eok ? ` ${k(eok)}억` : ''}원`; } return v >= 10000 ? `${k(v / 10000, 1)}억원` : `${k(Math.round(v))}만원`; };
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const strKey = (t: string) => [...t].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0), 11) >>> 0;
 
@@ -70,7 +71,7 @@ function launchCounters(s: CarState, ev: GameEvent[], m: number): Set<string> {
     st.counterCool[c.body] = m + R.counter.cooldown;
     done.add(`${r.id}:${c.body}`);
     const v = rivalModelView(s, ri, c.body);
-    news(s, ev, `[대응 신차] ${r.name}, 「${c.target}」${josa(c.target, '을/를')} 겨냥한 ${v.name} ${v.number}세대 출시. ${bodyById(c.body).name}, 추정 평론 ${v.critic.toFixed(1)}.`);
+    news(s, c.quiet ? [] : ev, `[대응 신차] ${r.name}, 「${c.target}」${josa(c.target, '을/를')} 겨냥한 ${v.name} ${v.number}세대 출시. ${bodyById(c.body).name}, 추정 평론 ${v.critic.toFixed(1)}.`);
   }
   return done;
 }
@@ -115,7 +116,7 @@ function rollWar(s: CarState, ev: GameEvent[], m: number): void {
   const est = warEstimate(s, war), bn = bodyById(body).name, cars = est.names.map((x) => `「${x}」`).join('·');
   const text = `${r.name}${josa(r.name, '이/가')} ${bn} 차급 가격을 ${pct(cut)} 내렸습니다(${months}개월, ${monthLabel(war.until - 1)}까지). 이 차급의 내 차는 ${cars}입니다. 따라 내릴까요?`;
   const results = [
-    `${months}개월 동안 ${cars} 가격을 ${pct(cut)} 내리고, 끝나면 원래대로 돌립니다. 판매는 지키지만 한 달 매출이 약 ${won(est.revenueCut)} 줄어듭니다.`,
+    `${months}개월 동안 ${cars} 가격을 ${pct(cut)} 내리고, 끝나면 원래대로 돌립니다. 판매는 지키지만 ${est.revenueCut >= 1 ? `한 달 매출이 약 ${won(est.revenueCut)} 줄어듭니다` : '지금 이 차급의 내 차 판매가 거의 없어 매출은 거의 줄지 않습니다'}.`, // 3.6.0 판매가 1대 안팎이면 "약 0만원"으로 보이던 것
     `가격은 그대로 둡니다. 그 기간 이 차급의 내 차 판매가 약 ${pct(est.holdLoss)} 줄어듭니다.`,
   ];
   pushChoice(s, ev, 'priceWar', '가격 전쟁', text, { rivalId: r.id, war: war.id, results });
@@ -198,9 +199,11 @@ function detectCounters(s: CarState, ev: GameEvent[], m: number): void {
     if (!rs.length || rs.some((x) => x.share > share)) continue; // 점유율 1위일 때만
     const r = activeRivals(s).filter((x) => x.models[body]).sort((a, b) => (defOf(b.id).cells[body] ?? 0) - (defOf(a.id).cells[body] ?? 0) || (a.id < b.id ? -1 : 1))[0];
     const launch = m + C.delayMin + Math.floor(hash01(s.seed, 88, m, bodyKey(body)) * (C.delayMax - C.delayMin + 1)), target = nameOfGen(s, top.get(body)!);
-    st.counters.push({ id: s.nextId++, rivalId: r.id, body, announced: m, launch, target });
+    const quiet = !!st.told?.includes(target); // 3.6.0 알림은 그 차를 겨냥한 첫 예고만(60년에 약 40번 뜨던 것), 뉴스에는 모두 남는다
+    if (!quiet) (st.told ??= []).push(target);
+    st.counters.push({ id: s.nextId++, rivalId: r.id, body, announced: m, launch, target, ...(quiet ? { quiet: true as const } : {}) });
     st.counterCool[body] = launch + C.cooldown;
-    news(s, ev, `[대응 신차 예고] ${r.name}, ${bodyById(body).name} 차급에 「${target}」${josa(target, '을/를')} 겨냥한 신차를 준비 중. 약 ${launch - m}개월 뒤(${monthLabel(launch)}) 출시 예정.`);
+    news(s, quiet ? [] : ev, `[대응 신차 예고] ${r.name}, ${bodyById(body).name} 차급에 「${target}」${josa(target, '을/를')} 겨냥한 신차를 준비 중. 약 ${launch - m}개월 뒤(${monthLabel(launch)}) 출시 예정.`);
   }
 }
 /** 시상 후보 한 대 */
@@ -341,7 +344,15 @@ export function acquireError(s: CarState, id: string): string | null {
   if (s.cash < p) return `현금이 모자랍니다(인수 값 ${won(p)}).`;
   return null;
 }
-/** 인수 창: 평가액·웃돈·값, 인수 뒤 예상 실적(월 판매·연 매출·연 이익·연 배당). 상태를 복사해 인수한 것처럼 만든 뒤 월 결산과 같은 계산(brandMonth)으로 이번 달을 셈해 12배 한다 */
+/** 3.6.0 본사의 이번 달 판매·매출 총이익 어림(월 결산과 같은 수요·생산 배분·가격 전쟁·수상 보너스, 원가는 대당 이익으로). 인수 창의 인수 전/후 비교용 */
+function hqMonth(s: CarState, m: number): { sold: number; gross: number } {
+  const gens = onSale(s), cars = gens.map((g) => { const c = toSaleCar(g, m), k = warPriceMult(s, g.body, m); return k === 1 ? c : { ...c, price: c.price * k }; });
+  const demand = gens.map((g, i) => monthlyDemand(s, cars[i], cars.filter((_, j) => j !== i), monthTime(m)) * ((g.awardUntil ?? -1) > m ? 1 + R.awards.salesBoost : 1));
+  const made = allocate(capacityOf(s), demand, gens.map((g) => g.allocShare));
+  return { sold: made.reduce((a, n) => a + n, 0), gross: gens.reduce((a, g, i) => a + made[i] * (generationUnitProfit(g, s) - currentEdition(g).price * (1 - warPriceMult(s, g.body, m))), 0) };
+}
+/** 인수 창: 평가액·웃돈·값, 인수 뒤 예상 실적(월 판매·연 매출·연 이익·연 배당). 상태를 복사해 인수한 것처럼 만든 뒤 월 결산과 같은 계산(brandMonth)으로 이번 달을 셈해 12배 한다.
+ *  3.6.0 본사 판매 변화: 같은 복사본에서 본사 판매를 인수 전/후로 셈한다(인수 브랜드 자체 이익은 얇아도 본사 차가 빈 몫을 가져가는 이득이 크다) */
 export function acquireInfo(s: CarState, id: string) {
   const ri = riOf(s, id);
   if (ri < 0 || isOut(s, id)) return null;
@@ -349,9 +360,10 @@ export function acquireInfo(s: CarState, id: string) {
   const c: CarState = JSON.parse(JSON.stringify(s)), sub = buildAcquired(c, ri, v.price), ghost = R.acquire.absorb ** (1 / config.market.shareExp);
   rv(c).out.push(id); for (const b of Object.keys(c.rivals[ri].cells)) c.rivals[ri].cells[b] *= ghost; // 월말 applyCells와 같은 빈 몫
   (c.subs ??= []).push(sub);
-  const b = brandMonth(c, sub, m), profit = (b.revenue - b.cost - brandFixed(sub, b.sold)) * MPY;
+  const b = brandMonth(c, sub, m), profit = (b.revenue - b.cost - brandFixed(sub, b.sold)) * MPY, h0 = hqMonth(s, m), h1 = hqMonth(c, m);
   return { id, name: r.name, newName: sub.name, color: sub.color, models: sub.models.length, revenue: v.revenue, value: v.value, premium: v.price - v.value, price: v.price, capital: sub.capital, rep: sub.rep,
-    rivalMonthly: Math.round(v.monthly), monthly: b.sold, yearRevenue: b.revenue * MPY, yearProfit: profit, yearDividend: Math.max(0, profit) * Math.min(1, sub.dividend / 100 * config.subs.strat.growth.payout), reason: acquireError(s, id) };
+    rivalMonthly: Math.round(v.monthly), monthly: b.sold, yearRevenue: b.revenue * MPY, yearProfit: profit, yearDividend: Math.max(0, profit) * Math.min(1, sub.dividend / 100 * config.subs.strat.growth.payout),
+    hqMonthly: h0.sold, hqMonthlyAfter: h1.sold, hqYearProfit: (h1.gross - h0.gross) * MPY, reason: acquireError(s, id) };
 }
 
 // ---------- 명령 ----------

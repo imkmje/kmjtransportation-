@@ -1,6 +1,7 @@
 // 3.0.0 자회사와 고급 브랜드(설계서 9.9). 자회사를 본사처럼 통째로 돌리지 않고, 브랜드 자회사는 경쟁 모델(market.ts RivalModel)과 같은 구조의
 // "내 편 경쟁사"로 그 차급 수요를 나눠 갖는다. 사업 자회사(부품·금융)는 본사 원가·판매에 효과를 주고 그 규모로 이익을 낸다.
 // 게임 난수를 쓰지 않는다(변화는 시드 해시). 자회사가 없는 판은 이 파일의 어떤 함수도 상태를 바꾸지 않는다. 수치는 config.subs
+import { won } from './won';
 import { config } from '../config';
 import { BODIES, COMPAT, OPTIONS, RIVALS, SUB_DATA, TECHS, bodyById, optionById, powertrainById, segmentById } from '../data';
 import { grade, payOf, unitCost } from './cars';
@@ -28,11 +29,6 @@ type BrandKind = 'premium' | 'value' | 'acquired'; // acquired(3.5.0): 인수 �
 type StratKey = 'a' | 'price' | 'cost' | 'dev' | 'vol' | 'payout';
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const r1 = (v: number) => Math.round(v * 10) / 10;
-const won = (x: number): string => { // 3.1.1 1조 이상은 "3조 5,000억원"(전에는 "35,000억원"), 자릿수 표기는 기기 언어와 무관하게 ko-KR
-  const v = Math.abs(x), sg = x < 0 ? '−' : '', k = (n: number, d = 0) => n.toLocaleString('ko-KR', { maximumFractionDigits: d });
-  if (v >= 1e8) { const e = Math.round(v / 1e4), jo = Math.floor(e / 1e4), eok = e % 1e4; return `${sg}${k(jo)}조${eok ? ` ${k(eok)}억` : ''}원`; }
-  return `${sg}${v >= 10000 ? `${k(v / 10000, 1)}억원` : `${k(Math.round(v))}만원`}`;
-};
 const pct = (x: number, d = 0) => `${(x * 100).toFixed(d)}%`;
 export const isBrand = (k: SubKind): k is BrandKind => k === 'premium' || k === 'value' || k === 'acquired';
 const brandDef = (k: BrandKind) => S.kinds[k];
@@ -547,7 +543,10 @@ export function subCommand(c: SubCtx, cmd: Command, ev: GameEvent[]): CommandRes
       const price = sellPrice(sub);
       c.spend(-price); releasePresident(s, sub);
       s.subs = s.subs!.filter((x) => x !== sub);
-      addNews(s, ev, `${s.companyName}, 자회사 「${sub.name}」${josa(sub.name, '을/를')} ${won(price)}에 매각했습니다.`, 'sub', 'news', undefined, 'sub');
+      // 3.6.0 인수 브랜드를 팔면 그 회사는 경쟁사로 돌아온다(인수됨 표시 해제). 라인업은 인수 뒤에도 s.rivals에서 이어 온 그 회사 것 그대로
+      const back = sub.from && s.rivalry?.out.includes(sub.from) ? s.rivals.find((r) => r.id === sub.from) : undefined;
+      if (back) s.rivalry!.out = s.rivalry!.out.filter((x) => x !== back.id);
+      addNews(s, ev, `${s.companyName}, 자회사 「${sub.name}」${josa(sub.name, '을/를')} ${won(price)}에 매각했습니다.${back ? ` ${back.name}${josa(back.name, '은/는')} 다시 독립 경쟁사가 됩니다.` : ''}`, 'sub', 'news', undefined, 'sub');
       return { ok: true, events: ev };
     }
     // ---------- 3.1.0 직접 운영 ----------
@@ -667,7 +666,7 @@ function addOrder(s: CarState, sub: Subsidiary, o: { body: string; how: SubCar['
 const SHAPE = SUB_DATA.shape as Record<BrandKind, Stats>;
 /** 자회사 모델 한 대의 겉으로 보이는 값(경쟁 모델 RivalModelView와 같은 이름의 값 + 내 자회사 표시) */
 export interface SubModelView { own: true; subId: number; company: string; color: string; body: string; bodyName: string; name: string; n: number; number: number; start: number; year: number; critic: number; grades: Stats; price: number; unitCost: number; share: number; sold: number; ev: boolean; keep: boolean; seed: number;
-  how: SubCar['how'] | null; powertrain: string; tier: number; segment: string; chassisSeed: number; faceSeed: number; pricePct: number | null; stdPrice: number; fromName: string | null; reviews: number[] | null; cycleLeft: number } // 3.1.0 실제 사양(how null = 추정 방식), 직접 정한 가격(%), 브랜드 기준 가격, 배지 원본 이름, 다음 세대교체까지 개월
+  how: SubCar['how'] | null; powertrain: string; tier: number; segment: string; chassisSeed: number; faceSeed: number; pricePct: number | null; stdPrice: number; fromName: string | null; reviews: number[] | null; cycleLeft: number; awards: string[]; awardLeft: number } // awards·awardLeft(3.6.0): 수상 이력, 수상 판매 보너스 남은 개월. 3.1.0 실제 사양(how null = 추정 방식), 직접 정한 가격(%), 브랜드 기준 가격, 배지 원본 이름, 다음 세대교체까지 개월
 export function subModelView(s: CarState, sub: Subsidiary, md: SubModel): SubModelView {
   const m = monthOf(s.week), V = config.rivals.view, c0 = criticOf(md), now = c0 - (1 - rivalA(md, m) / (md.base * (1 + config.rivals.fresh))) * V.criticPer;
   const c = md.car, grades = c ? Object.fromEntries(STATS.map((k) => [k, r1(grade(c.stats[k], yearOf(s.week)))])) as Stats
@@ -677,7 +676,7 @@ export function subModelView(s: CarState, sub: Subsidiary, md: SubModel): SubMod
   return { own: true, subId: sub.id, company: sub.name, color: sub.color, body: md.body, bodyName: bodyById(md.body).name, name: md.name, n: md.n, number: md.n + 1, start: md.start, year: yearOfMonth(md.start), critic: c0, grades,
     price: Math.round(subPrice(s, sub, md) / 10) * 10, unitCost: Math.round(subUnitCost(s, sub, md)), share: size > 0 ? Math.min(1, md.sold / size) : 0, sold: md.sold, ev: !!md.ev, keep: !!md.keep, seed,
     how: c?.how ?? null, powertrain: ptOf(md), tier: c?.spec.tier ?? 2, segment: c?.spec.segment ?? sub.segment ?? brandDef(sub.kind as BrandKind).segment, chassisSeed: c?.chassisSeed ?? seed, faceSeed: c?.faceSeed ?? seed >>> 3,
-    pricePct: md.price === undefined ? null : Math.round(md.price * 100), stdPrice: Math.round(std / 10) * 10, fromName: from, reviews: c ? [...c.reviews] : null, cycleLeft: Math.max(0, md.start + md.cycle - m) };
+    pricePct: md.price === undefined ? null : Math.round(md.price * 100), stdPrice: Math.round(std / 10) * 10, fromName: from, reviews: c ? [...c.reviews] : null, cycleLeft: Math.max(0, md.start + md.cycle - m), awards: [...(md.awards ?? [])], awardLeft: Math.max(0, (md.awardUntil ?? -1) - m) };
 }
 /** 한 차급의 내 자회사 모델(비교 화면·경쟁 모델 목록 옆에, own: true로 구분) */
 export const subModelsIn = (s: CarState, body: string): SubModelView[] => (s.subs ?? []).flatMap((sub) => sub.models.filter((md) => md.body === body).map((md) => subModelView(s, sub, md)));

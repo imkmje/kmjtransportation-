@@ -1,5 +1,6 @@
 // 임원(0.7.0, 설계서 9.7): 자리·임명·채용, 월 결산 제안(보고함), 위임, 교체 고용.
 // 제안 수치는 화면이 쓰는 조회(queries·research·company)와 같은 함수로 계산한다. 상태를 바꾸는 것은 execCommand·execWeek·execMonth뿐
+import { won } from './won';
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById, optionById, segmentById, techById } from '../data';
 import { equipOf, expectEffect, recommendedEquip, stdOf } from './equip';
@@ -54,7 +55,6 @@ const KIND_TITLE: Record<string, string> = {
   replaceDone: '교체 고용 완료', replaceFail: '교체 고용 실패', replaceHold: '교체 고용 보류', replaceCancel: '교체 고용 취소', replaceWait: '교체 고용 대기',
 };
 
-const won = (x: number): string => { const v = Math.abs(x); return `${x < 0 ? '−' : ''}${v >= 10000 ? `${(v / 10000).toFixed(1)}억원` : `${Math.round(v).toLocaleString()}만원`}`; };
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const J = josa;
 
