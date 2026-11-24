@@ -2458,6 +2458,60 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await three('group', async () => { await sp.locator('#panel .group-card').scrollIntoViewIfNeeded(); });
   await sctx.close(); }
 
+// ---- 3.1.1 패치: 운영 전환 중 머리글(사건 칩·결정 대기·[본사로]) 넘침, 640px 이하 할 일 창과 알림, 이름 변경 Enter, 자기 잠식 작은 수요, 밝은 로고 색 글자 대비.
+// CAR_SMOKE_311=폴더 를 주면 화면을 찍는다
+{ const pctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const pp = await pctx.newPage(); pp.on('pageerror', (e) => errors.push(String(e))); pp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const PG = (fn, a) => pp.evaluate(fn, a), P3 = process.env.CAR_SMOKE_311 ?? '', pshot = async (n) => { if (P3) await pp.screenshot({ path: `${P3}/${n}.png` }); };
+  await pp.goto(URL0); await pp.waitForSelector('#title:not([hidden])');
+  await pp.click('[data-act="titleNew"]'); await pp.fill('#t-co', '패치 시험'); await pp.click('[data-act="startNew"]'); await PG(() => window.__car.setSpeed(0));
+  await PG(() => { const c = window.__car, g = c.game, s = g.state; s.week = (2005 - 1970) * 48; s.cash = 1e9; s.hqLevel = 5; s.reputation = 150;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2005 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id);
+    g.command({ type: 'startProject', name: '아리아', body: 'sedanM', segment: 'family', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    const p = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 });
+    g.command({ type: 'foundSubsidiary', kind: 'premium', name: '엘리온프리미엄', color: '#2b3a55' }); g.command({ type: 'foundSubsidiary', kind: 'value', name: '모아', color: '#d9822b' });
+    s.events.pending.length = 0; c.tick(8); s.events.pending.length = 0; c.render(); });
+  // 자기 잠식: 개발자 메뉴로 끝낸 차라 수요가 한 달 1대도 안 된다 → "1대 미만"(전에는 "약 0.0대"와 비율 7%)
+  await pp.click('#tabs button[data-tab="company"]'); await pp.click('#panel [data-act="cotab"][data-v="sub"]');
+  await pp.locator('#panel .sub-rows [data-act="subOpen"]').first().click(); await pp.waitForSelector('#panel .sub-bar');
+  await pp.click('#tabs button[data-tab="company"]'); await pp.waitForTimeout(150);
+  const canT = await PG(() => [...document.querySelectorAll('#panel table')].find((t) => t.innerText.includes('줄어든 한 달 수요'))?.innerText ?? '');
+  check('3.1.1 자기 잠식: 한 달 1대가 안 되면 "1대 미만"("약 0.0대" 없음)', canT.includes('1대 미만') && !canT.includes('0.0대'), canT.replace(/\s+/g, ' ').slice(0, 80));
+  // 운영 전환 중 머리글 최악 조건(사건 칩·결정 대기 12건·긴 날짜·조 단위 본사 현금). 사건 칩은 overflow가 보이게라 내용이 칸보다 넓으면 옆 칸 위로 넘친다(잘림으로 셈)
+  const subTop = () => PG(() => { const s = window.__car.game.state; s.cash = 340120000; window.__car.render();
+    const ch = document.getElementById('evchip'); ch.hidden = false; ch.dataset.v = 'x'; ch.innerHTML = '<span class="ev-n">포티 소형 세단 히트작</span><span class="ev-m"> · 13개월 +1</span>';
+    const pd = document.getElementById('pend'); pd.hidden = false; pd.dataset.v = 'x'; pd.innerHTML = '<svg viewBox="0 0 24 24"></svg><b>12</b><span class="pd-t">결정 대기</span>';
+    const d = document.getElementById('date'); d.dataset.v = 'x'; d.textContent = '2005년 12월 4주'; document.getElementById('held').hidden = false; document.getElementById('toasts').innerHTML = '';
+    const q = ['#mylogo', '#co', '#date', '#evchip', '#pend', '#todobtn', '#hqback', '#top .pill:has(#cash)', '#top .pill:has(#rep)', '#speeds', '#skipbtn', '#held', '#mutebtn', '#menubtn'];
+    const R = q.map((x) => { const e = document.querySelector(x); if (!e || e.hidden || getComputedStyle(e).display === 'none' || !e.getBoundingClientRect().width) return null; const r = e.getBoundingClientRect(); return { q: x, l: r.left, r: r.right, t: Math.round(r.top), clip: x === '#evchip' ? e.scrollWidth > e.clientWidth + 2 : x !== '#co' && getComputedStyle(e).overflow !== 'visible' && e.scrollWidth > e.clientWidth + 1 }; }).filter(Boolean);
+    const bad = []; R.forEach((a, i) => { if (a.l < 0 || a.r > innerWidth) bad.push(`${a.q} 화면 밖`); if (a.clip) bad.push(`${a.q} 잘림`); const b = R[i + 1]; if (b && b.t === a.t && a.r > b.l + 0.5) bad.push(`${a.q}·${b.q} 겹침`); });
+    return bad; });
+  const stw = {}; for (const [w, h] of [[800, 1200], [1024, 768], [1366, 1024]]) { await pp.setViewportSize({ width: w, height: h }); await pp.waitForTimeout(200); stw[w] = await subTop(); await pp.waitForTimeout(50); if (P3) await pp.screenshot({ path: `${P3}/subtop-${w}.png`, clip: { x: 0, y: 0, width: w, height: 130 } }); }
+  check('3.1.1 운영 전환 머리글 최악 조건(800·1024·1366): 사건 칩 잘림·칸 겹침 없음', Object.values(stw).every((x) => !x.length), JSON.stringify(stw));
+  check('3.1.1 고급 머리글: 결정 대기 칩이 머리글 색에 묻히지 않음(본사와 같은 주황)', await PG(() => getComputedStyle(document.getElementById('pend')).backgroundColor === 'rgb(201, 63, 12)'));
+  // 밝은 로고 색(보급형 기본 주황)의 자회사 표시: 글자 대비 4.5 이상
+  const markCr = await PG(() => { const lum = (c) => { const v = c.match(/\d+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    return [...document.querySelectorAll('.sub-mark')].map((e) => { const cs = getComputedStyle(e), a = lum(cs.color), b = lum(cs.backgroundColor); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); }); });
+  check('3.1.1 자회사 표시 글자 대비 4.5 이상(주황 #d9822b 포함)', markCr.length >= 2 && markCr.every((x) => x >= 4.5), markCr.map((x) => x.toFixed(2)).join(','));
+  // 이름 변경 창: Enter로 확인(자회사 모델, 본사 차)
+  await pp.setViewportSize({ width: 1366, height: 1024 }); await pp.click('#tabs button[data-tab="company"]'); await pp.waitForTimeout(150);
+  await PG(() => document.querySelector('#panel [data-act="subRenameOpen"]').click()); await pp.waitForSelector('#sub-rn');
+  await pp.fill('#sub-rn', '엔터자회사'); await pp.press('#sub-rn', 'Enter'); await pp.waitForTimeout(150);
+  check('3.1.1 자회사 모델 이름 변경 창: Enter로 바뀌고 창이 닫힘', (await PG(() => window.__car.game.state.subs.some((x) => x.models.some((m) => m.name === '엔터자회사')))) && !(await pp.locator('#sheet').isVisible()));
+  await pp.click('#hqback'); await pp.click('#tabs button[data-tab="garage"]'); await pp.waitForTimeout(150);
+  if (await pp.locator('[data-act="gopen"]').count()) await pp.locator('[data-act="gopen"]').first().click();
+  await pp.locator('[data-act="renameOpen"]').first().click(); await pp.waitForSelector('#rn-name');
+  await pp.fill('#rn-name', '엔터시험'); await pp.press('#rn-name', 'Enter'); await pp.waitForTimeout(150);
+  check('3.1.1 본사 차 이름 변경 창: Enter로 바뀌고 창이 닫힘', (await PG(() => window.__car.game.state.nameplates.some((n) => n.name === '엔터시험'))) && !(await pp.locator('#sheet').isVisible()));
+  // 640px 이하: 할 일 창이 화면 전체면 보통 알림은 숨고(창을 가리지 않음) 경고 알림만 아래쪽에
+  const dt = {}; for (const [w, h] of [[640, 900], [400, 800]]) {
+    await pp.setViewportSize({ width: w, height: h }); await pp.waitForTimeout(200); await pp.click('#todobtn'); await pp.waitForTimeout(300);
+    await PG(() => { for (let i = 0; i < 3; i++) window.__car.toast(`알림 시험 ${i + 1}: 경쟁사 신차가 나왔습니다.`); }); await pp.waitForTimeout(200);
+    dt[w] = await PG(() => { const d = document.getElementById('drawer').getBoundingClientRect(); return [...document.querySelectorAll('#toasts .toast')].filter((t) => getComputedStyle(t).display !== 'none').map((t) => { const r = t.getBoundingClientRect(); return Math.max(0, Math.min(r.right, d.right) - Math.max(r.left, d.left)) * Math.max(0, Math.min(r.bottom, d.bottom) - Math.max(r.top, d.top)); }).reduce((a, b) => a + b, 0); });
+    await pshot(`drawer-toast-${w}`); await PG(() => { document.getElementById('toasts').innerHTML = ''; }); await pp.keyboard.press('Escape'); await pp.waitForTimeout(150); }
+  check('3.1.1 640·400px 할 일 창: 보통 알림이 창을 가리지 않음', Object.values(dt).every((x) => x === 0), JSON.stringify(dt));
+  await pctx.close(); }
+
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에
 await done(fails.length ? 1 : 0);

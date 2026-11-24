@@ -1045,6 +1045,7 @@ button.co-box:hover{border-color:var(--ink)}
 @keyframes drawer-in{from{transform:translateX(40px);opacity:0}}
 @media (prefers-reduced-motion:reduce){.drawer{animation:none}}
 @media (max-width:640px){.drawer{width:100vw}}
+@media (max-width:640px){body:has(#drawer:not([hidden])) #toasts .toast:not(.bad),body:has(#drawer:not([hidden])) #toasts .more{display:none}body:has(#drawer:not([hidden])) #toasts{top:auto;bottom:max(12px,env(safe-area-inset-bottom,0px))}} /* 3.1.1 할 일 창이 화면 전체(640px 이하)면 비켜 줄 곳이 없어 알림이 창의 탭·목록을 가렸다: 경고 알림만 창 아래쪽에(결정 창과 같은 방식) */
 /* 1.3.1 할 일 창이 열려 있으면 알림이 창을 가리지 않게 창 왼쪽 옆으로(너비는 창 너비 min(420px,100vw-96px) 기준, 640px 이하는 창이 화면 전체라 비켜 줄 곳이 없다) */
 @media (min-width:641px){body:has(#drawer:not([hidden])) #toasts{right:calc(min(420px,100vw - 96px) + 12px)}body:has(#drawer:not([hidden])) #toasts:not(.corner):not(.inofc){width:auto}body:has(#drawer:not([hidden])) #toasts.corner,body:has(#drawer:not([hidden])) #toasts.inofc{right:calc(min(420px,100vw - 96px) + 16px)}}
 .drawer .todo-sheet{display:flex;flex-direction:column;min-height:0;flex:1}
@@ -1246,7 +1247,7 @@ span.g-auto{border-color:transparent;background:transparent}.g-auto.hd{min-heigh
 /* 자회사 종류별 분위기(CSS 변수 덮어쓰기 수준): 고급은 어둡고 차분하게, 보급형은 밝고 둥글게 */
 body.sub-premium{--bg:#d5d9e0;--soft:#eceff3;--line:#c9ced8;--stage1:#f3f4f6;--stage2:#cfd4dc;--stage3:#b6bdc8}
 body.sub-premium #top{background:#232a36;color:#f1f3f6}
-body.sub-premium #top .pill:not(.hqback),body.sub-premium #top .menubtn,body.sub-premium #top .speeds,body.sub-premium #top .skipbtn{background:#2f3846;border-color:#465062;color:#e6e9ee}
+body.sub-premium #top .pill:not(.hqback):not(.evchip):not(.pend),body.sub-premium #top .menubtn,body.sub-premium #top .speeds,body.sub-premium #top .skipbtn{background:#2f3846;border-color:#465062;color:#e6e9ee}
 body.sub-premium #top .pill b{color:#fff}body.sub-premium #hqcash{color:#c3c9d3}
 body.sub-premium .card{border-radius:10px}body.sub-premium .btn,body.sub-premium .go{border-radius:8px}
 body.sub-premium .pill.hqback{background:#f1f3f6;color:#14171c;border-color:#f1f3f6}
@@ -1255,3 +1256,9 @@ body.sub-value .card{border-radius:26px}body.sub-value .btn{border-radius:999px}
 body.sub-on #tabs button.on{box-shadow:inset 0 0 0 2px var(--accent)}
 body.sub-premium #top .speeds button{color:#c9cfd9}body.sub-premium #top .speeds button.on{background:#f1f3f6;color:#14171c}
 body.sub-premium #top .pill .ib{filter:invert(1)}
+body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1.1 어두운 머리글에서도 결정 대기는 본사와 같은 주황(고급 로고 색이 어두우면 머리글에 묻혔다). 사건 칩은 원래 노란 칩 */
+/* 3.1.1 운영 전환 중 머리글: [← 본사로]가 더해져 1024·1366에서 사건 칩이 눌려 잘리고 결정 대기와 겹쳤다. 사건 칩 대신 자회사 이름이 줄어들고,
+   1400px 이하에서는 본사 현금 작은 글자(자본 칩·[본사로]의 title에 있다), 1180px 이하에서는 본사 평판 칩(회사 탭에 있다)을 숨긴다 */
+@media (min-width:900px){body.sub-on #top .pill.evchip{flex-shrink:0}body.sub-on #top .brand{flex:0 1 auto;min-width:26px}}
+@media (min-width:900px) and (max-width:1400px){body.sub-on #hqcash{display:none}}
+@media (min-width:900px) and (max-width:1180px){body.sub-on #top .pill:has(#rep){display:none}}

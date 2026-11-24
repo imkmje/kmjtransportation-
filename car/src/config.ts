@@ -137,7 +137,7 @@ export const config = {
     faceliftAt: 0.5, faceliftKeep: 0.4, // 주기의 절반에 페이스리프트: 수명 나이를 40%로
     response: { from: 1985, to: 1995, share0: 0.1, k: 3 }, // 1.0.0 경쟁사의 대응(market.rivalResponse)
     // 2.0.0 경쟁 모델의 겉으로 보이는 값(표시용, 판매 계산에 쓰지 않는다. sim/rivals.ts). d = 모델 기본 A − 그때 경쟁 차 기본 A(rivalBase)
-    view: { criticMid: 6, criticPer: 10, hitAt: 0.6, statJitter: 0.6, pricePer: 0.02 }, // 추정 평론 = 6 + d × 10(1~10), 히트작 = 난수 몫이 noise의 60% 이상, 능력치 = 평론 + 회사 모양 ± 0.6, 가격 = 시장 기준가 × (1 + (평론 − 6) × 2%)
+    view: { criticMid: 6, criticPer: 10, hitAt: 0.6, statJitter: 0.6, pricePer: 0.02 }, // 추정 평론 = 6 + d × 10(1~10), 히트작 = 난수 몫이 noise의 60% 이상이고 같은 차급 다른 경쟁 모델보다 추정 평론이 낮지 않음(3.1.1), 능력치 = 평론 + 회사 모양 ± 0.6, 가격 = 시장 기준가 × (1 + (평론 − 6) × 2%)
     lateCells: ['suvL', 'suvS'], // 0.6.0에 더한 칸: 새 게임의 첫 모델 강약 난수를 게임 난수 대신 해시로 뽑는다(기존 시드의 난수 순서가 그대로)
   },
   lifecycle: { // 8장
@@ -329,6 +329,7 @@ export const config = {
     defaultSub: { dividend: 50, share: 1 }, // 설립 때 배당 50%·공유 보통, 전략은 브랜드 growth·사업 stable
     switchMonths: 6, // 전략 전환 기간(효과가 이 기간에 걸쳐 직선으로 바뀐다)
     evFrom: 2010, // 전동화 전환을 고를 수 있는 해
+    evPace: 2, // 3.1.1 전동화 전환: 라인업의 전기차 수 = 올림(모델 수 × min(1, 충전 인프라 × 이 값)), 전략 원가 배수(0.95)는 전기차에만. 충전 인프라가 모자란 2010년대에도 가솔린 모델이 남아 바닥을 받친다
     capPerCar: 4000, // 월 생산 한도 = 자본 ÷ 이 값(대)
     capitalPerModel: 10000000, // 모델 수 상한 = max(1, 자본 ÷ 이 값)(영역의 차급 수 이내)
     upkeep: 0.002, // 월 유지비 = 쓰는 자본 × 이 값(브랜드: min(자본, 판매 대수 × capPerCar), 사업: 자본). 남는 자본(유보·과잉 투자)에는 유지비가 없다
@@ -348,11 +349,11 @@ export const config = {
     // 전략별 효과(전환 중에는 비중대로 섞는다). a: 기본 A 가산(rival은 상대의 주력 차급에서만), price·cost·dev·vol: 배수, payout: 배당 비율 배수(최대 100%),
     // cycle: 세대교체 주기(개월), max: 모델 수 상한(0 = 자본 상한까지, -1 = 지금 수 유지), subRep·hqRep: 해마다 자회사·본사 평판 가산
     strat: {
-      growth: { name: '성장 중심', a: 0, price: 1, cost: 1, dev: 1.3, vol: 1, payout: 0.4, cycle: 54, max: 0, subRep: 0, hqRep: 0 },
+      growth: { name: '성장 중심', a: 0, price: 1, cost: 1, dev: 1.0, vol: 1.08, payout: 0.4, cycle: 54, max: 0, subRep: 0, hqRep: 0 },
       share: { name: '점유율 중심', a: 0.06, price: 0.96, cost: 1, dev: 0.9, vol: 1.1, payout: 1, cycle: 60, max: 0, subRep: 0, hqRep: 0 },
       profit: { name: '수익 중심', a: -0.03, price: 1.03, cost: 0.95, dev: 0.7, vol: 1, payout: 1.4, cycle: 78, max: -1, subRep: 0, hqRep: 0 },
       rival: { name: '경쟁사 대응', a: 0.1, price: 0.96, cost: 1, dev: 1.2, vol: 1, payout: 1, cycle: 48, max: 0, subRep: 0, hqRep: 0, noise: 2.5 },
-      tech: { name: '기술 선도', a: 0.1, price: 1.04, cost: 1.02, dev: 1.7, vol: 1, payout: 1, cycle: 54, max: 0, subRep: 1.5, hqRep: 0.3 },
+      tech: { name: '기술 선도', a: 0.1, price: 1.07, cost: 1.02, dev: 1.1, vol: 1, payout: 1, cycle: 54, max: 0, subRep: 1.5, hqRep: 0.3 },
       stable: { name: '안정 유지', a: -0.01, price: 1, cost: 0.98, dev: 0.75, vol: 1, payout: 1, cycle: 72, max: -1, subRep: 0, hqRep: 0 },
       niche: { name: '틈새 공략', a: 0.02, price: 1.07, cost: 1, dev: 0.9, vol: 1, payout: 1, cycle: 66, max: 2, subRep: 0.5, hqRep: 0 },
       prestige: { name: '명성 구축', a: 0.2, price: 1.5, cost: 1.15, dev: 0.6, vol: 0.45, payout: 1, cycle: 60, max: 1, subRep: 4, hqRep: 1 },
