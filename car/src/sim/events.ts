@@ -1,5 +1,6 @@
 // 시대 사건(설계서 11장). 고정 사건은 시드와 날짜만으로 계산한다(상태 없음): 시작 달 = 자료 연·월 ± 1년(시드 해시).
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
+import { won } from './won';
 import { config } from '../config';
 import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, segmentById } from '../data';
 import { grades, salaryOf } from './cars';
@@ -273,7 +274,7 @@ export function choiceMoney(s: CarState, pc: PendingChoice, idx: number): number
   return def.choices[idx].effects.reduce((a, e) => a + (e.type === 'cash' ? e.base + (e.revenue ?? 0) * avgRev + (e.salaries ?? 0) * salaries
     : e.type === 'fixDefects' && g ? -g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare : 0), 0);
 }
-const moneyText = (x: number): string | null => { const v = Math.abs(x); if (v < 1) return null; const t = v >= 10000 ? `${(v / 10000).toFixed(1)}억원` : `${Math.round(v).toLocaleString()}만원`; return `${x < 0 ? '비용' : '수입'} 약 ${t}`; };
+const moneyText = (x: number): string | null => { const v = Math.abs(x); if (v < 1) return null; const t = won(v); return `${x < 0 ? '비용' : '수입'} 약 ${t}`; };
 /** 답을 기다리는 사건. choices[].cost: 지출(만원, 수입이면 음수), costText: "비용 약 3.2억원"(돈 변화가 없으면 null). 0.5.1 */
 export function pendingChoices(s: CarState) {
   return s.events.pending.map((p) => {

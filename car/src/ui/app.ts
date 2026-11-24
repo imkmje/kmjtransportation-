@@ -203,19 +203,49 @@ export function startApp(): void {
   interface NoteLog { id: number; week: number; cat: NoteCat; head: string; text: string; open?: { label: string; fn: () => void } }
   let noteLog: NoteLog[] = [], noteId = 0, noteSeen = 0; // noteSeen: 기록함을 마지막으로 연 때의 id
   const toastTimers = new WeakMap<HTMLElement, number>();
+  // ----- 3.6.0 알림 묶기: 같은 주(빠른 배속이면 한 화면 갱신에 지나간 여러 주)에 같은 유형 알림이 2개 이상이면 "경쟁사 신차·동향 3건" 하나로.
+  // 경고·결정 대기·자동 멈춤(끌 수 없는 유형)과 키 알림(월 결산 등)은 묶지 않는다. 기록함에는 하나씩 남고, 묶은 알림의 [펼쳐 보기]는 그 유형으로 거른 기록함을 연다. 화면 전용(sim 상태와 무관)
+  type Queued = { text: string; kind: '' | 'alert' | 'bad'; head: string; ms: number; open?: { label: string; fn: () => void }; cat: NoteCat };
+  let batchQ: Queued[] | null = null, relay = false;
+  const grpItems = new Map<NoteCat, Queued[]>(); // 떠 있는 묶음 알림의 항목(묶음이 닫히면 새로 시작)
+  const solo = new Map<NoteCat, { el: HTMLElement; item: Queued }>(); // 유형마다 마지막으로 하나만 띄운 알림(다음에 같은 유형이 오면 묶음으로 바꾼다)
+  /** fn 동안의 알림을 모았다가 유형별로 띄운다(안쪽에서 다시 불리면 바깥 묶음에 합친다) */
+  function batched<T>(fn: () => T): T {
+    if (batchQ) return fn();
+    batchQ = [];
+    try { return fn(); } finally { const q = batchQ; batchQ = null; flushToasts(q); }
+  }
+  function flushToasts(q: Queued[]): void {
+    const cats = [...new Set(q.map((x) => x.cat))];
+    relay = true;
+    try {
+      for (const c of cats) {
+        const items = q.filter((x) => x.cat === c), key = `grp-${c}`, live = keyed.get(key), on = !!live?.isConnected && !live.classList.contains('out');
+        const one = solo.get(c), oneOn = !on && !!one?.el.isConnected && !one.el.classList.contains('out') && one.el.dataset.cat === c && !one.el.querySelector('[data-undo]');
+        if (items.length === 1 && !on && !oneOn) { const x = items[0]; toast(x.text, x.kind, x.head, x.ms, '', x.open, x.cat); const el = $('#toasts').lastElementChild as HTMLElement | null; if (el?.dataset.cat === c) solo.set(c, { el, item: x }); continue; }
+        if (oneOn) closers.get(one!.el)?.(); // 앞 화면 갱신에 하나로 띄운 같은 유형 알림도 묶음에 넣는다
+        const all = [...(on ? grpItems.get(c) ?? [] : oneOn ? [one!.item] : []), ...items]; grpItems.set(c, all);
+        const cut = (v: string) => (v.length > 46 ? `${v.slice(0, 45)}…` : v);
+        const same = all.every((x) => x.head === all[0].head), text = all.slice(-3).reverse().map((x) => `· ${cut(x.head && !same ? `${x.head}: ${x.text}` : x.text)}`).join('\n') + (all.length > 3 ? `\n외 ${all.length - 3}건` : '');
+        toast(text, all.some((x) => x.kind === 'alert') ? 'alert' : '', `${catName(c)} ${all.length}건`, Math.max(...all.map((x) => x.ms)), key, { label: '펼쳐 보기', fn: () => { noteTopic = c; showTodo('notes'); } }, c);
+        const el = keyed.get(key); if (el) el.dataset.grp = '1';
+      }
+    } finally { relay = false; }
+  }
   /** 작은 알림. key가 같은 알림은 새로 쌓지 않고 그 자리에서 내용만 바꾼다(월 결산처럼 자주 오는 것). 12초 이상 두는 알림(자동 멈춤·현금 경고·결정 대기·리콜·규제)은 중요한 알림.
    *  cat(1.0.0): 알림 종류. 주면 기록함에 남고, 꺼 둔 종류는 띄우지 않으며, 같은 종류가 떠 있는 동안 또 오면 "평판 변화 3건"으로 묶는다 */
   function toast(text: string, kind: '' | 'alert' | 'bad' = '', head = '', ms = kind ? 9000 : 4000, key = '', open?: { label: string; fn: () => void }, cat?: NoteCat): void {
     if (!cat && kind !== 'bad' && actHist >= 0) cat = ACT_TOPIC[curAct]; // 1.3.0 교육 보내기·채용 같은 조작 직후 알림도 유형을 따른다
-    if (cat && game && cat !== 'act') { noteLog.unshift({ id: ++noteId, week: game.state.week, cat, head: head || catName(cat), text, open }); if (noteLog.length > 100) noteLog.length = 100; }
+    if (cat && game && cat !== 'act' && !relay) { noteLog.unshift({ id: ++noteId, week: game.state.week, cat, head: head || catName(cat), text, open }); if (noteLog.length > 100) noteLog.length = 100; }
     if (cat && !noteOn(cat)) { if (actHist >= 0) undoShown = true; return; } // 끈 유형: 조작 직후라도 따로 [되돌리기] 한 줄을 띄우지 않는다(메뉴의 되돌리기는 그대로)
+    if (batchQ && cat && !relay && !key && kind !== 'bad' && !noteFixed(cat) && cat !== 'act' && cat !== 'pause') { batchQ.push({ text, kind, head, ms, open, cat }); return; } // 3.6.0 알림 묶기: 시간 진행 중의 알림은 모았다가 한 번에
     const box = $('#toasts');
     setVar(box, '--tt', `${Math.round($('#top').getBoundingClientRect().bottom + 8)}px`); // 폰: 상단바 바로 아래
     const undo = !open && undoFresh(); // 0.8.0: 되돌릴 수 있는 조작 직후의 알림에 [되돌리기]
     if (undo) { dropUndoBtns(); open = { label: '되돌리기', fn: doUndo }; ms = Math.max(ms, 8000); undoShown = true; } // 되돌릴 수 있는 것은 하나뿐: 이전 알림의 버튼은 없앤다
     const live = (x: HTMLElement | undefined) => !!x?.isConnected && !x.classList.contains('out');
     let n = 1, t = key ? keyed.get(key) : undefined;
-    if (!live(t) && cat && !undo && GROUPED.has(cat)) { // 같은 종류 묶기: 떠 있는 같은 종류 알림을 그 자리에서 바꾼다
+    if (!live(t) && cat && !undo && GROUPED.has(cat) && !key.startsWith('grp-')) { // 같은 종류 묶기: 떠 있는 같은 종류 알림을 그 자리에서 바꾼다
       t = [...box.querySelectorAll<HTMLElement>('.toast')].find((x) => x.dataset.cat === cat && live(x) && !x.querySelector('[data-undo]'));
       if (t) { n = Number(t.dataset.n ?? 1) + 1; head = `${catName(cat)} ${n}건`; }
     }
@@ -471,7 +501,8 @@ export function startApp(): void {
   let quietChoice = false; // 점검용 __car.tick: 사건 창을 띄우지 않는다(popups를 주면 띄움)
   let weekFresh = false; // 한 주에 여러 프로젝트의 주간 기록이 오면 모두 모은다
   let weekReports = 0; // 이번 주(월 결산)에 새로 온 임원 보고 수
-  function tickOnce(): GameEvent[] {
+  function tickOnce(): GameEvent[] { return batched(tickRaw); }
+  function tickRaw(): GameEvent[] {
     if (!game) return [];
     const eds = new Set(allGens(game.state).flatMap((g) => g.editions.map((x) => x.id))); // 1.3.0 위임한 차의 자동 출시를 알아보려고
     const ev = game.tick();
@@ -878,7 +909,7 @@ export function startApp(): void {
     if (isHeld() || speed === 0) { acc = 0; if (skip) setSpeed(0); return; } // 창이 뜨면(선택 사건 등) [다음 일까지]도 끝
     acc = skip ? WEEK_MS * MAX_TICKS_PER_FRAME : acc + dt * speed; // 다음 일까지: 프레임마다 tick 상한만큼(화면 갱신은 유지)
     let n = 0;
-    while (acc >= WEEK_MS && n < MAX_TICKS_PER_FRAME) { acc -= WEEK_MS; const ev = tickOnce(); n++; if (skip) skipCheck(ev); if (isHeld() || !speed) { acc = 0; break; } }
+    batched(() => { while (acc >= WEEK_MS && n < MAX_TICKS_PER_FRAME) { acc -= WEEK_MS; const ev = tickOnce(); n++; if (skip) skipCheck(ev); if (isHeld() || !speed) { acc = 0; break; } } }); // 3.6.0 한 화면 갱신에 지나간 주들의 알림을 묶는다
     if (n) render();
   }
   requestAnimationFrame(frame);
@@ -1256,6 +1287,9 @@ export function startApp(): void {
       <div class="tblwrap"><table class="tbl acq-t"><tr><th>연 매출 어림</th><td class="r">${money(a.revenue)}</td></tr><tr><th>평가액(연 매출 × ${config.rivalry.acquire.salesMult})</th><td class="r">${money(a.value)}</td></tr><tr><th>웃돈(${Math.round(config.rivalry.acquire.premium * 100)}%)</th><td class="r">${money(a.premium)}</td></tr><tr class="acq-sum"><th>인수 값</th><td class="r"><b>${money(a.price)}</b></td></tr></table></div>
       <p class="lbl" style="margin-top:12px">인수 뒤 예상 실적(지금 시장 기준 어림)</p>
       <div class="kpis">${kpi('월 판매', `${num(a.monthly)}<span>대</span>`)}${kpi('연 매출', money(a.yearRevenue))}${kpi('연 이익', money(a.yearProfit, true), a.yearProfit >= 0 ? 'pos' : 'neg')}${kpi('연 배당(본사)', money(a.yearDividend))}</div>
+      <p class="lbl" style="margin-top:12px">본사 판매 변화 예상</p>
+      <div class="kpis">${kpi('본사 월 판매', `${num(a.hqMonthly)} → ${num(a.hqMonthlyAfter)}<span>대</span>`)}${kpi('변화', `${Math.round(a.hqMonthlyAfter - a.hqMonthly) > 0 ? '+' : Math.round(a.hqMonthlyAfter - a.hqMonthly) < 0 ? '−' : ''}${num(Math.abs(a.hqMonthlyAfter - a.hqMonthly))}<span>대/월</span>`, Math.round(a.hqMonthlyAfter - a.hqMonthly) > 0 ? 'pos' : Math.round(a.hqMonthlyAfter - a.hqMonthly) < 0 ? 'neg' : '')}${kpi('본사 연 이익 변화', money(a.hqYearProfit, true), Math.round(a.hqYearProfit) > 0 ? 'pos' : Math.round(a.hqYearProfit) < 0 ? 'neg' : '')}</div>
+      <p class="note">인수 브랜드 자체의 이익은 얇을 수 있지만, 경쟁사 하나가 빠지면 그 손님 일부가 본사 차로 옮겨 와 본사 판매가 늘어납니다(공장 생산 한도 안, 지금 시장 기준 어림).</p>
       <p class="note">지금 이 회사는 한 달 약 ${num(a.rivalMonthly)}대를 팝니다. 인수하면 손님 일부가 남은 경쟁사로 옮겨 가 브랜드 판매는 그보다 적게 잡았습니다. 자본 ${money(a.capital)}으로 시작하고(인수 값의 ${Math.round(config.rivalry.acquire.capital * 100)}%), 브랜드 평판 ${Math.round(a.rep)}, 전략은 성장 중심, 배당 비율 ${config.subs.defaultSub.dividend}%입니다. 자회사 수에 들어갑니다.</p>
       ${a.reason ? `<div class="badbox" style="margin-top:10px">${esc(a.reason)}</div>` : ''}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="rivalOpen" data-v="${id}">← ${esc(a.name)}</button><button class="btn ink" data-act="acqDo" data-v="${id}" ${a.reason ? 'disabled' : ''}>인수하기 · ${money(a.price)}</button></div></div>`;
@@ -2194,7 +2228,7 @@ export function startApp(): void {
       <div class="kpis">${kpi('자본', money(d.capital))}${B ? kpi('월 생산 한도', `${num(d.capacity)}<span>대</span>`) + kpi('모델', `${d.models.length}/${d.modelCap}<span>개</span>`) + kpi('브랜드 평판', String(Math.round(d.rep))) : ''}${d.hqEffect ? kpi('본사에 주는 효과', esc(d.hqEffect.text), 'pos', 'kpi-word') : ''}</div></div>`;
     return `<div class="sub-detail">${head}<div class="cols">${subModeCard(d)}${subTargetCard(d)}</div>${subView === id ? '' : subWorkCard(d)}${subStrategyCard(d)}<div class="cols">${subSettingsCard(d)}${subPresidentCard(d)}</div>${B ? subLineupCard(d) : ''}${subResultCard(d)}
       ${B ? subListCard(d) : ''}
-      <div class="card sub-sell"><h3>매각</h3><p class="hint">지금 매각하면 자본의 ${Math.round(SUBS.sellShare * 100)}%${d.listed ? `에서 상장한 지분(${Math.round(d.listed * 100)}%)을 뺀` : ''} <b>${money(d.sellPrice)}</b>을 받습니다. 매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없고, 모델과 실적 기록이 사라집니다. 사장은 본사 직원으로 돌아옵니다.</p><button class="btn danger" data-act="subSell" data-id="${d.id}" style="width:100%;margin-top:8px">「${esc(d.name)}」 매각 · ${money(d.sellPrice)}</button></div></div>`;
+      <div class="card sub-sell"><h3>매각</h3><p class="hint">지금 매각하면 자본의 ${Math.round(SUBS.sellShare * 100)}%${d.listed ? `에서 상장한 지분(${Math.round(d.listed * 100)}%)을 뺀` : ''} <b>${money(d.sellPrice)}</b>을 받습니다. 매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없고, 모델과 실적 기록이 사라집니다. 사장은 본사 직원으로 돌아옵니다.${d.from ? ' 인수한 회사는 다시 독립 경쟁사가 됩니다.' : ''}</p><button class="btn danger" data-act="subSell" data-id="${d.id}" style="width:100%;margin-top:8px">「${esc(d.name)}」 매각 · ${money(d.sellPrice)}</button></div></div>`;
   }
   function subStrategyCard(d: Q.SubDetail): string {
     const s = game!.state, list = d.brand ? d.strategies : d.strategies.filter((x) => (SUBS.business as readonly string[]).includes(x.id));
@@ -2226,7 +2260,7 @@ export function startApp(): void {
   }
   function subLineupCard(d: Q.SubDetail): string {
     const free = d.areaReady.filter((b) => !d.models.some((m) => m.body === b));
-    const row = (v: Q.SubModelView) => `<details class="rv-model"><summary><span class="g-th">${thumb(subLook(v), -0.65, 160, 100)}</span><span class="rv-n"><b>${esc(v.name)}</b><small>${v.bodyName} · ${v.number}세대 · ${v.year}년 출시${v.ev ? ' · 전기차' : ''}${v.keep ? ' · 본사 지시' : ''}</small></span><span class="rv-c">추정 평론 <b>${score(v.critic)}</b><br>${num(v.price)}만원 · 점유 약 ${Math.round(v.share * 100)}% · 지난달 ${num(v.sold)}대</span></summary>
+    const row = (v: Q.SubModelView) => `<details class="rv-model"><summary><span class="g-th">${thumb(subLook(v), -0.65, 160, 100)}</span><span class="rv-n"><b>${esc(v.name)}</b><small>${v.bodyName} · ${v.number}세대 · ${v.year}년 출시${v.ev ? ' · 전기차' : ''}${v.keep ? ' · 본사 지시' : ''}</small></span><span class="rv-c">추정 평론 <b>${score(v.critic)}</b>${v.awards.length ? ' <small class="aw-s">수상</small>' : ''}<br>${num(v.price)}만원 · 점유 약 ${Math.round(v.share * 100)}% · 지난달 ${num(v.sold)}대</span></summary>
       <div class="row sub-mact"><button class="btn" data-act="subRenameOpen" data-id="${d.id}" data-k="${v.body}">이름 변경</button><button class="btn danger" data-act="subDrop" data-id="${d.id}" data-k="${v.body}">단종</button></div></details>`;
     const add = subPick === 'add' ? `<div class="row sub-add">${free.map((b) => `<button class="btn" data-act="subAdd" data-id="${d.id}" data-v="${b}">${bodyById(b).name}</button>`).join('') || '<p class="hint">새 모델을 낼 수 있는 차급이 없습니다. 맡을 영역에 차급을 넣거나 본사가 차급을 연구해야 합니다.</p>'}</div>` : '';
     return `<div class="card sub-lineup"><h3>라인업 <small class="hint">모델 ${d.models.length}/${d.modelCap}개</small></h3>${d.models.length ? `<div class="rv-list">${d.models.map(row).join('')}</div>` : '<p class="hint">아직 모델이 없습니다. 첫 모델은 설립한 달 말에 나옵니다.</p>'}
@@ -2293,7 +2327,7 @@ export function startApp(): void {
     if (!d.models.length) return { ov: `<div class="ov empty"><div><h3>${esc(d.name)} 차고가 비어 있습니다</h3><p>${d.orders.length ? `개발 중인 차가 ${d.orders.length}대 있습니다.` : direct ? '개발 탭에서 신차를 기획하거나 제작을 지시하세요.' : '전략에 따라 이번 달 말에 첫 모델이 나옵니다.'}</p></div></div>`, panel: (fromHq ? back : subBar(x)) + `<div class="card"><p class="hint">아직 판매 중인 모델이 없습니다.</p></div>`, look: null };
     const v = d.models.find((m) => m.body === (fromHq ? garageSub?.body : subCar)) ?? d.models[0];
     if (fromHq) garageSub = { id, body: v.body }; else subCar = v.body;
-    const list = d.models.map((m) => `<button class="gsr sub-car" data-act="${fromHq ? 'gsubOpen' : 'subCarSel'}" data-id="${id}" data-k="${m.body}" aria-pressed="${m.body === v.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small>${m.bodyName} · ${m.number}세대 · ${esc(m.how ? HOW_NAME[m.how] : '자체 개발')}</small></span><span>평론 ${score(m.critic)}</span><span>지난달 ${num(m.sold)}대</span></button>`).join('');
+    const list = d.models.map((m) => `<button class="gsr sub-car" data-act="${fromHq ? 'gsubOpen' : 'subCarSel'}" data-id="${id}" data-k="${m.body}" aria-pressed="${m.body === v.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small>${m.bodyName} · ${m.number}세대 · ${esc(m.how ? HOW_NAME[m.how] : '자체 개발')}</small></span><span>평론 ${score(m.critic)}${m.awards.length ? '<small class="aw-s">수상</small>' : ''}</span><span>지난달 ${num(m.sold)}대</span></button>`).join('');
     const crit = v.reviews ? `<p class="lbl" style="margin-top:12px">평론가 4명</p><div class="kpis">${config.critics.list.map((c, i) => kpi(esc(c.name), score(v.reviews![i] ?? 0))).join('')}</div>` : `<p class="note">이 모델은 자회사가 전략에 따라 스스로 개발했습니다. 평론은 추정 평론${ib('term:추정 평론')}입니다.</p>`;
     const pct = v.pricePct ?? null, step = (dv: number) => Math.min(SUBS.modelPrice.max, Math.max(SUBS.modelPrice.min, (pct ?? Math.round(v.price / Math.max(1, v.stdPrice) * 100)) + dv));
     const price = direct && !fromHq ? `<hr><p class="lbl">가격 · 브랜드 기준 가격 ${num(v.stdPrice)}만원</p><div class="row sub-px"><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(-5)}">−5%</button><b class="sub-divv">${pct === null ? '전략대로' : `${pct}%`}</b><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(5)}">+5%</button><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="" ${pct === null ? 'disabled' : ''}>전략대로</button></div>
@@ -2301,6 +2335,7 @@ export function startApp(): void {
     const acts = fromHq ? `<button class="btn ink" data-act="subOpen" data-id="${id}" data-v="garage" style="width:100%;margin-top:10px">${esc(d.name)} 운영 전환</button>` : `<div class="row sub-mact" style="margin-top:10px"><button class="btn" data-act="subRenameOpen" data-id="${id}" data-k="${v.body}">이름 변경</button><button class="btn danger" data-act="subDrop" data-id="${id}" data-k="${v.body}">단종</button></div>`;
     const card = `<div class="card sub-car-card"><p class="lbl"><i class="sub-own">${fromHq ? '내 자회사' : esc(v.how ? HOW_NAME[v.how] : '자체 개발')}</i> ${esc(d.name)}</p><h2>${esc(v.name)} <small class="hint">${v.bodyName} · ${v.number}세대 · ${v.year}년</small></h2>${v.fromName ? `<p class="hint">본사 「${esc(v.fromName)}」의 배지 모델${ib('term:배지 모델')}</p>` : ''}
       ${statBars(v.grades)}<div class="kpis" style="margin-top:10px">${kpi('평론', score(v.critic))}${kpi('가격', `${num(v.price)}<span>만원</span>`)}${kpi('대당 원가', `${num(v.unitCost)}<span>만원</span>`)}${kpi('지난달 판매', `${num(v.sold)}<span>대</span>`)}${kpi('차급 점유', `${Math.round(v.share * 100)}<span>%</span>`)}${kpi('다음 세대교체', v.cycleLeft ? `${v.cycleLeft}<span>개월 뒤</span>` : '이번 달')}</div>
+      ${v.awards.length ? `<p class="hint aw-line" style="margin-top:8px"><b>수상${ib('term:시상식')}</b> ${v.awards.map(esc).join(' · ')}${v.awardLeft ? ` <small>(판매 +${Math.round(config.rivalry.awards.salesBoost * 100)}%, ${v.awardLeft}개월 남음)</small>` : ''}</p>` : ''}
       ${crit}${price}${acts}</div>`;
     const ovh = ovTop(`${esc(d.name)} 차고 · ${fromHq ? '내 자회사' : esc(SUBS.kinds[x.kind].name)}`, `${esc(v.name)}<small>${v.number}세대</small>`, specLine(v.body, v.powertrain, v.tier, v.segment)) + ovScore('평론', v.critic) + ovHint;
     return { ov: ovh, panel: (fromHq ? back : subBar(x)) + `<div class="card gsec"><h3>${esc(d.name)} 모델 ${d.models.length}대</h3>${list}</div>` + card, look: subLook(v) };
@@ -2397,7 +2432,7 @@ export function startApp(): void {
   function subCarsCard(): string {
     const s = game!.state, list = (s.subs ?? []).flatMap((x) => (Q.subDetail(s, x.id)?.models ?? []).map((m) => ({ x, m })));
     if (!list.length) return '';
-    return `<div class="card gsec sub-cars"><h3>자회사 차 ${list.length}대 <small class="hint">누르면 무대에서 봅니다</small></h3>${list.map(({ x, m }) => `<button class="gsr" data-act="gsubOpen" data-id="${x.id}" data-k="${m.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small><i class="sub-own">내 자회사</i> ${esc(x.name)} · ${m.bodyName} · ${m.number}세대</small></span><span>평론 ${score(m.critic)}</span><span>지난달 ${num(m.sold)}대</span><span aria-hidden="true">→</span></button>`).join('')}</div>`;
+    return `<div class="card gsec sub-cars"><h3>자회사 차 ${list.length}대 <small class="hint">누르면 무대에서 봅니다</small></h3>${list.map(({ x, m }) => `<button class="gsr" data-act="gsubOpen" data-id="${x.id}" data-k="${m.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small><i class="sub-own">내 자회사</i> ${esc(x.name)} · ${m.bodyName} · ${m.number}세대</small></span><span>평론 ${score(m.critic)}${m.awards.length ? '<small class="aw-s">수상</small>' : ''}</span><span>지난달 ${num(m.sold)}대</span><span aria-hidden="true">→</span></button>`).join('')}</div>`;
   }
 
   function hqTab(): string {
@@ -2776,7 +2811,7 @@ export function startApp(): void {
         <p class="note">켜 둔 항목이 생기면 시간을 멈추고 알림을 띄웁니다. 끄면 알림만 띄우고 시간은 계속 흐릅니다. [다음 일까지]도 켜 둔 항목에서 멈춥니다.</p>`
       : t === 'note' ? `<p class="lbl">알림 유형</p><div class="set-list note-topics">${NOTE_CATS.slice(0, TOPIC_N).map(([k, n, f]) => onOff('noteCat', k, n, noteOn(k), f ? '끌 수 없습니다' : '', !!f)).join('')}</div>
         <p class="lbl">그 밖의 안내</p><div class="set-list">${NOTE_CATS.slice(TOPIC_N).filter(([k]) => k !== 'pauseStop').map(([k, n, f]) => onOff('noteCat', k, n, noteOn(k), f ? '끌 수 없습니다' : '', !!f)).join('')}</div>
-        <p class="note">끈 유형은 화면에 뜨는 알림과 그 효과음만 나오지 않고, 상단 '할 일' 창의 알림 탭(지난 알림 기록)과 기록 탭에는 그대로 남습니다. 같은 유형이 연달아 오면 "연구 3건"처럼 한 알림으로 묶습니다. 시간 멈춤은 시간 설정의 자동 멈춤으로 따로 정하며, 시간을 멈춘 때의 알림은 늘 띄웁니다.</p>
+        <p class="note">끈 유형은 화면에 뜨는 알림과 그 효과음만 나오지 않고, 상단 '할 일' 창의 알림 탭(지난 알림 기록)과 기록 탭에는 그대로 남습니다. 같은 주(빠른 배속이면 한꺼번에 지나간 여러 주)에 같은 유형 알림이 2개 이상 오면 "경쟁사 신차·동향 3건"처럼 한 알림으로 묶고, [펼쳐 보기]를 누르면 그 유형의 지난 알림 기록이 열립니다. 경고·결정 대기·시간을 멈춘 알림은 묶지 않습니다. 시간 멈춤은 시간 설정의 자동 멈춤으로 따로 정하며, 시간을 멈춘 때의 알림은 늘 띄웁니다.</p>
         <p class="lbl">할 일에서 다시 알리지 않는 종류</p>${todoMute.size ? `<div class="set-list todo-muted">${[...todoMute].map((k) => `<div class="toggle"><span>${esc(TODO_KIND_NAME[k as Q.TodoKind] ?? k)}</span><button class="btn" data-act="todoUnmute" data-v="${esc(k)}">다시 알리기</button></div>`).join('')}</div>` : '<p class="hint">없습니다. 할 일 서랍의 [다시 알리지 않기]로 종류별로 끌 수 있습니다.</p>'}`
       : t === 'sound' ? soundSet()
       : t === 'save' ? `<p class="lbl">자동 저장 <small class="hint auto-last">마지막 자동 저장: ${auto}</small></p>
@@ -3179,7 +3214,7 @@ export function startApp(): void {
         if (!(await ask(`「${m.name}」${josa(m.name, '을/를')} 단종할까요?\n이 차급에는 전략이 다시 모델을 내지 않습니다. 다시 내려면 모델 추가를 지시하세요.`, '단종하기', true))) return;
         if (run(game.command({ type: 'subDropModel', subId: id, body: m.body }))) { toast(`「${m.name}」${josa(m.name, '을/를')} 단종했습니다.`); render(); } return; }
       case 'subSell': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d) return;
-        if (!(await ask(`「${d.name}」${josa(d.name, '을/를')} ${money(d.sellPrice)}에 매각할까요?\n매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없습니다. 모델과 실적 기록이 사라지고, 사장은 본사 직원으로 돌아옵니다.`, '매각하기', true))) return;
+        if (!(await ask(`「${d.name}」${josa(d.name, '을/를')} ${money(d.sellPrice)}에 매각할까요?\n매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없습니다. 모델과 실적 기록이 사라지고, 사장은 본사 직원으로 돌아옵니다.${d.from ? ' 인수한 회사는 다시 독립 경쟁사가 됩니다.' : ''}`, '매각하기', true))) return;
         if (run(game.command({ type: 'sellSubsidiary', subId: id }))) { subSel = null; if (subView === id) { subView = null; screen = 'company'; } toast(`「${d.name}」${josa(d.name, '을/를')} 매각했습니다. ${money(d.sellPrice)}${josa(money(d.sellPrice), '이/가')} 들어왔습니다.`); lastPanel = ''; render(); } return; }
       // ---- 임원(0.7.0) ----
       case 'execPick': execPick = execPick === v ? null : v as ExecRole; render(); return;
@@ -3363,7 +3398,7 @@ export function startApp(): void {
       }
       case 'devYear': { // 화면 갱신 없이 48주. 사건 창·자동 멈춤 없이
         if (!game) return; quietChoice = skipPause = skipping = true;
-        try { for (let i = 0; i < 48 && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = skipPause = skipping = false; }
+        try { batched(() => { for (let i = 0; i < 48 && game!.state.status === 'playing'; i++) tickOnce(); }); } finally { quietChoice = skipPause = skipping = false; }
         toast('48주를 건너뛰었습니다.', '', '개발자 메뉴', 2500); lastPanel = ''; render(); return;
       }
       case 'diff': diffSel = v as Difficulty; for (const b of document.querySelectorAll<HTMLElement>('[data-act="diff"]')) b.setAttribute('aria-pressed', String(b.dataset.v === v)); { const l = document.getElementById('ns-line'); if (l) l.textContent = nsLine(); } return;
@@ -3478,6 +3513,7 @@ export function startApp(): void {
     get game() { return game; }, get screen() { return screen; }, get ui() { return ui; }, get speed() { return speed; }, get stage() { return stage; },
     tick(n = 1, popups = false) { quietChoice = !popups; try { for (let i = 0; i < n && game && game.state.status === 'playing'; i++) tickOnce(); } finally { quietChoice = false; } render(); },
     get look() { return lookKey; },
+    events: (list: GameEvent[], frames = 1) => { for (let k = 0; k < frames; k++) batched(() => list.forEach(onEvent)); }, // 3.6.0 알림 묶기 점검: 한 화면 갱신에 온 이벤트처럼(frames번 되풀이)
     get draft() { return draft; }, get lift() { return lift; }, get launch() { return launch; }, get planTab() { return planTab; },
     genLook: (id: number) => { const g = game && Q.generationById(game.state, id); return g ? genLook(g) : null; },
     get tip() { return tip.hidden ? null : { key: tip.dataset.key, hover: tipHover, text: tip.innerText }; },

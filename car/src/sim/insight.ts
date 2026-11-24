@@ -1,4 +1,5 @@
 // 0.10.0 정보와 수습 수단: 차종별 손익, 판매 요인 분해, 직원 성장 기록, 10년 회고, 실패한 차의 수습(조건·미리보기). 순수 함수(상태를 바꾸지 않는다)
+import { won } from './won';
 import { config } from '../config';
 import { COMPAT, ERA_EVENTS, TECHS, bodyById, optionById, segmentById } from '../data';
 import { avgGrade, grade, lifeFactor, standard, unitCost } from './cars';
@@ -22,7 +23,6 @@ import { startYearOf } from './start';
 import { STATS, type CarState, type ExecRole, type Generation, type ProjectKind, type Role, type Staff, type StaffWin, type Stats } from './types';
 
 const MPY = config.time.monthsPerYear, WPY = MPY * config.time.weeksPerMonth;
-const won = (v: number): string => { const a = Math.abs(Math.round(v)), s = v < 0 ? '−' : ''; return a >= 10000 ? `${s}${(Math.round(a / 1000) / 10).toLocaleString('ko-KR')}억원` : `${s}${a.toLocaleString('ko-KR')}만원`; };
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const genOf = (s: CarState, id: number) => allGens(s).find((g) => g.id === id);
 const genName = (s: CarState, g: Generation) => `${nameplateOf(s, g.id)?.name ?? ''} ${g.number}세대`;

@@ -1,4 +1,5 @@
 // 카 컴퍼니 게임 본체: 상태, 1주 진행(tick), 명령(command), 저장(toJSON/fromJSON)
+import { won } from './won';
 import { config } from '../config';
 import { NAMES, RANDOM_EVENTS, RIVALS, TECHS, bodyById, optionById, techById } from '../data';
 import { defectQMult, finalStats, grade, optionsAt, partStats, payOf, salaryOf, unitCost, zeroStats } from './cars';
@@ -81,7 +82,6 @@ export function undoInfo(s: CarState): { available: boolean; label: string } {
   if (!u || u.week !== s.week) return { available: false, label: '' };
   return { available: true, label: u.names.length ? `${u.kind}: ${u.names[0]}${u.names.length > 1 ? ` 외 ${u.names.length - 1}명` : ''}` : u.kind };
 }
-const wonText = (v: number) => (v >= 10000 ? `${(v / 10000).toLocaleString()}억원` : `${v.toLocaleString()}만원`);
 
 /** 판매 중(생산 라인을 차지하는) 세대: 단종 신청한 달까지 포함 */
 export const sellingGens = (s: CarState): Generation[] =>
@@ -242,7 +242,7 @@ export class Game {
           g.awareness *= config.recall.awarenessMult; ed.defects = 0; // 전량 수리했으므로 결함은 없어진다
           const R = config.reputation, before = s.reputation; // 0.5.1: 평판 감점은 규모 비례(누적 판매 / 5,000, 0.5~3) × 난이도 배수
           this.addRep(-Math.min(-config.recall.rep, Math.max(R.recallMin, g.totalSold / R.recallPer)), `「${this.nameOf(g)}」 리콜`);
-          ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜 실시. 수리비 ${Math.round(cost).toLocaleString()}만원이 들고 평판이 ${(before - s.reputation).toFixed(1)} 떨어졌습니다.` });
+          ev.push({ kind: 'recall', id: g.id, text: `「${this.nameOf(g)}」 리콜 실시. 수리비 ${won(cost)}${josa(won(cost), '이/가')} 들고 평판이 ${(before - s.reputation).toFixed(1)} 떨어졌습니다.` });
         }
       }
       const dc = config.discontinue, last = g.sales.slice(-dc.adviceMonths); // 8.6: 월 10대 미만이 6개월째가 된 달에 한 번 조언
@@ -298,7 +298,7 @@ export class Game {
       if (s.negMonths >= diffOf(s).bankruptcyMonths) { s.status = 'gameOver'; ev.push({ kind: 'gameOver', text: `현금 부족이 ${diffOf(s).bankruptcyMonths}개월 이어져 회사가 파산했습니다.` }); }
       else {
         const room = Math.max(0, loanLimit(s) - s.loan.balance); // 남은 대출 한도를 함께 알린다(0.4.1)
-        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${hasChallenge(s, 'noLoan') ? '' : room >= 10000 ? ` 대출 한도 ${Math.floor(room / 10000).toLocaleString()}억원이 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
+        ev.push({ kind: 'cashWarning', text: `현금이 ${s.negMonths}개월째 마이너스입니다. ${diffOf(s).bankruptcyMonths}개월이 되면 파산합니다.${hasChallenge(s, 'noLoan') ? '' : room >= 10000 ? ` 대출 한도 ${won(Math.floor(room / 10000) * 10000)}${josa(won(Math.floor(room / 10000) * 10000), '이/가')} 남아 있습니다.` : ' 남은 대출 한도가 없습니다.'}` });
       }
     } else s.negMonths = 0;
     if (s.status === 'playing') execMonth(this.execCtx(), ev); // 0.7.0 위임 실행, 임원 제안(보고함)
@@ -347,7 +347,7 @@ export class Game {
       case 'hire': return s.candidates.find((x) => x.id === id)?.name ?? '';
       case 'hireExec': return s.execs?.candidates.find((x) => x.id === id)?.name ?? '';
       case 'dismissExec': return s.execs?.seats[cmd.role]?.staff.name ?? '';
-      case 'borrow': case 'repay': return Number.isFinite(cmd.amount) ? wonText(cmd.amount) : '';
+      case 'borrow': case 'repay': return Number.isFinite(cmd.amount) ? won(cmd.amount) : '';
       case 'startResearch': case 'cancelResearch': return TECHS.some((t) => t.id === cmd.techId) ? `「${techById(cmd.techId).name}」` : '';
       case 'renameNameplate': { const n = nameplateById(s, cmd.nameplateId); return n ? `「${n.name}」` : ''; }
       case 'foundSubsidiary': return '';

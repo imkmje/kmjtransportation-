@@ -2625,6 +2625,47 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await three('acquire-last');
   await RG(() => window.__car.tick(8)); // 인수 브랜드 두 곳이 돌아가는 판에서 두 달
   check('3.5.0 인수 브랜드가 팔린다(두 달 뒤 판매 > 0)', await RG(() => window.__car.game.state.subs.filter((x) => x.kind === 'acquired').every((x) => (x.months.at(-1)?.sold ?? 0) > 0)));
+  // ---- 3.6.0 안정화: 인수 창의 본사 판매 변화, 자회사 차 수상 표시, 인수 브랜드 매각 뒤 경쟁사 복귀, 알림 묶기(CAR_SMOKE_360=폴더면 640·800·1366 캡처) ----
+  { const P6 = process.env.CAR_SMOKE_360 ?? '';
+    await RG(() => { const b = document.querySelector('#sheet [data-act="closeSheet"]'); if (b) b.click(); else document.getElementById('sheet').hidden = true; window.__car.render(); });
+    await RG(() => window.__car.game.command({ type: 'sellSubsidiary', subId: window.__car.game.state.subs.find((x) => x.from === 'hyundae').id }));
+    await RG(() => window.__car.render()); await rp.click('#tabs button[data-tab="fin"]'); await rp.waitForSelector('#panel .rivals');
+    check('3.6.0 인수 브랜드 매각: 현다이가 경쟁사로 돌아와 라인업 단추가 다시 보임', (await rp.locator('#panel [data-act="rivalOpen"][data-v="hyundae"]').count()) === 1 && !(await RG(() => window.__car.game.state.rivalry.out.includes('hyundae'))));
+    await rp.locator('#panel [data-act="rivalOpen"][data-v="toyoda"]').click(); await rp.waitForSelector('#sheet [data-act="acqOpen"]'); await rp.locator('#sheet [data-act="acqOpen"]').click(); await rp.waitForSelector('#sheet .acq-sheet');
+    const a6 = await rp.locator('#sheet .acq-sheet').innerText();
+    check('3.6.0 인수 창: 본사 판매 변화 예상(월 판매 전 → 후, 본사 연 이익 변화)과 설명', ['본사 판매 변화 예상', '본사 월 판매', '본사 연 이익 변화', '본사 판매가 늘어납니다'].every((x) => a6.includes(x)) && !/NaN|undefined/.test(a6), a6.replace(/\s+/g, ' ').slice(-220));
+    if (P6) for (const [w, h] of [[640, 900], [1366, 1024]]) { await rp.setViewportSize({ width: w, height: h }); await rp.waitForTimeout(250); await RG(() => document.querySelector('#sheet .acq-sheet .lbl:nth-of-type(2)')?.scrollIntoView({ block: 'center' })); await rp.screenshot({ path: `${P6}/after-acquire-hq-${w}x${h}.png` }); }
+    await rp.setViewportSize({ width: 1366, height: 1024 }); await RG(() => document.querySelector('#sheet [data-act="closeSheet"], #sheet [data-act="rivalOpen"]') && (document.getElementById('sheet').hidden = true));
+    await RG(() => { const s = window.__car.game.state, md = s.subs.find((x) => x.kind === 'acquired').models[0]; md.awards = ['2005년 올해의 디자인상']; md.awardUntil = Math.floor(s.week / 4) + 5; window.__car.render(); });
+    await rp.click('#tabs button[data-tab="garage"]'); await rp.waitForSelector('#panel .sub-cars');
+    check('3.6.0 본사 차고의 자회사 차: 수상 표시', (await rp.locator('#panel .sub-cars .aw-s').count()) === 1);
+    await rp.locator('#panel .sub-cars [data-act="gsubOpen"]:has(.aw-s)').click(); await rp.waitForSelector('#panel .sub-car-card');
+    check('3.6.0 자회사 차고 카드: 수상 줄(부문·남은 개월)', (await rp.locator('#panel .sub-car-card .aw-line').innerText()).includes('2005년 올해의 디자인상') && (await rp.locator('#panel .gsec .aw-s').count()) === 1);
+    if (P6) for (const [w, h] of [[640, 900], [1366, 1024]]) { await rp.setViewportSize({ width: w, height: h }); await rp.waitForTimeout(300); await RG(() => document.querySelector('#panel .sub-car-card .aw-line')?.scrollIntoView({ block: 'center' })); await rp.screenshot({ path: `${P6}/after-subaward-${w}x${h}.png` }); }
+    await rp.setViewportSize({ width: 1366, height: 1024 });
+    await rp.click('#tabs button[data-tab="company"]'); await rp.click('#panel [data-act="cotab"][data-v="sub"]'); await RG(() => document.querySelector('#panel [data-act="subBack"]')?.click());
+    await RG(() => { const s = window.__car.game.state; document.querySelector(`#panel [data-act="subSel"][data-id="${s.subs.find((x) => x.kind === 'acquired').id}"], #panel [data-act="subOpenD"][data-id="${s.subs.find((x) => x.kind === 'acquired').id}"]`)?.click(); });
+    await rp.waitForTimeout(300);
+    const lu = await rp.locator('#panel .sub-lineup').count() ? await rp.locator('#panel .sub-lineup .aw-s').count() : -1;
+    check('3.6.0 자회사 라인업: 수상 표시', lu === 1, String(lu));
+    // 알림 묶기: 같은 화면 갱신에 경쟁사 뉴스 3건 + 현금 경고 1건 → 경쟁사 묶음 1개(3건) + 경고 따로
+    const nw = (t) => ({ kind: 'news', text: t, category: 'rival', topic: 'rival' });
+    for (const [w, h] of [[640, 900], [800, 1200], [1366, 1024]]) {
+      await rp.setViewportSize({ width: w, height: h }); await rp.click('#tabs button[data-tab="garage"]'); await RG(() => { document.getElementById('toasts').innerHTML = ''; }); await rp.waitForTimeout(200);
+      await RG((l) => window.__car.events(l), [nw('도요다, 카리나 5세대 출시. 중형 세단, 추정 평론 6.8.'), nw('포티, 머스탱 3세대 출시. 스포츠카, 추정 평론 7.1.'), nw('현다이, 소나투 4세대 출시. 중형 세단, 추정 평론 6.5.'), { kind: 'cashWarning', text: '현금이 1개월째 마이너스입니다.' }]);
+      await rp.waitForTimeout(400);
+      const tt = await RG(() => [...document.querySelectorAll('#toasts .toast:not(.out)')].map((x) => x.innerText.replace(/\s+/g, ' ')));
+      check(`3.6.0 알림 묶기 ${w}×${h}: 경쟁사 3건이 한 알림, 경고는 따로`, tt.filter((x) => x.includes('경쟁사 신차·동향 3건')).length === 1 && tt.filter((x) => x.includes('카리나') || x.includes('머스탱')).length === 1 && tt.some((x) => x.includes('현금 경고')) && tt.length === 2, tt.join(' | ').slice(0, 200));
+      if (P6) await rp.screenshot({ path: `${P6}/after-toastgroup-${w}x${h}.png` });
+    }
+    await RG((l) => window.__car.events(l, 3), [nw('도요다, 크라운 6세대 출시. 대형 세단, 추정 평론 7.0.')]); await rp.waitForTimeout(300);
+    check('3.6.0 알림 묶기: 빠른 배속으로 이어 온 같은 유형도 떠 있는 묶음에 더해짐(6건, 경쟁사 알림 1개)', await RG(() => [...document.querySelectorAll('#toasts .toast:not(.out)')].filter((x) => x.dataset.cat === 'rival').length === 1 && document.querySelector('#toasts .toast[data-grp]').innerText.includes('6건')));
+    await rp.locator('#toasts .toast[data-grp] .open').click(); await rp.waitForSelector('#drawer:not([hidden]) .note-list');
+    const nl6 = await rp.locator('#drawer .note-list').innerText();
+    check('3.6.0 묶은 알림 [펼쳐 보기]: 경쟁사 유형으로 거른 지난 알림 기록(항목마다 한 줄)', nl6.includes('카리나') && nl6.includes('머스탱') && nl6.includes('크라운') && !nl6.includes('현금이 1개월째') && (await rp.locator('#drawer .note-cats [aria-pressed="true"]').innerText()).includes('경쟁사'), nl6.replace(/\s+/g, ' ').slice(0, 160));
+    await RG(() => document.querySelector('[data-act="drawerClose"]')?.click());
+    await rp.setViewportSize({ width: 1366, height: 1024 });
+  }
   await rctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
