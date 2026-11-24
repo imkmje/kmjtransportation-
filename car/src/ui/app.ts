@@ -2027,6 +2027,9 @@ export function startApp(): void {
     const ev = k === 'start' || k === 'regulation' ? Q.activeEvents(game!.state).events.find((x) => x.name === tag) : undefined;
     showNews(head, ev ? `지금 걸려 있는 효과: ${ev.effects.join(' ')}` : k === 'preview' ? '아직 시작되지 않은 사건입니다. 몇 달 안에 일어날 수 있습니다.' : '', monthOf(week), `${NEWS_KIND[k]}${tag && tag !== '예고' ? ` · ${tag}` : ''}`);
   }
+  /** 3.7.1 자동 승인을 켠 종류인데 결정 창이 뜬 이유 */
+  const heldWhy = (id: number): string => { const s = game!.state, pc = s.events.pending.find((p) => p.id === id)!, why = Q.autoHold(s, pc, Q.autoPick(s, pc).choice);
+    return why ? `자동 승인을 켠 종류지만 정한 답을 바로 하지 않고 묻습니다: ${why}(설정 › 결정).` : '자동 승인을 켜기 전에 생긴 결정이라 묻습니다.'; };
   /** 답을 기다리는 무작위 사건(맨 앞 것) 창: 선택지와 결과, 남은 주, [나중에] */
   function showChoice(): void {
     const list = Q.pendingChoices(game!.state), c = list[0];
@@ -2036,7 +2039,7 @@ export function startApp(): void {
     sheetBody.innerHTML = `<div class="choice-sheet" data-id="${c.id}"><div class="eyebrow"><i></i>결정이 필요합니다${list.length > 1 ? ` · ${list.length}건 중 1` : ''}</div><h2>${esc(c.name)}</h2><p class="ev-text">${esc(c.text)}</p>
       <div class="evchoices">${c.choices.map((x, i) => `<button class="evc" data-act="resolveEv" data-id="${c.id}" data-v="${i}"><b>${esc(x.label)}${i === c.defaultChoice ? ' <small>(고르지 않으면 이것)</small>' : ''}</b><small>${esc(x.result)}</small>${x.costText ? `<span class="ev-cost ${x.cost > 0 ? 'neg' : 'pos'}">${esc(x.costText)}</span>` : ''}</button>`).join('')}</div>
       <p class="hint" style="margin-top:10px">${c.weeksLeft}주 안에 고르지 않으면 「${esc(def)}」${josa(def, '으로/로')} 정해집니다. 이 창이 떠 있는 동안 시간이 멈춥니다.</p>
-      ${Q.autoOn(game!.state, c.eventId) ? `<p class="hint auto-held">자동 승인을 켠 종류지만 큰돈이 드는 결정이라 묻습니다(설정 › 결정 › 안전선).</p>` : `<label class="chk auto-chk"><input type="checkbox" data-ad="${esc(c.eventId)}"> 이 종류(${esc(c.name)})는 앞으로 자동 승인 ${ib('term:결정 자동 승인')}</label>`}
+      ${Q.autoOn(game!.state, c.eventId) ? `<p class="hint auto-held">${esc(heldWhy(c.id))}</p>` : `<label class="chk auto-chk"><input type="checkbox" data-ad="${esc(c.eventId)}"> 이 종류(${esc(c.name)})는 앞으로 지금 고르는 답으로 자동 승인 ${ib('term:결정 자동 승인')}</label>`}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="later">나중에</button></div></div>`;
     sheet.hidden = false; renderTop();
   }
@@ -2832,10 +2835,17 @@ export function startApp(): void {
   /** 3.7.0 설정 › 결정: 종류별 자동 승인, 모두 켜기·끄기, 안전선, 최근 기록 */
   function decideSet(): string {
     const s = game!.state, all = Q.AUTO_KINDS.every((k) => Q.autoOn(s, k.id)), none = !Q.AUTO_KINDS.some((k) => Q.autoOn(s, k.id)), pct = Math.round(config.autoDecide.guardShare * 100);
-    const rule = (k: typeof Q.AUTO_KINDS[number]) => k.rule === 'exec' ? `임원 위임과 같은 규칙으로 고릅니다${k.id === 'priceWar' ? '(버틸 때 줄어드는 판매가 인하 폭보다 크면 따라 내림)' : '(그 직원 능력이 같은 직무 평균 이상이면 붙잡음)'}` : `「${k.defaultLabel}」${josa(k.defaultLabel, '을/를')} 고릅니다(기본 선택)`;
+    const rule = (k: typeof Q.AUTO_KINDS[number]) => { // 3.7.1 지금 정한 답과 한 줄 효과
+      const ans = Q.autoAnswer(s, k.id), init = ans === Q.autoInitial(k) ? '(기본 선택)' : '';
+      if (ans === 'rule') return `임원 위임과 같은 규칙으로 고릅니다${init}${k.id === 'priceWar' ? ': 버틸 때 줄어드는 판매가 인하 폭보다 크면 따라 내림' : ': 그 직원 능력이 같은 직무 평균 이상이면 붙잡음'}`;
+      const c = k.choices[ans]; return `「${c.label}」${josa(c.label, '을/를')} 고릅니다${init}: ${c.result}`;
+    };
+    const pick = (k: typeof Q.AUTO_KINDS[number]) => { const ans = Q.autoAnswer(s, k.id), init = Q.autoInitial(k);
+      const opts: [number | 'rule', string][] = [...(k.rule === 'exec' ? [['rule', '규칙대로'] as [number | 'rule', string]] : []), ...k.choices.map((c, i) => [i, c.label] as [number, string])];
+      return `<div class="seg auto-pick" role="group" aria-label="${esc(k.name)}: 자동으로 고를 답">${opts.map(([v, l]) => `<button data-act="autoPick" data-k="${esc(k.id)}" data-v="${v}" aria-pressed="${ans === v}">${esc(l)}${v === init ? '<small>기본 선택</small>' : ''}</button>`).join('')}</div>`; };
     const log = autoLogHtml();
     return `<p class="lbl">결정 자동 승인 ${ib('term:결정 자동 승인')}</p><div class="row auto-all"><button class="btn" data-act="autoAll" data-v="1" ${all ? 'disabled' : ''}>모두 켜기</button><button class="btn" data-act="autoAll" data-v="0" ${none ? 'disabled' : ''}>모두 끄기</button></div>
-      <div class="set-list auto-kinds">${Q.AUTO_KINDS.map((k) => onOff('autoKind', k.id, k.name, Q.autoOn(s, k.id), rule(k))).join('')}</div>
+      <div class="set-list auto-kinds">${Q.AUTO_KINDS.map((k) => `<div class="auto-kind">${onOff('autoKind', k.id, k.name, Q.autoOn(s, k.id), esc(rule(k)))}${pick(k)}</div>`).join('')}</div>
       <p class="lbl">안전선</p><div class="set-list">${onOff('autoGuard', '', '큰돈이 드는 결정은 묻기', Q.autoGuardOn(s), `고른 선택지의 지출이 지금 현금의 ${pct}% 이상이거나 현금이 모자라면 자동으로 하지 않고 결정 창을 띄웁니다`)}</div>
       <p class="note">켠 종류의 결정은 창을 띄우지 않고 생기자마자 처리하며 시간도 멈추지 않습니다. 결과는 '자동 승인' 알림과 뉴스에 남습니다. 임원이 위임으로 처리하는 결정은 지금처럼 임원이 처리합니다.</p>
       <p class="lbl">최근 자동 승인</p>${log || '<p class="hint">아직 없습니다.</p>'}`;
@@ -3127,9 +3137,12 @@ export function startApp(): void {
       case 'techSel': showTech(v); return;
       case 'priRes': if (game && run(game.command({ type: 'prioritizeResearch', techId: v }))) { toast(`이 연구가 주간 연구 점수의 ${Math.round(config.research.priorityShare * 100)}%를 받습니다. 나머지는 다른 연구가 나눠 받습니다.`); render(); } return;
       case 'resolveEv': {
-        if (!game) return; const r = game.command({ type: 'resolveEvent', eventId: Number(el.dataset.id), choice: Number(v) });
+        if (!game) return; const ad = document.querySelector<HTMLInputElement>('#sheet .auto-chk input:checked')?.dataset.ad; // 3.7.1 체크한 채 고르면 그 답으로 자동 승인
+        const r = game.command({ type: 'resolveEvent', eventId: Number(el.dataset.id), choice: Number(v) });
         if (!r.ok) return err(r.reason);
         const n = r.events?.find((e) => e.kind === 'news'); if (n) toast(newsLine(n.text), 'alert', '결정 결과', 9000);
+        if (ad && game.command({ type: 'setAutoDecide', kind: ad, on: true, choice: Number(v) }).ok) { const k = Q.AUTO_KINDS.find((x) => x.id === ad)!, l = k.choices[Number(v)].label;
+          toast(`「${k.name}」 결정은 앞으로 「${l}」${josa(l, '으로/로')} 자동 승인합니다. 설정 › 결정에서 바꿀 수 있습니다.`, '', '자동 승인', 6000); }
         if (Q.pendingChoices(game.state).length) showChoice(); else { sheet.hidden = true; render(); }
         return;
       }
@@ -3386,6 +3399,10 @@ export function startApp(): void {
         if (!game) return; const kind = a === 'autoAll' ? 'all' : v, on = a === 'autoAll' ? v === '1' : !Q.autoOn(game.state, v);
         if (run(game.command({ type: 'setAutoDecide', kind, on }))) showSettings(); return;
       }
+      case 'autoPick': { // 3.7.1 자동으로 고를 답(켜기·끄기는 그대로)
+        const k = el.dataset.k; if (!game || !k) return;
+        if (run(game.command({ type: 'setAutoDecide', kind: k, on: Q.autoOn(game.state, k), choice: v === 'rule' ? 'rule' : Number(v) }))) showSettings(); return;
+      }
       case 'autoGuard': if (game && run(game.command({ type: 'setAutoDecideGuard', on: !Q.autoGuardOn(game.state) }))) showSettings(); return;
       case 'setTab': if (SET_TABS.some(([k]) => k === v)) showSettings(v as SetTab); return;
       case 'menuBack': void showMenu(); return;
@@ -3450,7 +3467,6 @@ export function startApp(): void {
     if (t.id === 'lg-text') { logoTarget().text = [...t.value.trim()].slice(0, 2).join(''); logoChanged(true); return; }
     if (t.id === 'lg-border') { logoTarget().border = t.checked; logoChanged(); return; }
     if (t.id === 'sy-dev') { const d = t.value.trim(); if (sync) { sync.device = d || guessDevice(); CL.saveCfg(sync); } else syncDev = d; return; } // 1.6.0 기기 이름
-    if (t.dataset.ad && game) { game.command({ type: 'setAutoDecide', kind: t.dataset.ad, on: t.checked }); toast(t.checked ? '이 종류의 결정은 앞으로 자동 승인합니다. 설정 › 결정에서 끌 수 있습니다.' : '이 종류의 자동 승인을 껐습니다.', '', '자동 승인', 5000); return; } // 3.7.0 결정 창의 체크
     if (t.dataset.ch) { const k = t.dataset.ch as Challenge; if (t.checked) nsChal.add(k); else nsChal.delete(k); return; } // 1.5.0 새 게임 도전 과제
     if (t.id === 'dname' && derive) { derive.name = t.value; const o = document.getElementById('dname-ov'); if (o) o.textContent = t.value.trim() || (t.placeholder ?? ''); return; } // 1.3.0 파생 모델 이름
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }

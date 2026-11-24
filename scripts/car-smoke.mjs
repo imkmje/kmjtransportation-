@@ -2696,16 +2696,36 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await ap.click('#sheet [data-act="autoKind"][data-v="strike"]');
   check('3.7.0 종류 하나 켜기(노조 파업)', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.on)) === '["strike"]');
   await shots('settings', () => AG(() => document.querySelector('#sheet .set-tabs')?.scrollIntoView({ block: 'start' })));
+  // 3.7.1 종류마다 자동으로 고를 답(CAR_SMOKE_371=폴더면 640·800·1366 캡처)
+  const P71 = process.env.CAR_SMOKE_371 ?? '';
+  const shots71 = async (n, fn) => { for (const [w, h] of SZ7) { await ap.setViewportSize({ width: w, height: h }); await ap.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(ap); check(`3.7.1 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P71) await ap.screenshot({ path: `${P71}/${n}-${w}x${h}.png` }); } await ap.setViewportSize({ width: 1366, height: 1024 }); };
+  const ms = '#sheet [data-act="autoPick"][data-k="motorshow"]';
+  check('3.7.1 설정 › 결정: 종류마다 답 고르기(선택지 수 + 규칙 종류는 "규칙대로"), 처음 값에 "기본 선택"', (await ap.locator('#sheet .auto-pick').count()) === 10 && (await ap.locator(ms).count()) === 2
+    && (await ap.locator('#sheet [data-act="autoPick"][data-v="rule"]').count()) === 2 && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('이번엔 불참') && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('기본 선택')
+    && (await ap.locator('#sheet [data-act="autoPick"][data-k="poach"][aria-pressed="true"]').innerText()).includes('규칙대로'));
+  await ap.click(`${ms}[data-v="0"]`);
+  const mrow = await ap.locator('#sheet .auto-kind:has([data-v="motorshow"]) .toggle').innerText();
+  check('3.7.1 모터쇼 초청 답을 "콘셉트카 출품"으로 → 판 상태 pick, 줄에 한 줄 효과, 켜기·끄기는 그대로', JSON.stringify(await AG(() => window.__car.game.state.autoDecide)) === '{"on":["strike"],"pick":{"motorshow":0}}'
+    && mrow.includes('콘셉트카 출품') && mrow.includes('평판이 3 오릅니다') && !mrow.includes('기본 선택'), mrow.replace(/\s+/g, ' ').slice(0, 160));
+  await ap.click('#sheet [data-act="autoAll"][data-v="1"]');
+  check('3.7.1 [모두 켜기]는 정한 답을 건드리지 않는다', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.pick)) === '{"motorshow":0}' && (await AG(() => window.__car.game.state.autoDecide.on.length)) === 10);
+  await ap.click('#sheet [data-act="autoAll"][data-v="0"]'); await ap.click('#sheet [data-act="autoKind"][data-v="strike"]');
+  await shots71('settings-pick', () => AG(() => document.querySelector('#sheet .auto-kind:has([data-v="motorshow"])')?.scrollIntoView({ block: 'center' })));
+  await ap.click(`${ms}[data-v="1"]`);
+  check('3.7.1 처음 값(이번엔 불참)으로 되돌리면 pick 칸이 지워진다', JSON.stringify(await AG(() => window.__car.game.state.autoDecide)) === '{"on":["strike"]}');
   // 결정 창의 체크
   await AG(() => { const c = window.__car, s = c.game.state; document.getElementById('sheet').hidden = true; const id = s.nextId++;
     s.events.pending.push({ id, eventId: 'motorshow', text: '국제 모터쇼에서 콘셉트카 출품을 요청해 왔습니다.', week: s.week, deadline: s.week + 4, genId: null, fx: null });
     c.events([{ kind: 'choice', text: '[모터쇼 초청] 국제 모터쇼에서 콘셉트카 출품을 요청해 왔습니다.', id, category: 'choice' }]); });
   await ap.waitForSelector('#sheet .choice-sheet');
-  check('3.7.0 결정 창: "이 종류(모터쇼 초청)는 앞으로 자동 승인" 체크', (await ap.locator('#sheet .auto-chk input[data-ad="motorshow"]').count()) === 1 && (await ap.locator('#sheet .auto-chk').innerText()).includes('모터쇼 초청'));
+  check('3.7.1 결정 창: "이 종류(모터쇼 초청)는 앞으로 지금 고르는 답으로 자동 승인" 체크', (await ap.locator('#sheet .auto-chk input[data-ad="motorshow"]').count()) === 1 && (await ap.locator('#sheet .auto-chk').innerText()).includes('모터쇼 초청') && (await ap.locator('#sheet .auto-chk').innerText()).includes('지금 고르는 답으로'));
   await shots('choice', () => AG(() => document.querySelector('#sheet .auto-chk')?.scrollIntoView({ block: 'center' })));
   await ap.locator('#sheet .auto-chk input').check();
-  check('3.7.0 결정 창 체크 → 판 상태에 모터쇼 초청 켜짐(지금 창은 그대로)', (await AG(() => window.__car.game.state.autoDecide.on.includes('motorshow'))) && (await ap.locator('#sheet .choice-sheet').count()) === 1);
-  await ap.locator('#sheet [data-act="resolveEv"][data-v="1"]').click(); await ap.waitForTimeout(200);
+  await shots71('choice-check', () => AG(() => document.querySelector('#sheet .auto-chk')?.scrollIntoView({ block: 'center' })));
+  check('3.7.1 체크만으로는 아직 켜지지 않는다(답을 고를 때 저장)', !(await AG(() => window.__car.game.state.autoDecide.on.includes('motorshow'))) && (await ap.locator('#sheet .choice-sheet').count()) === 1);
+  await ap.locator('#sheet [data-act="resolveEv"][data-v="0"]').click(); await ap.waitForTimeout(200);
+  check('3.7.1 체크한 채 "콘셉트카 출품" → 모터쇼 초청 켜짐 + 답 콘셉트카 출품, 알림 한 줄', JSON.stringify(await AG(() => window.__car.game.state.autoDecide)) === '{"on":["strike","motorshow"],"pick":{"motorshow":0}}'
+    && (await AG(() => [...document.querySelectorAll('#toasts .toast')].some((x) => x.innerText.includes('「모터쇼 초청」 결정은 앞으로 「콘셉트카 출품」으로 자동 승인합니다')))));
   // 실제 진행: 모두 켜고 몇 년 돌리면 결정 창 없이 자동 승인 기록이 쌓인다
   const real = await AG(() => { const g = window.__car.game, s = g.state; g.command({ type: 'setAutoDecide', kind: 'all', on: true }); let n = 0, waits = 0;
     for (let i = 0; i < 48 * 8; i++) { s.cash = Math.max(s.cash, 1e9); const ev = g.tick(); n += ev.filter((e) => e.topic === 'auto').length; waits += ev.filter((e) => e.kind === 'choice').length; }

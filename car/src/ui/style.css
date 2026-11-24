@@ -1300,6 +1300,9 @@ body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1
 .auto-chk{display:flex;gap:8px;align-items:center;min-height:44px;margin-top:8px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer;flex-wrap:wrap}
 .auto-chk input{width:20px;height:20px;flex:none}
 .auto-all{gap:8px;margin-bottom:8px}
+.auto-kind{display:flex;flex-direction:column;gap:4px;margin-bottom:6px} /* 3.7.1 종류 줄 + 자동 답 고르기 */
+.auto-pick{margin:0}
+.auto-pick button{overflow-wrap:anywhere}
 .auto-log{list-style:none;margin:4px 0 8px;padding:0;display:flex;flex-direction:column;gap:6px}
 .auto-log li{font-size:13px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
 .auto-log .nd{color:var(--ink3);font-weight:700;margin-right:4px}
