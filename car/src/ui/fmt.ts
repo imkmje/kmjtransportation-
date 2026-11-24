@@ -5,7 +5,7 @@ export const num = (n: number): string => Math.round(n).toLocaleString('ko-KR');
 export const money = (v: number, sign = false): string => {
   const s = sign && v > 0 ? '+' : v < 0 ? '−' : '', a = Math.abs(v);
   if (Math.round(a) === 0) return '0원'; // 0.9.0 "0만원" 대신 다른 금액과 같은 표기(광고 '안 함' 칸의 "0원")
-  if (a >= 1e8) { const jo = Math.floor(a / 1e8), eok = Math.round((a % 1e8) / 1e4); return `${s}${num(jo)}조${eok ? ` ${num(eok)}억` : ''}`; }
+  if (a >= 1e8) { const e = Math.round(a / 1e4), jo = Math.floor(e / 1e4), eok = e % 1e4; return `${s}${num(jo)}조${eok ? ` ${num(eok)}억` : ''}`; } // 3.1.1 억을 먼저 반올림(전에는 1조 9,999.6억이 "1조 10,000억")
   return a >= 10000 ? `${s}${(a / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}억` : `${s}${num(a)}만원`;
 };
 /** 큰 수량: 1만 이상이면 "3.3만" (좁은 칸용) */

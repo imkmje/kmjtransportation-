@@ -28,7 +28,11 @@ type BrandKind = 'premium' | 'value';
 type StratKey = 'a' | 'price' | 'cost' | 'dev' | 'vol' | 'payout';
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const r1 = (v: number) => Math.round(v * 10) / 10;
-const won = (x: number): string => { const v = Math.abs(x); return `${x < 0 ? '−' : ''}${v >= 10000 ? `${(v / 10000).toLocaleString(undefined, { maximumFractionDigits: 1 })}억원` : `${Math.round(v).toLocaleString()}만원`}`; };
+const won = (x: number): string => { // 3.1.1 1조 이상은 "3조 5,000억원"(전에는 "35,000억원"), 자릿수 표기는 기기 언어와 무관하게 ko-KR
+  const v = Math.abs(x), sg = x < 0 ? '−' : '', k = (n: number, d = 0) => n.toLocaleString('ko-KR', { maximumFractionDigits: d });
+  if (v >= 1e8) { const e = Math.round(v / 1e4), jo = Math.floor(e / 1e4), eok = e % 1e4; return `${sg}${k(jo)}조${eok ? ` ${k(eok)}억` : ''}원`; }
+  return `${sg}${v >= 10000 ? `${k(v / 10000, 1)}억원` : `${k(Math.round(v))}만원`}`;
+};
 const pct = (x: number, d = 0) => `${(x * 100).toFixed(d)}%`;
 export const isBrand = (k: SubKind): k is BrandKind => k === 'premium' || k === 'value';
 const brandDef = (k: BrandKind) => S.kinds[k];
@@ -46,6 +50,8 @@ export function stratWeights(sub: Subsidiary, m: number): [SubStrategy, number][
 }
 /** 전략 효과 하나를 비중대로 섞은 값 */
 const fx = (sub: Subsidiary, m: number, key: StratKey): number => stratWeights(sub, m).reduce((a, [k, w]) => a + w * S.strat[k][key], 0);
+/** 3.1.1 대당 원가 배수: 전동화 전환의 원가 절감은 전기차에만(2010년대에 남겨 둔 가솔린 모델은 1) */
+const costFx = (sub: Subsidiary, m: number, ev: boolean): number => stratWeights(sub, m).reduce((a, [k, w]) => a + w * (k === 'ev' && !ev ? 1 : S.strat[k].cost), 0);
 const presQ = (sub: Subsidiary): number => (sub.president ? sub.president.ability / 100 : S.noPres);
 
 /** 본사 기술 수준: 그해까지 나온(반복 제외) 기술 중 연구를 마친 몫 */
@@ -91,7 +97,7 @@ export const isDirect = (sub: Pick<Subsidiary, 'mode'>): boolean => sub.mode ===
 export const subPrice = (s: CarState, sub: Subsidiary, md: Pick<SubModel, 'body' | 'ev' | 'car' | 'price'>): number => carBase0(s, md) * brandDef(sub.kind as BrandKind).price * priceFx(sub, md, monthOf(s.week)) * bandMult(md);
 /** 대당 원가(본사 공장·연구·부품 자회사 혜택을 함께 쓴다) × 종류 × 전략 × 공유 범위 × 사장 */
 export function subUnitCost(s: CarState, sub: Subsidiary, md: Pick<SubModel, 'body' | 'ev' | 'car'>): number {
-  const pt = ptOf(md), mult = costMultOf(s, pt) * brandDef(sub.kind as BrandKind).unitCost * fx(sub, monthOf(s.week), 'cost') * S.shareFx[sub.share].cost * (1 - S.presCost * (presQ(sub) - 0.5) * 2);
+  const pt = ptOf(md), mult = costMultOf(s, pt) * brandDef(sub.kind as BrandKind).unitCost * costFx(sub, monthOf(s.week), pt === EV) * S.shareFx[sub.share].cost * (1 - S.presCost * (presQ(sub) - 0.5) * 2);
   const c = md.car?.spec; // 3.1.0 실제 사양이면 그 동력 등급·기본 장비·배터리
   return c ? unitCost(md.body, pt, c.tier, withRequired(s, specOpts(c)), mult, ptCostAdd(s, pt, c.battery)) : unitCost(md.body, pt, 2, withRequired(s, []), mult, ptCostAdd(s, pt));
 }
@@ -117,6 +123,14 @@ export const subModelCap = (s: CarState, sub: Subsidiary): number => Math.max(1,
 /** 맡은 차급 중 본사가 연구로 연 것(기술·차대 공유) */
 export const areaBodies = (s: CarState, sub: Pick<Subsidiary, 'bodies'>): string[] => { const u = new Set(unlockedBodies(s).map((b) => b.id)); return sub.bodies.filter((b) => u.has(b)); };
 const evReady = (s: CarState): boolean => unlockedPowertrains(s).some((p) => p.id === EV);
+/** 3.1.1 전동화 전환에서 이 차(없으면 새 모델)를 전기차로 낼지: 라인업의 전기차가 충전 인프라를 따라(모델 수 × min(1, 인프라 × evPace), 올림) 될 때까지 바꾼다. 이미 전기차인 차는 그대로.
+ *  3.1.0까지는 한꺼번에 다 바꿔 충전 인프라가 모자란 2010년대에 성장 중심의 약 15분의 1밖에 못 벌었다 */
+function evNext(s: CarState, sub: Subsidiary, m: number, md?: SubModel): boolean {
+  if (sub.strategy !== 'ev' || !evReady(s)) return false;
+  if (md?.ev) return true;
+  const n = sub.models.length + (md && sub.models.includes(md) ? 0 : 1);
+  return sub.models.filter((x) => x.ev).length < Math.ceil(n * Math.min(1, chargingInfra(s.seed, m) * S.evPace) - 1e-9);
+}
 /** 전략이 바라는 모델 수 */
 function targetCount(s: CarState, sub: Subsidiary): number {
   const cap = subModelCap(s, sub), mx = S.strat[sub.strategy].max, kept = sub.models.filter((x) => x.keep).length;
@@ -175,9 +189,9 @@ export function shareTechError(s: CarState, sub: Subsidiary, spec: Pick<ProjectS
   const bad = [...new Set([...spec.options, ...Object.keys(spec.equip ?? {})])].find((id) => !req.has(id) && OPTIONS.some((o) => o.id === id) && optionById(id).year + lag > y);
   return bad ? `공유 범위가 ${sn}이면 나온 지 ${lag}년이 안 된 장비(${optionById(bad).name})는 쓸 수 없습니다.` : null;
 }
-/** 자회사가 스스로 짜는 사양(제작 지시·다시 개발): 성격 → 개발 방향, 가격대 → 동력 등급·예산, 동력은 전동화 전략이면 전기 아니면 가솔린, 장비는 추천 구성(공유 범위 안) */
+/** 자회사가 스스로 짜는 사양(제작 지시·다시 개발): 성격 → 개발 방향, 가격대 → 동력 등급·예산, 동력은 전동화 전략이면 evNext를 따라 전기(3.1.1) 아니면 가솔린, 장비는 추천 구성(공유 범위 안) */
 export function autoSpec(s: CarState, sub: Subsidiary, body: string, character: SubCharacter, band: PriceBand, name = ''): ProjectSpec {
-  const seg = sub.segment ?? brandDef(sub.kind as BrandKind).segment, pt = sub.strategy === 'ev' && evReady(s) ? EV : 'gasoline', B = S.band[band];
+  const seg = sub.segment ?? brandDef(sub.kind as BrandKind).segment, pt = evNext(s, sub, monthOf(s.week), sub.models.find((x) => x.body === body)) ? EV : 'gasoline', B = S.band[band];
   const tier = Math.min(B.tier, S.shareTier[sub.share], powertrainById(pt).tiers.length), lag = S.shareLag[sub.share], y = yearOf(s.week), req = new Set(requiredOptions(s));
   const equip = Object.fromEntries(Object.entries(recommendedEquip(s, body, seg, pt)).filter(([id]) => req.has(id) || optionById(id).year + lag <= y));
   return { name, body, segment: seg, powertrain: pt, tier, options: stdOf(equip), equip, direction: { ...S.character[character].dir }, budget: B.budget as Budget, designWeeks: config.dev.designWeeks[1] };
@@ -253,7 +267,7 @@ export function subsMonthStart(s: CarState, ev: GameEvent[], m: number): void {
       sub.effect = sub.kind === 'parts' ? Math.min(S.parts.cutMax, S.parts.cut * q) : Math.min(S.finance.boostMax, S.finance.boost * q);
       continue;
     }
-    const area = new Set(areaBodies(s, sub)), wantEv = sub.strategy === 'ev' && evReady(s), direct = isDirect(sub);
+    const area = new Set(areaBodies(s, sub)), direct = isDirect(sub);
     if (sub.orders?.length) { // 3.1.0 개발 중인 차: 영역에서 빠진 차급은 취소, 개발이 끝나면 출시
       for (const o of [...sub.orders].sort((a, b) => a.id - b.id)) {
         if (!area.has(o.body)) { sub.orders = sub.orders.filter((x) => x !== o); news(s, ev, sub, `「${sub.name}」, 맡은 영역에서 빠진 ${bodyById(o.body).name} 개발을 멈췄습니다.`); }
@@ -273,13 +287,13 @@ export function subsMonthStart(s: CarState, ev: GameEvent[], m: number): void {
       }
       const n = md.n + 1;
       Object.assign(md, { n, start: m, cycle: cycleOf(s, sub, md.body, n), base: newBase(s, sub, md.body, n, m) });
-      if (wantEv) md.ev = true; else if (sub.strategy !== 'ev') delete md.ev;
+      if (evNext(s, sub, m, md)) md.ev = true; else if (sub.strategy !== 'ev') delete md.ev;
       launchModel(s, ev, sub, md, false);
     }
     if (!direct && sub.models.length < target) { // 한 달에 한 대까지(3.1.0 직접 운영에서는 스스로 추가하지 않는다)
       const body = pickBody(s, sub, m);
       if (body) {
-        const md: SubModel = { body, name: newModelName(s, sub, body), n: 0, start: m, cycle: cycleOf(s, sub, body, 0), base: newBase(s, sub, body, 0, m), a: 0, sold: 0, ...(wantEv ? { ev: true as const } : {}) };
+        const md: SubModel = { body, name: newModelName(s, sub, body), n: 0, start: m, cycle: cycleOf(s, sub, body, 0), base: newBase(s, sub, body, 0, m), a: 0, sold: 0, ...(evNext(s, sub, m) ? { ev: true as const } : {}) };
         sub.models.push(md); sub.models.sort((a, b) => (a.body < b.body ? -1 : 1));
         launchModel(s, ev, sub, md, true);
       }
@@ -485,8 +499,7 @@ export function subCommand(c: SubCtx, cmd: Command, ev: GameEvent[]): CommandRes
       if (sub.models.some((x) => x.body === cmd.body)) return fail('이미 그 차급에 모델이 있습니다.');
       if (sub.orders?.some((o) => o.body === cmd.body)) return fail('그 차급의 차를 이미 개발하고 있습니다.');
       if (sub.models.length + newOrders(sub) >= subModelCap(s, sub)) return fail(`자본이 모자라 모델을 더 둘 수 없습니다(지금 상한 ${subModelCap(s, sub)}개, 모델 하나에 자본 ${won(S.capitalPerModel)}). 투자하면 늘어납니다.`);
-      const wantEv = sub.strategy === 'ev' && evReady(s);
-      const md: SubModel = { body: cmd.body, name: newModelName(s, sub, cmd.body), n: 0, start: m, cycle: cycleOf(s, sub, cmd.body, 0), base: newBase(s, sub, cmd.body, 0, m), a: 0, sold: 0, keep: true, ...(wantEv ? { ev: true as const } : {}) };
+      const md: SubModel = { body: cmd.body, name: newModelName(s, sub, cmd.body), n: 0, start: m, cycle: cycleOf(s, sub, cmd.body, 0), base: newBase(s, sub, cmd.body, 0, m), a: 0, sold: 0, keep: true, ...(evNext(s, sub, m) ? { ev: true as const } : {}) };
       md.a = effA(sub, md, m);
       sub.models.push(md); sub.models.sort((a, b) => (a.body < b.body ? -1 : 1)); sub.dropped = sub.dropped.filter((b) => b !== cmd.body);
       launchModel(s, ev, sub, md, true);

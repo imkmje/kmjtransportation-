@@ -918,7 +918,7 @@ export function startApp(): void {
     // 1.0.0 좁은 상단 바(1240px 이하)에서는 1조 이상을 "3.4조"로 줄인다(전체 금액은 title·aria)
     const topMoney = (v: number) => (innerWidth <= 1240 && Math.abs(v) >= 1e8 ? `${v < 0 ? '−' : ''}${(Math.abs(v) / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}조` : money(v));
     const c = $('#cash'), hc = $('#hqcash'); put($('#cash-l'), sx ? '자본' : '현금');
-    if (sx) { put(c, topMoney(sx.capital)); c.classList.remove('neg'); c.title = `${sx.name} 자본 ${money(sx.capital)}`; put(hc, `본사 ${topMoney(s.cash)}`); hc.classList.toggle('neg', s.cash < 0); hc.hidden = false; }
+    if (sx) { put(c, topMoney(sx.capital)); c.classList.remove('neg'); c.title = `${sx.name} 자본 ${money(sx.capital)} · 본사 현금 ${money(s.cash)}`; $('#hqback').title = `본사 화면으로 돌아가기 · 본사 현금 ${money(s.cash)}`; put(hc, `본사 ${topMoney(s.cash)}`); hc.classList.toggle('neg', s.cash < 0); hc.hidden = false; }
     else { put(c, topMoney(s.cash)); c.classList.toggle('neg', s.cash < 0); c.title = money(s.cash); hc.hidden = true; }
     put($('#rep'), String(Math.round(s.reputation)));
     { const L = s.ledger.at(-1), pc = $('#plchip'), pb = $('#pl'); pc.hidden = !L || !!sx; // 3.1.0 운영 전환 중에는 본사 손익 칩을 숨긴다(머리글 자리) // 0.9.0 지난달 손익: ▲3.4억 / ▼1.1억(누르면 재무)
@@ -1216,7 +1216,7 @@ export function startApp(): void {
     if (!L) return;
     const ri = s.rivals.findIndex((r) => r.id === id);
     const row = (v: Q.RivalModelView) => `<details class="rv-model"><summary><span class="g-th">${thumb(rivalLook(v), -0.65, 160, 100)}</span><span class="rv-n"><b>${esc(v.name)}</b><small>${bodyById(v.body).name} · ${v.number}세대 · ${v.year}년 출시</small></span><span class="rv-c">추정 평론 <b>${score(v.critic)}</b>${v.hit ? '<i class="rv-hit">히트작</i>' : ''}</span></summary>
-      <table class="tbl rv-hist"><tr><th>세대</th><th class="r">출시</th><th class="r">추정 평론</th></tr>${[...Q.rivalHistory(s, ri, v.body)].reverse().map((h) => `<tr><td>${h.number}세대${h.n === v.n ? ' <small>지금</small>' : ''}</td><td class="r">${h.year}년</td><td class="r">${score(h.critic)}${h.hit ? ' <i class="rv-hit">히트작</i>' : ''}</td></tr>`).join('')}</table></details>`;
+      <table class="tbl rv-hist"><tr><th>세대</th><th class="r">출시</th><th class="r">추정 평론</th></tr>${[...Q.rivalHistory(s, ri, v.body)].reverse().map((h) => `<tr><td>${h.number}세대${h.n === v.n ? ' <small>지금</small>' : ''}</td><td class="r">${h.year}년</td><td class="r">${score(h.critic)}${(h.n === v.n ? v.hit : h.hit) ? ' <i class="rv-hit">히트작</i>' : ''}</td></tr>`).join('')}</table></details>`;
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
     sheetBody.innerHTML = `<div class="rv-sheet"><div class="eyebrow"><i></i>경쟁사 · ${esc(game!.dateLabel)}</div><div class="rv-head">${logo(id, 36)}<div><h2>${esc(L.name)} <small class="hint">${esc(L.trait)}</small></h2><p class="hint">${esc(L.desc)}</p></div></div>
       <div class="rv-list">${L.models.map(row).join('')}</div>
@@ -2116,7 +2116,7 @@ export function startApp(): void {
   let subSel: number | null = null, subPick: '' | 'pres' | 'add' = '', foundKind: SubKind = 'premium', foundColor = '';
   let subView: number | null = null, subCar = '', garageSub: { id: number; body: string } | null = null, ordSet: { id: number; body: string; character: SubCharacter; band: PriceBand } | null = null, tgtKind: 'sold' | 'profit' = 'sold'; // 3.1.0 운영 전환(UI 상태, 저장하지 않음)
   const SUBS = config.subs;
-  const subMark = (name: string, color: string, z = 40) => `<span class="sub-mark" style="--c:${color};width:${z}px;height:${z}px" aria-hidden="true">${esc([...name][0] ?? '')}</span>`;
+  const subMark = (name: string, color: string, z = 40) => `<span class="sub-mark" style="--c:${color};width:${z}px;height:${z}px${/^#[0-9a-f]{6}$/i.test(color) && 1.05 / (lumOf(hexRgb(color)) + 0.05) < 4.5 ? ';color:#14171c' : ''}" aria-hidden="true">${esc([...name][0] ?? '')}</span>`; // 3.1.1 밝은 로고 색(보급형 기본 주황 등)은 흰 글자 대비가 모자라 어두운 글자로
   /** 자회사 모델 썸네일: 경쟁 모델과 같은 방식, 색은 자회사 로고 색 */
   const subLook = (v: Q.SubModelView): CarLook => lookOf({ body: v.body, powertrain: v.powertrain, tier: v.tier, color: v.color, wheels: 1, year: v.year, chassisSeed: v.chassisSeed, faceSeed: v.faceSeed }); // 3.1.0 실제 사양이 있으면 그 동력·등급·모양
   function subTab(): string {
@@ -2185,7 +2185,7 @@ export function startApp(): void {
   }
   function subResultCard(d: Q.SubDetail): string {
     const s = game!.state, L = d.lastMonth, Y = d.last12, T = d.total;
-    const can = d.cannibal.length ? `<table class="tbl" style="margin-top:6px"><tr><th>본사 차</th><th class="r">줄어든 한 달 수요</th><th class="r">비율</th></tr>${d.cannibal.map((c) => { const g = Q.generationById(s, c.generationId); return `<tr><td>${g ? esc(nameOf(g)) : '—'} <small class="hint">${bodyById(c.body).name}</small></td><td class="r">약 ${c.lost >= 10 ? num(Math.round(c.lost)) : c.lost.toFixed(1)}대</td><td class="r">${(c.share * 100).toFixed(1)}%</td></tr>`; }).join('')}</table>` : '<p class="hint">같은 차급에서 겹치는 본사 차가 없습니다.</p>';
+    const can = d.cannibal.length ? `<table class="tbl" style="margin-top:6px"><tr><th>본사 차</th><th class="r">줄어든 한 달 수요</th><th class="r">비율</th></tr>${d.cannibal.map((c) => { const g = Q.generationById(s, c.generationId); return `<tr><td>${g ? esc(nameOf(g)) : '—'} <small class="hint">${bodyById(c.body).name}</small></td><td class="r">${c.lost < 1 ? '1대 미만' : `약 ${c.lost >= 10 ? num(Math.round(c.lost)) : c.lost.toFixed(1)}대`}</td><td class="r">${(c.share * 100).toFixed(1)}%</td></tr>`; }).join('')}</table>` : '<p class="hint">같은 차급에서 겹치는 본사 차가 없습니다.</p>';
     return `<div class="cols"><div class="card sub-res"><h3>실적</h3>
       ${L ? `<p class="lbl">지난달</p><div class="kpis">${d.brand ? kpi('판매', `${num(L.sold)}<span>대</span>`) : ''}${kpi('매출', money(L.revenue))}${kpi('이익', money(L.profit, true), L.profit >= 0 ? 'pos' : 'neg')}${kpi('배당', money(L.dividend))}</div>` : '<p class="hint">아직 결산한 달이 없습니다.</p>'}
       <p class="lbl" style="margin-top:10px">최근 ${Y.months}개월</p><div class="kpis">${d.brand ? kpi('판매', `${num(Y.sold)}<span>대</span>`) : ''}${kpi('매출', money(Y.revenue))}${kpi('이익', money(Y.profit, true), Y.profit >= 0 ? 'pos' : 'neg')}${kpi('배당', money(Y.dividend))}</div>
@@ -3398,7 +3398,12 @@ export function startApp(): void {
     if ([...sheetBody.querySelectorAll<HTMLInputElement>('input[type=text]')].some((x) => x.value.trim())) return;
     sheetBody.querySelector<HTMLElement>('[data-act="closeReview"],[data-act="closeSheet"],[data-act="later"]')?.click();
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target as HTMLElement).id === 't-co') $('[data-act="startNew"]').click(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const t = e.target as HTMLElement;
+    if (t.id === 't-co') $('[data-act="startNew"]').click();
+    else if (!e.isComposing && t.matches('.rename-sheet input.namein')) { e.preventDefault(); t.closest('.rename-sheet')?.querySelector<HTMLElement>('.btn.ink')?.click(); } // 3.1.1 이름 변경 창(본사 차·자회사 모델): Enter로 [이름 바꾸기]. 한글 조합 중 Enter는 조합만 끝낸다
+  });
 
   // 스모크 테스트·디버그용
   (window as unknown as { __car: unknown }).__car = {

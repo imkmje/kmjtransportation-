@@ -23,7 +23,15 @@ export function rivalModelName(seed: number, ri: number, id: string, body: strin
 /** 지난 세대 포함 한 칸의 세대 목록(오래된 것부터). 시작 달은 지금 모델에서 주기를 거꾸로 빼서 셈하고, 기본 A는 갱신 규칙(updateRivals)의 해시로 다시 셈한다.
  *  첫 모델(n = 0)의 강약 난수는 게임 난수라 지금 모델이 아니면 알 수 없어 0으로 본다(늦게 더한 칸은 해시라 정확) */
 export interface RivalGen { n: number; number: number; start: number; year: number; critic: number; hit: boolean; d: number }
+/** 3.1.1 히트작은 보이는 값과 어긋나지 않게: 그 회사·그 칸의 평소보다 뚜렷이 강하고(또는 히트작 사건), 같은 차급 다른 경쟁 모델(at달에 팔리던 세대)보다 추정 평론이 낮지 않은 세대만.
+ *  3.1.0까지는 회사 안 비교만 해서, 히트작인데 옆 경쟁 차보다 추정 평론이 낮게 보이는 일이 있었다 */
+const topOther = (s: CarState, ri: number, body: string, at: number): number =>
+  s.rivals.reduce((top, r, rj) => { const g = rj !== ri && r.models[body] ? rawHistory(s, rj, body).filter((x) => x.start <= at).at(-1) : undefined; return g ? Math.max(top, g.critic) : top; }, -Infinity);
 export function rivalHistory(s: CarState, ri: number, body: string): RivalGen[] {
+  return rawHistory(s, ri, body).map((g) => ({ ...g, hit: g.hit && g.critic >= topOther(s, ri, body, g.start) }));
+}
+/** 회사 안 비교만 한 세대 목록(hit = 평소보다 뚜렷이 강함) */
+function rawHistory(s: CarState, ri: number, body: string): RivalGen[] {
   const r = s.rivals[ri], md = r.models[body], cell = defOf(r.id).cells[body] ?? 0, key = bodyKey(body), noise = config.rivals.noise;
   const out: RivalGen[] = [];
   for (let n = md.n, start = md.start; n >= 0; n--) {
@@ -39,12 +47,12 @@ export function rivalHistory(s: CarState, ri: number, body: string): RivalGen[] 
 /** 지금 팔리는 경쟁 모델 하나의 겉으로 보이는 값. grades: 지금 그해 기준 능력치 등급(나이 들수록 내려간다), price: 시장 기준가 근처(만원), share: 그 칸에서의 대략적 점유 */
 export interface RivalModelView extends RivalGen { rivalId: string; company: string; body: string; name: string; grades: Stats; price: number; share: number; seed: number }
 export function rivalModelView(s: CarState, ri: number, body: string): RivalModelView {
-  const r = s.rivals[ri], md = r.models[body], m = monthOf(s.week), def = defOf(r.id), g = rivalHistory(s, ri, body).at(-1)!;
+  const r = s.rivals[ri], md = r.models[body], m = monthOf(s.week), def = defOf(r.id), g = rawHistory(s, ri, body).at(-1)!;
   const now = g.critic - (1 - r.cells[body] / (md.base * (1 + config.rivals.fresh))) * V.criticPer; // 지금 세기: 출시 때 평론에서 낡은 만큼(새 모델 A 대비 줄어든 비율 × criticPer) 뺀다
   const grades = Object.fromEntries(STATS.map((k, i) => [k, r1(clamp(now + def.shape[k] + (hash01(s.seed, 9, ri, bodyKey(body), md.n, i) * 2 - 1) * V.statJitter, 0, 10))])) as Stats;
   const e = config.market.shareExp, tot = s.rivals.reduce((a, q) => a + (q.cells[body] ?? 0) ** e, 0) + subPull(s, body); // 3.0.0 자회사 모델도 그 칸을 나눠 갖는다
   const share = tot > 0 ? (1 - myCellShare(s, body)) * (r.cells[body] ?? 0) ** e / tot : 0; // 내 몫을 뺀 나머지를 경쟁 차 A^지수로 나눈다(고객층·사건은 무시한 어림)
-  return { ...g, hit: g.hit || rivalHitAdd(s, r.id, body, m) > 0, rivalId: r.id, company: r.name, body, name: rivalModelName(s.seed, ri, r.id, body), grades,
+  return { ...g, hit: (g.hit || rivalHitAdd(s, r.id, body, m) > 0) && g.critic >= topOther(s, ri, body, m), rivalId: r.id, company: r.name, body, name: rivalModelName(s.seed, ri, r.id, body), grades,
     price: Math.round(basePriceOf(s, body) * (1 + (g.critic - V.criticMid) * V.pricePer) / 10) * 10, share, seed: Math.floor(hash01(s.seed, 10, ri, bodyKey(body), md.n) * 2 ** 31) };
 }
 /** 내 회사의 그 칸 점유(지난달 판매 ÷ 칸 월 규모, 0~1) */

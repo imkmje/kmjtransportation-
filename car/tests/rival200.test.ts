@@ -65,18 +65,35 @@ describe('2.0.0 경쟁 모델', () => {
     } });
     expect(checked).toBeGreaterThan(50);
   });
-  it('히트작: 그 회사·그 칸의 평소(강약만 반영한 평론)보다 뚜렷이 높은 세대만, 대략 다섯에 하나', () => {
+  it('3.1.1 히트작 표시: 같은 차급에서 옆 경쟁 차보다 추정 평론이 낮은 히트작이 없다(비교 화면·지난 세대)', () => {
+    let shown = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const g = Game.create({ seed, difficulty: 'normal' });
+      for (let y = 0; y < 30; y++) {
+        ticks(g, 12);
+        for (const body of new Set(g.state.rivals.flatMap((r) => Object.keys(r.models)))) {
+          const v = rivalModelsIn(g.state, body);
+          for (const m of v.filter((x) => x.hit)) { shown++; for (const o of v) expect(m.critic, `${seed} ${body} ${m.name} ${o.name}`).toBeGreaterThanOrEqual(o.critic); }
+        }
+      }
+      g.state.rivals.forEach((r, ri) => { for (const b of Object.keys(r.models)) for (const x of rivalHistory(g.state, ri, b).filter((h) => h.hit)) {
+        g.state.rivals.forEach((q, rj) => { if (rj === ri || !q.models[b]) return; const o = rivalHistory(g.state, rj, b).filter((h) => h.start <= x.start).at(-1); if (o) expect(x.critic).toBeGreaterThanOrEqual(o.critic); });
+      } });
+    }
+    expect(shown).toBeGreaterThan(10);
+  });
+  it('히트작: 그 회사·그 칸의 평소(강약만 반영한 평론)보다 뚜렷이 높은 세대만, 열에 한둘', () => {
     let hits = 0, all = 0;
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const g = Game.create({ seed, difficulty: 'normal' }); ticks(g, 12 * 30);
       g.state.rivals.forEach((r, ri) => { for (const b of Object.keys(r.models)) for (const x of rivalHistory(g.state, ri, b)) {
         if (x.n === 0) continue;
         const usual = config.rivals.view.criticMid + (RIVALS.find((d) => d.id === r.id)!.cells[b]) * config.rivals.view.criticPer;
-        all++; if (x.hit) { hits++; expect(x.critic).toBeGreaterThanOrEqual(usual + config.rivals.view.hitAt * config.rivals.noise * config.rivals.view.criticPer - 0.051); }
-        else expect(x.critic).toBeLessThan(usual + config.rivals.view.hitAt * config.rivals.noise * config.rivals.view.criticPer + 0.051);
+        all++; if (x.hit) { hits++; expect(x.critic).toBeGreaterThanOrEqual(usual + config.rivals.view.hitAt * config.rivals.noise * config.rivals.view.criticPer - 0.051); } // 3.1.1 평소보다 강해도 옆 경쟁 차보다 낮으면 히트작이 아니다(위 점검)
       } });
     }
-    expect(hits / all).toBeGreaterThan(0.1); expect(hits / all).toBeLessThan(0.3);
+    console.log(`히트작 비율 ${(hits / all * 100).toFixed(1)}%`);
+    expect(hits / all).toBeGreaterThan(0.05); expect(hits / all).toBeLessThan(0.3);
   });
   it('뉴스: 세대교체 수와 뉴스 수가 같고, 줄마다 그 세대 번호가 있다. 내 차가 없으면 알림(이벤트)은 없다', () => {
     const g = Game.create({ seed: 4, difficulty: 'normal' }), g0 = gens(g.state);

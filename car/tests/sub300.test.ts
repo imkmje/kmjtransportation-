@@ -284,6 +284,7 @@ describe(`전략별 행동 차이(1990년 설립, ${YRS}년)`, () => {
       const sts = SUB_STRATEGIES.filter((x) => pick(rs, k, x).length), best = (key: keyof Run) => sts.reduce((a, x) => (avg(pick(rs, k, x), key) > avg(pick(rs, k, a), key) ? x : a));
       const tops = (['profit', 'share', 'rep', 'capital'] as (keyof Run)[]).map(best);
       expect(new Set(tops).size, `${k}: ${tops.join(',')}`).toBeGreaterThan(1);
+      expect(tops[0], `${k} 이익 1등`).not.toBe('niche'); // 3.1.1 틈새는 이익률은 높지만 규모에 한계: 이익 총액 1등이 아니다(성장 중심·기술 선도가 위)
     }
   });
   it('너그러움: 누적 이익이 흑자이고 연 단위 적자는 드물며, 본전(설립비 + 투자)을 찾아가는 중이다. 사업 자회사도 본전을 찾는다', () => {
@@ -313,10 +314,11 @@ describe(`전략별 행동 차이(1990년 설립, ${YRS}년)`, () => {
     expect(porty(r)).toBeLessThan(porty(gr));
     expect(r.subs![0].reports.some((x) => x.text.includes('포티의 주력 차급'))).toBe(true);
   });
-  it('전동화 전환: 2010년대 이익은 성장 중심보다 적고, 2030년대에는 많다', () => {
+  it('전동화 전환: 2010년대 이익은 성장 중심보다 적지만 3분의 1은 넘고, 2030년대에는 많다', () => {
     const ev = measure('value', 'ev', 40, 4), gr = measure('value', 'growth', 40, 4), ev3 = measure('value', 'ev', 60, 4), gr3 = measure('value', 'growth', 60, 4);
     console.log(`보급형 4년 이익: 2010년대 전동화 ${eok(ev.profit)} / 성장 ${eok(gr.profit)}, 2030년대 전동화 ${eok(ev3.profit)} / 성장 ${eok(gr3.profit)}`);
     expect(ev.profit).toBeLessThan(gr.profit);
+    expect(ev.profit).toBeGreaterThan(gr.profit / 3); // 3.1.1 2010년대 바닥(3.1.0은 약 15분의 1)
     expect(ev3.profit).toBeGreaterThan(gr3.profit);
   });
 });
