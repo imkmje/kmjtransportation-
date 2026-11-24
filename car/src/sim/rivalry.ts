@@ -12,7 +12,7 @@ import { isDone, researchCost } from './research';
 import { activeRivals, isOut, myCellShare, rivalHooks, rivalModelView } from './rivals';
 import { hash01 } from './rng';
 import { startOf } from './start';
-import { buildAcquired, isBrand, subById, subModelDev, subModelView, subPrice, subUnitCost } from './subs';
+import { brandFixed, brandMonth, buildAcquired, isBrand, subById, subModelView } from './subs';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { type Award, type CarState, type Command, type CommandResult, type GameEvent, type Generation, type PendingChoice, type PriceWar, type RivalDef, type RivalryState, type Role, type Staff, type Subsidiary } from './types';
 
@@ -341,22 +341,17 @@ export function acquireError(s: CarState, id: string): string | null {
   if (s.cash < p) return `현금이 모자랍니다(인수 값 ${won(p)}).`;
   return null;
 }
-/** 인수 창: 평가액·웃돈·값, 인수 뒤 예상 실적(월 판매·연 매출·연 이익·연 배당, 지금 시장 기준 어림) */
+/** 인수 창: 평가액·웃돈·값, 인수 뒤 예상 실적(월 판매·연 매출·연 이익·연 배당). 상태를 복사해 인수한 것처럼 만든 뒤 월 결산과 같은 계산(brandMonth)으로 이번 달을 셈해 12배 한다 */
 export function acquireInfo(s: CarState, id: string) {
   const ri = riOf(s, id);
   if (ri < 0 || isOut(s, id)) return null;
-  const v = rivalValue(s, id), sub = buildAcquired(s, ri, v.price), m = monthOf(s.week), t = monthTime(m), e = config.market.shareExp, A = R.acquire, r = s.rivals[ri];
-  let sold = 0, revenue = 0, cost = 0;
-  for (const md of sub.models) {
-    const tot = s.rivals.reduce((a, q) => a + (q.cells[md.body] ?? 0) ** e, 0) + subPull(s, md.body) - (r.cells[md.body] ?? 0) ** e * (1 - A.absorb) + md.a ** e;
-    const n = tot > 0 ? cellMonthly(md.body, t) * (1 - myCellShare(s, md.body)) * md.a ** e / tot * config.subs.strat.growth.vol : 0;
-    sold += n; revenue += n * subPrice(s, sub, md); cost += n * subUnitCost(s, sub, md) + subModelDev(s, sub, md, m);
-  }
-  const cap = Math.floor(sub.capital / config.subs.capPerCar), k = sold > cap ? cap / sold : 1;
-  sold *= k; revenue *= k;
-  const profit = (revenue - cost - Math.min(sub.capital, sold * config.subs.capPerCar) * config.subs.upkeep) * MPY;
+  const v = rivalValue(s, id), m = monthOf(s.week), r = s.rivals[ri];
+  const c: CarState = JSON.parse(JSON.stringify(s)), sub = buildAcquired(c, ri, v.price), ghost = R.acquire.absorb ** (1 / config.market.shareExp);
+  rv(c).out.push(id); for (const b of Object.keys(c.rivals[ri].cells)) c.rivals[ri].cells[b] *= ghost; // 월말 applyCells와 같은 빈 몫
+  (c.subs ??= []).push(sub);
+  const b = brandMonth(c, sub, m), profit = (b.revenue - b.cost - brandFixed(sub, b.sold)) * MPY;
   return { id, name: r.name, newName: sub.name, color: sub.color, models: sub.models.length, revenue: v.revenue, value: v.value, premium: v.price - v.value, price: v.price, capital: sub.capital, rep: sub.rep,
-    rivalMonthly: Math.round(v.monthly), monthly: Math.round(sold), yearRevenue: revenue * MPY, yearProfit: profit, yearDividend: Math.max(0, profit) * Math.min(1, sub.dividend / 100 * config.subs.strat.growth.payout), reason: acquireError(s, id) };
+    rivalMonthly: Math.round(v.monthly), monthly: b.sold, yearRevenue: b.revenue * MPY, yearProfit: profit, yearDividend: Math.max(0, profit) * Math.min(1, sub.dividend / 100 * config.subs.strat.growth.payout), reason: acquireError(s, id) };
 }
 
 // ---------- 명령 ----------

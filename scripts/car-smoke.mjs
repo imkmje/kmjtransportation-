@@ -2585,7 +2585,8 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   // 시상식: 기록 탭과 차고 수상 표시
   await RG((gid) => { const s = window.__car.game.state, g = s.nameplates[0].generations[0]; g.awards = ['2005년 올해의 차', '2005년 올해의 패밀리카']; g.awardUntil = Math.floor(s.week / 4) + 12;
     const A = (cat, name, who, company, car, body) => ({ year: 2005, cat, name, who, company, car, body, score: 7.5 });
-    s.rivalry.awards.push(A('overall', '올해의 차', 'mine', s.companyName, '아리아', 'sedanM'), A('small', '올해의 소형차', 'rival', '현다이', '누리', 'hatch'), A('family', '올해의 패밀리카', 'mine', s.companyName, '아리아', 'sedanM'), A('fun', '올해의 스포츠·레저', 'rival', '포티', '오자크', 'pickup'), A('tech', '올해의 기술상', 'rival', '도요다', '세실리오', 'sedanS'), A('design', '올해의 디자인상', 'rival', '현다이', '아라', 'coupe'));
+    const R = (id, body) => window.__car.Q.rivalModelsIn(s, body).find((v) => v.rivalId === id).name; // 그 회사·그 차급의 실제 모델 이름
+    s.rivalry.awards.push(A('overall', '올해의 차', 'mine', s.companyName, '아리아', 'sedanM'), A('small', '올해의 소형차', 'rival', '현다이', R('hyundae', 'hatch'), 'hatch'), A('family', '올해의 패밀리카', 'mine', s.companyName, '아리아', 'sedanM'), A('fun', '올해의 스포츠·레저', 'rival', '포티', R('porty', 'pickup'), 'pickup'), A('tech', '올해의 기술상', 'rival', '도요다', R('toyoda', 'sedanS'), 'sedanS'), A('design', '올해의 디자인상', 'rival', '현다이', R('hyundae', 'coupe'), 'coupe'));
     window.__car.render(); }, gid);
   await rp.click('#tabs button[data-tab="records"]'); await rp.click('#panel [data-act="rectab"][data-v="awards"]'); await rp.waitForSelector('#panel .aw-card');
   const awT = await rp.locator('#panel .aw-card').innerText();

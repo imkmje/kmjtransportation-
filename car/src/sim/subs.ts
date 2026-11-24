@@ -307,6 +307,20 @@ export function subsMonthStart(s: CarState, ev: GameEvent[], m: number): void {
     for (const md of sub.models) md.a = effA(sub, md, m);
   }
 }
+/** 브랜드 자회사 한 달 판매·매출·원가(개발비 포함, 유지비·사장 월급 제외). 월 결산과 3.5.0 인수 창 예상 실적이 같이 쓴다 */
+export function brandMonth(s: CarState, sub: Subsidiary, m: number): { each: number[]; sold: number; demand: number; revenue: number; cost: number } {
+  const d = sub.models.map((md) => subDemand(s, sub, md, m)), tot = d.reduce((a, x) => a + x, 0), cap = subCapacity(sub), k = tot > cap ? cap / tot : 1;
+  const out = { each: [] as number[], sold: 0, demand: 0, revenue: 0, cost: 0 };
+  sub.models.forEach((md, i) => {
+    const n = Math.floor(d[i] * k);
+    out.each.push(n); out.sold += n; out.demand += d[i];
+    out.revenue += n * subPrice(s, sub, md); out.cost += n * subUnitCost(s, sub, md);
+    if (!md.car) out.cost += subModelDev(s, sub, md, m); // 개발비(모델마다 매달). 3.1.0 실제 사양이 있는 차는 개발할 때 한 번 낸다
+  });
+  return out;
+}
+/** 브랜드 자회사 월 유지비(쓰는 설비만큼) + 사장 월급 */
+export const brandFixed = (sub: Subsidiary, sold: number): number => Math.min(sub.capital, sold * S.capPerCar) * S.upkeep + presPay(sub);
 /** 사업 자회사 규모 = min(scaleMax, √(자본 ÷ 설립비)) × 사장 배수 */
 const bizScale = (sub: Subsidiary): number => Math.min(S.scaleMax, Math.sqrt(sub.capital / S.kinds[sub.kind].cost)) * (0.75 + presQ(sub) / 2);
 /** 사장 월급(직원 월급 + 수당, 자회사가 낸다) */
@@ -330,12 +344,9 @@ export function subsSettle(s: CarState, ev: GameEvent[], m: number, hq: { revenu
   for (const sub of [...(s.subs ?? [])].sort((a, b) => a.id - b.id)) {
     let sold = 0, demand = 0, revenue = 0, cost = 0;
     if (isBrand(sub.kind)) {
-      const d = sub.models.map((md) => subDemand(s, sub, md, m)), tot = d.reduce((a, x) => a + x, 0), cap = subCapacity(sub), k = tot > cap ? cap / tot : 1;
-      sub.models.forEach((md, i) => {
-        md.sold = Math.floor(d[i] * k); sold += md.sold; demand += d[i];
-        revenue += md.sold * subPrice(s, sub, md); cost += md.sold * subUnitCost(s, sub, md);
-        if (!md.car) cost += subModelDev(s, sub, md, m); // 개발비(모델마다 매달). 3.1.0 실제 사양이 있는 차는 개발할 때 한 번 낸다
-      });
+      const b = brandMonth(s, sub, m);
+      sub.models.forEach((md, i) => { md.sold = b.each[i]; });
+      ({ sold, demand, revenue, cost } = b);
     } else {
       const B = sub.kind === 'parts' ? S.parts.margin : S.finance.financed * S.finance.spread;
       revenue = (sub.kind === 'parts' ? hq.cogs : hq.revenue) * B * bizScale(sub) * S.bizFx[sub.strategy].margin;

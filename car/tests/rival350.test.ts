@@ -177,6 +177,11 @@ describe('시상식', () => {
     const h = awardHistory(s);
     expect(h.length).toBeGreaterThanOrEqual(1);
     for (const y of h) { expect(y.list.length).toBeLessThanOrEqual(R.awards.cats.length); expect(new Set(y.list.map((a) => a.cat)).size).toBe(y.list.length); }
+    for (const x of s.rivalry!.awards) { // 수상 줄의 모델 이름·차급이 실제 그 회사·그 차급 모델과 같다
+      if (x.who === 'rival') { const ri = s.rivals.findIndex((r) => r.name === x.company); expect(rivalModelName(s.seed, ri, s.rivals[ri].id, x.body)).toBe(x.car); }
+      if (x.who === 'mine') expect(allGens(s).find((y) => y.id === x.genId)!.body).toBe(x.body);
+      if (x.cat !== 'overall' && x.cat !== 'tech' && x.cat !== 'design') expect(R.awards.cats.find((c) => c.id === x.cat)!.bodies).toContain(x.body);
+    }
     const a = s.rivalry!.awards.find((x) => x.who === 'mine')!;
     expect(a, `10년 안에 내 차 수상이 없다(${years}건)`).toBeDefined();
     const gen = allGens(s).find((x) => x.id === a.genId)!;
@@ -239,6 +244,18 @@ describe('경쟁사 인수', () => {
     expect(s.subs!.filter((x) => x.kind === 'acquired').every((x) => x.months.slice(-6).every((m) => m.sold > 0))).toBe(true);
     expect(s.events.news.filter((x) => x.week > w0).some((x) => x.category === 'rival' && (x.text.startsWith(`${r0.name}, `) || x.text.startsWith(`${r1.name}, `)) && x.text.includes('세대 출시'))).toBe(false); // 인수한 회사의 경쟁 모델 뉴스는 없다
     expect(rivalLineup(s, activeRivals(s)[0].id)).not.toBeNull();
+  });
+  it('인수 창 예상 실적은 월 결산과 같은 계산: 첫 달 판매가 예상과 같고, 12개월 실적이 예상의 ±25% 안', () => {
+    const g = load(), s = g.state; s.cash = 1e10;
+    while (s.week % 4 !== 0) g.tick();
+    const a = acquireInfo(s, 'toyoda')!;
+    ok(g.command({ type: 'acquireRival', rivalId: 'toyoda' }));
+    const sub = s.subs!.at(-1)!, bot = steadyBestExec();
+    for (let i = 0; i < 12 * 4; i++) { s.cash = Math.max(s.cash, 1e9); bot.step(g); g.tick(); }
+    const m = sub.months.slice(-12), sold = m.reduce((x, y) => x + y.sold, 0) / 12, rev = m.reduce((x, y) => x + y.revenue, 0);
+    expect(Math.abs(m[0].sold / a.monthly - 1)).toBeLessThan(0.02);
+    expect(Math.abs(sold / a.monthly - 1)).toBeLessThan(0.25); expect(Math.abs(rev / a.yearRevenue - 1)).toBeLessThan(0.25);
+    expect(Math.sign(m.reduce((x, y) => x + y.profit, 0))).toBe(Math.sign(a.yearProfit));
   });
   it('조건: 본사 5등급, 자회사 상한, 현금', () => {
     const g = Game.create({ seed: 1, difficulty: 'normal' }), s = g.state;
