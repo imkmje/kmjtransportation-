@@ -212,6 +212,8 @@ export interface ResearchState {
 }
 /** 무작위 사건의 답을 기다리는 선택(4주 뒤 기본 선택) */
 export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null; rv?: RivalChoice } // rv(3.5.0): 경쟁 2부 결정 창의 대상
+/** 3.7.1 결정 자동 승인의 답: 선택지 번호 또는 'rule'(임원 위임과 같은 규칙, 가격 전쟁·이직 제안만) */
+export type AutoAnswer = number | 'rule';
 /** 3.5.0 경쟁 2부 결정 창의 대상: 가격 전쟁(war ID) 또는 이직 제안(직원 ID·인상 월급), 선택지별 결과 문장 */
 export interface RivalChoice { rivalId: string; war?: number; staffId?: number; raise?: number; results: string[] }
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
@@ -359,7 +361,7 @@ export interface CarState {
   start?: { year: number; condition: StartCondition; challenges: Challenge[] }; // 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
   subs?: Subsidiary[]; // 3.0.0 자회사(형식 9). 없으면 자회사 없음
   rivalry?: RivalryState; // 3.5.0 경쟁 2부(형식 10). 없으면 다음 월 결산에 빈 상태로 시작한다
-  autoDecide?: { on: string[]; guard?: false }; // 3.7.0 결정 자동 승인(형식 10의 생략 가능한 칸): 켠 결정 종류(사건 ID), guard false = 안전선 끔. 없으면 모두 끔
+  autoDecide?: { on: string[]; guard?: false; pick?: Record<string, AutoAnswer> }; // 3.7.0 결정 자동 승인(형식 10의 생략 가능한 칸): 켠 결정 종류(사건 ID), guard false = 안전선 끔. 없으면 모두 끔. 3.7.1 pick: 종류별 자동 답(없으면 처음 값)
   pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
@@ -405,7 +407,7 @@ export type Command =
   | { type: 'cancelResearch'; techId: string } // 쓴 돈은 돌아오지 않는다
   | { type: 'prioritizeResearch'; techId: string } // 0.5.1: 그 연구를 맨 앞으로(주간 점수의 50%를 받는다)
   | { type: 'resolveEvent'; eventId: number; choice: number }
-  | { type: 'setAutoDecide'; kind: string; on: boolean } // 3.7.0 결정 자동 승인(kind 'all'이면 모든 종류)
+  | { type: 'setAutoDecide'; kind: string; on: boolean; choice?: AutoAnswer } // 3.7.0 결정 자동 승인(kind 'all'이면 모든 종류). 3.7.1 choice: 자동 답(한 종류만)
   | { type: 'setAutoDecideGuard'; on: boolean } // 3.7.0 큰돈이 드는 결정은 묻기
   // ---------- 임원(0.7.0) ----------
   | { type: 'appointExec'; role: ExecRole; staffId: number }

@@ -27,7 +27,7 @@ import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
 import { presidents, subCommand, subsMonthStart, subsSettle } from './subs';
 import { applyRivalChoice, autoChoice, emptyRivalry, rivalryCommand, rivalryMonthEnd, rivalryMonthStart, warPriceMult } from './rivalry';
 import { addReport, delegationOn } from './execs';
-import { AUTO_KINDS, autoHold, autoOn, autoPick } from './autodecide';
+import { AUTO_KINDS, autoAnswerOk, autoHold, autoInitial, autoOn, autoPick } from './autodecide';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
 import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerCar, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty, type StartCondition, type Challenge } from './types';
@@ -662,9 +662,17 @@ export class Game {
       case 'setAutoDecide': { // 3.7.0 결정 자동 승인(앞으로 생기는 결정부터)
         const kinds = cmd.kind === 'all' ? AUTO_KINDS.map((k) => k.id) : AUTO_KINDS.some((k) => k.id === cmd.kind) ? [cmd.kind] : null;
         if (!kinds) return fail('없는 결정 종류입니다.');
+        const kd = AUTO_KINDS.find((k) => k.id === cmd.kind);
+        if (cmd.choice !== undefined && !(kd && autoAnswerOk(kd, cmd.choice))) return fail('그 종류에서 고를 수 없는 답입니다.');
         const a = (s.autoDecide ??= { on: [] }), on = new Set(a.on);
         for (const k of kinds) if (cmd.on) on.add(k); else on.delete(k);
         a.on = AUTO_KINDS.map((k) => k.id).filter((k) => on.has(k));
+        if (kd && cmd.choice !== undefined) { // 3.7.1 처음 값과 같으면 칸을 지워 3.7.0 저장과 같게 둔다
+          const p: Record<string, number | 'rule'> = { ...a.pick, [kd.id]: cmd.choice };
+          if (cmd.choice === autoInitial(kd)) delete p[kd.id];
+          const keep = AUTO_KINDS.filter((k) => k.id in p).map((k) => [k.id, p[k.id]] as const);
+          if (keep.length) a.pick = Object.fromEntries(keep); else delete a.pick;
+        }
         return OK;
       }
       case 'setAutoDecideGuard': {

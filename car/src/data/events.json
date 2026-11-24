@@ -117,7 +117,7 @@
       "choices": [
         { "label": "콘셉트카 출품", "result": "출품 비용이 듭니다(월 매출의 약 4%). 대신 평판이 3 오릅니다.", "effects": [ { "type": "cash", "base": -3000, "revenue": -0.04 }, { "type": "rep", "value": 3 } ] },
         { "label": "이번엔 불참", "result": "돈도 들지 않고, 달라지는 것도 없습니다.", "effects": [] } ] },
-    { "id": "scout", "name": "인재 이직 제안", "text": "경쟁사의 실력 있는 엔지니어가 우리 회사로 오고 싶어 합니다.", "needs": "staffRoom", "defaultChoice": 1,
+    { "id": "scout", "name": "경쟁사 엔지니어 입사 희망", "text": "경쟁사의 실력 있는 엔지니어가 우리 회사로 오고 싶어 합니다.", "needs": "staffRoom", "defaultChoice": 1,
       "choices": [
         { "label": "영입하기", "result": "계약금이 듭니다. 대신 실력 있는 엔지니어 한 명이 들어옵니다(정원이 남아 있을 때).", "effects": [ { "type": "cash", "base": -3000, "revenue": -0.01 }, { "type": "hire", "abilityMin": 45, "abilityMax": 65 } ] },
         { "label": "거절", "result": "돈도 들지 않고, 달라지는 것도 없습니다.", "effects": [] } ] },
@@ -131,7 +131,7 @@
       "choices": [
         { "label": "환 헤지", "result": "헤지 비용을 냅니다. 대신 환율이 어떻게 움직여도 원가가 그대로입니다.", "effects": [ { "type": "cash", "base": -500, "revenue": -0.01 } ] },
         { "label": "그냥 두기", "result": "비용은 들지 않지만 6개월 동안 원가가 환율에 따라 4% 오르거나 3% 내립니다(확률은 반반).", "effects": [ { "type": "mod", "mod": "cost", "value": 0, "months": 6 } ] } ] },
-    {"id": "priceWar", "name": "가격 전쟁", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "따라 내린다", "result": "", "effects": [{"type": "warFollow"}]}, {"label": "버틴다", "result": "", "effects": []}]},
-    {"id": "poach", "name": "이직 제안", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "연봉을 올려 붙잡는다", "result": "", "effects": [{"type": "retain"}]}, {"label": "그대로 둔다", "result": "", "effects": []}]}
+    {"id": "priceWar", "name": "가격 전쟁", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "따라 내린다", "result": "그 차급의 내 차 가격을 같은 폭으로 내립니다. 판매는 지키지만 매출이 줄어듭니다.", "effects": [{"type": "warFollow"}]}, {"label": "버틴다", "result": "가격은 그대로 둡니다. 그 기간 그 차급의 내 차 판매가 줄어듭니다.", "effects": []}]},
+    {"id": "poach", "name": "이직 제안", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "연봉을 올려 붙잡는다", "result": "월급이 오르고, 그 직원의 능력이 오르고 컨디션이 좋아집니다.", "effects": [{"type": "retain"}]}, {"label": "그대로 둔다", "result": "직원은 남고 달라지는 것은 없습니다.", "effects": []}]}
   ]
 }
