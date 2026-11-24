@@ -1262,3 +1262,36 @@ body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1
 @media (min-width:900px){body.sub-on #top .pill.evchip{flex-shrink:0}body.sub-on #top .brand{flex:0 1 auto;min-width:26px}}
 @media (min-width:900px) and (max-width:1400px){body.sub-on #hqcash{display:none}}
 @media (min-width:900px) and (max-width:1180px){body.sub-on #top .pill:has(#rep){display:none}}
+/* 3.5.0 경쟁 2부: 경쟁사 관계 표시, 경쟁사 창 행동 카드, 인수 창, 시상식, 상장 */
+.rv-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.rv-tag{font-style:normal;font-size:11px;font-weight:800;border-radius:999px;padding:2px 7px;line-height:1.3;white-space:nowrap}
+.rv-tag.ally{background:var(--up-bg);color:var(--up)}
+.rv-tag.war{background:var(--neg-bg);color:var(--neg-ink)}
+.rv-tag.ctr{background:var(--warn-bg);color:var(--warn-ink)}
+.rivals .rv-out{opacity:.75;border-style:dashed;cursor:default}
+.rv-now{margin:10px 0 0;padding:10px 12px 10px 28px;background:var(--soft);border-radius:12px;font-size:13px;line-height:1.55}
+.rv-now li+li{margin-top:2px}
+.rv-now0{margin-top:10px}
+.rv-acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px;margin-top:10px}
+.rv-card{padding:12px 14px;margin:0;box-shadow:none;border:1px solid var(--line)}
+.rv-card h3{font-size:15px;margin-bottom:6px}
+.rv-card .btn{min-height:44px}
+.rv-card .hint.neg{color:var(--neg);margin-top:6px}
+.rv-tals,.rv-techs{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.rv-tal,.rv-tech{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:12px}
+.rv-tal>span,.rv-tech>span{display:flex;flex-direction:column;gap:2px;min-width:0;word-break:keep-all}
+.rv-tal small,.rv-tech small{color:var(--ink3);font-size:12px;line-height:1.4}
+.rv-tal>small.neg{grid-column:1/-1;color:var(--neg)}
+.acq-t th{text-align:left;font-weight:600;color:var(--ink2)}
+.acq-t .acq-sum th,.acq-t .acq-sum td{border-top:2px solid var(--ink);font-size:15px}
+.aw-chip,.aw-s{display:inline-block;margin-left:6px;font-size:11px;font-weight:800;border-radius:999px;padding:2px 7px;background:var(--gold-bg);color:var(--gold-ink);vertical-align:middle}
+.aw-line b{color:var(--gold-ink)}
+.aw-y{margin-top:12px}
+.aw-t th{text-align:left;width:34%;font-weight:600;color:var(--ink2);word-break:keep-all}
+.aw-t td{word-break:keep-all}
+.aw-t tr.aw-own td b{color:var(--ink)}
+.aw-t tr.aw-own{background:var(--gold-bg)}
+.aw-t tr.aw-own th{color:var(--gold-ink)}
+.aw-me{font-style:normal;font-size:11px;font-weight:800;border-radius:999px;padding:2px 7px;background:var(--ink);color:#fff}
+.sub-ipo-b{flex-wrap:wrap;gap:8px}
+.sub-ipo-b .btn{min-height:44px}

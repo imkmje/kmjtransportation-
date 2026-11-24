@@ -14,7 +14,7 @@ export type EquipLevel = 'opt' | 'std'; // 1.1.0 선택 사양 / 기본 장비(�
 export type Equip = Record<string, EquipLevel>;
 export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
-export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number>; desc: string; shape: Stats; models: string[] } // desc·shape·models(2.0.0): 한 줄 성격, 능력치 모양(등급 가감), 모델 이름 목록(차체 수 이상)
+export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number>; desc: string; shape: Stats; models: string[]; color: string; field: TechField; segment: string } // color·field·segment(3.5.0): 로고 색, 앞선 연구 분야(기술 제휴), 인수 브랜드의 기본 고객층 // desc·shape·models(2.0.0): 한 줄 성격, 능력치 모양(등급 가감), 모델 이름 목록(차체 수 이상)
 /** 1.3.0 파생 모델(variants.json): 쓸 수 있는 차체, 기본 고객층, 능력치 배수, 시장 기준가·원가 배수, 개발비(바탕 세대 개발비의 몫)·설계 주, powertrain(전기차판), rep(출시 평판 가점) */
 export interface VariantDef { id: string; name: string; suffix: string; info: string; bodies: string[]; segment?: string; powertrain?: string; mult: Stats; price: number; cost: number; devShare: number; designWeeks: number; rep?: number }
 /** 1.3.0 평론가(critics.json): config.critics.list와 같은 id·순서 */
@@ -59,10 +59,12 @@ export type ChoiceEffect =
   | { type: 'condition'; value: number } // 전 직원 컨디션 가산
   | { type: 'fixDefects'; costShare: number } // 대상 차 결함 수리(누적 판매 × 리콜 대당 비용 × costShare), 리콜 위험 0
   | { type: 'mod'; mod: 'production' | 'cost'; value: number; months: number } // 기간 배수(생산·원가). value 0이면 사건이 정한 값(환율)
-  | { type: 'hire'; abilityMin: number; abilityMax: number }; // 인재 영입(정원 안에서)
+  | { type: 'hire'; abilityMin: number; abilityMax: number } // 인재 영입(정원 안에서)
+  | { type: 'warFollow' } // 3.5.0 가격 전쟁: 그 기간 그 차급 내 차 가격을 따라 내린다(PendingChoice.rv)
+  | { type: 'retain' }; // 3.5.0 이직 제안: 연봉을 올려 붙잡는다(PendingChoice.rv)
 export interface RandomEventDef {
   id: string; name: string; text: string; // text의 {car}는 대상 차 이름
-  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell';
+  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell' | 'rivalry'; // rivalry(3.5.0): 경쟁 2부가 직접 띄우는 결정 창(무작위 사건 추첨에서 빠진다)
   choices: { label: string; result: string; effects: ChoiceEffect[] }[];
   defaultChoice: number;
   onFire?: { type: 'rivalHit'; add: number; months: number } | { type: 'fxRoll'; good: number; bad: number; goodShare: number }; // 사건이 뜰 때 바로 생기는 일
@@ -81,6 +83,8 @@ export interface Staff {
   restUntil: number | null; // 이 주 전까지 강제 휴식(산출 0, 회복)
   lab: boolean; // 전담 연구원(10장, 본사 4등급부터): 프로젝트에 배치되지 않고 연구 점수 ×1.5
   hist?: StaffHist; // 0.10.0 성장 기록(없으면 예전 저장: 다음 월 결산부터 쌓는다)
+  pay?: number; // 3.5.0 월급 가산(만원, 이직 제안을 붙잡은 인상분·경쟁사 인재의 웃돈). 없으면 0
+  from?: string; // 3.5.0 경쟁사에서 영입한 직원이면 그 경쟁사 ID
 }
 /** 1.3.0 개발 중 직원 성과(항상 이득, 자동 적용). kind: 'stat:P' 같은 능력치 배수(출시 때) / defects 결함 감소(바로) / time 설계 한 주 단축(바로) / cost 대당 원가 인하(세대) / acclaim 출시 인지도 가산 */
 export type WinKind = 'stat:P' | 'stat:E' | 'stat:U' | 'stat:D' | 'stat:Q' | 'defects' | 'time' | 'cost' | 'acclaim';
@@ -171,6 +175,8 @@ export interface Generation {
   costCut?: number; // 1.3.0 직원 성과로 줄어든 대당 원가 비율
   wins?: StaffWin[]; // 1.3.0 이 세대(판 포함) 개발 중 직원 성과 기록
   critiques?: Critique[]; // 1.3.0 출시 때 평론가별 시승기(reviews와 같은 순서·점수)
+  awards?: string[]; // 3.5.0 수상 이력("1995년 올해의 차")
+  awardUntil?: number; // 3.5.0 수상 판매 보너스가 끝나는 달(이 달 전까지)
 }
 /** 세대 손익 누적(0.10.0): 매출·원가·광고비·리콜비, 개발비(처음·페이스리프트·의무 장비·긴급 개선), 월별 이익(sales와 같은 길이). est: 예전 저장에서 추정한 값이 섞임 */
 export interface GenPnl { rev: number; cogs: number; mk: number; recall: number; dev: { base: number; lift: number; retro: number; fix: number }; months: number[]; est?: true }
@@ -205,7 +211,9 @@ export interface ResearchState {
   priority?: string; // 0.5.1 우선 연구(맨 앞, 주간 점수의 50%). 없으면 고르게 나눈다
 }
 /** 무작위 사건의 답을 기다리는 선택(4주 뒤 기본 선택) */
-export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null }
+export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null; rv?: RivalChoice } // rv(3.5.0): 경쟁 2부 결정 창의 대상
+/** 3.5.0 경쟁 2부 결정 창의 대상: 가격 전쟁(war ID) 또는 이직 제안(직원 ID·인상 월급), 선택지별 결과 문장 */
+export interface RivalChoice { rivalId: string; war?: number; staffId?: number; raise?: number; results: string[] }
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
 export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
 /** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
@@ -248,11 +256,11 @@ export type StartCondition = 'normal' | 'rich' | 'lean'; // 1.5.0 시작 조건
 export type Challenge = 'evOnly' | 'names3' | 'noLoan' | 'noExec'; // 1.5.0 도전 과제
 // ---------- 자회사(3.0.0, 설계서 9.9) ----------
 /** 브랜드 자회사(고급·보급형)와 사업 자회사(부품·금융) */
-export type SubKind = 'premium' | 'value' | 'parts' | 'finance';
+export type SubKind = 'premium' | 'value' | 'parts' | 'finance' | 'acquired'; // acquired(3.5.0): 인수한 경쟁사(인수 브랜드, 종류마다 한 곳 제한의 예외)
 /** 자회사 전략 9가지(사업 자회사는 growth·profit·stable만) */
 export type SubStrategy = 'growth' | 'share' | 'profit' | 'rival' | 'tech' | 'stable' | 'niche' | 'prestige' | 'ev';
 /** 자회사 모델 한 대(차급 하나): 경쟁 모델(RivalModel)과 같은 n·start·cycle·base에 이름·동력·이번 달 점유 점수(a, 본사 판매의 제 살 깎기에 쓴다)·지난달 판매 */
-export interface SubModel extends RivalModel { body: string; name: string; ev?: true; keep?: true; a: number; sold: number; car?: SubCar; price?: number } // car(3.1.0): 실제 사양(없으면 추정 방식), price(3.1.0): 직접 운영에서 정한 가격 배수(없으면 전략) // keep: 플레이어가 추가를 지시한 모델(전략이 줄이지 않는다)
+export interface SubModel extends RivalModel { body: string; name: string; ev?: true; keep?: true; a: number; sold: number; car?: SubCar; price?: number; awardUntil?: number; awards?: string[] } // awardUntil·awards(3.5.0): 수상 판매 보너스가 끝나는 달, 수상 이력 // car(3.1.0): 실제 사양(없으면 추정 방식), price(3.1.0): 직접 운영에서 정한 가격 배수(없으면 전략) // keep: 플레이어가 추가를 지시한 모델(전략이 줄이지 않는다)
 // ---------- 3.1.0 자회사 직접 운영(설계서 9.9) ----------
 /** 제작 지시의 성격·가격대 */
 export type SubCharacter = 'luxury' | 'sport' | 'value';
@@ -287,10 +295,38 @@ export interface Subsidiary {
   orders?: SubOrder[]; // 3.1.0 개발 중인 차
   devDue?: number; // 3.1.0 이번 달에 낼 개발비(직접 기획·지시·배지, 월말 결산의 비용)
   target?: SubTarget | null; // 3.1.0 연간 목표
+  listed?: number; // 3.5.0 상장으로 판 지분(0~0.49). 본사 배당·매각 대금이 이만큼 줄어든다
+  listedMonth?: number; // 3.5.0 처음 상장한 달
+  from?: string; // 3.5.0 인수 브랜드: 인수한 경쟁사 ID(이름·모양·강약을 물려받는다)
+  cost?: number; // 3.5.0 인수 브랜드의 투자 기준(인수 때 자본, 없으면 종류의 설립비)
+}
+// ---------- 3.5.0 경쟁 2부(설계서 7.4) ----------
+/** 대응 신차: 플레이어가 점유율 상위인 차급에 경쟁사가 맞불 모델을 예고하고 launch 달에 낸다 */
+export interface Counter { id: number; rivalId: string; body: string; announced: number; launch: number; target: string } // target: 예고 때 그 차급의 내 차 이름
+/** 가격 전쟁: rivalId가 body 차급에서 from~until(이 달 전까지) cut만큼 가격을 내린다. follow: 내가 따라 내렸는가(null = 아직 답 없음) */
+export interface PriceWar { id: number; rivalId: string; body: string; from: number; until: number; cut: number; follow: boolean | null }
+/** 경쟁사 인재(영입 후보) */
+export interface RivalTalent { id: number; rivalId: string; name: string; role: Role; ability: number; potential: number; pay: number; fee: number; until: number } // pay: 월급 가산(웃돈), fee: 영입비, until: 이 달 전까지 후보
+/** 기술 제휴 */
+export interface Alliance { rivalId: string; from: number; until: number; fee: number }
+/** 시상식 수상 한 건 */
+export interface Award { year: number; cat: string; name: string; who: 'mine' | 'sub' | 'rival'; company: string; car: string; body: string; score: number; genId?: number; subId?: number }
+export interface RivalryState {
+  counters: Counter[]; // 예고된(출시 전) 대응 신차
+  counterCool: Record<string, number>; // 차급 → 다시 대응 신차를 예고할 수 있는 달
+  wars: PriceWar[]; // 진행 중·예정 가격 전쟁(끝나면 지운다)
+  lastWar: number; // 마지막 가격 전쟁이 시작한 달(−∞ = 없음)
+  lastPoach: number; // 마지막 이직 제안 달
+  talent: RivalTalent[]; talentMonth: number; // 경쟁사 인재 후보와 마지막 갱신 달
+  weak: Record<string, number>; // 경쟁사 → 인재를 빼앗겨 약해진 몫(0~)
+  alliances: Alliance[];
+  out: string[]; // 인수해 경쟁사 목록에서 빠진 회사
+  awards: Award[]; // 시상식 이력(오래된 것이 앞)
+  log: { week: number; text: string }[]; // 경쟁사 관계 기록(최근 것이 뒤)
 }
 
 export interface CarState {
-  saveVersion: 9;
+  saveVersion: 10;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -321,6 +357,7 @@ export interface CarState {
   devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
   start?: { year: number; condition: StartCondition; challenges: Challenge[] }; // 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
   subs?: Subsidiary[]; // 3.0.0 자회사(형식 9). 없으면 자회사 없음
+  rivalry?: RivalryState; // 3.5.0 경쟁 2부(형식 10). 없으면 다음 월 결산에 빈 상태로 시작한다
   pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
@@ -397,6 +434,13 @@ export type Command =
   | { type: 'subCancelOrder'; subId: number; orderId: number }
   | { type: 'setSubModelPrice'; subId: number; body: string; pct: number | null } // pct: 브랜드 기준 가격의 %(null = 전략대로)
   | { type: 'setSubTarget'; subId: number; target: SubTarget | null }
+  // ---------- 3.5.0 경쟁 2부 ----------
+  | { type: 'hireRivalTalent'; talentId: number }
+  | { type: 'allyRival'; rivalId: string }
+  | { type: 'endAlliance'; rivalId: string }
+  | { type: 'buyRivalTech'; rivalId: string; techId: string }
+  | { type: 'listSub'; subId: number; pct: number } // pct: 상장 뒤 판 지분 합(%)
+  | { type: 'acquireRival'; rivalId: string }
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';

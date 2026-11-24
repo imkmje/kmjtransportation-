@@ -16,6 +16,7 @@ import { planPreview } from './queries';
 import { rescueOptions } from './insight';
 import { DELEGATIONS, execSkill, monthlyFixed, seatsOf } from './execs';
 import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
+import { buyableTechs, listError, rivalRelations } from './rivalry';
 import { SUB_KINDS, autoSpec, badgeCost, foundError, isDirect, newModelName, slotError, subFunds, subPlanPreview, areaBodies } from './subs';
 import { monthOf, monthTime, yearOf } from './time';
 import type { Battery, Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
@@ -46,6 +47,7 @@ export interface SteadyOptions {
   ptPick: 'auto' | 'gasoline' | 'newest';
   optPick: 'fit' | 'none' | 'misfit';
   subDirect?: boolean; // 3.1.0: 브랜드 자회사를 직접 운영(빈 차급에 본사 차 배지 또는 직접 기획, subs와 함께)
+  rivalry?: boolean; // 3.5.0: 경쟁사 인재 영입·기술 제휴(기술 구매)·자회사 상장·경쟁사 인수를 쓴다(선택, 기존 균형 봇은 쓰지 않는다)
   subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
 const STEADY: SteadyOptions = {
@@ -73,6 +75,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (o.research && turn) research(g, o.sloppy);
       if (o.rescue) rescue(g);
       if (o.subs && g.state.week % config.time.weeksPerMonth === 0) { manageSubs(g); if (o.subDirect) manageSubsDirect(g); }
+      if (o.rivalry && g.state.week % config.time.weeksPerMonth === 0) manageRivalry(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -149,6 +152,21 @@ function manageSubs(g: Game): void {
   if (spare <= 0 || monthOf(s.week) % config.time.monthsPerYear !== 0) return;
   const to = (s.subs ?? []).filter((x) => x.kind === 'premium' || x.kind === 'value').sort((a, b) => a.total.invested / config.subs.kinds[a.kind].cost - b.total.invested / config.subs.kinds[b.kind].cost || a.id - b.id)[0];
   if (to) g.command({ type: 'investSub', subId: to.id, amount: spare });
+}
+/** 3.5.0 경쟁 2부 봇(선택, 달 첫 주): 지난 1년 흑자일 때만. 경쟁사 인재는 같은 직무 최고 능력보다 높으면 영입, 기술 제휴는 사 올 기술이 가장 많은 곳과 맺고 가장 싼 기술을 한 달에 하나 산다,
+ *  브랜드 자회사는 상장할 수 있으면 다음 단계 지분까지 판다, 인수는 가장 싼 경쟁사를 값 + 고정비 acquireMonths개월 치가 있을 때. 여유 현금 기준은 config.bots.rivalry */
+function manageRivalry(g: Game): void {
+  const s = g.state, BR = B.rivalry, floor = fixedCost(s) * BR.cashMonths;
+  if (s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0) <= 0) return;
+  const rel = rivalRelations(s).filter((r) => !r.out);
+  for (const t of rel.flatMap((r) => r.talent)) if (!t.reason && s.cash >= t.fee + floor && t.ability > Math.max(0, ...s.staff.filter((x) => x.role === t.role).map((x) => x.ability))) { g.command({ type: 'hireRivalTalent', talentId: t.id }); break; }
+  const ally = rel.filter((r) => !r.alliance && !r.allianceError && s.cash >= r.allianceFee + floor).sort((a, b) => buyableTechs(s, b.id).length - buyableTechs(s, a.id).length || (a.id < b.id ? -1 : 1))[0];
+  if (ally && buyableTechs(s, ally.id).length) g.command({ type: 'allyRival', rivalId: ally.id });
+  const buy = rivalRelations(s).filter((r) => r.alliance).flatMap((r) => r.buyable.map((t) => ({ r: r.id, t }))).sort((a, b) => a.t.cost - b.t.cost || (a.t.id < b.t.id ? -1 : 1))[0];
+  if (buy && s.cash >= buy.t.cost + floor) g.command({ type: 'buyRivalTech', rivalId: buy.r, techId: buy.t.id });
+  for (const sub of [...(s.subs ?? [])].sort((a, b) => a.id - b.id)) { const step = config.rivalry.ipo.steps.find((p) => !listError(s, sub, p)); if (step !== undefined) g.command({ type: 'listSub', subId: sub.id, pct: step }); }
+  const buyCo = rel.filter((r) => !r.acquire.reason && s.cash >= r.acquire.price + fixedCost(s) * BR.acquireMonths).sort((a, b) => a.acquire.price - b.acquire.price)[0];
+  if (buyCo) g.command({ type: 'acquireRival', rivalId: buyCo.id });
 }
 /** 3.1.0 직접 운영 봇: 브랜드 자회사를 직접 운영으로 바꾸고, 달마다 자회사마다 한 대까지 빈 차급(영역 안, 상한 안)에 차를 낸다.
  *  본사가 그 차급에 판매 중인 차가 있으면 배지, 없으면 직접 기획(고객층 가중치 순으로 개발 방향 4·3·2·1·0, 고급은 가격대 높게). 개발비는 자본의 절반까지만 */

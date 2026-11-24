@@ -132,11 +132,21 @@ describe('2.0.0 경쟁 모델', () => {
       const s = g.state;
       return { cash: s.cash, sold: allGens(s).reduce((a, x) => a + x.totalSold, 0), rng: s.rng, ledger: h(s.ledger), rivals: h(s.rivals) };
     };
-    // 1.6.1(커밋 de79c75)에서 같은 코드로 뽑은 값
-    expect([run(1, 20), run(2, 20, steady()), run(3, 8, steadyExec(), 2015)]).toEqual([
+    // 1.6.1(커밋 de79c75)에서 같은 코드로 뽑은 값. 3.5.0: 경쟁 2부(시상식·대응 신차·가격 전쟁 등)를 끈 계산이 그대로인지 본다(켠 값은 아래 3.5.0 고정값)
+    const R = config.rivalry as { on: boolean };
+    R.on = false;
+    let off;
+    try { off = [run(1, 20), run(2, 20, steady()), run(3, 8, steadyExec(), 2015)]; } finally { R.on = true; }
+    expect(off).toEqual([
       { cash: 87412019.56920338, sold: 940508, rng: 1249105420, ledger: 4227960597, rivals: 547975576 },
       { cash: 45466261.71972582, sold: 792658, rng: 2087917282, ledger: 3886249014, rivals: 722100899 },
       { cash: 98958003.81953543, sold: 304542, rng: 4270408987, ledger: 3353263113, rivals: 2834068642 },
+    ]);
+    // 3.5.0 경쟁 2부를 켠 판(지금 게임): 시상식 평판·판매 보너스, 대응 신차, 가격 전쟁(봇은 기본 선택 '버틴다'), 이직 제안(임원 봇은 인사 위임으로 붙잡는다)이 결과를 바꾼다
+    expect([run(1, 20), run(2, 20, steady()), run(3, 8, steadyExec(), 2015)]).toEqual([
+      { cash: 108126213.4875947, sold: 1075924, rng: 3678870906, ledger: 69962234, rivals: 1834140196 },
+      { cash: 51269056.79065265, sold: 823653, rng: 1591540306, ledger: 1647041059, rivals: 1379558245 },
+      { cash: 95369860.96742879, sold: 312140, rng: 3623420717, ledger: 539106578, rivals: 3493211895 },
     ]);
   });
 });

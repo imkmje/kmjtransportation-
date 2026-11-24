@@ -164,13 +164,14 @@ function rollRandom(s: CarState, m: number, ev: GameEvent[]): void {
     if (mon !== m % MPY) return;
     const gens = onSaleGens(s), defect = gens.filter((g) => g.editions[g.editions.length - 1].defects > 0);
     const room = s.staff.length < staffCap(s);
-    const ok = RANDOM_EVENTS.filter((d) => d.needs === 'none' || (d.needs === 'defectCar' ? defect.length > 0 : d.needs === 'staffRoom' ? room : gens.length > 0));
+    const ok = RANDOM_EVENTS.filter((d) => d.needs !== 'rivalry').filter((d) => d.needs === 'none' || (d.needs === 'defectCar' ? defect.length > 0 : d.needs === 'staffRoom' ? room : gens.length > 0));
     if (!ok.length) return;
     const def = ok[Math.floor(hash01(s.seed, 53, year, k) * ok.length)];
     const pool = def.needs === 'defectCar' ? defect : gens, g = def.needs === 'none' || def.needs === 'staffRoom' ? undefined : pool[Math.floor(hash01(s.seed, 54, year, k) * pool.length)];
     let fx: number | null = null;
-    if (def.onFire?.type === 'rivalHit' && g && s.rivals.length) {
-      const r = s.rivals[Math.floor(hash01(s.seed, 55, year, k) * s.rivals.length)];
+    const act = s.rivals.filter((x) => !s.rivalry?.out.includes(x.id)); // 3.5.0 인수한 회사 제외
+    if (def.onFire?.type === 'rivalHit' && g && act.length) {
+      const r = act[Math.floor(hash01(s.seed, 55, year, k) * act.length)];
       s.events.mods.push({ kind: 'rivalHit', value: def.onFire.add, untilMonth: m + def.onFire.months, body: g.body, rivalId: r.id, label: `${r.name} ${bodyById(g.body).name} 히트작` });
     }
     if (def.onFire?.type === 'fxRoll') fx = hash01(s.seed, 56, year, k) < def.onFire.goodShare ? def.onFire.good : def.onFire.bad;
@@ -277,7 +278,7 @@ const moneyText = (x: number): string | null => { const v = Math.abs(x); if (v <
 export function pendingChoices(s: CarState) {
   return s.events.pending.map((p) => {
     const def = RANDOM_EVENTS.find((d) => d.id === p.eventId)!;
-    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c, i) => { const mny = choiceMoney(s, p, i); return { label: c.label, result: c.result, cost: -mny, costText: moneyText(mny) }; }), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
+    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c, i) => { const mny = choiceMoney(s, p, i); return { label: c.label, result: p.rv?.results[i] ?? c.result, cost: -mny, costText: moneyText(mny) }; }), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
   });
 }
 /** 뉴스 기록(최신이 앞). category가 없는 예전 항목은 'other' */

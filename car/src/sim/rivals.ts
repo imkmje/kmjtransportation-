@@ -63,7 +63,7 @@ export function myCellShare(s: CarState, body: string): number {
   return size > 0 ? Math.min(1, mine / size) : 0;
 }
 /** 한 차체 칸의 경쟁 모델(경쟁사 순) */
-export const rivalModelsIn = (s: CarState, body: string): RivalModelView[] => s.rivals.flatMap((r, ri) => (r.models[body] ? [rivalModelView(s, ri, body)] : []));
+export const rivalModelsIn = (s: CarState, body: string): RivalModelView[] => s.rivals.flatMap((r, ri) => (r.models[body] && !isOut(s, r.id) ? [rivalModelView(s, ri, body)] : []));
 /** 경쟁사 하나의 라인업(차체 순)과 한 줄 성격 */
 export function rivalLineup(s: CarState, id: string): { name: string; trait: string; desc: string; models: RivalModelView[] } | null {
   const ri = s.rivals.findIndex((r) => r.id === id);
@@ -72,18 +72,29 @@ export function rivalLineup(s: CarState, id: string): { name: string; trait: str
   return { name: s.rivals[ri].name, trait: d.trait, desc: d.desc, models: Object.keys(s.rivals[ri].models).sort().map((b) => rivalModelView(s, ri, b)) };
 }
 
+/** 3.5.0 인수해 경쟁사 목록에서 빠진 회사인가. 빠진 회사도 s.rivals에 남겨 둔다(순번 ri가 모델 이름·주기 해시에 쓰여 다른 회사 값이 바뀌지 않게) */
+export const isOut = (s: Pick<CarState, 'rivalry'>, id: string): boolean => !!s.rivalry?.out.includes(id);
+/** 지금 경쟁사(인수한 회사 제외) */
+export const activeRivals = (s: CarState) => s.rivals.filter((r) => !isOut(s, r.id));
+/** 3.5.0 경쟁 2부의 월말 손잡이(rivalry.ts가 채운다. rivals.ts가 rivalry.ts를 가져오면 순환 참조라 주입한다) */
+export const rivalHooks: { launch?: (s: CarState, ev: GameEvent[], m: number) => Set<string>; cells?: (s: CarState, m: number) => void } = {};
+
 /** 월말: 경쟁 차 갱신(updateRivals) + 세대가 바뀐 칸마다 뉴스 한 줄. 내가 그 칸에 차를 팔고 있으면 관련을 덧붙이고 알림(이벤트)도 낸다.
- *  늦은 시작의 과거 갱신(start.ts)은 이것을 거치지 않으므로 지난 세대교체 뉴스가 쏟아지지 않는다 */
+ *  늦은 시작의 과거 갱신(start.ts)은 이것을 거치지 않으므로 지난 세대교체 뉴스가 쏟아지지 않는다.
+ *  3.5.0: 예고한 대응 신차를 내고(뉴스는 그쪽에서), 인수한 회사의 세대교체 뉴스는 내지 않으며, 끝으로 가격 전쟁·인재 유출·인수 빈 몫을 칸 세기에 반영한다 */
 export function updateRivalsWithNews(s: CarState, ev: GameEvent[], m: number): void {
   const before = s.rivals.map((r) => Object.fromEntries(Object.entries(r.models).map(([b, md]) => [b, md.n])));
   updateRivals(s.rivals, s.seed, m);
+  const counter = s.rivalry ? rivalHooks.launch?.(s, ev, m) : undefined;
   s.rivals.forEach((r, ri) => {
+    if (isOut(s, r.id)) return;
     for (const body of Object.keys(r.models).sort()) {
-      if (r.models[body].n === before[ri][body]) continue;
+      if (r.models[body].n === before[ri][body] || counter?.has(`${r.id}:${body}`)) continue;
       const v = rivalModelView(s, ri, body), bn = bodyById(body).name;
       const mine = s.nameplates.find((n) => n.generations.some((g) => g.body === body && g.status !== 'discontinued'))?.name;
       const text = `${r.name}, ${v.name} ${v.number}세대 출시. ${mine ? `「${mine}」${josa(mine, '과/와')} 같은 ${bn}` : bn}, 추정 평론 ${v.critic.toFixed(1)}.${v.hit ? ' 이 회사의 평소 모델보다 뚜렷이 강한 히트작이다.' : ''}`;
       addNews(s, mine ? ev : [], text, 'rival', 'news', undefined, 'rival');
     }
   });
+  if (s.rivalry) rivalHooks.cells?.(s, m);
 }

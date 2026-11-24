@@ -1,7 +1,7 @@
 // 화면이 쓰는 조회 함수(순수 함수, 상태를 바꾸지 않는다)
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById } from '../data';
-import { avgGrade, finalStats, grade, grades, lifeFactor, salaryOf, standard, unitCost, zeroStats } from './cars';
+import { avgGrade, finalStats, grade, grades, lifeFactor, payOf, salaryOf, standard, unitCost, zeroStats } from './cars';
 import { equipOf, optPerCar, optWeights, stdOf } from './equip';
 import { withRequired, devScale, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
 import { allGens, linesUsed, sellingGens } from './game';
@@ -303,7 +303,7 @@ export function staffInfo(s: CarState): StaffRow[] {
     const tr = isTraining(x, s.week), rs = isResting(x, s.week), why = trainError(s, x);
     const weeksLeft = tr ? x.trainings[x.trainings.length - 1] + config.staff.train.weeks - s.week : rs ? x.restUntil! - s.week : 0;
     return {
-      id: x.id, name: x.name, role: x.role, ability: x.ability, potential: x.potential, atPotential: x.ability >= x.potential, salary: salaryOf(x.ability),
+      id: x.id, name: x.name, role: x.role, ability: x.ability, potential: x.potential, atPotential: x.ability >= x.potential, salary: payOf(x), from: x.from ?? null,
       condition: x.condition, conditionMult: conditionMult(x.condition), projectId: x.projectId,
       status: tr ? 'training' : rs ? 'resting' : x.role === 'sales' ? 'sales' : x.projectId !== null ? 'working' : 'idle', weeksLeft,
       canTrain: why === null, trainReason: why, trainCost: trainCost(x.ability), trainingsThisYear: trainingsThisYear(x, s.week), severance: salaryOf(x.ability) * config.staff.severanceMonths,
@@ -494,3 +494,5 @@ export { subsInfo, subDetail, subModelsIn, subModelView, subOfModelName, canniba
 export { subPlanPreview, autoSpec as subAutoSpec, badgeChoices, groupSummary, subTeam, isDirect, newModelName as subModelName, slotError as subSlotError, shareTechError, targetProgress } from './subs'; // 3.1.0
 export { partsCut } from './company';
 export { subSalesMult } from './market';
+export { rivalRelations, acquireInfo, acquireError, awardHistory, rivalryLog, subValue, listError, warPriceMult, activeWar, allianceFee, buyableTechs, pressureFrom, type RivalRelation } from './rivalry'; // 3.5.0 경쟁 2부
+export { activeRivals, isOut } from './rivals';

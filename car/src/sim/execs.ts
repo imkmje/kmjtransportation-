@@ -3,7 +3,7 @@
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById, optionById, segmentById, techById } from '../data';
 import { equipOf, expectEffect, recommendedEquip, stdOf } from './equip';
-import { grade, salaryOf, unitCost } from './cars';
+import { grade, payOf, salaryOf, unitCost } from './cars';
 import { allocate, capacityOf, costMultOf, devTeams, isAway, isDevRole, isTraining, linesOf, repEffect, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
 import { linesUsed, sellingGens } from './game';
@@ -34,8 +34,9 @@ export const DELEGATIONS: Record<ExecRole, { key: string; label: string; note?: 
   hr: [{ key: 'autoRest', label: '지친 직원 자동 휴식' }, { key: 'autoTrain', label: '성장 여지가 있는 직원 자동 교육' },
     { key: 'autoHire', label: '빈자리 자동 채용', note: '정원에 빈자리가 있고 현금에 여유가 있으면 가장 부족한 직무를 뽑습니다. 같은 직무 직원 평균 능력 이상인 후보를 뽑고, 공고로 평균에 닿기 어려우면 가장 높은 등급 공고에서 가장 나은 후보를 뽑습니다.' },
     { key: 'autoFire', label: '성장이 멈춘 직원 자동 해고', note: `성장 한계에 닿았고 같은 직무 평균보다 능력이 ${config.exec.hr.weakGap} 이상 낮은 직원을 한 달에 한 명까지 내보냅니다. 개발 중·교육·휴식 중이거나 입사 ${AS.tenureMonths}개월이 안 된 직원은 제외합니다.`,
-      warn: '해고는 되돌릴 수 없습니다. 퇴직금이 나가고, 내보낸 직원은 다시 데려올 수 없습니다.' }],
-  product: [], finance: [],
+      warn: '해고는 되돌릴 수 없습니다. 퇴직금이 나가고, 내보낸 직원은 다시 데려올 수 없습니다.' },
+    { key: 'autoPoach', label: '이직 제안 자동 대응', note: '경쟁사가 직원에게 이직을 제안하면, 그 직원 능력이 같은 직무 평균 이상일 때 월급을 올려 붙잡습니다. 어느 쪽이든 직원은 남습니다(3.5.0).' }],
+  product: [], finance: [{ key: 'autoPriceWar', label: '가격 전쟁 자동 대응', note: '경쟁사가 가격을 내리면, 버틸 때 줄어드는 판매가 인하 폭보다 크면 따라 내리고 아니면 가격을 지킵니다(3.5.0).' }],
   production: [{ key: 'autoAlloc', label: '생산 배분 자동 조정' }],
   research: [{ key: 'autoResearch', label: '빈 연구 칸에 추천 연구 시작' }],
   market: [],
@@ -48,7 +49,7 @@ const KIND_TITLE: Record<string, string> = {
   expand: '공장 증설', lines: '생산 라인 부족', alloc: '생산 배분',
   regulation: '규제 대비 연구', emptySlot: '빈 연구 칸',
   build: '새 차종 제안', adUp: '광고 늘리기', adDown: '광고 줄이기',
-  autoRest: '자동 휴식', autoTrain: '자동 교육', autoHire: '자동 채용', autoHireFail: '자동 채용 보류', autoFire: '자동 해고', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
+  autoPriceWar: '가격 전쟁 대응', autoPoach: '이직 제안 대응', autoRest: '자동 휴식', autoTrain: '자동 교육', autoHire: '자동 채용', autoHireFail: '자동 채용 보류', autoFire: '자동 해고', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
   autoFullChange: '자동 풀체인지', autoFacelift: '자동 페이스리프트', autoDerive: '파생 모델 세대교체', autoGenWait: '세대교체 대기', autoLaunch: '자동 출시', autoLaunchFail: '자동 출시 보류',
   replaceDone: '교체 고용 완료', replaceFail: '교체 고용 실패', replaceHold: '교체 고용 보류', replaceCancel: '교체 고용 취소', replaceWait: '교체 고용 대기',
 };
@@ -72,7 +73,7 @@ export const seatAllowance = (n: number): number => X.seatAllowance[Math.min(n, 
 export const execPayOf = (s: CarState, x: Staff, hired: boolean): number => (hired ? Math.round(salaryOf(x.ability) * X.hiredPayMult) : salaryOf(x.ability) + X.allowance) + seatAllowance(seated(s).length);
 export const execPay = (s: CarState): number => seated(s).reduce((a, [, x, h]) => a + execPayOf(s, x, h), 0);
 /** 운영비(월): 직원 월급 + 임원 월급 + 본사·공장 유지비. 위임·교체 고용의 현금 기준 */
-export const monthlyFixed = (s: CarState): number => s.staff.reduce((a, x) => a + salaryOf(x.ability), 0) + execPay(s) + upkeepOf(s);
+export const monthlyFixed = (s: CarState): number => s.staff.reduce((a, x) => a + payOf(x), 0) + execPay(s) + upkeepOf(s);
 
 const holder = (s: CarState, r: ExecRole) => s.execs?.seats[r];
 export const delegationOn = (s: CarState, r: ExecRole, key: string): boolean => !!holder(s, r) && !!s.execs?.delegations[r]?.includes(key) && execSkill(r, holder(s, r)!.staff) >= X.delegateSkill;
@@ -376,7 +377,7 @@ const IDEAS: Record<ExecRole, (s: CarState) => Idea[]> = { hr: hrIdeas, product:
 /** Game이 넘기는 손잡이: 일회성 지출, 명령 실행(검증 포함, 기록에는 남지 않음), 새 이름 */
 export interface ExecCtx { s: CarState; rng: Rng; spend(cost: number): void; run(cmd: Command): CommandResult; newName(): string }
 
-function addReport(s: CarState, role: ExecRole, kind: string, text: string, facts: string[], goto: ExecGoto | null, auto: boolean, replacementId: number | null = null, key = ''): void {
+export function addReport(s: CarState, role: ExecRole, kind: string, text: string, facts: string[], goto: ExecGoto | null, auto: boolean, replacementId: number | null = null, key = ''): void {
   const e = s.execs!, seat = e.seats[role];
   e.reports.push({ id: s.nextId++, week: s.week, role, execName: seat?.staff.name ?? '', kind, key, text, facts, goto, unread: true, auto, replacementId });
   if (e.reports.length > X.reportsMax) e.reports.splice(0, e.reports.length - X.reportsMax);

@@ -172,6 +172,7 @@ export const config = {
     modelsPerBody: 1, // 차종 수 상한 = 쓸 수 있는 차체 수 × 이 값(생산 라인 수 이내)
     gougeStep: 0.05, // 가격 올리기 봇: 매달 ±5%
     bodySpread: 2, // 4단계: 이미 파는 차체의 가치를 (1 + 차 수)^2로 나눠 새 차체를 쓰게 한다
+    rivalry: { cashMonths: 24, acquireMonths: 36 }, // 3.5.0 경쟁 2부 봇(선택): 영입·제휴·기술 구매는 그 돈 + 고정비 24개월 치가 남을 때, 인수는 값 + 고정비 36개월 치가 남을 때
     subs: { cashMonths: 24, investShare: 0.2, keepCash: 50000000 }, // 3.0.0 자회사 봇(선택): 지난 1년 흑자이고 설립비 + 고정비 24개월 치가 있으면 설립, 해마다 1월에 현금이 keepCash(5,000억)와 고정비 24개월 치를 넘으면 그 넘는 몫의 20%를 투자가 가장 적은(설립비 대비) 브랜드 자회사에
     execCashMonths: 12, // 0.7.0 임원 봇: 지난 1년 흑자이고 현금이 고정비 12개월 치 이상일 때만 임원 자리를 채운다
     weakShare: 0.5, // 지난달 수요가 (한도 ÷ 판매 차종 수)의 50% 미만인 약한 차는 풀체인지 가능 시점(36개월)에 교체
@@ -325,6 +326,8 @@ export const config = {
       value: { name: '보급형 브랜드', cost: 15000000, rep: 100, bodies: ['kei', 'hatch', 'sedanS', 'suvS', 'minivan', 'sedanM'], segments: ['worker', 'family', 'youth', 'fleet'], segment: 'worker', price: 1, unitCost: 0.97, vol: 1.15, a: 0, rep0: 0.4, color: '#d9822b' },
       parts: { name: '부품 회사', cost: 10000000, rep: 100, color: '#5b7f5a' },
       finance: { name: '할부 금융', cost: 10000000, rep: 100, color: '#4a6fa5' },
+      // 3.5.0 인수 브랜드(설립하지 않고 경쟁사를 사서 만든다). 모든 차급·고객층, 시장 가격·원가·물량은 경쟁사 때와 같게(1), 설립비 자리는 인수 때 자본(sub.cost)이 대신한다
+      acquired: { name: '인수 브랜드', cost: 20000000, rep: 0, bodies: ['sedanS', 'sedanM', 'sedanL', 'hatch', 'coupe', 'minivan', 'kei', 'suvS', 'suv', 'suvL', 'pickup', 'sports'], segments: ['youth', 'family', 'worker', 'rich', 'fleet', 'enthusiast'], segment: 'worker', price: 1, unitCost: 1, vol: 1, a: 0, rep0: 1, color: '#777777' },
     },
     defaultSub: { dividend: 50, share: 1 }, // 설립 때 배당 50%·공유 보통, 전략은 브랜드 growth·사업 stable
     switchMonths: 6, // 전략 전환 기간(효과가 이 기간에 걸쳐 직선으로 바뀐다)
@@ -382,9 +385,47 @@ export const config = {
       mid: { name: '보통', tier: 2, budget: 'normal', price: 1 },
       high: { name: '높게', tier: 3, budget: 'high', price: 1.1 },
     },
-    defaultOrder: { premium: { character: 'luxury', band: 'high' }, value: { character: 'value', band: 'mid' } }, // 자회사가 스스로 다시 개발할 때(지시 차의 성격이 없으면)
+    defaultOrder: { premium: { character: 'luxury', band: 'high' }, value: { character: 'value', band: 'mid' }, acquired: { character: 'value', band: 'mid' } }, // 자회사가 스스로 다시 개발할 때(지시 차의 성격이 없으면)
     badge: { costShare: 0.3, timeShare: 1 / 3, critic: -0.5, cannibal: 1 }, // 본사 차 배지: 개발비 = 원본 세대 개발비 × 30%, 기간 = 원본 개발 기간 ÷ 3, 평론 −0.5, 본사 원본과의 자기 잠식 = a² × 1(일반 자회사 모델은 0.25)
     modelPrice: { min: 80, max: 130 }, // 직접 운영의 모델 가격: 브랜드 기준 가격의 80~130%
     target: { subRep: 3, hqRep: 0.5, maxSold: 10000000, maxProfit: 1e10 }, // 연간 목표를 이루면 브랜드 평판 +3, 본사 평판 +0.5(미달 벌칙 없음)
+  },
+  // 3.5.0 경쟁 2부(설계서 7.4, 계산은 sim/rivalry.ts). 사용자 균형 원칙: 쓰면 이득, 당하는 쪽은 약하게, 초반 파산·숫자 폭주만 막는다. 무작위는 시드 해시(게임 난수를 쓰지 않는다)
+  rivalry: {
+    on: true, // 끄면 경쟁 2부의 월초·월말 처리가 모두 멈춘다(기존 판 결과 회귀 점검용, rival200 테스트)
+    // 대응 신차: 지난달 내 판매가 그 차급 월 규모의 share 이상이고 경쟁사 각각의 점유보다 크면, 그 차급이 가장 강한(rivals.json cells) 경쟁사가 delayMin~delayMax개월 뒤 맞불 모델을 낸다.
+    // 맞불 모델의 기본 A = 평소 새 모델 + boost(추정 평론 +0.5). 같은 차급에는 출시 뒤 cooldown개월 동안 다시 예고하지 않는다. from년 전에는 없다(1.0.0 경쟁사의 대응과 같은 시기)
+    counter: { share: 0.2, delayMin: 12, delayMax: 24, boost: 0.05, cooldown: 72, from: 1985 },
+    // 가격 전쟁: 설립(시작) 뒤 startYears년(난이도별)이 지나면, 해마다 perYear 확률(달마다 나눠 굴림)로 경쟁사 하나가 내가 차를 파는 한 차급에서 cutMin~cutMax만큼 monthsMin~monthsMax개월 가격을 내린다.
+    // 그동안 그 경쟁 차 세기 × (1 + 인하 폭 × aPer). 따라 내리면 그 기간 그 차급 내 차 가격 × (1 − 인하 폭)(끝나면 원래대로). 다음 전쟁은 끝나고 gap개월 뒤부터
+    war: { startYears: { easy: 10, normal: 6, hard: 4 } as Record<string, number>, perYear: 0.35, cutMin: 0.04, cutMax: 0.08, monthsMin: 3, monthsMax: 6, aPer: 1.5, gap: 12, answerWeeks: 2 },
+    // 이직 제안: 같은 시작 시점부터 해마다 perYear 확률로, 능력 상위 top명 중 한 명에게. 붙잡으면 월급 + raise(지금 월급 대비), 능력 + ability(잠재력 안), 컨디션 + condition. 직원은 어느 쪽이든 남는다
+    poach: { perYear: 0.4, minStaff: 5, top: 3, raise: 0.1, ability: 2, condition: 0.15, gap: 6 },
+    // 경쟁사 인재(영입 후보): 본사 hqMin등급부터 refreshMonths개월마다 count명. 능력 = 지금 직원 상위 평균 + addMin~addMax(최대 maxAbility), 월급 웃돈 = 직원 월급 × payPremium,
+    // 영입비 = 월급(웃돈 포함) × feeMonths. 영입하면 그 경쟁사 세기 × (1 − weaken)(최대 weakMax까지 쌓인다)
+    talent: { hqMin: 3, count: 2, refreshMonths: 6, addMin: 8, addMax: 18, minAbility: 60, maxAbility: 95, payPremium: 0.3, feeMonths: 12, weaken: 0.01, weakMax: 0.05 },
+    // 기술 제휴: 본사 hqMin등급부터, 동시에 max곳, months개월. 계약금 = 지금 앞뒤 5년에 나온 기술의 평균 연구비 × feeTechs. 제휴 중 주간 연구 점수 × (1 + speed),
+    // 그 경쟁사가 앞선 분야(rivals.json field)의 기술(그해까지 나온 것, 선행 기술 완료)을 연구비 × buyMult에 바로 사 온다
+    alliance: { hqMin: 3, max: 2, months: 36, feeTechs: 2, speed: 0.25, buyMult: 1.5 },
+    // 시상식(12월 결산): 그해(최근 window개월)에 나온 차가 겨룬다. 점수 = 부문 점수 ± jitter(시드 해시). 수상하면 본사 평판 + rep, 그 차 판매 × (1 + salesBoost) boostMonths개월, 인지도 + awareness.
+    // 자회사 차가 받으면 브랜드 평판 + subRep와 같은 판매 보너스. 미수상 벌칙 없음
+    awards: {
+      window: 12, jitter: 0.3, salesBoost: 0.08, boostMonths: 12, awareness: 0.05, subRep: 2,
+      cats: [
+        { id: 'overall', name: '올해의 차', rep: 3, score: 'critic', bodies: null },
+        { id: 'small', name: '올해의 소형차', rep: 1.5, score: 'critic', bodies: ['kei', 'hatch', 'sedanS', 'suvS'] },
+        { id: 'family', name: '올해의 패밀리카', rep: 1.5, score: 'critic', bodies: ['sedanM', 'sedanL', 'minivan', 'suv', 'suvL'] },
+        { id: 'fun', name: '올해의 스포츠·레저', rep: 1.5, score: 'critic', bodies: ['coupe', 'sports', 'pickup'] },
+        { id: 'tech', name: '올해의 기술상', rep: 1, score: 'tech', bodies: null },
+        { id: 'design', name: '올해의 디자인상', rep: 1, score: 'design', bodies: null },
+      ] as { id: string; name: string; rep: number; score: 'critic' | 'tech' | 'design'; bodies: string[] | null }[],
+      keep: 300, // 기록 보관 개수
+    },
+    // 자회사 상장: 브랜드 자회사, 설립(인수) 뒤 years년·지난 12개월 흑자. 판 지분의 합은 steps 중 하나(최대 49%). 평가액 = 자본 + 지난 12개월 이익 × per
+    ipo: { years: 3, steps: [20, 30, 49], per: 10 },
+    // 경쟁사 인수: 본사 hqMin등급, 자회사 상한 안, 마지막 한 곳은 못 산다. 평가액 = 그 회사 연 매출 어림(칸 규모 × 점유 × 시장 기준가) × salesMult, 값 = 평가액 × (1 + premium).
+    // 인수 브랜드의 자본 = 값 × capital, 브랜드 평판 = max(본사 평판, rep). 빈 몫: 인수한 회사의 세기는 남은 경쟁사가 absorb만큼 이어받는다(경쟁 합에 세기^지수 × absorb로 남는다)
+    acquire: { hqMin: 5, salesMult: 0.6, premium: 0.3, capital: 0.5, rep: 140, absorb: 0.5, minPrice: 10000000 },
+    logMax: 60,
   },
 };

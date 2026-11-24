@@ -3,7 +3,7 @@
 // 게임 난수를 쓰지 않는다(변화는 시드 해시). 자회사가 없는 판은 이 파일의 어떤 함수도 상태를 바꾸지 않는다. 수치는 config.subs
 import { config } from '../config';
 import { BODIES, COMPAT, OPTIONS, RIVALS, SUB_DATA, TECHS, bodyById, optionById, powertrainById, segmentById } from '../data';
-import { grade, salaryOf, unitCost } from './cars';
+import { grade, payOf, unitCost } from './cars';
 import { costMultOf } from './company';
 import { specError, withRequired } from './dev';
 import { addNews, chargingInfra, eraNow, marketMult, requiredOptions, rivalHitAdd, trendOf } from './events';
@@ -13,7 +13,7 @@ import { basePriceOf, bodyKey, carBasePrice, cellMonthly, currentEdition, monthl
 import { recommendedEquip, stdOf } from './equip';
 import { planPreview } from './queries';
 import { criticScores, mean } from './reviews';
-import { myCellShare } from './rivals';
+import { isOut, myCellShare, rivalModelName } from './rivals';
 import { levelForTier, ptCostAdd, unlockedBodies, unlockedPowertrains } from './research';
 import { hash01, hash32 } from './rng';
 import { monthOf, monthTime, yearOf, yearOfMonth } from './time';
@@ -24,7 +24,7 @@ const EV = config.events.charging.powertrain;
 export const SUB_KINDS: SubKind[] = ['premium', 'value', 'parts', 'finance'];
 export const SUB_STRATEGIES: SubStrategy[] = ['growth', 'share', 'profit', 'rival', 'tech', 'stable', 'niche', 'prestige', 'ev'];
 export const SHARE_NAMES = ['좁게', '보통', '넓게'] as const;
-type BrandKind = 'premium' | 'value';
+type BrandKind = 'premium' | 'value' | 'acquired'; // acquired(3.5.0): 인수 브랜드
 type StratKey = 'a' | 'price' | 'cost' | 'dev' | 'vol' | 'payout';
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -34,7 +34,7 @@ const won = (x: number): string => { // 3.1.1 1조 이상은 "3조 5,000억원"(
   return `${sg}${v >= 10000 ? `${k(v / 10000, 1)}억원` : `${k(Math.round(v))}만원`}`;
 };
 const pct = (x: number, d = 0) => `${(x * 100).toFixed(d)}%`;
-export const isBrand = (k: SubKind): k is BrandKind => k === 'premium' || k === 'value';
+export const isBrand = (k: SubKind): k is BrandKind => k === 'premium' || k === 'value' || k === 'acquired';
 const brandDef = (k: BrandKind) => S.kinds[k];
 export const subById = (s: CarState, id: number): Subsidiary | undefined => s.subs?.find((x) => x.id === id);
 export const stratName = (k: SubStrategy): string => S.strat[k].name;
@@ -61,9 +61,9 @@ export function techLevel(s: CarState): number {
 }
 /** 경쟁사 대응의 상대: 지정한 회사, 없으면 지금 가장 큰 경쟁사(차급별 세기 × 칸 규모의 합) */
 export function rivalTarget(s: CarState, sub: Subsidiary): string {
-  if (sub.rivalId && s.rivals.some((r) => r.id === sub.rivalId)) return sub.rivalId;
+  if (sub.rivalId && s.rivals.some((r) => r.id === sub.rivalId) && !isOut(s, sub.rivalId)) return sub.rivalId;
   const t = monthTime(monthOf(s.week)), size = (r: CarState['rivals'][number]) => Object.keys(r.cells).reduce((a, b) => a + r.cells[b] * cellMonthly(b, t), 0);
-  return [...s.rivals].sort((a, b) => size(b) - size(a) || (a.id < b.id ? -1 : 1))[0].id;
+  return [...s.rivals].filter((r) => !isOut(s, r.id)).sort((a, b) => size(b) - size(a) || (a.id < b.id ? -1 : 1))[0].id;
 }
 /** 상대 경쟁사의 주력 차급(세기 × 칸 규모 상위 2개, 이 자회사가 맡은 차급 안에서) */
 export function rivalFocus(s: CarState, sub: Subsidiary): string[] {
@@ -78,9 +78,13 @@ function newBase(s: CarState, sub: Subsidiary, body: string, n: number, m: numbe
   const noiseMult = w.reduce((a, [x, v]) => a + v * ('noise' in S.strat[x] ? (S.strat[x] as { noise: number }).noise : 1), 0);
   const invest = investA(sub);
   return rivalBase(m) + k.a + strat + S.shareFx[sub.share].a + S.presA * (presQ(sub) - 0.5) + S.techA * (techLevel(s) - 1) + invest
-    + repA(sub) + (hash01(s.seed, 30, sub.id, bodyKey(body), n) * 2 - 1) * S.noise * noiseMult;
+    + repA(sub) + fromA(sub, body) + (hash01(s.seed, 30, sub.id, bodyKey(body), n) * 2 - 1) * S.noise * noiseMult;
 }
-const investA = (sub: Subsidiary): number => clamp(S.investA * Math.log2(Math.max(1, sub.total.invested / S.kinds[sub.kind].cost)), 0, S.investMax);
+/** 3.5.0 인수 브랜드는 그 경쟁사의 차급별 강약(rivals.json cells)을 물려받는다 */
+const fromA = (sub: Subsidiary, body: string): number => (sub.from ? RIVALS.find((r) => r.id === sub.from)?.cells[body] ?? 0 : 0);
+/** 3.5.0 투자 기준: 인수 브랜드는 인수 값, 그 밖은 종류의 설립비 */
+export const subCost = (sub: Subsidiary): number => sub.cost ?? S.kinds[sub.kind].cost;
+const investA = (sub: Subsidiary): number => clamp(S.investA * Math.log2(Math.max(1, sub.total.invested / subCost(sub))), 0, S.investMax);
 const repA = (sub: Subsidiary): number => S.repA * (Math.min(sub.rep, S.repCap) - 100) / 100;
 /** 3.1.0 실제 사양이 있는 차의 기본 A = 그때 경쟁 차 기본 A + (평론 − 6) ÷ 10(추정 평론 셈을 뒤집은 것) + 종류 + 공유 범위 + 본사 투자 + 브랜드 평판. 전략·사장·기술은 평론(사양)에 이미 들어 있다 */
 const carBase = (sub: Subsidiary, critic: number, m: number): number =>
@@ -107,21 +111,23 @@ export const subAwareness = (sub: Subsidiary): number => Math.min(1, S.aw.base +
 /** 이번 달 점유 점수 a = 세기(경쟁 차와 같은 노화) × 고객층 궁합 × 가격 효과 × 브랜드 인지도 */
 function effA(sub: Subsidiary, md: SubModel, m: number): number {
   const seg = md.car?.spec.segment ?? sub.segment ?? brandDef(sub.kind as BrandKind).segment;
-  return rivalA(md, m) * (COMPAT[md.body]?.[seg] ?? 1) * priceFx(sub, md, m) ** -S.pricePe * subAwareness(sub);
+  return rivalA(md, m) * (sub.from ? 1 : COMPAT[md.body]?.[seg] ?? 1) * priceFx(sub, md, m) ** -S.pricePe * subAwareness(sub); // 3.5.0 인수 브랜드는 경쟁사 때처럼 모든 고객층에 판다(궁합 1)
 }
 /** 한 모델의 이번 달 수요(생산 한도 전): 칸 규모(시대 사건·유행·동력) × (1 − 본사 몫) × a^지수 ÷ (경쟁 차 + 자회사 모델) × 종류·전략 물량 */
 function subDemand(s: CarState, sub: Subsidiary, md: SubModel, m: number): number {
   const t = monthTime(m), n = eraNow(s.seed, m), pt = ptOf(md), e = config.market.shareExp, rm = diffOf(s).rivalMult;
   const size = cellMonthly(md.body, t) * (n.body[md.body] ?? 1) * marketMult(n) * trendOf(md.body, t, n) * trendOf(pt, t, n) * (n.pt[pt] ?? 1) * (pt === EV ? chargingInfra(s.seed, m) : 1);
   const rivals = s.rivals.reduce((a, r) => a + (((r.cells[md.body] ?? 0) + rivalHitAdd(s, r.id, md.body, m)) * rm) ** e, 0), tot = rivals + subPull(s, md.body);
-  return tot > 0 ? size * (1 - myCellShare(s, md.body)) * md.a ** e / tot * brandDef(sub.kind as BrandKind).vol * fx(sub, m, 'vol') : 0;
+  return tot > 0 ? size * (1 - myCellShare(s, md.body)) * md.a ** e / tot * brandDef(sub.kind as BrandKind).vol * fx(sub, m, 'vol') * ((md.awardUntil ?? -1) > m ? 1 + config.rivalry.awards.salesBoost : 1) : 0; // 3.5.0 수상 판매 보너스
 }
+/** 추정 방식 모델 하나의 월 개발비 */
+export const subModelDev = (s: CarState, sub: Subsidiary, md: Pick<SubModel, 'body'>, m: number): number => basePriceOf(s, md.body) * S.dev * fx(sub, m, 'dev') * S.shareFx[sub.share].dev;
 /** 월 생산 한도(대) */
 export const subCapacity = (sub: Subsidiary): number => Math.floor(sub.capital / S.capPerCar);
 /** 모델 수 상한(자본, 맡은 차급 수 이내) */
 export const subModelCap = (s: CarState, sub: Subsidiary): number => Math.max(1, Math.min(areaBodies(s, sub).length, Math.floor(sub.capital / S.capitalPerModel)));
 /** 맡은 차급 중 본사가 연구로 연 것(기술·차대 공유) */
-export const areaBodies = (s: CarState, sub: Pick<Subsidiary, 'bodies'>): string[] => { const u = new Set(unlockedBodies(s).map((b) => b.id)); return sub.bodies.filter((b) => u.has(b)); };
+export const areaBodies = (s: CarState, sub: Pick<Subsidiary, 'bodies'> & { from?: string }): string[] => { if (sub.from) return [...sub.bodies]; const u = new Set(unlockedBodies(s).map((b) => b.id)); return sub.bodies.filter((b) => u.has(b)); }; // 3.5.0 인수 브랜드는 자기 차대 기술이 있어 본사 연구와 무관
 const evReady = (s: CarState): boolean => unlockedPowertrains(s).some((p) => p.id === EV);
 /** 3.1.1 전동화 전환에서 이 차(없으면 새 모델)를 전기차로 낼지: 라인업의 전기차가 충전 인프라를 따라(모델 수 × min(1, 인프라 × evPace), 올림) 될 때까지 바꾼다. 이미 전기차인 차는 그대로.
  *  3.1.0까지는 한꺼번에 다 바꿔 충전 인프라가 모자란 2010년대에 성장 중심의 약 15분의 1밖에 못 벌었다 */
@@ -304,7 +310,7 @@ export function subsMonthStart(s: CarState, ev: GameEvent[], m: number): void {
 /** 사업 자회사 규모 = min(scaleMax, √(자본 ÷ 설립비)) × 사장 배수 */
 const bizScale = (sub: Subsidiary): number => Math.min(S.scaleMax, Math.sqrt(sub.capital / S.kinds[sub.kind].cost)) * (0.75 + presQ(sub) / 2);
 /** 사장 월급(직원 월급 + 수당, 자회사가 낸다) */
-const presPay = (sub: Subsidiary): number => (sub.president ? salaryOf(sub.president.ability) + S.presAllowance : 0);
+const presPay = (sub: Subsidiary): number => (sub.president ? payOf(sub.president) + S.presAllowance : 0);
 
 export interface SubSettle { dividend: number; rep: { name: string; value: number; reason?: string }[] }
 /** 3.1.0 연간 목표: 올해 실적이 목표 이상이면 브랜드 평판·본사 평판이 조금 오르고 뉴스, 못 미치면 뉴스 한 줄(벌칙 없음) */
@@ -328,7 +334,7 @@ export function subsSettle(s: CarState, ev: GameEvent[], m: number, hq: { revenu
       sub.models.forEach((md, i) => {
         md.sold = Math.floor(d[i] * k); sold += md.sold; demand += d[i];
         revenue += md.sold * subPrice(s, sub, md); cost += md.sold * subUnitCost(s, sub, md);
-        if (!md.car) cost += basePriceOf(s, md.body) * S.dev * fx(sub, m, 'dev') * S.shareFx[sub.share].dev; // 개발비(모델마다 매달). 3.1.0 실제 사양이 있는 차는 개발할 때 한 번 낸다
+        if (!md.car) cost += subModelDev(s, sub, md, m); // 개발비(모델마다 매달). 3.1.0 실제 사양이 있는 차는 개발할 때 한 번 낸다
       });
     } else {
       const B = sub.kind === 'parts' ? S.parts.margin : S.finance.financed * S.finance.spread;
@@ -338,10 +344,11 @@ export function subsSettle(s: CarState, ev: GameEvent[], m: number, hq: { revenu
     cost += (isBrand(sub.kind) ? Math.min(sub.capital, sold * S.capPerCar) : sub.capital) * S.upkeep + presPay(sub); // 유지비: 브랜드는 쓰는 설비(판매 대수 × 대당 자본)만큼, 사업 자회사는 자본만큼
     const profit = revenue - cost, payout = Math.min(1, sub.dividend / 100 * fx(sub, m, 'payout')), dividend = profit > 0 ? profit * payout : 0;
     sub.capital = Math.max(0, sub.capital + profit - dividend); // 손실은 자회사 자본이 떠안는다(본사로 넘어오지 않는다)
-    out.dividend += dividend;
-    const row: SubMonth = { month: m, sold, demand: Math.round(demand), revenue, profit, dividend };
+    const own = dividend * (1 - (sub.listed ?? 0)); // 3.5.0 상장한 지분만큼은 다른 주주 몫
+    out.dividend += own;
+    const row: SubMonth = { month: m, sold, demand: Math.round(demand), revenue, profit, dividend: own };
     sub.months.push(row); if (sub.months.length > S.monthsMax) sub.months.splice(0, sub.months.length - S.monthsMax);
-    Object.assign(sub.total, { profit: sub.total.profit + profit, dividend: sub.total.dividend + dividend, sold: sub.total.sold + sold });
+    Object.assign(sub.total, { profit: sub.total.profit + profit, dividend: sub.total.dividend + own, sold: sub.total.sold + sold });
     if (m % 3 === 2) quarterReport(s, ev, sub, m);
     if ((m + 1) % config.time.monthsPerYear === 0) { // 연말: 브랜드 평판(전략 가산, 본사 평판 쪽으로 조금씩), 본사 평판 가산
       const w = stratWeights(sub, m), subRep = w.reduce((a, [x, v]) => a + v * S.strat[x].subRep, 0), hqRep = w.reduce((a, [x, v]) => a + v * S.strat[x].hqRep, 0);
@@ -383,6 +390,8 @@ function quarterReport(s: CarState, ev: GameEvent[], sub: Subsidiary, m: number)
 export interface SubCtx { s: CarState; spend: (c: number) => void }
 const fail = (reason: string): CommandResult => ({ ok: false, reason });
 const OK: CommandResult = { ok: true };
+/** 매각 대금 = 자본 × sellShare × 본사 지분(3.5.0 상장한 몫 제외) */
+export const sellPrice = (sub: Subsidiary): number => Math.round(sub.capital * S.sellShare * (1 - (sub.listed ?? 0)));
 /** 자회사를 세울 수 없는 이유(없으면 null) */
 export function foundError(s: CarState, kind: SubKind): string | null {
   if (!SUB_KINDS.includes(kind)) return '없는 자회사 종류입니다.';
@@ -524,7 +533,7 @@ export function subCommand(c: SubCtx, cmd: Command, ev: GameEvent[]): CommandRes
     }
     case 'sellSubsidiary': {
       const sub = subOf(s, cmd.subId); if (typeof sub === 'string') return fail(sub);
-      const price = Math.round(sub.capital * S.sellShare);
+      const price = sellPrice(sub);
       c.spend(-price); releasePresident(s, sub);
       s.subs = s.subs!.filter((x) => x !== sub);
       addNews(s, ev, `${s.companyName}, 자회사 「${sub.name}」${josa(sub.name, '을/를')} ${won(price)}에 매각했습니다.`, 'sub', 'news', undefined, 'sub');
@@ -602,6 +611,20 @@ export function subCommand(c: SubCtx, cmd: Command, ev: GameEvent[]): CommandRes
     default: return null;
   }
 }
+/** 3.5.0 경쟁사 ri를 인수 브랜드로: 이름·로고 색·라인업(모델 이름·세대·출시 달·세기)을 그대로 물려받는다. 상태에 넣지는 않는다(인수 명령·예상 실적이 함께 쓴다) */
+export function buildAcquired(s: CarState, ri: number, price: number): Subsidiary {
+  const r = s.rivals[ri], def = RIVALS.find((x) => x.id === r.id)!, m = monthOf(s.week), A = config.rivalry.acquire, bodies = Object.keys(r.models).sort();
+  const taken = (n: string) => n === s.companyName || !!s.subs?.some((x) => x.name === n);
+  const sub: Subsidiary = {
+    id: s.nextId, kind: 'acquired', name: taken(r.name) ? `${r.name} 브랜드` : r.name, color: def.color, founded: m, strategy: 'growth', rivalId: null, mix: { growth: 1 }, switchMonth: m - S.switchMonths,
+    bodies, segment: def.segment, dropped: [], dividend: S.defaultSub.dividend, share: S.defaultSub.share as 0 | 1 | 2, president: null,
+    capital: Math.round(price * A.capital), rep: Math.max(s.reputation, A.rep), effect: 0, models: [], months: [], total: { invested: price, profit: 0, dividend: 0, sold: 0, hqRep: 0 },
+    reports: [], lastPrice: 1, from: r.id, cost: price,
+  };
+  sub.models = bodies.map((body) => { const md = r.models[body]; return { body, name: rivalModelName(s.seed, ri, r.id, body), n: md.n, start: md.start, cycle: md.cycle, base: md.base, a: 0, sold: 0 }; });
+  for (const md of sub.models) md.a = effA(sub, md, m);
+  return sub;
+}
 /** 개발 중인 차 중 아직 모델이 없는 차급(모델 수 상한에 넣는다) */
 const newOrders = (sub: Subsidiary): number => (sub.orders ?? []).filter((o) => !sub.models.some((x) => x.body === o.body)).length;
 /** 그 차급에 새 차를 낼 수 없는 이유(영역·연구·개발 중·모델 수 상한) */
@@ -637,7 +660,7 @@ export interface SubModelView { own: true; subId: number; company: string; color
 export function subModelView(s: CarState, sub: Subsidiary, md: SubModel): SubModelView {
   const m = monthOf(s.week), V = config.rivals.view, c0 = criticOf(md), now = c0 - (1 - rivalA(md, m) / (md.base * (1 + config.rivals.fresh))) * V.criticPer;
   const c = md.car, grades = c ? Object.fromEntries(STATS.map((k) => [k, r1(grade(c.stats[k], yearOf(s.week)))])) as Stats
-    : Object.fromEntries(STATS.map((k, i) => [k, r1(clamp(now + SHAPE[sub.kind as BrandKind][k] + (hash01(s.seed, 33, sub.id, bodyKey(md.body), md.n, i) * 2 - 1) * V.statJitter, 0, 10))])) as Stats;
+    : Object.fromEntries(STATS.map((k, i) => [k, r1(clamp(now + (sub.from ? RIVALS.find((r) => r.id === sub.from)!.shape : SHAPE[sub.kind as BrandKind])[k] + (hash01(s.seed, 33, sub.id, bodyKey(md.body), md.n, i) * 2 - 1) * V.statJitter, 0, 10))])) as Stats;
   const size = cellMonthly(md.body, monthTime(m)), seed = Math.floor(hash01(s.seed, 34, sub.id, bodyKey(md.body), md.n) * 2 ** 31), std = carBase0(s, md) * brandDef(sub.kind as BrandKind).price * bandMult(md);
   const from = c?.fromGen === undefined ? null : s.nameplates.find((x) => x.generations.some((g) => g.id === c.fromGen))?.name ?? null;
   return { own: true, subId: sub.id, company: sub.name, color: sub.color, body: md.body, bodyName: bodyById(md.body).name, name: md.name, n: md.n, number: md.n + 1, start: md.start, year: yearOfMonth(md.start), critic: c0, grades,
@@ -688,7 +711,7 @@ export function subDetail(s: CarState, id: number) {
     lastMonth: sub.months.at(-1) ?? null, last12: { months: last12.length, sold: sum('sold'), revenue: sum('revenue'), profit: sum('profit'), dividend: sum('dividend') }, total: { ...sub.total },
     hqEffect: sub.kind === 'parts' ? { kind: 'cost' as const, value: sub.effect, text: `본사 차 대당 원가 −${pct(sub.effect, 1)}` } : sub.kind === 'finance' ? { kind: 'sales' as const, value: sub.effect, text: `본사 판매 +${pct(sub.effect, 1)}(할부)` } : null,
     cannibal: cannibalInfo(s).filter((x) => sub.models.some((md) => md.body === x.body)),
-    strategies: strategyChoices(s, sub), reports: [...sub.reports].reverse(), sellPrice: Math.round(sub.capital * S.sellShare),
+    strategies: strategyChoices(s, sub), reports: [...sub.reports].reverse(), sellPrice: sellPrice(sub), listed: sub.listed ?? 0, from: sub.from ?? null,
     mode: isDirect(sub) ? 'direct' as const : 'delegate' as const, funds: subFunds(sub), devDue: sub.devDue ?? 0, team: brand ? subTeam(s, sub)[0].ability : 0,
     orders: (sub.orders ?? []).map((o) => ({ id: o.id, body: o.body, bodyName: bodyById(o.body).name, how: o.how, name: o.name ?? (o.how === 'badge' ? s.nameplates.find((x) => x.generations.some((g) => g.id === o.fromGen))?.name ?? '' : ''),
       monthsLeft: Math.max(0, o.doneMonth - m), months: o.doneMonth - o.start, cost: o.cost, character: o.character ? S.character[o.character].name : null, band: o.band ? S.band[o.band].name : null, replaces: sub.models.find((x) => x.body === o.body)?.name ?? null })),
