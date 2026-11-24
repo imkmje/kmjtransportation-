@@ -20,7 +20,7 @@ export interface VariantDef { id: string; name: string; suffix: string; info: st
 /** 1.3.0 평론가(critics.json): config.critics.list와 같은 id·순서 */
 export interface CriticDef { id: string; name: string; outlet: string; focus: Stat[]; open: Record<'high' | 'mid' | 'low', string[]> }
 /** 1.3.0 알림 유형(notify.json). locked: 끌 수 없음(경고) */
-export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning' | 'sub'; // rival(2.0.0): 경쟁사 신차, sub(3.0.0): 자회사
+export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning' | 'sub' | 'auto'; // auto(3.7.0): 결정 자동 승인 // rival(2.0.0): 경쟁사 신차, sub(3.0.0): 자회사
 export interface NotifyDef { id: NotifyTopic; name: string; locked: boolean }
 
 /** 연구 분야 5개(10장) */
@@ -359,6 +359,7 @@ export interface CarState {
   start?: { year: number; condition: StartCondition; challenges: Challenge[] }; // 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
   subs?: Subsidiary[]; // 3.0.0 자회사(형식 9). 없으면 자회사 없음
   rivalry?: RivalryState; // 3.5.0 경쟁 2부(형식 10). 없으면 다음 월 결산에 빈 상태로 시작한다
+  autoDecide?: { on: string[]; guard?: false }; // 3.7.0 결정 자동 승인(형식 10의 생략 가능한 칸): 켠 결정 종류(사건 ID), guard false = 안전선 끔. 없으면 모두 끔
   pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
@@ -404,6 +405,8 @@ export type Command =
   | { type: 'cancelResearch'; techId: string } // 쓴 돈은 돌아오지 않는다
   | { type: 'prioritizeResearch'; techId: string } // 0.5.1: 그 연구를 맨 앞으로(주간 점수의 50%를 받는다)
   | { type: 'resolveEvent'; eventId: number; choice: number }
+  | { type: 'setAutoDecide'; kind: string; on: boolean } // 3.7.0 결정 자동 승인(kind 'all'이면 모든 종류)
+  | { type: 'setAutoDecideGuard'; on: boolean } // 3.7.0 큰돈이 드는 결정은 묻기
   // ---------- 임원(0.7.0) ----------
   | { type: 'appointExec'; role: ExecRole; staffId: number }
   | { type: 'dismissExec'; role: ExecRole }

@@ -47,6 +47,7 @@ export interface SteadyOptions {
   ptPick: 'auto' | 'gasoline' | 'newest';
   optPick: 'fit' | 'none' | 'misfit';
   subDirect?: boolean; // 3.1.0: 브랜드 자회사를 직접 운영(빈 차급에 본사 차 배지 또는 직접 기획, subs와 함께)
+  autoDecide?: boolean; // 3.7.0: 결정 자동 승인을 모두 켜고 결정 창에 답하지 않는다(안전선에 걸린 것은 4주 뒤 기본 선택)
   rivalry?: boolean; // 3.5.0: 경쟁사 인재 영입·기술 제휴(기술 구매)·자회사 상장·경쟁사 인수를 쓴다(선택, 기존 균형 봇은 쓰지 않는다)
   subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
@@ -66,7 +67,8 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
     name: 'steady',
     step(g) {
       if (o.borrowShare > 0 && g.state.cash < 0) { const room = loanLimit(g.state) * o.borrowShare - g.state.loan.balance; if (room >= 1) g.command({ type: 'borrow', amount: Math.floor(Math.min(room, -g.state.cash + fixedCost(g.state) * 2)) }); }
-      for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
+      if (o.autoDecide) { if ((g.state.autoDecide?.on.length ?? 0) < RANDOM_EVENTS.length) g.command({ type: 'setAutoDecide', kind: 'all', on: true }); }
+      else for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
       researchRequired(g); // 0.4.2: 규제 예고가 나오면 의무 장비 기술부터(연구를 안 하는 봇도, 안 하면 개발이 막힌다)
       launchReady(g, o);
       startProjects(g, o);

@@ -10,5 +10,6 @@
   {"id":"rival","name":"경쟁사 신차·동향","locked":false},
   {"id":"factory","name":"공장·설비","locked":false},
   {"id":"sub","name":"자회사","locked":false},
+  {"id":"auto","name":"자동 승인","locked":false},
   {"id":"warning","name":"경고(파산 위험·규제·리콜)","locked":true}
 ]
