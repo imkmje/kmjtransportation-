@@ -496,3 +496,4 @@ export { partsCut } from './company';
 export { subSalesMult } from './market';
 export { rivalRelations, acquireInfo, acquireError, awardHistory, rivalryLog, subValue, listError, warPriceMult, activeWar, allianceFee, buyableTechs, pressureFrom, type RivalRelation } from './rivalry'; // 3.5.0 경쟁 2부
 export { activeRivals, isOut } from './rivals';
+export { AUTO_KINDS, autoOn, autoGuardOn, autoPick, autoHold, autoLog } from './autodecide'; // 3.7.0 결정 자동 승인

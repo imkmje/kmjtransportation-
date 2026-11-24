@@ -1072,7 +1072,7 @@ await act('closeSheet');
 await openMenu();
 check('1.0.0 메뉴: 저장·불러오기·내보내기·설정·되돌리기·처음 화면만(설정 항목은 설정 화면으로)', (await page.locator('#sheet [data-act="settings"]').count()) === 1 && (await page.locator('#sheet [data-act="autoPause"], #sheet [data-act="snd"], #sheet [data-act="debug"], #sheet [data-act="saveEvery"]').count()) === 0 && (await page.locator('#sheet [data-act="undo"], #sheet [data-act="home"], #sheet [data-act="export"]').count()) === 3);
 await act('settings'); await act('setTab', '[data-v="time"]');
-check('1.0.0 설정 화면: 묶음 5개(시간·알림·소리·저장·화면)', (await page.locator('#sheet [data-act="setTab"]').allInnerTexts()).join() === '시간,알림,소리,저장,화면');
+check('1.0.0 설정 화면: 묶음 6개(시간·알림·결정(3.7.0)·소리·저장·화면)', (await page.locator('#sheet [data-act="setTab"]').allInnerTexts()).join() === '시간,알림,결정,소리,저장,화면');
 check('설정 시간: 자동 멈춤 4항목(후보·출시 대기·결정 사건·연 보고서), 기본 켬', (await page.locator('#sheet [data-act="autoPause"]').count()) === 4 && (await page.locator('#sheet [data-act="autoPause"][aria-pressed="true"]').count()) === 4);
 await act('autoPause', '[data-v="cands"]'); await page.locator('#sheet [data-act="autoPause"][data-v="cands"][aria-pressed="false"]').waitFor({ timeout: 3000 }).catch(() => {});
 check('자동 멈춤 끄기: 버튼 꺼짐·기기 저장소에 저장', (await page.locator('#sheet [data-act="autoPause"][data-v="cands"]').getAttribute('aria-pressed')) === 'false' && (await G(() => JSON.parse(localStorage.getItem('car-company-autopause')).cands)) === false);
@@ -1580,7 +1580,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await GG(() => { for (const g of window.__car.game.state.nameplates.flatMap((n) => n.generations)) delete g.clearance; document.getElementById('toasts').innerHTML = ''; window.__car.render(); });
   // U3 설정 화면 · U2 알림 종류 켜고 끄기, 묶기, 기록함
   await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.3.0 설정 알림: 유형 12개(2.0.0 경쟁사 신차, 3.0.0 자회사) + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 12 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 15 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
+  check('1.3.0 설정 알림: 유형 13개(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인) + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 13 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 16 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
   await mshot('settings-note-1180x820');
   await gp.click('#sheet [data-act="noteCat"][data-v="launch"]');
   check('1.0.0 알림 종류 끄기(출시·평론) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).launch)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="launch"]').getAttribute('aria-pressed')) === 'false');
@@ -1885,7 +1885,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await mp.locator('#sheet [data-act="closeReview"]').click().catch(() => {}); }
   // (d) 알림 유형: 교육 알림을 끄면 교육 보내기 알림이 뜨지 않고 기록에는 남음, 경고는 못 끔
   await mp.click('#menubtn'); await mp.click('#sheet [data-act="settings"]'); await mp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.3.0 알림 설정: 유형 12종(2.0.0 경쟁사 신차, 3.0.0 자회사 포함), 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 12 && (await mp.locator('#sheet [data-act="noteCat"][data-v="sub"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="rival"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
+  check('1.3.0 알림 설정: 유형 13종(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인 포함), 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 13 && (await mp.locator('#sheet [data-act="noteCat"][data-v="sub"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="rival"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
   await mp.click('#sheet [data-act="noteCat"][data-v="training"]');
   check('1.3.0 교육 알림 끄기 → 기기 저장소', (await MG(() => JSON.parse(localStorage.getItem('car-company-notify')).training)) === false);
   await mshot3('settings-notify-1366x1024');
@@ -2667,6 +2667,76 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await rp.setViewportSize({ width: 1366, height: 1024 });
   }
   await rctx.close(); }
+
+// ---- 3.7.0 결정 자동 승인: 설정 › 결정, 결정 창의 체크, 자동 승인 알림(묶음 포함), 최근 자동 승인 내역(CAR_SMOKE_370=폴더면 640·800·1366 캡처) ----
+{ const actx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const ap = await actx.newPage(); ap.on('pageerror', (e) => errors.push(String(e))); ap.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const AG = (fn, a) => ap.evaluate(fn, a), P7 = process.env.CAR_SMOKE_370 ?? '';
+  const SZ7 = [[640, 900], [800, 1200], [1366, 1024]];
+  const shots = async (n, fn) => { for (const [w, h] of SZ7) { await ap.setViewportSize({ width: w, height: h }); await ap.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(ap); check(`3.7.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P7) await ap.screenshot({ path: `${P7}/${n}-${w}x${h}.png` }); } await ap.setViewportSize({ width: 1366, height: 1024 }); };
+  await ap.goto(URL0); await ap.waitForSelector('#title:not([hidden])');
+  await ap.click('[data-act="titleNew"]'); await ap.fill('#t-co', '자동 승인 시험'); await ap.click('[data-act="startNew"]'); await AG(() => window.__car.setSpeed(0));
+  await AG(() => { const c = window.__car, g = c.game, s = g.state; s.week = (2005 - 1970) * 48; s.cash = 1e9; s.hqLevel = 4;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2003 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id);
+    g.command({ type: 'startProject', name: '아리아', body: 'sedanM', segment: 'family', powertrain: 'gasoline', tier: 1, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+    const p = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 });
+    s.events.pending.length = 0; c.render(); });
+  // 설정 › 결정
+  await ap.click('#menubtn'); await ap.click('#sheet [data-act="settings"]'); await ap.click('#sheet [data-act="setTab"][data-v="decide"]'); await ap.waitForSelector('#sheet .auto-kinds');
+  const st7 = await ap.locator('#sheet .set-body').innerText();
+  check('3.7.0 설정 › 결정: 종류 10개(모두 꺼짐)·모두 켜기/끄기·안전선(켜짐)·ⓘ', (await ap.locator('#sheet [data-act="autoKind"]').count()) === 10 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 0
+    && (await ap.locator('#sheet [data-act="autoAll"]').count()) === 2 && (await ap.locator('#sheet [data-act="autoGuard"]').getAttribute('aria-pressed')) === 'true' && (await ap.locator('#sheet [data-info="term:결정 자동 승인"]').count()) === 1
+    && ['노조 파업', '가격 전쟁', '임원 위임과 같은 규칙', '기본 선택', '큰돈이 드는 결정은 묻기', '10%'].every((x) => st7.includes(x)), st7.replace(/\s+/g, ' ').slice(0, 200));
+  await ap.click('#sheet [data-act="autoAll"][data-v="1"]');
+  check('3.7.0 [모두 켜기]: 판 상태에 10종 모두 켜짐', (await AG(() => window.__car.game.state.autoDecide.on.length)) === 10 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 10);
+  await ap.click('#sheet [data-act="autoGuard"]');
+  check('3.7.0 안전선 끄기 → 판 상태 guard false', (await AG(() => window.__car.game.state.autoDecide.guard)) === false);
+  await ap.click('#sheet [data-act="autoGuard"]'); await ap.click('#sheet [data-act="autoAll"][data-v="0"]');
+  check('3.7.0 [모두 끄기]: 모두 꺼짐, 안전선 다시 켜짐', (await AG(() => window.__car.game.state.autoDecide.on.length)) === 0 && (await AG(() => window.__car.game.state.autoDecide.guard)) === undefined);
+  await ap.click('#sheet [data-act="autoKind"][data-v="strike"]');
+  check('3.7.0 종류 하나 켜기(노조 파업)', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.on)) === '["strike"]');
+  await shots('settings', () => AG(() => document.querySelector('#sheet .set-tabs')?.scrollIntoView({ block: 'start' })));
+  // 결정 창의 체크
+  await AG(() => { const c = window.__car, s = c.game.state; document.getElementById('sheet').hidden = true; const id = s.nextId++;
+    s.events.pending.push({ id, eventId: 'motorshow', text: '국제 모터쇼에서 콘셉트카 출품을 요청해 왔습니다.', week: s.week, deadline: s.week + 4, genId: null, fx: null });
+    c.events([{ kind: 'choice', text: '[모터쇼 초청] 국제 모터쇼에서 콘셉트카 출품을 요청해 왔습니다.', id, category: 'choice' }]); });
+  await ap.waitForSelector('#sheet .choice-sheet');
+  check('3.7.0 결정 창: "이 종류(모터쇼 초청)는 앞으로 자동 승인" 체크', (await ap.locator('#sheet .auto-chk input[data-ad="motorshow"]').count()) === 1 && (await ap.locator('#sheet .auto-chk').innerText()).includes('모터쇼 초청'));
+  await shots('choice', () => AG(() => document.querySelector('#sheet .auto-chk')?.scrollIntoView({ block: 'center' })));
+  await ap.locator('#sheet .auto-chk input').check();
+  check('3.7.0 결정 창 체크 → 판 상태에 모터쇼 초청 켜짐(지금 창은 그대로)', (await AG(() => window.__car.game.state.autoDecide.on.includes('motorshow'))) && (await ap.locator('#sheet .choice-sheet').count()) === 1);
+  await ap.locator('#sheet [data-act="resolveEv"][data-v="1"]').click(); await ap.waitForTimeout(200);
+  // 실제 진행: 모두 켜고 몇 년 돌리면 결정 창 없이 자동 승인 기록이 쌓인다
+  const real = await AG(() => { const g = window.__car.game, s = g.state; g.command({ type: 'setAutoDecide', kind: 'all', on: true }); let n = 0, waits = 0;
+    for (let i = 0; i < 48 * 8; i++) { s.cash = Math.max(s.cash, 1e9); const ev = g.tick(); n += ev.filter((e) => e.topic === 'auto').length; waits += ev.filter((e) => e.kind === 'choice').length; }
+    window.__car.render(); return { n, waits, pending: s.events.pending.length }; });
+  check('3.7.0 모두 켜고 8년 진행: 자동 승인 기록이 쌓이고 결정 대기가 남지 않음', real.n > 0 && real.waits === 0 && real.pending === 0, JSON.stringify(real));
+  // 자동 승인 알림(하나, 묶음)
+  const an = (t) => ({ kind: 'news', text: `자동 승인: ${t}`, category: 'result', topic: 'auto' });
+  for (const [w, h] of SZ7) {
+    await ap.setViewportSize({ width: w, height: h }); await AG(() => { document.getElementById('sheet').hidden = true; document.getElementById('toasts').innerHTML = ''; }); await ap.waitForTimeout(200);
+    await AG((l) => window.__car.events(l), [an('노조 파업 → 임금 인상 수용 선택 — 직원 컨디션이 좋아집니다.')]); await ap.waitForTimeout(300);
+    const one = await AG(() => [...document.querySelectorAll('#toasts .toast:not(.out)')].map((x) => x.innerText.replace(/\s+/g, ' ')));
+    check(`3.7.0 자동 승인 알림 ${w}×${h}: 제목 '자동 승인', 내용 한 줄`, one.length === 1 && one[0].includes('자동 승인') && one[0].includes('노조 파업 → 임금 인상 수용 선택'), one.join(' | ').slice(0, 160));
+    if (P7) await ap.screenshot({ path: `${P7}/toast-${w}x${h}.png` });
+    await AG(() => { document.getElementById('toasts').innerHTML = ''; }); await ap.waitForTimeout(100);
+    await AG((l) => window.__car.events(l), [an('모터쇼 초청 → 이번엔 불참 선택 — 달라지는 것은 없습니다.'), an('환율 변동 → 그냥 두기 선택 — 원가가 바뀔 수 있습니다.'), an('가격 전쟁 → 버틴다 선택 — 판매가 조금 줄어듭니다.')]); await ap.waitForTimeout(300);
+    const grp7 = await AG(() => [...document.querySelectorAll('#toasts .toast:not(.out)')].map((x) => x.innerText.replace(/\s+/g, ' ')));
+    check(`3.7.0 자동 승인 알림 묶기 ${w}×${h}: "자동 승인 3건" 한 알림`, grp7.length === 1 && grp7[0].includes('자동 승인 3건'), grp7.join(' | ').slice(0, 160));
+    const o = await overflowOf(ap); check(`3.7.0 자동 승인 알림 ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o));
+    if (P7) await ap.screenshot({ path: `${P7}/toastgroup-${w}x${h}.png` });
+  }
+  await ap.setViewportSize({ width: 1366, height: 1024 }); await AG(() => { document.getElementById('toasts').innerHTML = ''; });
+  // 내역: 할 일 창의 '최근 자동 승인', 설정 › 결정의 최근 기록
+  await ap.click('#todobtn'); await ap.waitForSelector('#drawer:not([hidden]) .todo-auto');
+  await AG(() => { document.querySelector('#drawer .todo-auto').open = true; });
+  const dl = await ap.locator('#drawer .todo-auto').innerText();
+  check('3.7.0 할 일 창: 최근 자동 승인 목록(날짜·"→ … 선택")', (await ap.locator('#drawer .todo-auto .auto-log li').count()) >= 1 && dl.includes('선택') && !dl.includes('자동 승인: '), dl.replace(/\s+/g, ' ').slice(0, 160));
+  await shots('log-todo', () => AG(() => { const d = document.querySelector('#drawer .todo-auto'); if (d) { d.open = true; d.scrollIntoView({ block: 'center' }); } }));
+  await ap.locator('#drawer .todo-auto [data-act="autoSettings"]').click(); await ap.waitForSelector('#sheet .auto-kinds');
+  check('3.7.0 설정 › 결정: 최근 자동 승인 기록', (await ap.locator('#sheet .auto-log li').count()) >= 1);
+  await shots('log-settings', () => AG(() => document.querySelector('#sheet .auto-log')?.scrollIntoView({ block: 'center' })));
+  await actx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

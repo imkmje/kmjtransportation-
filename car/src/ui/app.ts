@@ -698,7 +698,7 @@ export function startApp(): void {
         const k = e.category ?? 'other', pid = e.id;
         if (reg || k === 'start' || k === 'end' || k === 'preview') fx(reg ? 'regulation' : 'event');
         if (tp === 'dev') { toast(e.text, 'alert', '직원 성과', 9000, '', pid !== undefined && Q.projectById(s, pid) ? { label: '개발 화면', fn: () => { devSel = pid; go('dev'); } } : undefined, tp); break; } // 1.3.0 개발 중 직원 성과
-        { const wk = s.week; toast(newsLine(e.text), 'alert', NEWS_KIND[k], reg ? 15000 : 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, wk, k) }, tp); } break;
+        { const wk = s.week; toast(newsLine(e.text).replace(/^자동 승인: /, ''), 'alert', tp === 'auto' ? '자동 승인' : NEWS_KIND[k], reg ? 15000 : 9000, '', { label: '신문 보기', fn: () => showNewsItem(e.text, wk, k) }, tp); } break;
       }
       case 'choice': // 화면 안 창이 떠 있는 동안 시간이 멈춘다. 자동 멈춤을 끄면 창 대신 알림만
         if (quietChoice) break;
@@ -812,7 +812,7 @@ export function startApp(): void {
   const shownTodos = () => { const m = monthOf(game!.state.week); return todos().filter((t) => !todoMute.has(t.kind) && !((todoSnooze.get(t.key) ?? -1) >= m)); };
   /** 배지 숫자: 급한 일 + 지금 할 수 있는 일(참고 제외) */
   const todoCount = () => shownTodos().filter((t) => t.urgent || !REF_KINDS.has(t.kind));
-  let refOpen = false;
+  let refOpen = false, autoOpen = false;
   function todoBody(): string {
     const all = todos(), list = shownTodos(), hid = all.length - list.length;
     const row = (t: Q.TodoItem) => `<div class="todo-row${t.urgent ? ' urgent' : ''}"><button class="todo-it${t.urgent ? ' urgent' : ''}" data-act="todoGo" data-k="${esc(t.key)}" data-kind="${t.kind}"><span class="ti t-${t.kind}" aria-hidden="true">${TODO_TAG[t.kind]}</span><span class="tt"><b>${esc(t.title)}</b><small>${esc(t.detail)}</small></span><span class="tg" aria-hidden="true">→</span></button>
@@ -821,8 +821,9 @@ export function startApp(): void {
     const grp = (title: string, xs: Q.TodoItem[]) => (xs.length ? `<p class="lbl todo-g">${title} ${xs.length}</p><div class="todo-list">${xs.map(row).join('')}</div>` : '');
     const refs = ref.length ? `<details class="todo-ref"${refOpen ? ' open' : ''}><summary><span class="lbl">참고 ${ref.length}</span><small>늘 있는 여유(빈 자리·칸·정원)</small></summary><div class="todo-list">${ref.map(row).join('')}</div></details>` : '';
     const more = hid ? `<p class="hint todo-hid">숨긴 항목 ${hid}개${todoSnooze.size ? ' · <button class="lnk" data-act="todoUnsnooze">나중에로 숨긴 것 다시 보기</button>' : ''}${todoMute.size ? ' · 다시 알리지 않는 종류는 메뉴 → 설정 → 알림에서 되돌립니다' : ''}</p>` : '';
-    if (!urgent.length && !now.length && !ref.length) return `<p class="todo-empty">지금 할 일이 없습니다. 시간을 진행하세요.</p>${more}`;
-    return grp('급한 일', urgent) + grp('지금 할 수 있는 일', now) + (urgent.length || now.length ? '' : '<p class="todo-empty small">급한 일과 지금 할 일은 없습니다.</p>') + refs + more;
+    const al = autoLogHtml(), autos = al ? `<details class="todo-ref todo-auto"${autoOpen ? ' open' : ''}><summary><span class="lbl">최근 자동 승인</span><small>결정 창 없이 처리한 결정</small></summary>${al}<button class="lnk" data-act="autoSettings">설정 › 결정</button></details>` : ''; // 3.7.0
+    if (!urgent.length && !now.length && !ref.length) return `<p class="todo-empty">지금 할 일이 없습니다. 시간을 진행하세요.</p>${autos}${more}`;
+    return grp('급한 일', urgent) + grp('지금 할 수 있는 일', now) + (urgent.length || now.length ? '' : '<p class="todo-empty small">급한 일과 지금 할 일은 없습니다.</p>') + refs + autos + more;
   }
   function reportsBody(): string {
     const s = game!.state, all = execReports(s);
@@ -872,7 +873,7 @@ export function startApp(): void {
     showTodo('todo');
   }
   document.addEventListener('pointerdown', (e) => { const t = e.target as Element; if (!drawer.hidden && !drawer.contains(t) && !t.closest('#todobtn, #ask, #sheet, #tip')) closeDrawer(); }, true);
-  drawer.addEventListener('toggle', (e) => { if ((e.target as Element).matches('details.todo-ref')) refOpen = (e.target as HTMLDetailsElement).open; }, true);
+  drawer.addEventListener('toggle', (e) => { const d = e.target as HTMLDetailsElement; if (d.matches('details.todo-auto')) autoOpen = d.open; else if (d.matches('details.todo-ref')) refOpen = d.open; }, true);
   /** 할 일·보고의 바로 가기 */
   function goTarget(t: { tab: string; sub?: string; id?: number }): void {
     if (!game) return;
@@ -2035,6 +2036,7 @@ export function startApp(): void {
     sheetBody.innerHTML = `<div class="choice-sheet" data-id="${c.id}"><div class="eyebrow"><i></i>결정이 필요합니다${list.length > 1 ? ` · ${list.length}건 중 1` : ''}</div><h2>${esc(c.name)}</h2><p class="ev-text">${esc(c.text)}</p>
       <div class="evchoices">${c.choices.map((x, i) => `<button class="evc" data-act="resolveEv" data-id="${c.id}" data-v="${i}"><b>${esc(x.label)}${i === c.defaultChoice ? ' <small>(고르지 않으면 이것)</small>' : ''}</b><small>${esc(x.result)}</small>${x.costText ? `<span class="ev-cost ${x.cost > 0 ? 'neg' : 'pos'}">${esc(x.costText)}</span>` : ''}</button>`).join('')}</div>
       <p class="hint" style="margin-top:10px">${c.weeksLeft}주 안에 고르지 않으면 「${esc(def)}」${josa(def, '으로/로')} 정해집니다. 이 창이 떠 있는 동안 시간이 멈춥니다.</p>
+      ${Q.autoOn(game!.state, c.eventId) ? `<p class="hint auto-held">자동 승인을 켠 종류지만 큰돈이 드는 결정이라 묻습니다(설정 › 결정 › 안전선).</p>` : `<label class="chk auto-chk"><input type="checkbox" data-ad="${esc(c.eventId)}"> 이 종류(${esc(c.name)})는 앞으로 자동 승인 ${ib('term:결정 자동 승인')}</label>`}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="later">나중에</button></div></div>`;
     sheet.hidden = false; renderTop();
   }
@@ -2798,7 +2800,7 @@ export function startApp(): void {
     sheet.hidden = false; renderTop();
   }
   // ---------- 1.0.0 설정 화면: 시간(자동 멈춤)·알림(종류별)·소리·저장(자동 저장)·화면(로고·디버그). 값은 예전과 같은 기기 저장소 키 ----------
-  const SET_TABS = [['time', '시간'], ['note', '알림'], ['sound', '소리'], ['save', '저장'], ['view', '화면']] as const;
+  const SET_TABS = [['time', '시간'], ['note', '알림'], ['decide', '결정'], ['sound', '소리'], ['save', '저장'], ['view', '화면']] as const;
   type SetTab = typeof SET_TABS[number][0];
   let setTab: SetTab = 'time';
   const onOff = (act: string, v: string, label: string, on: boolean, sub = '', dis = false) => `<div class="toggle"><span>${label}${sub ? `<small>${sub}</small>` : ''}</span><button class="btn" data-act="${act}" data-v="${v}" aria-pressed="${on}" ${dis ? 'disabled' : ''}>${on ? '켜짐' : '꺼짐'}</button></div>`;
@@ -2813,6 +2815,7 @@ export function startApp(): void {
         <p class="lbl">그 밖의 안내</p><div class="set-list">${NOTE_CATS.slice(TOPIC_N).filter(([k]) => k !== 'pauseStop').map(([k, n, f]) => onOff('noteCat', k, n, noteOn(k), f ? '끌 수 없습니다' : '', !!f)).join('')}</div>
         <p class="note">끈 유형은 화면에 뜨는 알림과 그 효과음만 나오지 않고, 상단 '할 일' 창의 알림 탭(지난 알림 기록)과 기록 탭에는 그대로 남습니다. 같은 주(빠른 배속이면 한꺼번에 지나간 여러 주)에 같은 유형 알림이 2개 이상 오면 "경쟁사 신차·동향 3건"처럼 한 알림으로 묶고, [펼쳐 보기]를 누르면 그 유형의 지난 알림 기록이 열립니다. 경고·결정 대기·시간을 멈춘 알림은 묶지 않습니다. 시간 멈춤은 시간 설정의 자동 멈춤으로 따로 정하며, 시간을 멈춘 때의 알림은 늘 띄웁니다.</p>
         <p class="lbl">할 일에서 다시 알리지 않는 종류</p>${todoMute.size ? `<div class="set-list todo-muted">${[...todoMute].map((k) => `<div class="toggle"><span>${esc(TODO_KIND_NAME[k as Q.TodoKind] ?? k)}</span><button class="btn" data-act="todoUnmute" data-v="${esc(k)}">다시 알리기</button></div>`).join('')}</div>` : '<p class="hint">없습니다. 할 일 서랍의 [다시 알리지 않기]로 종류별로 끌 수 있습니다.</p>'}`
+      : t === 'decide' ? decideSet()
       : t === 'sound' ? soundSet()
       : t === 'save' ? `<p class="lbl">자동 저장 <small class="hint auto-last">마지막 자동 저장: ${auto}</small></p>
         <div class="seg auto-every" role="group" aria-label="자동 저장 간격">${SAVE_EVERY.map(([k, n]) => `<button data-act="saveEvery" data-v="${k}" aria-pressed="${saveSet.every === k}">${n}</button>`).join('')}</div>
@@ -2820,9 +2823,22 @@ export function startApp(): void {
         <p class="note">끄지 않았으면 탭을 숨기거나 닫을 때도 저장합니다. 이 기기에 저장됩니다. 저장 칸과 파일 내보내기는 메뉴에 있습니다.</p>`
       : `<p class="lbl">화면</p><div class="set-list"><button class="btn" data-act="logoSheet" style="width:100%">회사 로고 바꾸기</button>${onOff('reveal', '', '출시 공개 장면', revealOn(), '출시할 때 무대의 공개 연출(누르면 건너뜀)')}${onOff('debug', '', '디버그 표시', debugOn, '화면 속도·주 번호·시드')}</div>`;
     sheetBody.innerHTML = `<div class="settings"><div class="eyebrow"><i></i>메뉴 · 설정</div><h2>설정</h2><div class="seg set-tabs" role="tablist" aria-label="설정 묶음">${SET_TABS.map(([k, n]) => `<button role="tab" data-act="setTab" data-v="${k}" aria-selected="${t === k}">${n}</button>`).join('')}</div>
-      <div class="set-body" data-tab="${t}">${body}</div><p class="note">설정은 이 기기에 저장되며 모든 게임에 함께 쓰입니다.</p>
+      <div class="set-body" data-tab="${t}">${body}</div><p class="note">${t === 'decide' ? '결정 설정은 지금 판에 저장됩니다(판마다 따로). 나머지 설정은 이 기기에 저장되며 모든 게임에 함께 쓰입니다.' : '설정은 이 기기에 저장되며 모든 게임에 함께 쓰입니다.'}</p>
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="menuBack">← 메뉴</button><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
+  }
+  /** 3.7.0 최근 자동 승인 기록(뉴스에서). 없으면 빈 문자열 */
+  const autoLogHtml = () => { const l = Q.autoLog(game!.state); return l.length ? `<ul class="auto-log">${l.map((x) => `<li><small class="nd">${esc(Q.dateLabel(x.week))}</small> ${esc(x.text.replace(/^자동 승인: /, ''))}</li>`).join('')}</ul>` : ''; };
+  /** 3.7.0 설정 › 결정: 종류별 자동 승인, 모두 켜기·끄기, 안전선, 최근 기록 */
+  function decideSet(): string {
+    const s = game!.state, all = Q.AUTO_KINDS.every((k) => Q.autoOn(s, k.id)), none = !Q.AUTO_KINDS.some((k) => Q.autoOn(s, k.id)), pct = Math.round(config.autoDecide.guardShare * 100);
+    const rule = (k: typeof Q.AUTO_KINDS[number]) => k.rule === 'exec' ? `임원 위임과 같은 규칙으로 고릅니다${k.id === 'priceWar' ? '(버틸 때 줄어드는 판매가 인하 폭보다 크면 따라 내림)' : '(그 직원 능력이 같은 직무 평균 이상이면 붙잡음)'}` : `「${k.defaultLabel}」${josa(k.defaultLabel, '을/를')} 고릅니다(기본 선택)`;
+    const log = autoLogHtml();
+    return `<p class="lbl">결정 자동 승인 ${ib('term:결정 자동 승인')}</p><div class="row auto-all"><button class="btn" data-act="autoAll" data-v="1" ${all ? 'disabled' : ''}>모두 켜기</button><button class="btn" data-act="autoAll" data-v="0" ${none ? 'disabled' : ''}>모두 끄기</button></div>
+      <div class="set-list auto-kinds">${Q.AUTO_KINDS.map((k) => onOff('autoKind', k.id, k.name, Q.autoOn(s, k.id), rule(k))).join('')}</div>
+      <p class="lbl">안전선</p><div class="set-list">${onOff('autoGuard', '', '큰돈이 드는 결정은 묻기', Q.autoGuardOn(s), `고른 선택지의 지출이 지금 현금의 ${pct}% 이상이거나 현금이 모자라면 자동으로 하지 않고 결정 창을 띄웁니다`)}</div>
+      <p class="note">켠 종류의 결정은 창을 띄우지 않고 생기자마자 처리하며 시간도 멈추지 않습니다. 결과는 '자동 승인' 알림과 뉴스에 남습니다. 임원이 위임으로 처리하는 결정은 지금처럼 임원이 처리합니다.</p>
+      <p class="lbl">최근 자동 승인</p>${log || '<p class="hint">아직 없습니다.</p>'}`;
   }
   const saveWhen = () => saveSet.every === 'off' ? '자동 저장 꺼짐' : `${SAVE_EVERY.find(([k]) => k === saveSet.every)![1]} 저장`;
   /** 메뉴의 되돌리기 한 줄(같은 주 안의 직전 조작) */
@@ -3364,7 +3380,13 @@ export function startApp(): void {
       case 'autoPause': { const k = v as PauseKey; if (!(k in pauseOn)) return; pauseOn[k] = !pauseOn[k]; try { localStorage.setItem(PAUSE_KEY, JSON.stringify(pauseOn)); } catch { /* 저장 불가 */ } showSettings(); return; }
       case 'noteCat': { const k = v as NoteCat; if (!NOTE_CATS.some(([c]) => c === k) || noteFixed(k)) return; noteSet[k] = !noteOn(k); keep(NOTE_KEY, noteSet); showSettings(); return; }
       case 'settings': showSettings(); return;
+      case 'autoSettings': closeDrawer(); showSettings('decide'); return;
       case 'reveal': try { localStorage.setItem(REVEAL_KEY, revealOn() ? '0' : '1'); } catch { /* 저장 불가 */ } showSettings(); return;
+      case 'autoKind': case 'autoAll': { // 3.7.0 결정 자동 승인(판 상태에 저장)
+        if (!game) return; const kind = a === 'autoAll' ? 'all' : v, on = a === 'autoAll' ? v === '1' : !Q.autoOn(game.state, v);
+        if (run(game.command({ type: 'setAutoDecide', kind, on }))) showSettings(); return;
+      }
+      case 'autoGuard': if (game && run(game.command({ type: 'setAutoDecideGuard', on: !Q.autoGuardOn(game.state) }))) showSettings(); return;
       case 'setTab': if (SET_TABS.some(([k]) => k === v)) showSettings(v as SetTab); return;
       case 'menuBack': void showMenu(); return;
       case 'snd': { const k = v as 'muted' | 'weekTick'; if (k !== 'muted' && k !== 'weekTick') return; sound.set({ [k]: !sound.settings()[k] }); renderMute(); showSettings(); return; }
@@ -3428,6 +3450,7 @@ export function startApp(): void {
     if (t.id === 'lg-text') { logoTarget().text = [...t.value.trim()].slice(0, 2).join(''); logoChanged(true); return; }
     if (t.id === 'lg-border') { logoTarget().border = t.checked; logoChanged(); return; }
     if (t.id === 'sy-dev') { const d = t.value.trim(); if (sync) { sync.device = d || guessDevice(); CL.saveCfg(sync); } else syncDev = d; return; } // 1.6.0 기기 이름
+    if (t.dataset.ad && game) { game.command({ type: 'setAutoDecide', kind: t.dataset.ad, on: t.checked }); toast(t.checked ? '이 종류의 결정은 앞으로 자동 승인합니다. 설정 › 결정에서 끌 수 있습니다.' : '이 종류의 자동 승인을 껐습니다.', '', '자동 승인', 5000); return; } // 3.7.0 결정 창의 체크
     if (t.dataset.ch) { const k = t.dataset.ch as Challenge; if (t.checked) nsChal.add(k); else nsChal.delete(k); return; } // 1.5.0 새 게임 도전 과제
     if (t.id === 'dname' && derive) { derive.name = t.value; const o = document.getElementById('dname-ov'); if (o) o.textContent = t.value.trim() || (t.placeholder ?? ''); return; } // 1.3.0 파생 모델 이름
     if (t.id === 'pname' && draft) { draft.name = t.value; const o = document.getElementById('pname-ov'); if (o) o.textContent = t.value.trim() || defaultName(); }

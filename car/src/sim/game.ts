@@ -27,6 +27,7 @@ import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
 import { presidents, subCommand, subsMonthStart, subsSettle } from './subs';
 import { applyRivalChoice, autoChoice, emptyRivalry, rivalryCommand, rivalryMonthEnd, rivalryMonthStart, warPriceMult } from './rivalry';
 import { addReport, delegationOn } from './execs';
+import { AUTO_KINDS, autoHold, autoOn, autoPick } from './autodecide';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
 import { STATS, type CarState, type Command, type CommandResult, type Edition, type GameEvent, type Generation, type LedgerCar, type LedgerEntry, type PricePolicy, type PendingChoice, type Project, type YearLog, type ProjectKind, type ProjectSpec, type Staff, type Stats, type Difficulty, type StartCondition, type Challenge } from './types';
@@ -160,7 +161,7 @@ export class Game {
       if (gone.length) { s.candidates = s.candidates.filter((c) => s.week < c.expiresWeek); ev.push({ kind: 'company', text: `채용 후보 ${gone.length}명이 다른 회사로 갔습니다.` }); }
       for (const pc of s.events.pending.filter((x) => s.week >= x.deadline).sort((a, b) => a.id - b.id)) // 답하지 않은 사건은 기본 선택
         this.applyChoice(pc, RANDOM_EVENTS.find((d) => d.id === pc.eventId)!.defaultChoice, ev, true);
-      if (s.week % config.time.weeksPerMonth === 0) { monthStart(s, ev); rivalryMonthStart(s, ev); this.autoRivalry(ev); } // 11장: 시대 사건 뉴스·무작위 사건. 3.5.0 경쟁 2부(가격 전쟁·이직 제안·인재 후보)
+      if (s.week % config.time.weeksPerMonth === 0) { monthStart(s, ev); rivalryMonthStart(s, ev); this.autoRivalry(ev); this.autoDecide(ev); } // 11장: 시대 사건 뉴스·무작위 사건. 3.5.0 경쟁 2부(가격 전쟁·이직 제안·인재 후보)
     }
     ev.push(...this.repEvents); this.repEvents = [];
     s.rng = this.rng.getState();
@@ -658,6 +659,19 @@ export class Game {
         this.applyChoice(pc, cmd.choice, events, false);
         return { ok: true, events };
       }
+      case 'setAutoDecide': { // 3.7.0 결정 자동 승인(앞으로 생기는 결정부터)
+        const kinds = cmd.kind === 'all' ? AUTO_KINDS.map((k) => k.id) : AUTO_KINDS.some((k) => k.id === cmd.kind) ? [cmd.kind] : null;
+        if (!kinds) return fail('없는 결정 종류입니다.');
+        const a = (s.autoDecide ??= { on: [] }), on = new Set(a.on);
+        for (const k of kinds) if (cmd.on) on.add(k); else on.delete(k);
+        a.on = AUTO_KINDS.map((k) => k.id).filter((k) => on.has(k));
+        return OK;
+      }
+      case 'setAutoDecideGuard': {
+        const a = (s.autoDecide ??= { on: [] });
+        if (cmd.on) delete a.guard; else a.guard = false;
+        return OK;
+      }
       case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
       case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 위임
       case 'foundSubsidiary': case 'setSubStrategy': case 'setSubArea': case 'setSubDividend': case 'investSub': case 'setSubPresident': case 'setSubShare':
@@ -687,7 +701,7 @@ export class Game {
   }
 
   /** 무작위 사건의 선택 결과(11.2). auto: 4주 동안 답이 없어 기본 선택 */
-  private applyChoice(pc: PendingChoice, idx: number, ev: GameEvent[], auto: boolean): void {
+  private applyChoice(pc: PendingChoice, idx: number, ev: GameEvent[], auto: boolean, approved = false): void {
     const s = this.state, def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, choice = def.choices[idx], m = monthOf(s.week);
     const g = pc.genId === null ? undefined : allGens(s).find((x) => x.id === pc.genId && x.status !== 'discontinued');
     this.spend(-choiceMoney(s, pc, idx)); // 현금·결함 수리비(화면 pendingChoices의 cost와 같은 계산)
@@ -707,7 +721,9 @@ export class Game {
       case 'warFollow': case 'retain': applyRivalChoice(s, pc, e.type); break; // 3.5.0
     }
     if (pc.rv && !choice.effects.length) applyRivalChoice(s, pc, 'none');
-    addNews(s, ev, `[${def.name}] ${choice.label}${auto ? '(답하지 않아 기본 선택)' : ''} — ${pc.rv?.results[idx] ?? choice.result}`, 'result', 'news', undefined, pc.rv ? 'rival' : undefined);
+    const result = pc.rv?.results[idx] ?? choice.result;
+    if (approved) addNews(s, ev, `자동 승인: ${def.name} → ${choice.label} 선택 — ${result}`, 'result', 'news', undefined, 'auto'); // 3.7.0
+    else addNews(s, ev, `[${def.name}] ${choice.label}${auto ? '(답하지 않아 기본 선택)' : ''} — ${result}`, 'result', 'news', undefined, pc.rv ? 'rival' : undefined);
   }
   /** 3.5.0 위임: 재무 임원 '가격 전쟁 대응'·인사 임원 '이직 제안 대응'이 켜져 있으면 결정 창을 바로 처리하고 보고함에 남긴다 */
   private autoRivalry(ev: GameEvent[]): void {
@@ -722,6 +738,16 @@ export class Game {
     }
   }
 
+  /** 3.7.0 결정 자동 승인: 이번 주에 생긴 결정 가운데 켠 종류(임원이 처리하지 않은 것)를 바로 처리한다. 안전선에 걸리면 그대로 묻는다.
+   *  임원·자동 승인이 처리한 결정의 '결정 대기' 이벤트는 내보내지 않는다(창·알림이 뜨지 않게) */
+  private autoDecide(ev: GameEvent[]): void {
+    const s = this.state;
+    if (s.autoDecide?.on.length) for (const pc of s.events.pending.filter((p) => p.week === s.week && autoOn(s, p.eventId)).sort((a, b) => a.id - b.id)) {
+      const a = autoPick(s, pc);
+      if (!autoHold(s, pc, a.choice)) this.applyChoice(pc, a.choice, ev, false, true);
+    }
+    for (let i = ev.length - 1; i >= 0; i--) { const e = ev[i]; if (e.kind === 'choice' && !s.events.pending.some((p) => p.id === e.id)) ev.splice(i, 1); }
+  }
   /** 일회성 지출: 현금에서 바로 빼고 장부(이달 oneOff)에 적는다 */
   private spend(cost: number): void { this.state.cash -= cost; this.state.pendingOneOff += cost; }
   /** 채용 후보 이름(성 + 이름, 지금 직원·후보와 겹치지 않게 최대 20번 다시 뽑는다) */

@@ -1296,3 +1296,11 @@ body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1
 .aw-me{font-style:normal;font-size:11px;font-weight:800;border-radius:999px;padding:2px 7px;background:var(--ink);color:#fff}
 .sub-ipo-b{flex-wrap:wrap;gap:8px}
 .sub-ipo-b .btn{min-height:44px}
+/* 3.7.0 결정 자동 승인 */
+.auto-chk{display:flex;gap:8px;align-items:center;min-height:44px;margin-top:8px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer;flex-wrap:wrap}
+.auto-chk input{width:20px;height:20px;flex:none}
+.auto-all{gap:8px;margin-bottom:8px}
+.auto-log{list-style:none;margin:4px 0 8px;padding:0;display:flex;flex-direction:column;gap:6px}
+.auto-log li{font-size:13px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
+.auto-log .nd{color:var(--ink3);font-weight:700;margin-right:4px}
+.chip.n-auto{background:var(--pos-bg);color:var(--pos-ink)}
