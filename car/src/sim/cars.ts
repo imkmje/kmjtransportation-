@@ -61,6 +61,8 @@ export function lifeFactor(ageMonths: number): number {
 }
 
 export const salaryOf = (ability: number): number => config.salary.base + ability * config.salary.perAbility;
+/** 3.5.0 실제 월급 = 능력 월급 + 가산(이직 제안을 붙잡은 인상분·경쟁사 인재의 웃돈) */
+export const payOf = (x: { ability: number; pay?: number }): number => salaryOf(x.ability) + (x.pay ?? 0);
 
 // ---------- 해금(4단계부터 연구로) ----------
 // 상태를 주면 연구로 연 것(research.ts의 unlocked*와 같다), 연도를 주면 자료의 등장 연도 기준(옛 호환: 실제로 쓸 수 있는지는 연구가 정한다)

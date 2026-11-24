@@ -93,7 +93,8 @@ export function researchError(s: CarState, techId: string): string | null {
 /** 직원 한 명의 주간 연구 점수: 프로젝트·교육·휴식에 없는 엔지니어가 능력 / 10, 전담 연구원 × 1.5 */
 export const staffResearchPoints = (x: Staff, week: number): number =>
   x.role !== 'engineer' || isAway(x, week) ? 0 : (x.ability / R.pointsDiv) * (x.lab ? R.labMult : x.projectId !== null ? R.projectShare : 1);
-export const weeklyResearchPoints = (s: CarState): number => s.staff.reduce((a, x) => a + staffResearchPoints(x, s.week), 0);
+/** 3.5.0 기술 제휴 중이면 제휴 한 곳마다 × (1 + config.rivalry.alliance.speed)만큼 더 */
+export const weeklyResearchPoints = (s: CarState): number => s.staff.reduce((a, x) => a + staffResearchPoints(x, s.week), 0) * (1 + (s.rivalry?.alliances.length ?? 0) * config.rivalry.alliance.speed);
 
 /** 전기차 추가 원가(%)가 이 기술 직전·직후에 얼마인지: 자료 순서대로 앞선 배터리 연구를 모두 했다고 본다 */
 function evCostSpan(t: TechDef, cut: number): [number, number] {

@@ -478,7 +478,7 @@ describe('저장 형식 2 → 4', () => {
     const v2 = JSON.parse(readFileSync('car/tests/fixtures/save-v2.json', 'utf8'));
     expect(v2.saveVersion).toBe(2);
     const g = Game.fromJSON(v2), s = g.state;
-    expect(s.saveVersion).toBe(9);
+    expect(s.saveVersion).toBe(10);
     expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]); expect(s.pendingOneOff).toBe(0);
     for (const x of s.staff) { expect(x.potential).toBe(Math.max(60, x.ability)); expect(x.trainings).toEqual([]); expect(x.restUntil).toBeNull(); }
     for (const x of allGens(s)) { expect(x.allocShare).toBeNull(); expect(x.lostSales).toBe(0); }
