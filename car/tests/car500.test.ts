@@ -24,7 +24,7 @@ describe('5.0.0 차 생성기', { timeout: 60000 }, () => {
       expect(Math.abs(box.max.y - c.roof)).toBeLessThan(.08);
       // 보닛 끝선: 범퍼 높이의 앞 끝이 보닛 높이의 앞 끝보다 앞에 있다(보닛이 앞으로 둥글게 말려 덮이지 않는다)
       const pa = m.geometry.getAttribute('position'), front = (y0: number, y1: number) => { let x = -9; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y > y0 && y < y1) x = Math.max(x, pa.getX(i)); } return x; };
-      const hood = c.belt - .12, bump = c.clr + .2;
+      const hood = c.belt - .12, bump = c.clr + (c.belt - c.clr) * .45; // 5.2.0 범퍼 높이: 코(얼굴에서 가장 앞)는 바닥~허리선의 약 절반
       expect(front(bump - .05, bump + .05)).toBeGreaterThanOrEqual(front(hood - .03, hood + .03) - 1e-6);
       disposeCar(a); disposeCar(b);
     }
