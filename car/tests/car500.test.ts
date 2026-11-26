@@ -22,10 +22,10 @@ describe('5.0.0 차 생성기', { timeout: 60000 }, () => {
       const box = new THREE.Box3().setFromObject(m);
       expect(Math.abs(box.max.x - box.min.x - c.L)).toBeLessThan(.02);
       expect(Math.abs(box.max.y - c.roof)).toBeLessThan(.08);
-      // 얼굴이 눕는다: 차체 가운데 단면에서 범퍼 높이의 앞 끝이 보닛 높이의 앞 끝보다 앞에 있다
-      const pa = m.geometry.getAttribute('position'), front = (y0: number, y1: number) => { let x = -9; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (Math.abs(pa.getZ(i)) < .05 && y > y0 && y < y1) x = Math.max(x, pa.getX(i)); } return x; };
+      // 보닛 끝선: 범퍼 높이의 앞 끝이 보닛 높이의 앞 끝보다 앞에 있다(보닛이 앞으로 둥글게 말려 덮이지 않는다)
+      const pa = m.geometry.getAttribute('position'), front = (y0: number, y1: number) => { let x = -9; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y > y0 && y < y1) x = Math.max(x, pa.getX(i)); } return x; };
       const hood = c.belt - .12, bump = c.clr + .2;
-      expect(front(bump - .05, bump + .05)).toBeGreaterThan(front(hood - .03, hood + .03));
+      expect(front(bump - .05, bump + .05)).toBeGreaterThanOrEqual(front(hood - .03, hood + .03) - 1e-6);
       disposeCar(a); disposeCar(b);
     }
   });

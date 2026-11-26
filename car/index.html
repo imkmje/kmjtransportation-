@@ -16,7 +16,7 @@
         <div class="sp"></div>
         <button class="decbtn" id="decbtn" hidden aria-label="정할 일 보기">정할 일 <b id="dec-n">0</b>건</button>
         <div class="speeds" id="speeds" role="group" aria-label="빠르기">
-          <button data-speed="0" aria-label="멈춤">멈춤</button><button data-speed="1" title="1주 3초" aria-label="보통"><span class="sp-t">보통</span><span class="sp-i" aria-hidden="true">▶</span></button><button data-speed="2" title="1주 1.5초" aria-label="빠름"><span class="sp-t">빠름</span><span class="sp-i" aria-hidden="true">▶▶</span></button><button data-speed="4" title="1주 0.75초" aria-label="아주 빠름"><span class="sp-t">아주 빠름</span><span class="sp-i" aria-hidden="true">▶▶▶</span></button>
+          <button data-speed="0" aria-label="멈춤"><span class="sp-t">멈춤</span><span class="sp-i" aria-hidden="true">❚❚</span></button><button data-speed="1" title="1주 3초" aria-label="보통"><span class="sp-t">보통</span><span class="sp-i" aria-hidden="true">▶</span></button><button data-speed="2" title="1주 1.5초" aria-label="빠름"><span class="sp-t">빠름</span><span class="sp-i" aria-hidden="true">▶▶</span></button><button data-speed="4" title="1주 0.75초" aria-label="아주 빠름"><span class="sp-t">아주 빠름</span><span class="sp-i" aria-hidden="true">▶▶▶</span></button>
         </div>
         <span class="held" id="held" hidden>결정 중 · 멈춤</span>
         <button class="skipbtn" id="skipbtn" aria-pressed="false" title="결정할 일이 생길 때까지 가장 빠르게 진행합니다(최대 2년)">다음 일까지</button>
@@ -31,6 +31,7 @@
           <button class="btn ink" id="menusave">저장·설정</button>
         </div>
       </header>
+      <div class="alertbar" id="alertbar" hidden role="status"></div>
       <main id="main">
         <aside id="side" hidden aria-label="내 차 목록"></aside>
         <section class="stage" id="stage">

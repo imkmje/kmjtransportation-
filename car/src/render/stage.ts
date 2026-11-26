@@ -71,7 +71,7 @@ export class Stage {
       const m = new THREE.Mesh(keep(new THREE.PlaneGeometry(w, h)), keep(new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })));
       m.position.set(x, y, z); m.lookAt(0, 0, 0); es.add(m);
     };
-    board(10, 3.2, 0, 9, 0, 0xffffff); board(14, 1.4, -8, 2.6, 6, 0xf2f6ff); board(14, 1.4, 8, 2.6, -6, 0xffffff); board(8, 2.4, -9, 4, -6, 0xc9d8ff); board(6, 2, 9, 3, 6, 0x9aa6b8); board(40, 40, 0, -4, 0, 0x30363f);
+    board(10, 3.2, 0, 9, 0, 0xffffff); board(16, .5, -7, 1.1, 7, 0xffffff); board(16, .5, 7, 1.3, -7, 0xeef3ff); board(16, .35, 0, 1.6, 9, 0xf4f6ff); // 5.1.0 옆면에 길게 걸리는 밝은 띠 board(14, 1.4, -8, 2.6, 6, 0xf2f6ff); board(14, 1.4, 8, 2.6, -6, 0xffffff); board(8, 2.4, -9, 4, -6, 0xc9d8ff); board(6, 2, 9, 3, 6, 0x9aa6b8); board(40, 40, 0, -4, 0, 0x30363f);
     const pm = keep(new THREE.PMREMGenerator(R));
     scene.environment = keep(pm.fromScene(es, .03).texture);
     const hemi = this.hemi = new THREE.HemisphereLight(0xffffff, 0xb9c2cc, .55 * LEGACY); scene.add(hemi);

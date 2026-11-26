@@ -34,7 +34,7 @@ export function createCarMaterials(color: string): CarMaterials {
   crease.color = paint.color; // 무대가 차체색을 바꾸면(paint.color.lerp) 함께 바뀐다
   return {
     paint, crease,
-    glass: new THREE.MeshPhysicalMaterial({ color: 0x24303c, metalness: .45, roughness: .07, envMapIntensity: 1.1, clearcoat: .6 }), // 짙은 청회색 + 약한 반사
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x3a4b5e, metalness: .5, roughness: .05, envMapIntensity: 1.6, clearcoat: .8 }), // 5.1.0 어두운 무대에서 유리가 바탕과 뭉치지 않게 조금 밝게 // 짙은 청회색 + 약한 반사
     tire: new std({ color: 0x1b1d20, roughness: .85, envMapIntensity: .3 }), // 고무: 순검정 대신 짙은 회색, 반사 약하게
     rim: new std({ color: 0xdfe3e8, metalness: .7, roughness: .26, envMapIntensity: 1.3 }),
     dark: new std({ color: 0x15181c, roughness: .6, metalness: .3 }),
@@ -42,7 +42,7 @@ export function createCarMaterials(color: string): CarMaterials {
     lamp: new std({ color: 0xffffff, emissive: 0xfff3d0, emissiveIntensity: 1.4, ...decalOpts }),
     tail: new std({ color: 0xc00000, emissive: 0xd00000, emissiveIntensity: .7, ...decalOpts }),
     chrome: new std({ color: 0xeef1f4, metalness: 1, roughness: .12, ...decalOpts }),
-    plate: new std({ color: 0xf4f5f2, roughness: .5, ...decalOpts }),
+    plate: new std({ color: 0x2b3038, roughness: .55, ...decalOpts }), // 5.1.0 번호판 자리는 어둡게(흰 네모가 떠 보였다)
     gloss: new THREE.MeshPhysicalMaterial({ color: 0x07090b, roughness: .18, metalness: .1, clearcoat: 1, clearcoatRoughness: .05 }),
     rotor: new std({ color: 0x8c9097, metalness: .85, roughness: .38 }), caliper: new std({ color: 0xb3201c, roughness: .4, metalness: .2 }),
     lens: new THREE.MeshPhysicalMaterial({ color: 0x3a4048, metalness: .85, roughness: .12, clearcoat: 1, clearcoatRoughness: .04, ...decalOpts }),
@@ -284,7 +284,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   // ── 휠 아치 테: 아치 원을 따라 옆면에 붙는 반고리 ──
   for (const xw of [-p.wb, p.wb]) {
     const inner: number[][] = [], outer: number[][] = [];
-    for (let i = 0; i <= 18; i++) {
+    for (let i = 2; i <= 16; i++) { // 5.1.0 아래 끝(문턱 높이)은 빼서 휠 아치 뒤에 검은 조각이 삐죽 나오지 않게
       const t = Math.PI * i / 18, c = Math.cos(t), s = Math.sin(t);
       for (const [arr, r] of [[inner, ar + F.archLift], [outer, ar + p.archTrim]] as const) {
         const x = xw + c * r, y = ay + s * r;
@@ -324,7 +324,10 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
   // 데칼 탐색이 시작되는 단면(바퀴 아치 바로 앞뒤)의 실제 옆면 폭을 넘지 않게 한다(앞뒤가 짧고 둥근 경차 등)
   // 차체 성격에 맞춘 눈: 스포츠·쿠페는 얇고 넓게, SUV·픽업은 크고 곧게, 경차는 조금 크고 순하게
   const BK = id === 'sports' || id === 'coupe' ? { w: 1.2, h: .8 } : p.suv || p.bed != null ? { w: 1.08, h: 1.25 } : id === 'kei' ? { w: 1.05, h: 1.15 } : { w: 1, h: 1 };
-  const lampY = p.belt - F.lampDrop + fc.lampDy, lw = fc.lampW * BK.w, LH = F.lampH * BK.h;
+  const lw = fc.lampW * BK.w, LH = F.lampH * BK.h;
+  // 5.1.0 전조등은 보닛 끝선 바로 아래 앞면에(보닛 윗면으로 올라가 얇은 띠로만 보이던 것), 후미등은 트렁크 끝선 바로 아래
+  const hoodF = Tat(h - endT(1) - .02), deckR = Tat(-h + endT(-1) + .02);
+  const lampY = Math.min(p.belt - F.lampDrop, hoodF - LH * .62 - .015) + fc.lampDy;
   const fw = Math.min(hw * E.faceW, ...([[1, lampY], [1, p.clr + .15], [-1, p.belt - F.tailDrop + fc.tailDy], [-1, p.clr + .15]] as const)
     .map(([s, y]) => (sideZ(s * loOf(s), y) - .01) / .96));
   const L2 = F.lift * 2, L3 = F.lift * 3, plateTop = p.clr + F.plateY + F.plateH;
@@ -360,7 +363,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
       lampIn = z0; lampTop = lampY + .06 * hk; break;
     }
     case 'slim': { // 2020년대 얇은 일자 LED: 덮개는 가늘고 길게, 발광 줄은 덮개 거의 끝까지
-      const z0 = fw * Math.max(.3, .88 - .5 * lw), y = lampY + LH * .2, lh = LH * .5;
+      const z0 = fw * Math.max(.3, .88 - .5 * lw), y = lampY + LH * .2, lh = LH * .72;
       pair(g => { decal(rect(g * z0, g * fw * .9, y - lh / 2, y + lh / 2), M.lens, 1); decal(rect(g * (z0 + .008), g * (fw * .9 - .008), y - lh * .05, y + lh * .36, 8, 1), M.lamp, 1, L2); });
       lampIn = z0; lampTop = y + lh / 2; break;
     }
@@ -462,7 +465,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
 
   // ── 뒷모습 ──
   // 후미등: 붉은 유리 덮개 + 안쪽 가운데 밝은 줄
-  const tailY = p.belt - F.tailDrop + fc.tailDy, tl = (z0: number, z1: number, y0: number, y1: number, sy = 3) => pair(g => {
+  const tailY = Math.min(p.belt - F.tailDrop, deckR - .075) + fc.tailDy, tl = (z0: number, z1: number, y0: number, y1: number, sy = 3) => pair(g => {
     decal(rect(g * fw * z0, g * fw * z1, y0, y1, 4, sy), M.tailLens, -1);
     const iz = Math.min(.012, (z1 - z0) * fw * .15), iy = Math.min(.012, (y1 - y0) * .2), ym2 = (y0 + y1) / 2, ih = Math.max(.01, (y1 - y0) * .3);
     if (y1 - y0 > z1 * fw - z0 * fw) decal(rect(g * (fw * z0 + iz), g * (fw * z1 - iz), y0 + iy, y1 - iy, 2, sy), M.tail, -1, L2); // 세로로 긴 등은 안쪽 전체
@@ -519,8 +522,8 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     }
   });
   // 휠하우스 안쪽(어두운 반원통): 위쪽 반만(바닥 아래로 뚫지 않게), 좌우 바퀴 안쪽에만(보닛 가운데로 솟지 않게)
-  const well = new THREE.CylinderGeometry(ar - .02, ar - .02, .22, 16, 1, true, Math.PI / 2, Math.PI);
-  for (const xw of [-p.wb, p.wb]) pair(sgn => { const wl = add(well, M.dark, xw, ay, sgn * (hw - .22)); wl.rotation.x = Math.PI / 2; wl.castShadow = false; });
+  const well = new THREE.CylinderGeometry(ar - .03, ar - .03, .2, 20, 1, true, Math.PI / 2, Math.PI); // 5.1.0 차체 옆으로 삐져나오지 않게 더 안쪽에
+  for (const xw of [-p.wb, p.wb]) pair(sgn => { const wl = add(well, M.dark, xw, ay, sgn * (hw - .3)); wl.rotation.x = Math.PI / 2; wl.castShadow = false; });
   if (look.sporty || p.spoiler) {
     // 실제 윗면 높이(topY)에 맞춰 붙인다: 트렁크 날개는 다리가 덱에 닿고, 지붕 스포일러는 지붕 끝에 얹힌다. 고성능판은 높고 넓은 날개 + 양끝 판
     const sx = p.deck ? -h + (gt ? .24 : .2) : p.cR - (gt ? .1 : .06), zl = hw - .42, sy = p.deck ? topY(sx, 0) + (gt ? .17 : .08) : Math.max(topY(sx, 0), topY(sx, zl)); // 고리 사이 면은 곡선보다 조금 낮아 살짝 묻는다
@@ -599,7 +602,7 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     : new THREE.CylinderGeometry(rimR * .24, rimR * .3, .03, 16);
   const rotor = open ? new THREE.CylinderGeometry(rimR * .8, rimR * .8, .016, 24) : null, caliper = open ? new THREE.BoxGeometry(rimR * .5, .045, rimR * .2) : null;
   for (const x of [-p.wb, p.wb]) for (const sgn of [1, -1]) {
-    const w = new THREE.Group(); w.position.set(x, p.wr, sgn * (hw - (gt ? .1 : .13))); w.rotation.x = sgn * Math.PI / 2; carG.add(w); // 고성능판은 바퀴가 바깥으로
+    const w = new THREE.Group(); w.position.set(x, p.wr, sgn * (hw - (gt ? .12 : .15))); w.rotation.x = sgn * Math.PI / 2; carG.add(w); // 고성능판은 바퀴가 바깥으로
     const part = (g: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const mm = new THREE.Mesh(g, mat); mm.position.y = y; mm.castShadow = true; w.add(mm); return mm; };
     part(tire, M.tire); part(disc, wk === 'steel' ? rimMat : M.dark, .06); part(lip, evV ? M.accent : rimMat, .1); // 전기차판은 청록 휠 테
     part(plate, wk === 'steel' ? M.chrome : M.rim, wk === 'steel' ? .1 : open ? .1 : .085);

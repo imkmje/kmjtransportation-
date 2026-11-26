@@ -91,7 +91,7 @@ export function chassisOf(look: CarLook): Chassis {
   if (b.suv && dev.roof < 0) dev.roof *= .45; // SUV는 지붕이 많이 낮아지면 왜건처럼 보인다
   // 지붕선 유형: 트렁크 있는 차만(쿠페·스포츠카는 패스트백이 더 흔하다)
   const rt = has ? r() : 0, sporty = look.bodyId === 'coupe' || look.bodyId === 'sports';
-  const roofType: RoofType = !b.deck ? 'notch' : rt < (sporty ? .3 : .5) ? 'notch' : rt < (sporty ? .6 : .8) ? 'semi' : 'fast';
+  const roofType: RoofType = !b.deck ? 'notch' : !has ? (sporty ? 'fast' : 'notch') : rt < (sporty ? .3 : .5) ? 'notch' : rt < (sporty ? .6 : .8) ? 'semi' : 'fast'; // 5.1.0 시드 없는 기본 스포츠카·쿠페는 패스트백(세단처럼 보이지 않게)
   const s = E.len * (1 + VARY.len * dev.len), h = b.L * s / 2, tmin = b.deck ? MIN_TRUNK : .2;
   let rf = b.rf * s * (1 + VARY.rake * dev.rake), rr = b.rr * s * (1 + VARY.rear * dev.rear);
   if (b.deck) rr = REAR[roofType](rr);
