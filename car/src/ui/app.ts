@@ -663,7 +663,7 @@ export function startApp(): void {
     const hqOf = (e: typeof L) => e.upkeepHq ?? Math.min(e.upkeep, Q.hqInfo(s).current.upkeep); // 0.5.1 전 장부는 지금 본사 유지비로 나눈다(재무 화면과 같게)
     // 지출 줄: [이름, 이번 달, 전월]. 임원·연구는 0.9.0부터 장부에 따로 있다(예전 달은 월급·일회성에 들어 있음)
     const costs = (e: typeof L): [string, number][] => [['차 원가', e.cogs], [e.execPay === undefined ? '직원·임원 월급' : '직원 월급', e.salaries - (e.execPay ?? 0)], ['임원 월급', e.execPay ?? 0], ['본사 유지비', hqOf(e)], [s.batteryPlant.level || s.batteryPlant.build ? '공장 유지비(배터리 공장 포함)' : '공장 유지비', e.upkeep - hqOf(e)],
-      ['개발비', e.dev], ['광고비', e.marketing], ['연구 시작 비용', e.research ?? 0], ['대출 이자', e.interest], ['리콜', e.recall], ['자회사 투자(설립·추가 투자)', e.subInv ?? 0], ['관세', e.tariff ?? 0], ['운송비', e.ship ?? 0], ['판매 법인 유지비', e.worldUpkeep ?? 0], ['해외 진출·판매 법인 투자', e.worldInv ?? 0], ['일회성 지출(채용 공고·교육·퇴직금·승급·건설 등)', (e.oneOff || 0) - (e.research ?? 0) - (e.subInv ?? 0) - (e.worldInv ?? 0)]]; // 4.0.0 해외 항목
+      ['개발비', e.dev], ['광고비', e.marketing], ['연구 시작 비용', e.research ?? 0], ['대출 이자', e.interest], ['리콜', e.recall], ['자회사 투자(설립·추가 투자)', e.subInv ?? 0], ['관세', e.tariff ?? 0], ['운송비', e.ship ?? 0], ['판매 법인·현지 공장 유지비', e.worldUpkeep ?? 0], ['해외 진출·판매 법인·현지 공장 투자', e.worldInv ?? 0], ['일회성 지출(채용 공고·교육·퇴직금·승급·건설 등)', (e.oneOff || 0) - (e.research ?? 0) - (e.subInv ?? 0) - (e.worldInv ?? 0)]]; // 4.0.0 해외 항목
     const cur = costs(L), prev = P ? costs(P) : null;
     const dd = (a: number, b: number | undefined, cost = false) => b === undefined ? '<td class="r d">—</td>' : Math.round(a - b) === 0 ? '<td class="r d">±0</td>' : `<td class="r d ${(a > b) !== cost ? 'pos' : 'neg'}">${money(a - b, true)}</td>`;
     const kp = (label: string, v: string, a: number, b: number | undefined, cls = '') => `<div class="kpi"><small>${label}</small><b class="${longCls(cls, v)}">${v}</b>${b === undefined ? '' : `<small class="${a >= b ? 'pos' : 'neg'}">전월 대비 ${label === '판매' ? `${a - b >= 0 ? '+' : '−'}${num(Math.abs(a - b))}대` : money(a - b, true)}</small>`}</div>`;
@@ -684,7 +684,7 @@ export function startApp(): void {
   /** 4.0.0 월 결산의 해외 권역 표 */
   function monWorld(L: Game['state']['ledger'][number], P?: Game['state']['ledger'][number]): string {
     const w = L.world!, ids = Object.keys(w);
-    return `<p class="lbl" style="margin-top:10px">해외 권역 <small class="hint">해외 매출 ${money(ids.reduce((a, k) => a + w[k].revenue, 0))} · 전체의 ${Math.round(WD.overseasShare(L.revenue, w) * 100)}%</small></p><div class="tblwrap"><table class="tbl mon-world"><tr><th>권역</th><th class="r">판매</th><th class="r">매출</th><th class="r">관세·운송</th><th class="r">법인 유지비</th><th class="r">이익</th><th class="r">전월 대비</th></tr>${ids.map((k) => { const x = w[k], p = P?.world?.[k]; return `<tr><td>${esc(WD.regionName(k))}</td><td class="r">${num(x.sold)}대</td><td class="r">${money(x.revenue)}</td><td class="r">${money(x.tariff + x.ship)}</td><td class="r">${money(x.upkeep)}</td><td class="r ${x.profit >= 0 ? 'pos' : 'neg'}">${money(x.profit, true)}</td><td class="r d">${p ? money(x.profit - p.profit, true) : '—'}</td></tr>`; }).join('')}</table></div><p class="note">권역 이익 = 매출 − 원가 − 관세 − 운송비 − 판매 법인 유지비.</p>`;
+    return `<p class="lbl" style="margin-top:10px">해외 권역 <small class="hint">해외 매출 ${money(ids.reduce((a, k) => a + w[k].revenue, 0))} · 전체의 ${Math.round(WD.overseasShare(L.revenue, w) * 100)}%</small></p><div class="tblwrap"><table class="tbl mon-world"><tr><th>권역</th><th class="r">판매</th><th class="r">매출</th><th class="r">관세·운송</th><th class="r">법인·공장 유지비</th><th class="r">이익</th><th class="r">전월 대비</th></tr>${ids.map((k) => { const x = w[k], p = P?.world?.[k]; return `<tr><td>${esc(WD.regionName(k))}</td><td class="r">${num(x.sold)}대</td><td class="r">${money(x.revenue)}</td><td class="r">${money(x.tariff + x.ship)}</td><td class="r">${money(x.upkeep)}</td><td class="r ${x.profit >= 0 ? 'pos' : 'neg'}">${money(x.profit, true)}</td><td class="r d">${p ? money(x.profit - p.profit, true) : '—'}</td></tr>`; }).join('')}</table></div><p class="note">권역 이익 = 매출 − 원가 − 관세 − 운송비 − 판매 법인·현지 공장 유지비.</p>`;
   }
   function onEvent(e: GameEvent): void {
     const s = game!.state, reg = e.kind === 'news' && (e.category === 'regulation' || (e.category === 'preview' && e.text.includes('규제')));
@@ -1175,6 +1175,7 @@ export function startApp(): void {
     for (const a of Q.researchInfo(s).active) rows.push(row('tab', ' data-v="research"', `연구 · ${esc(a.name)}`, a.weeksLeft === null ? '—' : `${a.weeksLeft}주`));
     for (const x of s.subs ?? []) { const d = Q.subDetail(s, x.id); if (d && d.mode === 'delegate') rows.push(row('cotab', ' data-v="sub"', `자회사 「${esc(d.name)}」 (전반 위임)`, `이익 ${money(d.lastMonth?.profit ?? 0, true)}`)); }
     for (const r of WD.regionViews(s)) if (r.open && r.auto) rows.push(row('cotab', ' data-v="world"', `자동 수출 · ${esc(r.name)}`, `${num(r.sold)}대`));
+    for (const r of WD.regionViews(s)) if (r.plant?.level || r.plant?.build) rows.push(row('cotab', ' data-v="world"', `현지 공장 · ${esc(r.name)}${r.plant.build ? ` ${r.plant.build.level}등급 공사` : ''}`, r.plant.build ? `${r.plant.build.monthsLeft}개월` : `${num(r.plant.made)}대`)); // 5.5.0
     const n = Q.autoLog(s, 99).filter((x) => x.week > s.week - config.time.weeksPerMonth).length;
     return { rows, foot: n ? `<p class="td-foot">자동 승인으로 최근 한 달 동안 ${n}건을 처리했습니다</p>` : '' };
   }
@@ -2344,10 +2345,40 @@ export function startApp(): void {
       <td><button class="btn sm ${c.on ? 'ink' : ''}" data-act="wExp" data-id="${c.id}" data-k="${v.id}" data-v="${c.on ? 'off' : 'on'}" ${c.block && !c.on ? 'disabled' : ''} aria-pressed="${c.on}">${c.on ? '수출 중' : '켜기'}</button></td>
       <td class="r"><button class="lnk" data-act="wPrice" data-id="${c.id}" data-k="${v.id}">${money(c.price)}</button><br><small class="hint">${c.manual ? '수동' : '자동'}</small></td><td class="r">${num(c.sold)}대</td><td class="r ${c.unit >= 0 ? 'pos' : 'neg'}">${money(c.unit, true)}</td><td class="r ${c.profit >= 0 ? 'pos' : 'neg'}">${money(c.profit, true)}</td></tr>`).join('')}</table></div>`
       : '<p class="hint">판매 중인 차가 없습니다.</p>';
-    const rk = WD.regionRanking(s, v.id), top = Math.max(...rk.map((x) => x.share), 1e-9);
-    const rank = `<p class="lbl">${esc(v.name)} 경쟁사 순위 <small class="hint">대략 점유</small></p><div class="w-bars w-rank">${rk.map((x, i) => `<div class="w-bar ${x.mine ? 'me' : ''}"><span>${i + 1}. ${x.mine || x.local ? esc(x.name) : `${logo(x.id, 16)}${esc(x.name)}`}${x.local ? ib('term:기타 현지 업체') : ''}</span><i><u style="width:${((x.share / top) * 100).toFixed(0)}%"></u></i><small>${(x.share * 100).toFixed(1)}%</small></div>`).join('')}</div>`;
-    return `<div class="card w-reg"><h3>${esc(v.name)} <small class="hint">${monthLabelOf(v.since!)} 진출 · 누적 ${num(v.total)}대 · 누적 이익 ${money(v.totalProfit, true)}</small></h3>${kp}${office}${auto}
-      <p class="lbl">수출 차종 <small class="hint">관세 ${money(v.tariff)} · 운송비 ${money(v.ship)}(지난달)</small></p>${list}${taste}${rank}</div>`;
+    const rank = regionRank(v), plant = v.plant ? plantBlock(v, cars) : `<p class="hint w-plant">현지 공장${ib('term:현지 공장')}은 판매 법인 ${config.world.plant.office}등급부터 지을 수 있습니다.</p>`;
+    const trade = v.trade.length || v.deal ? `<div class="w-trade"><p class="lbl">무역 사건${ib('term:무역 사건')}</p><ul class="w-tl">${[...v.trade, ...(v.deal ? [v.deal] : [])].map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>` : '';
+    return `<div class="card w-reg"><h3>${esc(v.name)} <small class="hint">${monthLabelOf(v.since!)} 진출 · 누적 ${num(v.total)}대 · 누적 이익 ${money(v.totalProfit, true)}</small></h3>${kp}${office}${plant}${trade}${auto}
+      <p class="lbl">수출 차종 <small class="hint">관세 ${money(v.tariff)} · 운송비 ${money(v.ship)}(지난달)</small></p>${list}${taste}${rank}${makersBlock(v.id)}</div>`;
+  }
+  /** 권역 경쟁사 순위(5.5.0 현지 경쟁사·내 자회사 포함) */
+  function regionRank(v: WD.RegionView): string {
+    const rk = WD.regionRanking(game!.state, v.id), top = Math.max(...rk.map((x) => x.share), 1e-9);
+    const nm = (x: WD.RankRow) => x.mine || x.local ? esc(x.name) : x.sub ? `${subMark(x.name, x.color ?? '#777', 16)}${esc(x.name)} <small class="hint">자회사</small>` : `${logo(x.id, 16)}${esc(x.name)}${x.maker ? ' <small class="hint">현지</small>' : ''}`;
+    return `<p class="lbl">${esc(v.name)} 경쟁사 순위 <small class="hint">대략 점유</small></p><div class="w-bars w-rank">${rk.map((x, i) => `<div class="w-bar ${x.mine ? 'me' : ''}${x.maker ? ' mk' : ''}"><span>${i + 1}. ${nm(x)}${x.local ? ib('term:기타 현지 업체') : x.maker ? ib('term:현지 경쟁사') : ''}</span><i><u style="width:${((x.share / top) * 100).toFixed(0)}%"></u></i><small>${(x.share * 100).toFixed(1)}%</small></div>`).join('')}</div>`;
+  }
+  /** 5.5.0 현지 경쟁사 소개 */
+  function makersBlock(rid: string): string {
+    const L = WD.regionMakers(rid); if (!L.length) return '';
+    return `<p class="lbl">현지 경쟁사${ib('term:현지 경쟁사')}</p><div class="w-makers">${L.map((x) => `<div class="w-mk">${logo(x.id, 28)}<div><b>${esc(x.name)}</b> <small class="hint">${esc(x.trait)}</small><p class="hint">${esc(x.desc)}</p><small>${x.models.map((m) => `「${esc(m.name)}」 ${esc(bodyById(m.body).name)}`).join(' · ')}</small></div></div>`).join('')}</div>`;
+  }
+  /** 5.5.0 현지 공장 구역: 등급·생산·누적 손익, 다음 등급 건설, 현지 생산 차종 */
+  function plantBlock(v: WD.RegionView, cars: WD.RegionCarView[]): string {
+    const p = v.plant!, n = p.next, on = cars.filter((c) => c.on);
+    const head = `<p class="lbl">현지 공장${ib('term:현지 공장')} · ${p.level ? `${p.level}등급 · 한 달 ${num(p.cap)}대 · 월 유지비 ${money(p.upkeep)}` : '없음'}${p.build ? ` · ${p.build.level}등급 공사 중(${p.build.monthsLeft}개월 남음)` : ''}</p>`;
+    const stat = p.level || p.build ? `<p class="hint">지난달 현지 생산 ${num(p.made)}대 · 누적 ${num(p.total)}대 · 누적 손익(현지 생산 차의 이익 − 건설비 − 유지비) <b class="${p.saved >= 0 ? 'pos' : 'neg'}">${money(p.saved, true)}</b></p>` : '';
+    const next = n ? `<p class="hint">${n.level}등급: 건설비 ${money(n.cost)}, 월 유지비 ${money(n.upkeep)}, 한 달 ${num(n.capacity)}대, ${n.months}개월 공사. 지난달 수출 기준 월 이익이 약 ${money(n.save)} 늘어납니다(관세·운송비 절감, 국내 공장이 모자라면 더 파는 몫 포함).</p><button class="btn" data-act="wPlant" data-v="${v.id}" ${n.error ? 'disabled' : ''}>현지 공장 ${n.level}등급 건설 · ${money(n.cost)}</button>${n.error ? `<p class="hint">${esc(n.error)}</p>` : ''}` : p.build ? '' : '<p class="hint">가장 높은 등급입니다.</p>';
+    const loc = (p.level || p.build) && on.length ? `<p class="lbl" style="margin-top:8px">현지 생산 차종${ib('term:현지 생산 차종')} <small class="hint">${p.auto ? '자동 · 관세·운송비가 큰 차부터' : '직접 고름'}</small></p>
+      <div class="row w-loc">${on.map((c) => `<button class="btn sm${c.local ? ' ink' : ''}" data-act="wLoc" data-k="${v.id}" data-id="${c.id}" aria-pressed="${c.local}" ${p.auto && p.cars ? 'disabled' : ''}>${esc(c.name)}${c.loc ? ` <small>${num(c.loc)}대</small>` : ''}</button>`).join('')}${p.cars ? `<button class="btn sm" data-act="wLocAuto" data-v="${v.id}">자동으로</button>` : ''}</div>${p.auto && p.cars ? '<p class="hint">위임(생산 배분·해외 운영)이 켜져 있어 자동으로 고릅니다.</p>' : ''}` : '';
+    return `<div class="w-plant">${head}${stat}${next}${loc}</div>`;
+  }
+  function showPlantBuild(id: string): void {
+    const s = game!.state, v = WD.regionViews(s).find((x) => x.id === id)!, p = v.plant, n = p?.next; if (!p || !n) return;
+    sheetBody.innerHTML = `<div class="eyebrow"><i></i>세계 시장</div><h2>${esc(v.name)} 현지 공장 ${n.level}등급</h2>
+      <table class="tbl"><tr><th>무엇이 바뀌나</th><th class="r">지금</th><th class="r">완공 뒤</th></tr>${cmpRow('한 달 현지 생산', `${num(p.cap)}대`, `${num(n.capacity)}대`)}${cmpRow('월 유지비', money(p.upkeep), money(n.upkeep), true)}${cmpRow('관세 인상·수입 규제', p.level ? '받지 않음' : '받음', '받지 않음')}</table>
+      <div class="kpis" style="margin-top:10px">${kpi('건설비', money(n.cost))}${kpi('공사', `${n.months}<span>개월</span>`)}${kpi('늘어나는 월 이익(어림)', money(n.save), 'pos')}</div>
+      <p class="note">현지 공장이 만든 차는 관세·운송비가 없고 국내 공장 한도를 쓰지 않습니다. 대신 대당 원가가 ${Math.round((config.world.plant.costMult - 1) * 100)}% 더 들고, 그 권역 판매 상한 안에서만 팔립니다. 생산 차종은 자동(관세·운송비가 큰 차부터)이며 직접 고를 수도 있습니다.</p>
+      ${n.error ? `<div class="badbox">${esc(n.error)}</div>` : ''}<div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">취소</button><button class="btn ink" data-act="wPlantDo" data-v="${id}" ${n.error ? 'disabled' : ''}>건설 · ${money(n.cost)}</button></div>`;
+    sheet.hidden = false;
   }
   const monthLabelOf = (m: number) => `${yearOfMonth(m)}년 ${(m % 12) + 1}월`;
   function showWorldOpen(id: string): void {
@@ -2502,6 +2533,7 @@ export function startApp(): void {
     hr: '해고·교육·휴식·채용을 권하고, 교체 고용을 제안합니다. 위임하면 휴식·교육·채용·해고를 대신 합니다.', product: '페이스리프트·풀체인지 적기와 단종을 권하고, 위임하면 세대교체를 대신 합니다.',
     finance: '현금 부족을 미리 알리고 대출 상환·가격 조정을 권합니다.', production: '공장 증설·생산 라인·생산 배분을 권합니다.',
     research: '규제 대비 연구와 다음 연구를 권합니다.', market: '무엇을 만들지(차급·고객층·예상 판매)와 광고 수준을 권합니다.',
+    world: '해외 진출·판매 법인·현지 공장 투자 시기를 권하고, 위임하면 자동 수출·권역 가격·현지 생산 차종을 자동으로 두고 무역 협정에 답합니다. 권역 인지도가 더 빨리 오릅니다.',
   };
   const TIER_WORD = ['', '뭉뚱그려 말함', '대상을 짚어 말함', '수치까지 말함'];
   function execTab(): string {
@@ -2572,9 +2604,18 @@ export function startApp(): void {
     const s = game!.state, d = Q.subDetail(s, id)!, B = d.brand;
     const head = `<div class="card sub-head">${subView === id ? '' : `<div class="row sub-top"><button class="btn" data-act="subBack">← 자회사 목록</button><button class="btn ink" data-act="subOpen" data-id="${id}">운영 전환</button></div>`}<div class="rv-head">${subMark(d.name, d.color, 48)}<div><h2>${esc(d.name)} <small class="hint">${esc(d.kindName)} · ${d.foundedYear}년 설립</small></h2><p class="hint">${esc(d.kindDesc)}</p></div></div>
       <div class="kpis">${kpi('자본', money(d.capital))}${B ? kpi('월 생산 한도', `${num(d.capacity)}<span>대</span>`) + kpi('모델', `${d.models.length}/${d.modelCap}<span>개</span>`) + kpi('브랜드 평판', String(Math.round(d.rep))) : ''}${d.hqEffect ? kpi('본사에 주는 효과', esc(d.hqEffect.text), 'pos', 'kpi-word') : ''}</div></div>`;
-    return `<div class="sub-detail">${head}<div class="cols">${subModeCard(d)}${subTargetCard(d)}</div>${subView === id ? '' : subWorkCard(d)}${subStrategyCard(d)}<div class="cols">${subSettingsCard(d)}${subPresidentCard(d)}</div>${B ? subLineupCard(d) : ''}${subResultCard(d)}
+    return `<div class="sub-detail">${head}<div class="cols">${subModeCard(d)}${subTargetCard(d)}</div>${subView === id ? '' : subWorkCard(d)}${subStrategyCard(d)}<div class="cols">${subSettingsCard(d)}${subPresidentCard(d)}</div>${B ? subLineupCard(d) : ''}${B ? subWorldCard(d) : ''}${subResultCard(d)}
       ${B ? subListCard(d) : ''}
       <div class="card sub-sell"><h3>매각</h3><p class="hint">지금 매각하면 자본의 ${Math.round(SUBS.sellShare * 100)}%${d.listed ? `에서 상장한 지분(${Math.round(d.listed * 100)}%)을 뺀` : ''} <b>${money(d.sellPrice)}</b>을 받습니다. 매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없고, 모델과 실적 기록이 사라집니다. 사장은 본사 직원으로 돌아옵니다.${d.from ? ' 인수한 회사는 다시 독립 경쟁사가 됩니다.' : ''}</p><button class="btn danger" data-act="subSell" data-id="${d.id}" style="width:100%;margin-top:8px">「${esc(d.name)}」 매각 · ${money(d.sellPrice)}</button></div></div>`;
+  }
+  /** 5.5.0 자회사 해외 판매: 본사가 진출한 권역마다 켜기·끄기(전반 위임은 자동도), 권역 인지도, 지난달 실적 */
+  function subWorldCard(d: Q.SubDetail): string {
+    const rows = Q.subRegionInfo(game!.state, d.id), direct = d.mode === 'direct';
+    if (!rows.length) return `<div class="card sub-world"><h3>해외 판매${ib('term:자회사 해외 판매')}</h3><p class="hint">본사가 해외 권역에 진출하면 그 권역에서도 팔 수 있습니다(본사 판매 법인을 함께 쓰고 진출비는 따로 들지 않습니다).</p></div>`;
+    const btn = (r: typeof rows[number], v: 'auto' | 'on' | 'off', label: string) => `<button data-act="subReg" data-id="${d.id}" data-k="${r.rid}" data-v="${v}" aria-pressed="${(v === 'auto' && r.mode === 'auto') || (v === 'on' && r.mode === true) || (v === 'off' && r.mode === false)}">${label}</button>`;
+    return `<div class="card sub-world"><h3>해외 판매${ib('term:자회사 해외 판매')} <small class="hint">${direct ? '직접 운영: 권역을 직접 고릅니다' : '전반 위임: 자동은 대당 이익이 남는 모델만 수출합니다'}</small></h3>
+      <div class="tblwrap"><table class="tbl sub-wt"><tr><th>권역</th><th>판매</th><th class="r">권역 인지도</th><th class="r">지난달</th><th class="r">이익</th></tr>${rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td><div class="seg sub-rseg">${direct ? '' : btn(r, 'auto', '자동')}${btn(r, 'on', '켬')}${btn(r, 'off', '끔')}</div></td><td class="r">${Math.round(r.aw * 100)}%${r.inherited ? `<br><small class="hint">인수 회사 승계${ib('term:인지도 승계')}</small>` : ''}</td><td class="r">${num(r.sold)}대<br><small class="hint">${money(r.revenue)}</small></td><td class="r ${r.profit >= 0 ? 'pos' : 'neg'}">${money(r.profit, true)}</td></tr>`).join('')}</table></div>
+      <p class="note">본사 판매 법인을 함께 써서 따로 진출비가 없습니다. 생산 한도는 국내 판매와 나눠 쓰고, 관세·운송비가 붙습니다(현지 공장은 본사 차만 만듭니다). 권역 판매 상한은 본사와 같은 비율입니다.</p></div>`;
   }
   function subStrategyCard(d: Q.SubDetail): string {
     const s = game!.state, list = d.brand ? d.strategies : d.strategies.filter((x) => (SUBS.business as readonly string[]).includes(x.id));
@@ -2773,6 +2814,7 @@ export function startApp(): void {
       <div class="tblwrap"><table class="tbl" style="margin-top:8px"><tr><th>회사</th><th class="r">판매(12개월)</th><th class="r">매출</th><th class="r">이익</th><th class="r">이익 비중</th></tr>${G.companies.map((c) => `<tr><td>${c.kind === 'hq' ? '<b>본사</b> ' : subMark(c.name, c.color, 16) + ' '}${esc(c.name)}</td><td class="r">${c.kind === 'hq' || isBrandK(c.kind) ? `${num(c.sold)}대 <small class="hint">${shareS(c.sold)}</small>` : '—'}</td><td class="r">${money(c.revenue)}</td><td class="r ${c.profit >= 0 ? 'pos' : 'neg'}">${money(c.profit, true)}</td><td class="r">${share(c.profit)}</td></tr>`).join('')}</table></div>
       <div class="pcols"><div class="pcol"><p class="lbl" style="margin-top:10px">그룹 월 이익</p>${V.barChart(rows, (r) => r.profit, '그룹 월 이익')}</div><div class="pcol"><p class="lbl" style="margin-top:10px">그룹 월 판매</p>${V.barChart(rows, (r) => r.sold, '그룹 월 판매', (v) => `${num(v)}대`, (v) => `${num(v)}대`)}</div></div>
       ${(() => { const L12 = s.ledger.slice(-12), rev = L12.reduce((a, e) => a + e.revenue, 0), ov = L12.reduce((a, e) => a + Object.values(e.world ?? {}).reduce((b, x) => b + x.revenue, 0), 0); return ov > 0 ? `<p class="hint">본사 매출 중 해외 비중(최근 12개월): <b>${Math.round((ov / rev) * 100)}%</b> · 해외 매출 ${money(ov)}</p>` : ''; })()}
+      ${(() => { const ab = (s.subs ?? []).filter((x) => x.abroad).map((x) => { const v = Object.values(x.abroad!), n = v.reduce((a, y) => a + y.sold, 0), pr = v.reduce((a, y) => a + y.profit, 0), all = x.months.at(-1)?.sold ?? 0; return `${esc(x.name)} ${num(n)}대(자회사 판매의 ${all > 0 ? Math.round((n / all) * 100) : 0}%) · 이익 ${money(pr, true)}`; }); return ab.length ? `<p class="hint">자회사 해외 판매(지난달)${ib('term:자회사 해외 판매')}: ${ab.join(' / ')}</p>` : ''; })()}
       <p class="note">본사 이익에서 자회사 배당은 빼고 자회사 설립·투자는 되돌려(그룹 안에서 옮겨 간 돈) 자회사 이익과 더했습니다. 이익 비중은 그룹 이익 대비입니다.</p></div>`;
   }
   /** 본사 차고의 자회사 차(구분 표시, 누르면 무대에 3D) */
@@ -3552,6 +3594,11 @@ export function startApp(): void {
       case 'wOpen': showWorldOpen(v); return;
       case 'wOpenDo': if (game && run(game.command({ type: 'openRegion', region: v }))) { sheet.hidden = true; worldSel = v; toast(`${WD.regionName(v)}에 진출했습니다. 다음 월 결산부터 자동 수출 목록의 차가 팔립니다.`); lastPanel = ''; render(); } return;
       case 'wOffice': showOfficeInvest(v); return;
+      case 'wPlant': showPlantBuild(v); return; // 5.5.0 현지 공장
+      case 'wPlantDo': if (game && run(game.command({ type: 'buildPlant', region: v }))) { sheet.hidden = true; const b = WD.regionOf(game.state, v)?.plant?.build; toast(`${WD.regionName(v)} 현지 공장 ${b?.level ?? ''}등급을 짓기 시작했습니다. ${b ? `${b.doneMonth - monthOf(game.state.week)}개월 뒤 완공됩니다.` : ''}`); lastPanel = ''; render(); } return;
+      case 'wLoc': { if (!game) return; const rid = el.dataset.k ?? '', id = Number(el.dataset.id), cur = WD.regionCars(game.state, rid).filter((c) => c.on && c.local).map((c) => c.id), next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+        if (run(game.command({ type: 'setPlantCars', region: rid, cars: next }))) { lastPanel = ''; render(); } return; }
+      case 'wLocAuto': if (game && run(game.command({ type: 'setPlantCars', region: v, cars: null }))) { lastPanel = ''; render(); } return;
       case 'wOfficeDo': if (game && run(game.command({ type: 'investOffice', region: v }))) { sheet.hidden = true; toast(`${WD.regionName(v)} 판매 법인 ${WD.regionOf(game.state, v)?.office}등급에 투자했습니다.`); lastPanel = ''; render(); } return;
       case 'wAuto': if (game && run(game.command({ type: 'setRegionAuto', region: v, on: (el as HTMLInputElement).checked }))) { lastPanel = ''; render(); } return;
       case 'wExp': if (game && run(game.command({ type: 'setExport', generationId: Number(el.dataset.id), region: el.dataset.k ?? '', on: v === 'on' }))) { lastPanel = ''; render(); } return;
@@ -3570,6 +3617,7 @@ export function startApp(): void {
       case 'subMode': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d || d.mode === v) return;
         if (v === 'delegate' && !(await ask(`「${d.name}」${josa(d.name, '을/를')} 전반 위임으로 돌릴까요?\n정한 모델 가격은 풀리고, 앞으로는 전략이 모델을 늘리거나 줄입니다. 개발 중인 차는 그대로 출시합니다.`, '전반 위임으로'))) return;
         if (run(game.command({ type: 'setSubMode', subId: id, mode: v as 'direct' | 'delegate' }))) { toast(v === 'direct' ? `「${d.name}」${josa(d.name, '을/를')} 직접 운영합니다. 개발 탭에서 신차를 기획할 수 있습니다.` : `「${d.name}」${josa(d.name, '을/를')} 전반 위임으로 돌렸습니다.`); render(); } return; }
+      case 'subReg': if (game && run(game.command({ type: 'setSubRegion', subId: Number(el.dataset.id), region: el.dataset.k ?? '', on: v === 'auto' ? null : v === 'on' }))) { lastPanel = ''; render(); } return; // 5.5.0
       case 'subPrice': if (game && run(game.command({ type: 'setSubModelPrice', subId: Number(el.dataset.id), body: el.dataset.k ?? '', pct: v === '' ? null : Number(v) }))) render(); return;
       case 'subPlanNew': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d) return;
         if (d.mode !== 'direct') return err('신차를 직접 기획하려면 먼저 직접 운영으로 바꾸세요.');

@@ -2169,7 +2169,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await A.p.fill('#sy-token', TOKEN); await A.p.click('[data-act="syncOn"]');
   const up1 = await until(() => meta()?.rev === 1);
   const wA1 = await where(A.p), m1 = meta();
-  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 12 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
+  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 13 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
   await until(async () => (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각'));
   check('1.6.0 A 상태 줄: 마지막으로 올린 시각, [지금 올리기]·[서버에서 불러오기]·[연동 끄기]', (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각') && (await A.p.locator('.sync-box [data-act="syncUp"],.sync-box [data-act="syncDown"],.sync-box [data-act="syncOff"]').count()) === 3);
   await shotS(A.p, 'menu-on-1366x1024');
@@ -2724,11 +2724,11 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   // 설정 › 결정
   await openSave(ap); await ap.click('#sheet [data-act="settings"]'); await ap.click('#sheet [data-act="setTab"][data-v="decide"]'); await ap.waitForSelector('#sheet .auto-kinds');
   const st7 = await ap.locator('#sheet .set-body').innerText();
-  check('3.7.0 설정 › 결정: 종류 10개(모두 꺼짐)·모두 켜기/끄기·안전선(켜짐)·ⓘ', (await ap.locator('#sheet [data-act="autoKind"]').count()) === 10 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 0
+  check('3.7.0 설정 › 결정: 종류 11개(5.5.0 무역 협정 포함, 모두 꺼짐)·모두 켜기/끄기·안전선(켜짐)·ⓘ', (await ap.locator('#sheet [data-act="autoKind"]').count()) === 11 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 0
     && (await ap.locator('#sheet [data-act="autoAll"]').count()) === 2 && (await ap.locator('#sheet [data-act="autoGuard"]').getAttribute('aria-pressed')) === 'true' && (await ap.locator('#sheet [data-info="term:결정 자동 승인"]').count()) === 1
     && ['노조 파업', '가격 전쟁', '임원 위임과 같은 규칙', '기본 선택', '큰돈이 드는 결정은 묻기', '10%'].every((x) => st7.includes(x)), st7.replace(/\s+/g, ' ').slice(0, 200));
   await ap.click('#sheet [data-act="autoAll"][data-v="1"]');
-  check('3.7.0 [모두 켜기]: 판 상태에 10종 모두 켜짐', (await AG(() => window.__car.game.state.autoDecide.on.length)) === 10 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 10);
+  check('3.7.0 [모두 켜기]: 판 상태에 11종 모두 켜짐', (await AG(() => window.__car.game.state.autoDecide.on.length)) === 11 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 11);
   await ap.click('#sheet [data-act="autoGuard"]');
   check('3.7.0 안전선 끄기 → 판 상태 guard false', (await AG(() => window.__car.game.state.autoDecide.guard)) === false);
   await ap.click('#sheet [data-act="autoGuard"]'); await ap.click('#sheet [data-act="autoAll"][data-v="0"]');
@@ -2740,15 +2740,15 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const P71 = process.env.CAR_SMOKE_371 ?? '';
   const shots71 = async (n, fn) => { for (const [w, h] of SZ7) { await ap.setViewportSize({ width: w, height: h }); await ap.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(ap); check(`3.7.1 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P71) await ap.screenshot({ path: `${P71}/${n}-${w}x${h}.png` }); } await ap.setViewportSize({ width: 1366, height: 1024 }); };
   const ms = '#sheet [data-act="autoPick"][data-k="motorshow"]';
-  check('3.7.1 설정 › 결정: 종류마다 답 고르기(선택지 수 + 규칙 종류는 "규칙대로"), 처음 값에 "기본 선택"', (await ap.locator('#sheet .auto-pick').count()) === 10 && (await ap.locator(ms).count()) === 2
-    && (await ap.locator('#sheet [data-act="autoPick"][data-v="rule"]').count()) === 2 && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('이번엔 불참') && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('기본 선택')
+  check('3.7.1 설정 › 결정: 종류마다 답 고르기(선택지 수 + 규칙 종류는 "규칙대로"), 처음 값에 "기본 선택"', (await ap.locator('#sheet .auto-pick').count()) === 11 && (await ap.locator(ms).count()) === 2
+    && (await ap.locator('#sheet [data-act="autoPick"][data-v="rule"]').count()) === 3 && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('이번엔 불참') && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('기본 선택')
     && (await ap.locator('#sheet [data-act="autoPick"][data-k="poach"][aria-pressed="true"]').innerText()).includes('규칙대로'));
   await ap.click(`${ms}[data-v="0"]`);
   const mrow = await ap.locator('#sheet .auto-kind:has([data-v="motorshow"]) .toggle').innerText();
   check('3.7.1 모터쇼 초청 답을 "콘셉트카 출품"으로 → 판 상태 pick, 줄에 한 줄 효과, 켜기·끄기는 그대로', JSON.stringify(await AG(() => window.__car.game.state.autoDecide)) === '{"on":["strike"],"pick":{"motorshow":0}}'
     && mrow.includes('콘셉트카 출품') && mrow.includes('평판이 3 오릅니다') && !mrow.includes('기본 선택'), mrow.replace(/\s+/g, ' ').slice(0, 160));
   await ap.click('#sheet [data-act="autoAll"][data-v="1"]');
-  check('3.7.1 [모두 켜기]는 정한 답을 건드리지 않는다', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.pick)) === '{"motorshow":0}' && (await AG(() => window.__car.game.state.autoDecide.on.length)) === 10);
+  check('3.7.1 [모두 켜기]는 정한 답을 건드리지 않는다', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.pick)) === '{"motorshow":0}' && (await AG(() => window.__car.game.state.autoDecide.on.length)) === 11);
   await ap.click('#sheet [data-act="autoAll"][data-v="0"]'); await ap.click('#sheet [data-act="autoKind"][data-v="strike"]');
   await shots71('settings-pick', () => AG(() => document.querySelector('#sheet .auto-kind:has([data-v="motorshow"])')?.scrollIntoView({ block: 'center' })));
   await ap.click(`${ms}[data-v="1"]`);
@@ -2984,6 +2984,72 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
       if (o > 0 || small) bad.push(`${w}×${h} ${t} 넘침 ${o} 작은 단추 ${small}`); } }
   check('5.0.0 7탭 × 7가지 크기(1194×834·834×1194·1280×800·800×1280·1366×1024·1024×768·640×900): 가로 넘침 0, 위쪽 줄·탭·목록·구역 단추 44px 이상', !bad.length, bad.slice(0, 4).join(' | '));
   await vctx.close(); }
+
+// ---- 5.5.0 세계 시장 2부: 현지 공장(건설 창·완공·현지 생산 차종)·현지 경쟁사(순위·소개·로고)·무역 협정 결정(오늘 탭)·자회사 해외 판매·해외 담당 임원(CAR_SMOKE_550=폴더면 1194×834·834×1194 캡처) ----
+{ const wctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
+  const wp = await wctx.newPage(); wp.on('pageerror', (e) => errors.push(String(e))); wp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const WG = (fn, a) => wp.evaluate(fn, a), P55 = process.env.CAR_SMOKE_550 || '', SZ55 = [[1194, 834], [834, 1194]];
+  const shots55 = async (n, fn) => { for (const [w, h] of SZ55) { await wp.setViewportSize({ width: w, height: h }); await wp.waitForTimeout(250); await WG(() => { document.getElementById('toasts').innerHTML = ''; }); if (fn) await fn(); await wp.waitForTimeout(120); const o = await overflowOf(wp); check(`5.5.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P55) await wp.screenshot({ path: `${P55}/${n}-${w}x${h}.png` }); } await wp.setViewportSize({ width: 1194, height: 834 }); };
+  await wp.goto(URL0); await wp.waitForSelector('#title:not([hidden])');
+  const [fc] = await Promise.all([wp.waitForEvent('filechooser'), wp.click('[data-act="import"]')]); await fc.setFiles('car/tests/fixtures/save-v12.json');
+  await wp.waitForSelector('#title', { state: 'hidden' });
+  await WG(() => { const c = window.__car, g = c.game, s = g.state; c.setSpeed(0); s.events.pending.length = 0; document.getElementById('toasts').innerHTML = '';
+    if (s.execs?.delegations.production?.includes('autoAlloc')) g.command({ type: 'setDelegation', role: 'production', key: 'autoAlloc', on: false }); c.render(); });
+  check('5.5.0 형식 12 저장(5.2.0으로 만든 판)을 불러오면 형식 13, 세 권역 진출', (await WG(() => [window.__car.game.state.saveVersion, window.__car.game.state.world.regions.length].join())) === '13,3');
+  await WG(() => window.__car.goCo('world')); await wp.waitForSelector('.wmap');
+  await wp.locator('.wmap [data-act="wSel"][data-v="na"]').click(); await wp.waitForTimeout(150);
+  check('5.5.0 북미 상세: 현지 공장 구역(법인 2등급이라 건설 단추)·순위에 현지 경쟁사 쉐보래(주력 모델)·현지 경쟁사 소개', (await wp.locator('.w-reg .w-plant [data-act="wPlant"]').count()) === 1 && (await wp.locator('.w-reg .w-rank .w-bar.mk').count()) === 1 && (await wp.locator('.w-reg .w-rank').innerText()).includes('쉐보래') && (await wp.locator('.w-reg .w-mk').count()) === 1);
+  await wp.locator('.wmap [data-act="wSel"][data-v="eu"]').click(); await wp.waitForTimeout(100);
+  check('5.5.0 유럽(법인 1등급): 현지 공장은 2등급부터라는 안내, 순위에 폭스바근', (await wp.locator('.w-reg .w-plant [data-act="wPlant"]').count()) === 0 && (await wp.locator('.w-reg').innerText()).includes('2등급부터') && (await wp.locator('.w-reg .w-rank').innerText()).includes('폭스바근'));
+  await wp.locator('.wmap [data-act="wSel"][data-v="na"]').click(); await wp.locator('.w-reg [data-act="wPlant"]').click(); await wp.waitForSelector('#sheet [data-act="wPlantDo"]');
+  { const t = await wp.locator('#sheet').innerText(); check('5.5.0 현지 공장 건설 창: 현지 생산·유지비·관세 인상·수입 규제 비교, 건설비·공사·늘어나는 이익', ['한 달 현지 생산', '월 유지비', '수입 규제', '건설비', '공사', '늘어나는 월 이익'].every((w) => t.includes(w)), t.replace(/\s+/g, ' ').slice(0, 120)); }
+  await shots55('plant-sheet');
+  { const c0 = await WG(() => window.__car.game.state.cash); await wp.locator('#sheet [data-act="wPlantDo"]').click(); await wp.waitForTimeout(200);
+    const st = await WG(() => { const s = window.__car.game.state, p = s.world.regions.find((r) => r.id === 'na').plant; return { lv: p?.level, b: p?.build?.level, cash: s.cash }; });
+    check('5.5.0 [건설] → 북미 현지 공장 1등급 공사 시작, 건설비가 현금에서 나감', st.lv === 0 && st.b === 1 && st.cash < c0, JSON.stringify(st)); }
+  await WG(() => { const c = window.__car; c.tick(44); c.goCo('world'); }); await wp.locator('.wmap [data-act="wSel"][data-v="na"]').click(); await wp.waitForTimeout(150);
+  { const st = await WG(() => { const p = window.__car.game.state.world.regions.find((r) => r.id === 'na').plant; return { lv: p.level, made: p.made }; });
+    check('5.5.0 완공 뒤: 현지 생산 대수가 생기고 현지 생산 차종 칩이 보임(오늘 탭 알아서 돌아가는 일에도)', st.lv === 1 && st.made > 0 && (await wp.locator('.w-reg .w-loc [data-act="wLoc"]').count()) >= 1, JSON.stringify(st)); }
+  await shots55('region-plant', () => WG(() => document.querySelector('.w-reg .w-plant')?.scrollIntoView({ block: 'start' })));
+  await shots55('region-rank', () => WG(() => document.querySelector('.w-reg .w-rank')?.scrollIntoView({ block: 'start' })));
+  await wp.locator('.w-reg .w-loc [data-act="wLoc"]').first().click(); await wp.waitForTimeout(150);
+  check('5.5.0 현지 생산 차종 칩을 누르면 직접 고름으로 바뀌고 [자동으로]가 생김', (await WG(() => Array.isArray(window.__car.game.state.world.regions.find((r) => r.id === 'na').plant.cars))) && (await wp.locator('.w-reg [data-act="wLocAuto"]').count()) === 1);
+  await wp.locator('.w-reg [data-act="wLocAuto"]').click(); await wp.waitForTimeout(100);
+  check('5.5.0 [자동으로] → 현지 생산 차종 자동', await WG(() => window.__car.game.state.world.regions.find((r) => r.id === 'na').plant.cars === undefined));
+  // 새 경쟁사 로고 모음(세 권역의 현지 경쟁사 소개를 한 화면에)
+  { const parts = []; for (const r of ['na', 'eu', 'em']) { await wp.locator(`.wmap [data-act="wSel"][data-v="${r}"]`).click(); await wp.waitForTimeout(100); parts.push(await wp.locator('.w-reg .w-makers').innerHTML()); }
+    check('5.5.0 현지 경쟁사 로고 3개(쉐보래·폭스바근·다타)', parts.length === 3 && ['쉐보래', '폭스바근', '다타'].every((n, i) => parts[i].includes(n)) && parts.every((h) => h.includes('<svg')));
+    await WG((h) => { const d = document.createElement('div'); d.id = 'logo55'; d.className = 'card'; d.style.cssText = 'position:fixed;left:16px;top:80px;right:16px;z-index:99;padding:16px;background:#fff'; d.innerHTML = `<h3>현지 경쟁사 로고(5.5.0)</h3><div class="w-makers">${h.join('')}</div>`; document.body.append(d); for (const s of d.querySelectorAll('.w-mk svg')) { s.setAttribute('width', '64'); s.setAttribute('height', '64'); } }, parts);
+    await shots55('logos'); await WG(() => document.getElementById('logo55')?.remove()); }
+  // 무역 협정 결정(오늘 탭): 시드 해시로 생기는 결정과 같은 모양을 넣는다
+  const dealId = await WG(() => { const c = window.__car, s = c.game.state, id = s.nextId++;
+    s.events.pending.push({ id, eventId: 'tradeDeal', text: '유럽과의 무역 협정이 타결됐습니다. 발효되면 그 권역 관세가 영구히 50% 내려갑니다. 그대로 두면 3년 뒤 발효됩니다.', week: s.week, deadline: s.week + 4, genId: null, fx: null, tr: { region: 'eu', cost: 120000, save: 400000, results: ['로비 비용 12억원을 냅니다. 3개월 뒤 발효됩니다. 앞당겨 아끼는 관세는 지난달 관세 기준 약 40억원입니다.', '돈은 들지 않습니다. 3년 뒤 발효됩니다.'] } });
+    c.render(); return id; });
+  await wp.click('#tabs button[data-tab="today"]'); await wp.waitForTimeout(150);
+  await wp.locator(`#panel .td-item[data-k="choice:${dealId}"]`).click(); await wp.waitForTimeout(150);
+  { const t = await wp.locator('#panel .td-r .choice-sheet').innerText(); check('5.5.0 오늘 탭 정할 일: 무역 협정 결정(로비·기다리기, 비용·결과 문장, 자동 승인 체크)', t.includes('무역 협정') && (await wp.locator('#panel .td-r [data-act="resolveEv"]').count()) === 2 && t.includes('12억') && (await wp.locator('#panel .td-r [data-ad="tradeDeal"]').count()) === 1, t.replace(/\s+/g, ' ').slice(0, 120)); }
+  await shots55('today-trade', async () => { if (!(await wp.locator('#panel .choice-sheet').count())) await wp.locator(`#panel .td-item[data-k="choice:${dealId}"]`).click(); await wp.waitForTimeout(150); });
+  { const c0 = await WG(() => window.__car.game.state.cash); if (!(await wp.locator('#panel .choice-sheet').count())) await wp.locator(`#panel .td-item[data-k="choice:${dealId}"]`).click(); await wp.locator('#panel .choice-sheet [data-act="resolveEv"][data-v="0"]').filter({ visible: true }).click(); await wp.waitForTimeout(200);
+    const st = await WG(() => { const s = window.__car.game.state; return { d: (s.world.deals ?? []).map((x) => `${x.region}:${x.lobby}`).join(), cash: s.cash, left: s.events.pending.length }; });
+    check('5.5.0 [로비 비용을 내고 앞당긴다] → 유럽 협정(로비), 로비 비용이 나감, 결정이 사라짐', st.d === 'eu:true' && Math.abs(c0 - st.cash - 120000) < 1 && st.left === 0, JSON.stringify(st)); }
+  // 자회사 해외 판매
+  await WG(() => window.__car.goCo('sub')); await wp.waitForTimeout(150);
+  const subId = await WG(() => window.__car.game.state.subs.find((x) => x.kind === 'premium').id);
+  await wp.locator(`#panel [data-act="subSel"][data-id="${subId}"]`).click(); await wp.waitForTimeout(150);
+  check('5.5.0 자회사 상세 › 해외 판매: 권역 3줄(자동·켬·끔), 권역 인지도·지난달 판매', (await wp.locator('.sub-world .sub-wt tr').count()) === 4 && (await wp.locator('.sub-world [data-act="subReg"][data-v="auto"][aria-pressed="true"]').count()) === 3);
+  await wp.locator('.sub-world [data-act="subReg"][data-k="na"][data-v="off"]').click(); await wp.waitForTimeout(150);
+  check('5.5.0 자회사 북미 [끔] → 판 상태에 북미 끔', (await WG((id) => window.__car.game.state.subs.find((x) => x.id === id).regions?.na, subId)) === false && (await wp.locator('.sub-world [data-act="subReg"][data-k="na"][data-v="off"][aria-pressed="true"]').count()) === 1);
+  await shots55('sub-world', () => WG(() => document.querySelector('.sub-world')?.scrollIntoView({ block: 'start' })));
+  await WG(() => window.__car.goCo('sum')); await wp.waitForTimeout(100);
+  check('5.5.0 그룹 종합 세계 시장 칸: 현지 공장·자회사 해외 판매', /현지 공장 1곳/.test(await wp.locator('.co-box[data-v="world"]').innerText()));
+  // 해외 담당 임원
+  await WG(() => window.__car.goCo('exec')); await wp.waitForTimeout(150);
+  check('5.5.0 사람 › 임원: 해외 담당 자리(진출한 판에서 자리 +1)', (await wp.locator('.exec-card[data-role="world"]').count()) === 1 && (await wp.locator('.exec-sum').innerText()).includes(`/${await WG(() => window.__car.Q.execInfo(window.__car.game.state).seats)}석`));
+  await WG(() => { const c = window.__car, g = c.game, s = g.state, x = [...s.staff].filter((y) => y.projectId === null).sort((a, b) => b.ability - a.ability)[0]; x.ability = Math.max(x.ability, 70); g.command({ type: 'appointExec', role: 'world', staffId: x.id }); c.render(); });
+  await wp.locator('.exec-card[data-role="world"] [data-act="execDeleg"][data-k="autoWorld"]').click(); await wp.waitForTimeout(150);
+  check('5.5.0 해외 담당 임명·[해외 운영 자동 조정] 켬', (await WG(() => window.__car.game.state.execs.delegations.world?.includes('autoWorld'))) === true && (await wp.locator('.exec-card.filled[data-role="world"]').innerText()).includes('해외 운영 자동 조정'));
+  await shots55('exec-world', () => WG(() => document.querySelector('.exec-card[data-role="world"]')?.scrollIntoView({ block: 'start' })));
+  await wctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

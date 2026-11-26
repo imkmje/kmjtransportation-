@@ -113,7 +113,7 @@ export function finMain(s: CarState, range: FinRange): string {
     <section><p class="lbl">${m ? '월말' : '연말'} 현금</p>${cashChart(rows)}</section>
     <section class="wide"><p class="lbl">차종별 이익(매출 − 원가 − 광고 − 리콜${s.world ? ' − 관세·운송비' : ''})</p>${stackChart(s, rows)}</section></div>
     <p class="lbl" style="margin-top:12px">${m ? '최근 12개월' : '연도별'} 손익 · <small class="hint">${m ? '달을 누르면 월 결산 창' : '지난 해를 누르면 연 보고서'}</small></p>${table}
-    <p class="note">판매관리 = 광고비 + 직원·임원 월급 + 본사·공장 유지비 + 대출 이자 + 리콜 + 일회성 지출(채용 공고·교육·퇴직금·승급·건설)${s.world ? ' + 관세·운송비·판매 법인 유지비(해외 진출비 포함)' : ''}. 개발 = 개발비 + 연구 시작 비용.${gap ? ' 장부는 최근 24개월만 남아, 그보다 오래된 해는 매출·이익·현금만 보입니다(—).' : ''}</p></div>`;
+    <p class="note">판매관리 = 광고비 + 직원·임원 월급 + 본사·공장 유지비 + 대출 이자 + 리콜 + 일회성 지출(채용 공고·교육·퇴직금·승급·건설)${s.world ? ' + 관세·운송비·판매 법인·현지 공장 유지비(해외 진출비·현지 공장 건설비 포함)' : ''}. 개발 = 개발비 + 연구 시작 비용.${gap ? ' 장부는 최근 24개월만 남아, 그보다 오래된 해는 매출·이익·현금만 보입니다(—).' : ''}</p></div>`;
 }
 
 /** 회사 탭 첫 화면: 칸마다 누르면 그 안쪽 탭 */
@@ -121,7 +121,7 @@ export function companySummary(s: CarState): string {
   const rows = Q.staffInfo(s), h = Q.hiringInfo(s), e = Q.execInfo(s), hq = Q.hqInfo(s), f = Q.factoryInfo(s);
   const byRole = (['designer', 'engineer', 'tester', 'sales'] as const).map((r) => `${ROLE_NAME[r]} ${rows.filter((x) => x.role === r).length}`).join(' · ');
   const pay = rows.reduce((a, x) => a + x.salary, 0), xpay = e.roles.reduce((a, r) => a + (r.holder?.pay ?? 0), 0), interest = Math.round(s.loan.balance * Q.loanRate(s));
-  const fix: [string, number][] = [['직원 월급', pay], ['임원 월급', xpay], ['본사 유지비', hq.current.upkeep], ['공장 유지비', f.current.upkeep], ['배터리 공장 유지비', Q.batteryPlantInfo(s).upkeep], ['판매 법인 유지비', (s.world?.regions ?? []).reduce((a, r) => a + WD.officeUpkeep(r.id, r.office), 0)], ['대출 이자', interest]];
+  const fix: [string, number][] = [['직원 월급', pay], ['임원 월급', xpay], ['본사 유지비', hq.current.upkeep], ['공장 유지비', f.current.upkeep], ['배터리 공장 유지비', Q.batteryPlantInfo(s).upkeep], ['판매 법인·현지 공장 유지비', (s.world?.regions ?? []).reduce((a, r) => a + WD.officeUpkeep(r.id, r.office) + WD.plantUpkeep(r.id, WD.plantLevel(r)), 0)], ['대출 이자', interest]];
   const total = fix.reduce((a, [, v]) => a + v, 0), util = f.current.capacity ? f.produced / f.current.capacity : 0, un = Q.execUnread(s);
   const si = Q.subsInfo(s); // 3.0.0
   const n = hq.next, nextLine = n ? `다음 ${n.level}등급 ${esc(n.name)} · 비용 ${money(n.cost)}` : '최고 등급입니다';
@@ -132,7 +132,7 @@ export function companySummary(s: CarState): string {
     ${box('hq', '본사', `${hq.current.level}<span>등급 · ${esc(hq.current.name)}</span>`, `<small>${nextLine}</small><small>${n ? (hq.canUpgrade ? '지금 올릴 수 있습니다' : esc(hq.reason ?? '')) : ''}</small>`)}
     ${box('factory', '공장', `${f.current.level}<span>등급</span>`, `<small>가동률 ${Math.round(util * 100)}% · 한 달 ${num(f.produced)}/${num(f.current.capacity)}대</small><small>생산 라인 ${f.linesUsed}/${f.current.lines}개${f.building ? ` · 증설 공사 ${f.building.monthsLeft}개월 남음` : ''}</small>`)}
     ${box('sub', '자회사', `${si.used}<span>/${si.max}곳</span>`, `<small>${si.list.map((x) => esc(x.name)).join(' · ') || (si.max ? '아직 자회사가 없습니다' : `본사 ${config.subs.hqMin}등급부터 세울 수 있습니다`)}</small><small>${si.list.length ? `최근 12개월 배당 ${money(si.list.reduce((a, x) => a + x.dividend12, 0))}` : ''}</small>`)}
-    ${box('world', '세계 시장', `${s.world?.regions.length ?? 0}<span>/${REGIONS.length}권역</span>`, `<small>${s.world ? s.world.regions.map((r) => `${esc(WD.regionName(r.id))} ${num(r.sold)}대`).join(' · ') : '아직 해외에 진출하지 않았습니다'}</small><small>${s.world ? `지난달 해외 이익 ${money(s.world.regions.reduce((a, r) => a + r.profit, 0), true)}` : `본사 ${config.world.hqLevel}등급과 평판이 되면 진출할 수 있습니다`}</small>`)}
+    ${box('world', '세계 시장', `${s.world?.regions.length ?? 0}<span>/${REGIONS.length}권역</span>`, `<small>${s.world ? s.world.regions.map((r) => `${esc(WD.regionName(r.id))} ${num(r.sold)}대`).join(' · ') : '아직 해외에 진출하지 않았습니다'}</small><small>${s.world ? `지난달 해외 이익 ${money(s.world.regions.reduce((a, r) => a + r.profit, 0), true)}` : `본사 ${config.world.hqLevel}등급과 평판이 되면 진출할 수 있습니다`}</small>${(() => { const n = (s.subs ?? []).reduce((a, x) => a + Object.values(x.abroad ?? {}).reduce((b, y) => b + y.sold, 0), 0), pl = (s.world?.regions ?? []).filter((r) => (r.plant?.level ?? 0) > 0).length; return n || pl ? `<small>${pl ? `현지 공장 ${pl}곳` : ''}${pl && n ? ' · ' : ''}${n ? `자회사 해외 ${num(n)}대` : ''}</small>` : ''; })()}`)}
     <div class="card co-box co-fix"><span class="lbl">월 고정비</span><b>${money(total)}<span>/월</span></b><table class="tbl">${fix.filter(([, v]) => v).map(([k, v]) => `<tr><td>${k}</td><td class="r">${money(v)}</td></tr>`).join('')}</table><small>차 원가·광고비·개발비는 빼고, 지금 기준으로 매달 나가는 돈입니다.</small></div></div>`;
 }
 

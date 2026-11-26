@@ -498,6 +498,7 @@ export { VARIANTS, CRITICS } from '../data';
 // ---------- 3.0.0 자회사와 고급 브랜드 ----------
 export { subsInfo, subDetail, subModelsIn, subModelView, subOfModelName, cannibalInfo, strategyChoices, foundError as subFoundError, strategyError as subStrategyError, subHqEffects, presidentOf, presidents, switchProgress, subAwareness,
   SUB_KINDS, SUB_STRATEGIES, SHARE_NAMES, type SubDetail, type SubModelView, type SubStrategyChoice } from './subs';
+export { subRegionInfo } from './subs'; // 5.5.0
 export { subPlanPreview, autoSpec as subAutoSpec, badgeChoices, groupSummary, subTeam, isDirect, newModelName as subModelName, slotError as subSlotError, shareTechError, targetProgress } from './subs'; // 3.1.0
 export { partsCut } from './company';
 export { subSalesMult } from './market';

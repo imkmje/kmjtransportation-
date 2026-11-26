@@ -16,7 +16,9 @@ export interface SegmentDef { id: string; name: string; info: string; w: Stats; 
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
 /** 4.0.0 해외 권역(regions.json, 게임용 가정): 시장 규모·차체 비중(market.json과 같은 꼴), 능력치 가중치 배수 w, 가격 민감도 배수 eps, 시장 가격 수준 priceMult, 동력 수요 배수(연도 표),
  *  관세율(연도 표, 대당 원가에 곱함)과 차체별 예외, 운송비(만원/대), 기타 현지 업체 몫(local, 경쟁 차 기본 A 몇 대 분), 규제 앞섬(regLead년, 국내 의무 장비가 이만큼 먼저), 진출 평판 조건·진출비, 판매 법인 비용 배수 */
-export interface RegionDef { id: string; name: string; taste: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; w: Stats; eps: number; priceMult: number; pt: Record<string, number[]>; tariff: number[]; tariffBody: Record<string, number>; ship: number; local: number; regLead: number; rep: number; entry: number; officeMult: number }
+export interface RegionDef { id: string; name: string; taste: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; w: Stats; eps: number; priceMult: number; pt: Record<string, number[]>; tariff: number[]; tariffBody: Record<string, number>; ship: number; local: number; regLead: number; rep: number; entry: number; officeMult: number; plantMult: number; makers: LocalMaker[] } // plantMult·makers(5.5.0): 현지 공장 비용 배수, 그 권역에서만 강한 현지 경쟁사
+/** 5.5.0 현지 경쟁사(regions.json makers, 그 권역에서만 판다): 기타 현지 업체 몫(local)의 share를 차급별 강약(cells, (1 + 강약)^지수 가중)으로 나눠 가진다. 국내에는 등장하지 않고 인수·제휴 대상이 아니다 */
+export interface LocalMaker { id: string; name: string; trait: string; desc: string; color: string; share: number; cells: Record<string, number>; models: Record<string, string> }
 export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number>; desc: string; shape: Stats; models: Record<string, string>; color: string; field: TechField; segment: string; legacy?: string[]; regions: Record<string, number>; from?: number; noise?: number; ev?: true; premium?: number } // 4.0.0: models 차체 → 모델 이름(실제 대표 차 이름을 비튼 것), legacy 3.7.1까지의 이름 목록(저장 변환용, 있으면 처음부터 있던 3곳), regions 권역별 세기 배수, from 등장 연도(없으면 처음부터), noise 강약 난수 폭(없으면 config), ev 전기차 전문(충전 인프라만큼 세진다), premium 표시 가격 웃돈 // color·field·segment(3.5.0): 로고 색, 앞선 연구 분야(기술 제휴), 인수 브랜드의 기본 고객층 // desc·shape·models(2.0.0): 한 줄 성격, 능력치 모양(등급 가감), 모델 이름 목록(차체 수 이상)
 /** 1.3.0 파생 모델(variants.json): 쓸 수 있는 차체, 기본 고객층, 능력치 배수, 시장 기준가·원가 배수, 개발비(바탕 세대 개발비의 몫)·설계 주, powertrain(전기차판), rep(출시 평판 가점) */
 export interface VariantDef { id: string; name: string; suffix: string; info: string; bodies: string[]; segment?: string; powertrain?: string; mult: Stats; price: number; cost: number; devShare: number; designWeeks: number; rep?: number }
@@ -64,10 +66,11 @@ export type ChoiceEffect =
   | { type: 'mod'; mod: 'production' | 'cost'; value: number; months: number } // 기간 배수(생산·원가). value 0이면 사건이 정한 값(환율)
   | { type: 'hire'; abilityMin: number; abilityMax: number } // 인재 영입(정원 안에서)
   | { type: 'warFollow' } // 3.5.0 가격 전쟁: 그 기간 그 차급 내 차 가격을 따라 내린다(PendingChoice.rv)
-  | { type: 'retain' }; // 3.5.0 이직 제안: 연봉을 올려 붙잡는다(PendingChoice.rv)
+  | { type: 'retain' } // 3.5.0 이직 제안: 연봉을 올려 붙잡는다(PendingChoice.rv)
+  | { type: 'tradeLobby' }; // 5.5.0 무역 협정 로비: 비용(PendingChoice.tr.cost)을 내고 협정을 앞당긴다
 export interface RandomEventDef {
   id: string; name: string; text: string; // text의 {car}는 대상 차 이름
-  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell' | 'rivalry'; // rivalry(3.5.0): 경쟁 2부가 직접 띄우는 결정 창(무작위 사건 추첨에서 빠진다)
+  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell' | 'rivalry' | 'world'; // world(5.5.0): 무역 사건이 직접 띄우는 결정(추첨에서 빠진다) // rivalry(3.5.0): 경쟁 2부가 직접 띄우는 결정 창(무작위 사건 추첨에서 빠진다)
   choices: { label: string; result: string; effects: ChoiceEffect[] }[];
   defaultChoice: number;
   onFire?: { type: 'rivalHit'; add: number; months: number } | { type: 'fxRoll'; good: number; bad: number; goodShare: number }; // 사건이 뜰 때 바로 생기는 일
@@ -153,10 +156,16 @@ export interface Edition {
 }
 /** 세대: 차체·동력 종류·고객층이 같은 한 묶음 */
 /** 4.0.0 세대의 권역 수출: on 수출 목록에 있음, price 수동 권역 가격(없으면 자동), ap·apAt·apEd 자동 가격과 셈한 달·판 수, sold·demand 지난달 판매·주문, total·profit 누적 판매·이익(관세·운송비 뺀 값), no 자동 수출이 적자로 뺀 차(다시 넣지 않음) */
-export interface GenWorld { on: boolean; price?: number; ap?: number; apAt?: number; apEd?: number; sold: number; demand: number; total: number; rev: number; profit: number; no?: true; ls?: number } // ls: 연속 적자 개월
+export interface GenWorld { on: boolean; price?: number; ap?: number; apAt?: number; apEd?: number; sold: number; demand: number; total: number; rev: number; profit: number; no?: true; nl?: true; ls?: number; loc?: number } // ls: 연속 적자 개월, loc(5.5.0): 지난달 판매 중 현지 공장에서 만든 대수
 /** 4.0.0 진출한 권역: since 진출 달, aw 브랜드 인지도(0~1, 차 인지도에 곱한다), rep 권역 평판, office 판매 법인 등급(0~3), auto 자동 수출, 지난달 sold·rev·profit·share(권역 시장 점유), 누적 total·totalProfit, blocked 규제로 못 판 차 수 */
-export interface WorldRegion { id: string; since: number; aw: number; rep: number; office: number; auto: boolean; sold: number; rev: number; profit: number; share: number; total: number; totalProfit: number; tariff: number; ship: number }
-export interface WorldState { regions: WorldRegion[] } // 진출 순
+export interface WorldRegion { id: string; since: number; aw: number; rep: number; office: number; auto: boolean; sold: number; rev: number; profit: number; share: number; total: number; totalProfit: number; tariff: number; ship: number; plant?: LocalPlant }
+/** 5.5.0 현지 공장(판매 법인 2등급부터, 1~3등급): build 공사 중인 다음 등급, cars 현지 생산 차종(없으면 자동: 관세·운송비가 큰 차부터), made 지난달 만든 대수, saved 누적 손익(현지 생산 차의 이익 − 건설비 − 유지비), total 누적 생산, since 첫 완공 달 */
+export interface LocalPlant { level: number; build: { level: number; doneMonth: number } | null; cars?: number[]; made: number; saved: number; total: number; since?: number }
+/** 5.5.0 무역 사건의 기간 효과: 관세 인상(add, 관세율에 더함)·인하(mult)·환율(mult, 권역 판매가로 받는 돈)·수입 규제(mult, 현지 공장이 없으면 판매 상한). until: 이 달부터 효과 없음 */
+export interface TradeMod { kind: 'tariffUp' | 'tariffDown' | 'fxUp' | 'fxDown' | 'quota'; region: string; value: number; until: number }
+/** 5.5.0 무역 협정: at 달부터 그 권역 관세 × (1 − cut)(영구) */
+export interface TradeDeal { region: string; at: number; cut: number; lobby: boolean }
+export interface WorldState { regions: WorldRegion[]; trade?: TradeMod[]; deals?: TradeDeal[]; lastTrade?: Record<string, number> } // 진출 순. trade·deals·lastTrade(5.5.0): 무역 사건(lastTrade: 권역별 마지막 사건이 끝나는 달)
 /** 장부의 권역 한 줄(4.0.0) */
 export interface LedgerWorld { sold: number; revenue: number; cogs: number; tariff: number; ship: number; upkeep: number; profit: number }
 export interface Generation {
@@ -231,7 +240,9 @@ export interface ResearchState {
   priority?: string; // 0.5.1 우선 연구(맨 앞, 주간 점수의 50%). 없으면 고르게 나눈다
 }
 /** 무작위 사건의 답을 기다리는 선택(4주 뒤 기본 선택) */
-export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null; rv?: RivalChoice } // rv(3.5.0): 경쟁 2부 결정 창의 대상
+export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null; rv?: RivalChoice; tr?: TradeChoice } // rv(3.5.0): 경쟁 2부 결정 창의 대상, tr(5.5.0): 무역 협정
+/** 5.5.0 무역 협정 결정: 권역, 로비 비용, 앞당기면 아끼는 관세 어림, 선택지별 결과 문장 */
+export interface TradeChoice { region: string; cost: number; save: number; results: string[] }
 /** 3.7.1 결정 자동 승인의 답: 선택지 번호 또는 'rule'(임원 위임과 같은 규칙, 가격 전쟁·이직 제안만) */
 export type AutoAnswer = number | 'rule';
 /** 3.5.0 경쟁 2부 결정 창의 대상: 가격 전쟁(war ID) 또는 이직 제안(직원 ID·인상 월급), 선택지별 결과 문장 */
@@ -245,7 +256,7 @@ export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news:
 
 // ---------- 임원(0.7.0) ----------
 /** 임원 6자리: 인사·기획·재무·생산·연구소장·시장 조사 */
-export type ExecRole = 'hr' | 'product' | 'finance' | 'production' | 'research' | 'market';
+export type ExecRole = 'hr' | 'product' | 'finance' | 'production' | 'research' | 'market' | 'world'; // world(5.5.0): 해외 담당(해외 권역에 진출하면 자리가 하나 늘어난다)
 /** 임원 자리: 임명한 직원(직원 목록에서 빠져 여기 있다) 또는 외부에서 뽑은 사람(hired) */
 export interface ExecSeat { staff: Staff; hired: boolean; since: number }
 export interface ExecCandidate { id: number; name: string; role: ExecRole; skill: number; pay: number; expiresWeek: number }
@@ -321,6 +332,8 @@ export interface Subsidiary {
   listedMonth?: number; // 3.5.0 처음 상장한 달
   from?: string; // 3.5.0 인수 브랜드: 인수한 경쟁사 ID(이름·모양·강약을 물려받는다)
   cost?: number; // 3.5.0 인수 브랜드의 투자 기준(인수 때 자본, 없으면 종류의 설립비)
+  regions?: Record<string, boolean>; // 5.5.0 해외 판매 켜기·끄기(권역 → 값). 없는 권역: 전반 위임은 자동(대당 이익이 남는 모델만), 직접 운영은 끔
+  abroad?: Record<string, { sold: number; revenue: number; profit: number }>; // 5.5.0 지난달 권역별 판매·매출·이익(관세·운송비 뺀 값)
 }
 // ---------- 3.5.0 경쟁 2부(설계서 7.4) ----------
 /** 대응 신차: 플레이어가 점유율 상위인 차급에 경쟁사가 맞불 모델을 예고하고 launch 달에 낸다 */
@@ -349,7 +362,7 @@ export interface RivalryState {
 }
 
 export interface CarState {
-  saveVersion: 12;
+  saveVersion: 13;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -473,6 +486,9 @@ export type Command =
   | { type: 'acquireRival'; rivalId: string }
   // ---------- 4.0.0 세계 시장 ----------
   | { type: 'openRegion'; region: string }
+  | { type: 'buildPlant'; region: string } // 5.5.0 현지 공장 다음 등급
+  | { type: 'setPlantCars'; region: string; cars: number[] | null } // 5.5.0 현지 생산 차종(null = 자동)
+  | { type: 'setSubRegion'; subId: number; region: string; on: boolean | null } // 5.5.0 자회사 해외 판매(null = 자동, 전반 위임만)
   | { type: 'setExport'; generationId: number; region: string; on: boolean }
   | { type: 'setRegionPrice'; generationId: number; region: string; price: number | null } // null = 자동
   | { type: 'investOffice'; region: string } // 판매 법인 다음 등급

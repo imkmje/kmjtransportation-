@@ -1,7 +1,7 @@
 // 균형 점검 봇(설계서 16장): 방치·신중·서툰 플레이·리프트 안 함·새 이름만·가격 올리기·확장 안 함·연구 안 함
 import { config } from '../config';
 import { COMPAT, MARKET, RANDOM_EVENTS, REGIONS, SEGMENTS, TECHS } from '../data';
-import { entryCost, officeCost, officeError, openError, regionCap, regionOf } from './world';
+import { entryCost, officeCost, officeError, openError, plantCapOf, plantCost, plantError, plantLevel, plantSaveEstimate, plantUpkeep, regionCap, regionOf } from './world';
 import { bodiesAt, optionsAt, powertrainsAt, unitCost } from './cars';
 import { eraTimeline, optionTech } from './events';
 import { levelForTier, platformReady, ptCostAdd, researchCost, researchError } from './research';
@@ -51,6 +51,7 @@ export interface SteadyOptions {
   subDirect?: boolean; // 3.1.0: 브랜드 자회사를 직접 운영(빈 차급에 본사 차 배지 또는 직접 기획, subs와 함께)
   autoDecide?: boolean; // 3.7.0: 결정 자동 승인을 모두 켜고 결정 창에 답하지 않는다(안전선에 걸린 것은 4주 뒤 기본 선택)
   rivalry?: boolean; // 3.5.0: 경쟁사 인재 영입·기술 제휴(기술 구매)·자회사 상장·경쟁사 인수를 쓴다(선택, 기존 균형 봇은 쓰지 않는다)
+  world2?: boolean; // 5.5.0: world와 함께. 현지 공장(지난달 수출이 다음 등급 생산의 60% 이상이고 아끼는 관세·운송비가 유지비보다 클 때), 해외 담당 임원(steadyExec), 무역 협정 자동 승인(규칙대로)
   world?: boolean; // 4.0.0: 조건이 되면 해외 권역에 진출(싼 곳부터, 자동 수출·자동 가격 그대로)하고, 판매가 상한에 가까우면 판매 법인에 투자(선택, 기존 균형 봇은 쓰지 않는다)
   elite?: boolean; // 4.1.0: 직속 전담팀을 채우고(지난 1년 흑자·현금 여유) 쉬는 전담팀으로 풀체인지·새 차종을 만든다(선택, 기존 균형 봇은 쓰지 않는다)
   subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
@@ -83,7 +84,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (o.rescue) rescue(g);
       if (o.subs && g.state.week % config.time.weeksPerMonth === 0) { manageSubs(g); if (o.subDirect) manageSubsDirect(g); }
       if (o.rivalry && g.state.week % config.time.weeksPerMonth === 0) manageRivalry(g);
-      if (o.world && g.state.week % config.time.weeksPerMonth === 0) manageWorld(g);
+      if (o.world && g.state.week % config.time.weeksPerMonth === 0) { manageWorld(g); if (o.world2) manageWorld2(g); }
       if (o.elite && g.state.week % config.time.weeksPerMonth === 0) manageElite(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
@@ -113,13 +114,13 @@ export const noResearch = (opts: Partial<SteadyOptions> = {}): Bot => ({ ...stea
 /** 임원을 쓰는 신중(0.7.0 균형 점검): 신중과 같고, 달 첫 주마다 위임이 있는 빈 임원 자리(인사·생산·연구소장)를 채운다(위임을 켤 수 있는 직원이 있으면 임명, 없으면 공고를 내 가장 나은 후보를 채용),
  *  켤 수 있는 위임을 모두 켜고, 교체 고용 제안은 승인한다. 그 밖의 제안(보고)은 읽기만 한다 */
 export const steadyExec = (opts: Partial<SteadyOptions> = {}): Bot => {
-  const base = steady(opts);
-  return { name: 'steadyExec', step(g) { base.step(g); if (g.state.week % config.time.weeksPerMonth === 0) manageExecs(g); } };
+  const base = steady(opts), order: ExecRole[] = opts.world2 ? [...EXEC_ORDER, 'world'] : EXEC_ORDER; // 5.5.0 2부 봇은 해외 담당도 채운다
+  return { name: 'steadyExec', step(g) { base.step(g); if (g.state.week % config.time.weeksPerMonth === 0) manageExecs(g, order); } };
 };
 const EXEC_ORDER: ExecRole[] = ['hr', 'production', 'research']; // 봇은 제안을 읽지 않으므로 위임이 있는 자리만 채운다
-function manageExecs(g: Game): void {
+function manageExecs(g: Game, order = EXEC_ORDER): void {
   const s = g.state, X = config.exec;
-  for (const role of EXEC_ORDER) {
+  for (const role of order) {
     const yearProfit = s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0);
     if (Object.keys(s.execs?.seats ?? {}).length >= seatsOf(s) || s.cash < fixedCost(s) * B.execCashMonths || yearProfit <= 0) break; // 지난 1년 흑자이고 현금에 여유가 있을 때만(창업 초기에 가장 나은 직원을 개발에서 빼 무너지지 않게)
     if (s.execs?.seats[role]) continue;
@@ -129,7 +130,7 @@ function manageExecs(g: Game): void {
     const best = (s.execs?.candidates ?? []).filter((c) => c.role === role).sort((a, b) => b.skill - a.skill || a.id - b.id)[0];
     if (best) g.command({ type: 'hireExec', role, candidateId: best.id });
   }
-  for (const role of EXEC_ORDER) if (s.execs?.seats[role]) for (const d of DELEGATIONS[role]) if (!s.execs.delegations[role]?.includes(d.key)) g.command({ type: 'setDelegation', role, key: d.key, on: true });
+  for (const role of order) if (s.execs?.seats[role]) for (const d of DELEGATIONS[role]) if (!s.execs.delegations[role]?.includes(d.key)) g.command({ type: 'setDelegation', role, key: d.key, on: true });
   for (const r of s.execs?.replacements ?? []) if (r.status === 'proposed') g.command({ type: 'approveReplacement', id: r.id });
 }
 
@@ -172,6 +173,16 @@ function manageWorld(g: Game): void {
     const open = regionOf(s, r.id);
     if (!open) { if (!openError(s, r.id) && s.cash >= entryCost(s, r.id) + reserve) g.command({ type: 'openRegion', region: r.id }); continue; }
     if (!officeError(s, r.id) && s.cash >= officeCost(r.id, open.office + 1) + reserve && open.profit > 0 && open.sold >= regionCap(s, open, m) * B.worldFill) g.command({ type: 'investOffice', region: r.id });
+  }
+}
+/** 5.5.0 2부 봇: 무역 협정은 자동 승인(규칙대로: 아끼는 관세가 로비 비용보다 크면 로비), 현지 공장은 다음 등급이 지난달 수출의 60% 이상을 맡고 아끼는 관세·운송비가 유지비보다 크면 짓는다 */
+function manageWorld2(g: Game): void {
+  const s = g.state, reserve = fixedCost(s) * B.reserveMonths;
+  if (s.world && !s.autoDecide?.on.includes('tradeDeal')) g.command({ type: 'setAutoDecide', kind: 'tradeDeal', on: true });
+  for (const r of [...(s.world?.regions ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    const lv = plantLevel(r) + 1;
+    if (plantError(s, r.id) || s.cash < plantCost(r.id, lv) + reserve || r.sold - (r.plant?.made ?? 0) < plantCapOf(lv) * 0.6) continue;
+    if (plantSaveEstimate(s, r.id, lv) > plantUpkeep(r.id, lv)) g.command({ type: 'buildPlant', region: r.id });
   }
 }
 function manageRivalry(g: Game): void {
@@ -262,8 +273,10 @@ function monthly(g: Game, o: SteadyOptions): void {
   // 주문이 밀린 지 3개월: 지난 3개월 모두 한도까지 팔았고(장부 판매 ≥ 한도의 97%), 지난달 주문이 한도의 1.3배 이상
   // 1.0.0: 최고 이익 가격을 쓰면 값을 올려 주문을 한도에 맞추므로, 증설 판단은 기준가에 팔 때의 주문으로 한다(전에는 값을 올린 뒤의 주문이라 공장을 늦게 키워 기준가 판매 봇보다 뒤졌다)
   const m = monthOf(s.week), cars = gens.map((x) => toSaleCar(x, m));
-  const cap = capacityOf(s), demand = gens.reduce((a, x, i) => a + (o.best && x.pricePolicy ? monthlyDemand(s, { ...cars[i], price: genBasePrice(s, x) }, cars.filter((_, j) => j !== i), monthTime(m)) + Object.values(x.world ?? {}).reduce((b, w) => b + (w.on ? w.demand : 0), 0) : x.lastDemand), 0), last = s.ledger.slice(-B.expandMonths);
-  const backlogged = demand >= cap * o.expandRatio && last.length === B.expandMonths && last.every((e) => e.sold >= cap * B.boundShare);
+  const cap = capacityOf(s), demand = gens.reduce((a, x, i) => a + (o.best && x.pricePolicy ? monthlyDemand(s, { ...cars[i], price: genBasePrice(s, x) }, cars.filter((_, j) => j !== i), monthTime(m)) + Object.values(x.world ?? {}).reduce((b, w) => b + (w.on ? w.demand - (w.loc ?? 0) : 0), 0) : x.lastDemand), 0), last = s.ledger.slice(-B.expandMonths);
+  // 5.5.0 수출 봇: 국내 공장이 만든 수출도 센다(장부 sold는 국내 판매만이라, 수출이 많으면 한도까지 만들어도 '밀림'으로 보지 않아 증설이 막혔다). 현지 공장 몫은 뺀다
+  const madeOf = (e: (typeof last)[number]) => e.sold + (o.world ? Object.values(e.world ?? {}).reduce((a, x) => a + x.sold, 0) - (s.world?.regions ?? []).reduce((a, r) => a + (r.plant?.made ?? 0), 0) : 0);
+  const backlogged = demand >= cap * o.expandRatio && last.length === B.expandMonths && last.every((e) => madeOf(e) >= cap * B.boundShare);
   if (o.expand) {
     const nf = config.factory.levels[s.factory.level];
     const top = s.factory.level + 1 >= B.fillFrom; // 1.0.0: 5등급부터(전에는 마지막 등급만). 0.4.2: 마지막 등급(월 유지비 240억)은 그 한도의 75%를 채울 주문이 있을 때만(봇이 증설 뒤 유지비에 무너졌다)

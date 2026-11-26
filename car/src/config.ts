@@ -251,7 +251,7 @@ export const config = {
     postCost: 3000, candidates: 3, expireWeeks: 4, // 임원 공고비, 후보 수, 후보가 기다리는 주
     hireSkillMin: 45, hireSkillMax: 70, repBonusDiv: 10, // 외부 후보 능력 = 45~70 + 평판 효과/10(평판 100에서 +10, 1.0.0: 상한 대신 평판 효과가 완만해진다)
     match: 0.75, // 직원을 임명할 때 관련 직무가 아니면 임원 능력 = 직원 능력 × 0.75(관련 직무는 아래 related 배수)
-    related: { hr: { sales: 1, tester: 0.85 }, product: { designer: 1, tester: 0.85 }, finance: { sales: 1 }, production: { tester: 1, engineer: 0.9 }, research: { engineer: 1 }, market: { sales: 1, designer: 0.9 } } as Record<string, Record<string, number>>,
+    related: { hr: { sales: 1, tester: 0.85 }, product: { designer: 1, tester: 0.85 }, finance: { sales: 1 }, production: { tester: 1, engineer: 0.9 }, research: { engineer: 1 }, market: { sales: 1, designer: 0.9 }, world: { sales: 1, designer: 0.85 } } as Record<string, Record<string, number>>,
     tiers: [40, 60], // 임원 능력 40 미만: 뭉뚱그린 말(1단계), 60 미만: 대상만 짚음(2단계), 60 이상: 수치까지(3단계)
     delegateSkill: 45, // 위임을 켤 수 있는 임원 능력
     perExec: 2, reissueMonths: 6, ignoredMonths: 18, reportsMax: 60, // 월 결산 때 임원별 제안 최대 2건, 같은 제안은 6개월(지운 제안은 18개월) 뒤에 다시, 보고함 60건 보관
@@ -464,5 +464,25 @@ export const config = {
     office: { cost: [1000000, 10000000, 40000000], upkeep: [50000, 250000, 800000], aw: [0, 0.15, 0.3, 0.45], rate: [0, 0.03, 0.06, 0.1] }, // 판매 법인 1~3등급: 투자비·월 유지비(× 권역 officeMult), 인지도 목표 가산·수렴 가산(0등급 = 법인 없음)
     pricePcts: [0.94, 0.97, 1, 1.03, 1.06], repriceMonths: 6, // 자동 권역 가격: 권역 기준가(차별 기준가 × 권역 가격 수준)의 이 비율 중 이익이 가장 큰 값, 6개월마다(판이 바뀌면 바로) 다시 셈
     autoMinSales: 15, autoLossMonths: 3, // 자동 수출: 예상 월 판매 15대 이상이고 대당 이익이 남는 차를 넣고, 3개월 연속 적자면 뺀다
+    // ---------- 5.5.0 세계 시장 2부(설계서 7.5 2부) ----------
+    // 현지 공장: 판매 법인 office등급 이상인 권역에 1~3등급(월 생산·건설비·월 유지비, 금액은 × 권역 plantMult(regions.json)). 국내 공장보다 작고 대당 고정비가 높다(조립 공장).
+    // 현지 공장이 만든 차는 관세·운송비 0, 국내 공장 한도를 쓰지 않는다(그 권역 판매 상한 안). 대신 대당 원가 × costMult(현지 부품 조달·인건비).
+    // 등급마다 권역 인지도 목표 + aw, 수렴 + rate, 권역 평판 성장 × (1 + rep). 5.5.0 봇 측정: 국내 공장 3·4·5등급 크기(3천·8천·2만 대)면 60년 현금이 3.5배가 되어(생산 한도가 풀려서) 줄였다
+    plant: { office: 2, costMult: 1.04, aw: 0.02, rate: 0.005, rep: 0.1,
+      levels: [{ capacity: 2000, cost: 9000000, upkeep: 100000, months: 9 }, { capacity: 5000, cost: 25000000, upkeep: 250000, months: 12 }, { capacity: 10000, cost: 60000000, upkeep: 500000, months: 15 }] },
+    // 무역 사건: 진출한 권역마다 해마다 perYear 확률(달마다 나눠, 시드 해시), 같은 권역은 지난 사건이 끝나고 gap개월 뒤부터. 종류는 w 비중으로 고른다.
+    // 관세 인상(관세율 + add)·인하(× mult), 환율(그 권역 판매가로 받는 돈 × mult), 수입 규제(판매 상한 × mult). 현지 공장이 있는 권역은 관세 인상·수입 규제를 받지 않는다.
+    // 무역 협정(결정): 관세 × (1 − cut) 영구. 기다리면 wait개월 뒤, 로비 비용을 내면 fast개월 뒤. 로비 비용 = 앞당겨 아끼는 관세 어림 × lobby(최소 minLobby)
+    trade: { perYear: 0.4, gap: 12,
+      kinds: [
+        { id: 'tariffUp', w: 2, value: 0.08, min: 12, max: 24 }, { id: 'tariffDown', w: 1, value: 0.5, min: 12, max: 24 },
+        { id: 'fxUp', w: 1.5, value: 1.05, min: 6, max: 12 }, { id: 'fxDown', w: 1.5, value: 0.95, min: 6, max: 12 },
+        { id: 'quota', w: 1, value: 0.5, min: 6, max: 12 }, { id: 'deal', w: 1, value: 0.5, min: 0, max: 0 },
+      ] as { id: 'tariffUp' | 'tariffDown' | 'fxUp' | 'fxDown' | 'quota' | 'deal'; w: number; value: number; min: number; max: number }[],
+      wait: 36, fast: 3, lobby: 0.3, minLobby: 50000 },
+    // 자회사 해외 판매: 본사 판매 법인을 함께 쓴다(진출비 없음). 판매 상한은 자회사마다 본사와 같은 비율. 인수 브랜드의 권역 인지도 = max(본사 권역 인지도, 그 회사의 권역 세기 × inherit)
+    sub: { inherit: 0.6, minSales: 15 },
+    // 해외 담당 임원(exec 'world'): 권역 인지도 수렴 + awRate × 능력/100
+    exec: { awRate: 0.02 },
   },
 };

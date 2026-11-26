@@ -132,6 +132,7 @@
         { "label": "환 헤지", "result": "헤지 비용을 냅니다. 대신 환율이 어떻게 움직여도 원가가 그대로입니다.", "effects": [ { "type": "cash", "base": -500, "revenue": -0.01 } ] },
         { "label": "그냥 두기", "result": "비용은 들지 않지만 6개월 동안 원가가 환율에 따라 4% 오르거나 3% 내립니다(확률은 반반).", "effects": [ { "type": "mod", "mod": "cost", "value": 0, "months": 6 } ] } ] },
     {"id": "priceWar", "name": "가격 전쟁", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "따라 내린다", "result": "그 차급의 내 차 가격을 같은 폭으로 내립니다. 판매는 지키지만 매출이 줄어듭니다.", "effects": [{"type": "warFollow"}]}, {"label": "버틴다", "result": "가격은 그대로 둡니다. 그 기간 그 차급의 내 차 판매가 줄어듭니다.", "effects": []}]},
-    {"id": "poach", "name": "이직 제안", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "연봉을 올려 붙잡는다", "result": "월급이 오르고, 그 직원의 능력이 오르고 컨디션이 좋아집니다.", "effects": [{"type": "retain"}]}, {"label": "그대로 둔다", "result": "직원은 남고 달라지는 것은 없습니다.", "effects": []}]}
+    {"id": "poach", "name": "이직 제안", "text": "", "needs": "rivalry", "defaultChoice": 1, "choices": [{"label": "연봉을 올려 붙잡는다", "result": "월급이 오르고, 그 직원의 능력이 오르고 컨디션이 좋아집니다.", "effects": [{"type": "retain"}]}, {"label": "그대로 둔다", "result": "직원은 남고 달라지는 것은 없습니다.", "effects": []}]},
+    {"id": "tradeDeal", "name": "무역 협정", "text": "", "needs": "world", "defaultChoice": 1, "choices": [{"label": "로비 비용을 내고 앞당긴다", "result": "로비 비용을 냅니다. 협정이 곧 발효되어 그 권역 관세가 영구히 내려갑니다.", "effects": [{"type": "tradeLobby"}]}, {"label": "발효를 기다린다", "result": "돈은 들지 않습니다. 협정은 몇 해 뒤 발효됩니다.", "effects": []}]}
   ]
 }

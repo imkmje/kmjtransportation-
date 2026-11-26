@@ -3,14 +3,15 @@
 // 게임 난수를 쓰지 않는다(변화는 시드 해시). 자회사가 없는 판은 이 파일의 어떤 함수도 상태를 바꾸지 않는다. 수치는 config.subs
 import { won } from './won';
 import { config } from '../config';
-import { BODIES, COMPAT, OPTIONS, RIVALS, SUB_DATA, TECHS, bodyById, optionById, powertrainById, segmentById } from '../data';
+import { BODIES, COMPAT, OPTIONS, RIVALS, SUB_DATA, TECHS, bodyById, optionById, powertrainById, regionById, segmentById } from '../data';
 import { grade, payOf, unitCost } from './cars';
 import { costMultOf } from './company';
 import { specError, withRequired } from './dev';
 import { addNews, chargingInfra, eraNow, marketMult, requiredOptions, rivalHitAdd, trendOf } from './events';
 import { diffOf } from './difficulty';
 import { josa } from './josa';
-import { basePriceOf, bodyKey, carBasePrice, cellMonthly, currentEdition, monthlyDemand, rivalA, rivalBase, subPull, subSalesMult, toSaleCar } from './market';
+import { basePriceOf, bodyKey, carBasePrice, cellMonthly, currentEdition, interp, monthlyDemand, regionRivalPull, rivalA, rivalBase, subPull, subSalesMult, toSaleCar } from './market';
+import { fxNow, openRegions, quotaNow, regionMarket, regionOf, tariffNow } from './world';
 import { recommendedEquip, stdOf } from './equip';
 import { planPreview } from './queries';
 import { criticScores, mean } from './reviews';
@@ -303,16 +304,57 @@ export function subsMonthStart(s: CarState, ev: GameEvent[], m: number): void {
     for (const md of sub.models) md.a = effA(sub, md, m);
   }
 }
-/** 브랜드 자회사 한 달 판매·매출·원가(개발비 포함, 유지비·사장 월급 제외). 월 결산과 3.5.0 인수 창 예상 실적이 같이 쓴다 */
-export function brandMonth(s: CarState, sub: Subsidiary, m: number): { each: number[]; sold: number; demand: number; revenue: number; cost: number } {
-  const d = sub.models.map((md) => subDemand(s, sub, md, m)), tot = d.reduce((a, x) => a + x, 0), cap = subCapacity(sub), k = tot > cap ? cap / tot : 1;
-  const out = { each: [] as number[], sold: 0, demand: 0, revenue: 0, cost: 0 };
+// ---------- 5.5.0 자회사 해외 판매(본사가 진출한 권역, 본사 판매 법인을 함께 쓴다) ----------
+const WS = config.world.sub;
+/** 그 권역 판매 설정: true 켬, false 끔, 'auto' 자동(전반 위임에서 정하지 않은 권역: 대당 이익이 남고 월 minSales대 이상인 모델만) */
+export const subRegionMode = (sub: Subsidiary, rid: string): boolean | 'auto' => sub.regions?.[rid] ?? (isDirect(sub) ? false : 'auto');
+/** 자회사의 권역 인지도 = 본사 권역 인지도(인수 브랜드는 그 회사가 가졌던 권역 세기 × inherit와 큰 쪽) */
+export function subRegionAw(s: CarState, sub: Subsidiary, rid: string): number {
+  const r = regionOf(s, rid); if (!r) return 0;
+  const from = sub.from ? RIVALS.find((x) => x.id === sub.from)?.regions[rid] ?? 1 : 0;
+  return Math.min(1, Math.max(r.aw, from * WS.inherit));
+}
+/** 한 모델의 권역 월 수요(생산 한도 전). 경쟁 = 그 권역 경쟁사·현지 업체(본사 수요와 같은 값) + 같은 차급 자회사 모델 */
+function subRegionDemand(s: CarState, sub: Subsidiary, md: SubModel, rid: string, m: number, aw: number): number {
+  const t = monthTime(m), n = eraNow(s.seed, m), pt = ptOf(md), e = config.market.shareExp, R = regionById(rid);
+  const size = cellMonthly(md.body, t, rid) * (n.body[md.body] ?? 1) * marketMult(n, rid) * trendOf(md.body, t, n) * trendOf(pt, t, n) * (n.pt[pt] ?? 1) * (R.pt[pt] ? interp(R.years, R.pt[pt], t) : 1) * (pt === EV ? chargingInfra(s.seed, m) : 1);
+  if (size <= 0) return 0;
+  const mine = (md.a * aw) ** e, tot = regionRivalPull(s, rid, md.body, m) + (s.subs ?? []).reduce((a, x) => a + (x === sub || subRegionMode(x, rid) === false ? 0 : x.models.reduce((b, y) => b + (y.body === md.body ? (y.a * subRegionAw(s, x, rid)) ** e : 0), 0)), 0) + mine;
+  return size * mine / tot * brandDef(sub.kind as BrandKind).vol * fx(sub, m, 'vol');
+}
+/** 5.5.0 자회사 상세의 해외 판매 줄(본사가 진출한 권역, ID 순): 설정, 권역 인지도(인수 브랜드는 승계분), 지난달 판매·매출·이익 */
+export function subRegionInfo(s: CarState, id: number): { rid: string; name: string; mode: boolean | 'auto'; aw: number; inherited: boolean; sold: number; revenue: number; profit: number }[] {
+  const sub = subById(s, id); if (!sub || !isBrand(sub.kind)) return [];
+  return [...openRegions(s)].sort((a, b) => (a.id < b.id ? -1 : 1)).map((r) => { const a = sub.abroad?.[r.id], aw = subRegionAw(s, sub, r.id); return { rid: r.id, name: regionById(r.id).name, mode: subRegionMode(sub, r.id), aw, inherited: !!sub.from && aw > r.aw, sold: a?.sold ?? 0, revenue: a?.revenue ?? 0, profit: a?.profit ?? 0 }; });
+}
+/** 자회사 모델 하나의 권역 판매가·대당 원가(관세·운송비 포함) */
+const subRegionUnit = (s: CarState, sub: Subsidiary, md: SubModel, rid: string, m: number): { price: number; uc: number; land: number } => {
+  const uc = subUnitCost(s, sub, md);
+  return { price: subPrice(s, sub, md) * regionById(rid).priceMult * fxNow(s, rid, m), uc, land: uc * tariffNow(s, rid, md.body, m) + regionById(rid).ship };
+};
+/** 브랜드 자회사 한 달 판매·매출·원가(개발비 포함, 유지비·사장 월급 제외). 월 결산과 3.5.0 인수 창 예상 실적이 같이 쓴다. 5.5.0 해외 판매(abroad)는 생산 한도를 국내와 나눠 쓴다 */
+export function brandMonth(s: CarState, sub: Subsidiary, m: number): { each: number[]; sold: number; demand: number; revenue: number; cost: number; abroad: Record<string, { sold: number; revenue: number; profit: number }> } {
+  const d = sub.models.map((md) => subDemand(s, sub, md, m)), rows: { i: number; rid: string; d: number; price: number; uc: number; land: number }[] = [];
+  for (const r of [...openRegions(s)].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    const mode = subRegionMode(sub, r.id); if (mode === false) continue;
+    const aw = subRegionAw(s, sub, r.id), one: typeof rows = [];
+    sub.models.forEach((md, i) => { const u = subRegionUnit(s, sub, md, r.id, m), x = subRegionDemand(s, sub, md, r.id, m, aw); if (mode === true || (x >= WS.minSales && u.price - u.uc - u.land > 0)) one.push({ i, rid: r.id, d: x, ...u }); });
+    const tot = one.reduce((a, x) => a + x.d, 0), cap = config.world.capShare[r.office] * regionMarket(s, r.id, m) * quotaNow(s, r.id, m), k = tot > cap ? cap / tot : 1; // 판매 상한은 본사와 같은 비율(자회사마다)
+    for (const x of one) { x.d *= k; rows.push(x); }
+  }
+  const tot = d.reduce((a, x) => a + x, 0) + rows.reduce((a, x) => a + x.d, 0), cap = subCapacity(sub), k = tot > cap ? cap / tot : 1;
+  const out = { each: [] as number[], sold: 0, demand: 0, revenue: 0, cost: 0, abroad: {} as Record<string, { sold: number; revenue: number; profit: number }> };
   sub.models.forEach((md, i) => {
     const n = Math.floor(d[i] * k);
     out.each.push(n); out.sold += n; out.demand += d[i];
     out.revenue += n * subPrice(s, sub, md); out.cost += n * subUnitCost(s, sub, md);
     if (!md.car) out.cost += subModelDev(s, sub, md, m); // 개발비(모델마다 매달). 3.1.0 실제 사양이 있는 차는 개발할 때 한 번 낸다
   });
+  for (const x of rows) {
+    const n = Math.floor(x.d * k), a = (out.abroad[x.rid] ??= { sold: 0, revenue: 0, profit: 0 });
+    a.sold += n; a.revenue += n * x.price; a.profit += n * (x.price - x.uc - x.land);
+    out.sold += n; out.demand += x.d; out.revenue += n * x.price; out.cost += n * (x.uc + x.land);
+  }
   return out;
 }
 /** 브랜드 자회사 월 유지비(쓰는 설비만큼) + 사장 월급 */
@@ -342,6 +384,7 @@ export function subsSettle(s: CarState, ev: GameEvent[], m: number, hq: { revenu
     if (isBrand(sub.kind)) {
       const b = brandMonth(s, sub, m);
       sub.models.forEach((md, i) => { md.sold = b.each[i]; });
+      if (Object.keys(b.abroad).length) sub.abroad = b.abroad; else delete sub.abroad; // 5.5.0
       ({ sold, demand, revenue, cost } = b);
     } else {
       const B = sub.kind === 'parts' ? S.parts.margin : S.finance.financed * S.finance.spread;
@@ -607,6 +650,15 @@ export function subCommand(c: SubCtx, cmd: Command, ev: GameEvent[]): CommandRes
       if (cmd.pct === null) { delete md.price; return OK; }
       if (!Number.isInteger(cmd.pct) || cmd.pct < P.min || cmd.pct > P.max) return fail(`가격은 브랜드 기준 가격의 ${P.min}~${P.max}% 사이 정수로 정하세요.`);
       md.price = cmd.pct / 100; md.a = effA(sub, md, m); return OK;
+    }
+    case 'setSubRegion': { // 5.5.0 해외 판매 켜기·끄기(본사가 진출한 권역). null = 자동(전반 위임만)
+      const sub = subOf(s, cmd.subId); if (typeof sub === 'string') return fail(sub);
+      if (!isBrand(sub.kind)) return fail('사업 자회사는 해외에 차를 팔지 않습니다.');
+      if (!regionOf(s, cmd.region)) return fail('본사가 진출하지 않은 권역입니다.');
+      if (cmd.on === null && isDirect(sub)) return fail('직접 운영 자회사는 권역마다 켜거나 꺼야 합니다.');
+      if (cmd.on === null) { if (sub.regions) { delete sub.regions[cmd.region]; if (!Object.keys(sub.regions).length) delete sub.regions; } return OK; }
+      if (typeof cmd.on !== 'boolean') return fail('켜기·끄기 값이 올바르지 않습니다.');
+      (sub.regions ??= {})[cmd.region] = cmd.on; return OK;
     }
     case 'setSubTarget': {
       const sub = subOf(s, cmd.subId); if (typeof sub === 'string') return fail(sub);

@@ -31,9 +31,9 @@ function until(g: Game, eventId: string, years = 8): CarState['events']['pending
 describe('저장 형식 9 → 10', () => {
   it('형식 9 fixture가 10으로 올라오고 경쟁 2부가 빈 상태로 시작하며, 이어 돌리면 새 기능이 돌아가고 저장 왕복이 같다', () => {
     const raw = fixture();
-    expect(raw.saveVersion).toBe(9); expect(raw.rivalry).toBeUndefined(); expect(SAVE_VERSION).toBe(12);
+    expect(raw.saveVersion).toBe(9); expect(raw.rivalry).toBeUndefined(); expect(SAVE_VERSION).toBe(13);
     const g = Game.fromJSON(raw), s = g.state;
-    expect(s.saveVersion).toBe(12); expect(s.rivalry!.out).toEqual([]); expect(s.rivalry!.awards).toEqual([]);
+    expect(s.saveVersion).toBe(13); expect(s.rivalry!.out).toEqual([]); expect(s.rivalry!.awards).toEqual([]);
     ticks(g, 2 * WPY);
     expect(awardHistory(s).length).toBeGreaterThanOrEqual(1); // 12월 시상식
     expect(s.rivalry!.talent.length).toBe(R.talent.count); // 본사 5등급: 경쟁사 인재 후보

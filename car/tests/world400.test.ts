@@ -71,7 +71,7 @@ describe('4.0.0 판매·원가·배분', () => {
     const g = opened(); g.state.factory.level = 2; toMonthEnd(g); // 생산 한도를 줄여 모자라게
     const s = g.state, made = sellingGens(s).reduce((a, x) => a + (x.sales.at(-1) ?? 0) + Object.values(x.world ?? {}).reduce((b, w) => b + w.sold, 0), 0);
     expect(made).toBeLessThanOrEqual(capacityOf(s) + sellingGens(s).length);
-    const rows = [{ rid: 'na', d: 50, price: 0, unit: 300, land: 0, tr: 0, n: 0 }, { rid: 'eu', d: 50, price: 0, unit: 100, land: 0, tr: 0, n: 0 }];
+    const rows = [{ rid: 'na', d: 50, price: 0, unit: 300, land: 0, tr: 0, n: 0, loc: 0, lx: 0 }, { rid: 'eu', d: 50, price: 0, unit: 100, land: 0, tr: 0, n: 0, loc: 0, lx: 0 }];
     expect(splitMade(70, 50, 200, rows, false)).toBe(20); expect(rows.map((r) => r.n)).toEqual([50, 0]);
     expect(splitMade(70, 50, 200, rows, true)).toBe(50); expect(rows.map((r) => r.n)).toEqual([20, 0]);
     expect(splitMade(500, 50, 200, rows, false)).toBe(400); // 넉넉하면 모두 채우고 반올림 나머지는 국내
@@ -181,7 +181,7 @@ describe('4.0.0 경쟁사 6곳', () => {
   });
   it('저장 변환 10 → 11: 새 회사는 뒤에 붙고(순번 유지), 인수 브랜드·시상식의 옛 모델 이름이 새 이름으로, 테슬러는 등장 달이 지났으면 불러올 때', () => {
     const old = raw(), g = Game.fromJSON(old), s = g.state;
-    expect(s.saveVersion).toBe(12);
+    expect(s.saveVersion).toBe(13);
     expect(s.rivals.map((r) => r.id)).toEqual(['hyundae', 'porty', 'toyoda', 'bmv', 'hondi']);
     expect(s.rivalry!.out).toEqual(['porty']);
     const sub = s.subs!.find((x) => x.from === 'porty')!;

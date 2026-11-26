@@ -78,7 +78,7 @@ describe('자료 무결성(4단계)', () => {
   });
   it('사건: 고정 13개(11.1 연도), 무작위 8종(선택지 2~3개, 기본 선택이 범위 안)', () => {
     expect(ERA_EVENTS.map((e) => e.year)).toEqual([1973, 1979, 1986, 1988, 1992, 1997, 2002, 2008, 2012, 2015, 2020, 2025, 2032, 2037, 2041, 2045, 2049, 2052, 2057]); // 1.2.0 가상 사건 6개
-    expect(RANDOM_EVENTS.filter((d) => d.needs !== 'rivalry').length).toBe(8); // 3.5.0 경쟁 2부의 결정 창 2종(가격 전쟁·이직 제안)은 추첨하지 않는다
+    expect(RANDOM_EVENTS.filter((d) => d.needs !== 'rivalry' && d.needs !== 'world').length).toBe(8); // 3.5.0 경쟁 2부의 결정 창 2종(가격 전쟁·이직 제안), 5.5.0 무역 협정은 추첨하지 않는다
     for (const d of RANDOM_EVENTS) { expect(d.choices.length).toBeGreaterThanOrEqual(2); expect(d.choices.length).toBeLessThanOrEqual(3); expect(d.defaultChoice).toBeLessThan(d.choices.length); }
   });
 });
@@ -426,11 +426,11 @@ describe('조합 노트(5.5)', () => {
 
 describe('저장 형식 3 → 4', () => {
   it('형식 3 파일(0.3.0 코드로 만든 픽스처)을 올리고 이어서 실행할 수 있다', () => {
-    expect(SAVE_VERSION).toBe(12);
+    expect(SAVE_VERSION).toBe(13);
     const v3 = JSON.parse(readFileSync('car/tests/fixtures/save-v3.json', 'utf8'));
     expect(v3.saveVersion).toBe(3);
     const g = Game.fromJSON(v3), s = g.state;
-    expect(s.saveVersion).toBe(12);
+    expect(s.saveVersion).toBe(13);
     // 이미 쓰던(판매·개발 중) 라디오·에어컨·중형 세단·파워 스티어링(선행 포함)을 연구 완료로, 소형 세단·가솔린은 원래 열려 있음
     expect(s.research.done).toEqual(['el_radio', 'el_aircon', 'bd_sedanM', 'el_powerSteering']); expect(s.research.active).toEqual([]); expect(s.research.early).toEqual([]);
     expect(s.knownCombos).toEqual(['sedanS:worker', 'sedanS:youth']);
@@ -450,7 +450,7 @@ describe('저장 형식 3 → 4', () => {
   it('형식 1·2 파일도 4로 올라간다', () => {
     for (const f of ['save-v1.json', 'save-v2.json']) {
       const s = Game.fromJSON(JSON.parse(readFileSync(`car/tests/fixtures/${f}`, 'utf8'))).state;
-      expect(s.saveVersion).toBe(12); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
+      expect(s.saveVersion).toBe(13); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
     }
   });
 });
