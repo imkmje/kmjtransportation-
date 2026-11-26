@@ -9,7 +9,7 @@ import { generationUnitProfit } from './queries';
 import { addNews } from './events';
 import { startHist } from './history';
 import { josa } from './josa';
-import { basePriceOf, bodyKey, cellMonthly, currentEdition, monthlyDemand, rivalA, rivalBase, rivalCycle, subPull, toSaleCar } from './market';
+import { basePriceOf, bodyKey, cellMonthly, currentEdition, monthlyDemand, evPresence, rivalBase, rivalCellA, rivalCycle, rivalNoise, subPull, toSaleCar } from './market';
 import { isDone, researchCost } from './research';
 import { activeRivals, isOut, myCellShare, rivalHooks, rivalModelView } from './rivals';
 import { hash01 } from './rng';
@@ -46,6 +46,8 @@ export function warPriceMult(s: CarState, body: string, m: number): number {
 }
 /** 진행 중인 가격 전쟁(그 달) */
 export const activeWar = (s: CarState, m = monthOf(s.week)): PriceWar | undefined => s.rivalry?.wars.find((x) => m >= x.from && m < x.until);
+/** 4.0.0 경쟁사가 늘어 한 회사 몫이 줄어든 만큼 한 회사에 걸리는 효과(가격 전쟁 세기·대응 신차 가산)를 키우는 배수: 그 차급에 차를 내는 회사 수(전기차 회사는 몫만큼) ÷ 처음 3곳 */
+const spread = (s: CarState, body: string): number => { const m = monthOf(s.week); return s.rivals.reduce((a, r) => a + (r.models[body] ? (defOf(r.id).ev ? evPresence(s.seed, m) : 1) : 0), 0) / config.rivals.refIds.length; };
 /** 월말 경쟁 차 갱신 뒤: 칸 세기 × (1 − 인재 유출) × 가격 전쟁 × 인수 빈 몫(남은 경쟁사가 absorb만큼 이어받는다). 다음 달 갱신이 다시 셈하므로 쌓이지 않는다 */
 function applyCells(s: CarState, m: number): void {
   const st = rv(s), ghost = R.acquire.absorb ** (1 / config.market.shareExp);
@@ -53,7 +55,7 @@ function applyCells(s: CarState, m: number): void {
     const base = (1 - (st.weak[r.id] ?? 0)) * (isOut(s, r.id) ? ghost : 1);
     for (const body of Object.keys(r.cells)) {
       const w = st.wars.find((x) => x.rivalId === r.id && x.body === body && m >= x.from && m < x.until);
-      const k = base * (w ? 1 + w.cut * R.war.aPer : 1);
+      const k = base * (w ? 1 + w.cut * R.war.aPer * spread(s, body) : 1);
       if (k !== 1) r.cells[body] *= k;
     }
   }
@@ -66,8 +68,8 @@ function launchCounters(s: CarState, ev: GameEvent[], m: number): Set<string> {
     const ri = riOf(s, c.rivalId), r = s.rivals[ri];
     if (!r || isOut(s, r.id) || !r.models[c.body]) continue;
     const md = r.models[c.body], n = md.n + 1, def = defOf(r.id);
-    r.models[c.body] = { n, start: m, cycle: rivalCycle(s.seed, ri, c.body, n), base: rivalBase(m) + (def.cells[c.body] ?? 0) + (hash01(s.seed, 3, ri, bodyKey(c.body), n) * 2 - 1) * config.rivals.noise + R.counter.boost };
-    r.cells[c.body] = rivalA(r.models[c.body], m);
+    r.models[c.body] = { n, start: m, cycle: rivalCycle(s.seed, ri, c.body, n), base: rivalBase(m) + (def.cells[c.body] ?? 0) + (hash01(s.seed, 3, ri, bodyKey(c.body), n) * 2 - 1) * rivalNoise(r.id) + R.counter.boost * spread(s, c.body) };
+    r.cells[c.body] = rivalCellA(s.rivals, s.seed, r, c.body, m);
     st.counterCool[c.body] = m + R.counter.cooldown;
     done.add(`${r.id}:${c.body}`);
     const v = rivalModelView(s, ri, c.body);
@@ -127,7 +129,7 @@ export function warEstimate(s: CarState, w: PriceWar): { holdLoss: number; reven
   const r = s.rivals.find((x) => x.id === w.rivalId)!, keep = r.cells[w.body];
   const dem = () => mine.map(({ i }) => monthlyDemand(s, cars[i], cars.filter((_, j) => j !== i), t));
   const d0 = dem();
-  r.cells[w.body] = keep * (1 + w.cut * R.war.aPer);
+  r.cells[w.body] = keep * (1 + w.cut * R.war.aPer * spread(s, w.body));
   const d1 = dem();
   r.cells[w.body] = keep;
   const a = d0.reduce((x, y) => x + y, 0), b = d1.reduce((x, y) => x + y, 0);

@@ -65,13 +65,13 @@ describe('경쟁사와 저장 호환', () => {
   });
   it('0.5.1에서 만든 저장(중형 SUV를 팔던 2003년, 형식 4)을 그대로 연다: 옛 suv는 중형 SUV, 경쟁사 새 칸을 채운다, 이어서 3년 돌고 저장 왕복이 같다', () => {
     const raw = load('save-v4-suv.json');
-    expect(raw.saveVersion).toBe(4); expect(SAVE_VERSION).toBe(10);
+    expect(raw.saveVersion).toBe(4); expect(SAVE_VERSION).toBe(11);
     expect(raw.rivals[0].models.suvS).toBeUndefined();
     const g = Game.fromJSON(raw), s = g.state, m = monthOf(s.week);
     const suv = allGens(s).find((x) => x.body === 'suv' && x.status === 'onSale')!;
     expect(bodyById(suv.body).name).toBe('중형 SUV');
     expect(monthlyDemand(s, toSaleCar(suv, m), [], monthTime(m))).toBeGreaterThan(0);
-    for (const r of s.rivals) for (const b of ['suvS', 'suvL']) { expect(r.models[b].base).toBeCloseTo(rivalBase(m) + RIVALS.find((x) => x.id === r.id)!.cells[b], 9); expect(r.cells[b]).toBeGreaterThan(0); }
+    for (const r of s.rivals.slice(0, 3)) for (const b of ['suvS', 'suvL']) { expect(r.models[b].base).toBeCloseTo(rivalBase(m) + RIVALS.find((x) => x.id === r.id)!.cells[b], 9); expect(r.cells[b]).toBeGreaterThan(0); }
     expect(s.research.done).toContain('bd_suv'); expect(s.research.done).not.toContain('bd_suvS');
     const a = Game.fromJSON(load('save-v4-suv.json')), b = Game.fromJSON(JSON.parse(JSON.stringify(Game.fromJSON(load('save-v4-suv.json')).toJSON())));
     const ba = steady(), bb = steady();
@@ -82,8 +82,9 @@ describe('경쟁사와 저장 호환', () => {
   it('옛 픽스처(형식 1~4)도 모두 열리고 경쟁사 칸이 12종 모두 찬다', () => {
     for (const f of ['save-v1.json', 'save-v2.json', 'save-v3.json', 'save-v4.json', 'save-v4b.json']) {
       const s = Game.fromJSON(load(f)).state;
-      expect(s.saveVersion).toBe(10);
-      for (const r of s.rivals) expect(Object.keys(r.models).sort(), f).toEqual(BODIES.map((b) => b.id).sort());
+      expect(s.saveVersion).toBe(11);
+      for (const r of s.rivals) expect(Object.keys(r.models).sort(), f).toEqual(Object.keys(RIVALS.find((x) => x.id === r.id)!.cells).sort()); // 4.0.0: 처음 3곳은 12종, 비엠브이는 경차·픽업이 없다
+      expect(s.rivals.slice(0, 3).every((r) => Object.keys(r.models).length === BODIES.length)).toBe(true);
     }
   });
 });

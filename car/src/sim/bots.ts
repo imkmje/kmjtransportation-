@@ -1,6 +1,7 @@
 // 균형 점검 봇(설계서 16장): 방치·신중·서툰 플레이·리프트 안 함·새 이름만·가격 올리기·확장 안 함·연구 안 함
 import { config } from '../config';
-import { COMPAT, MARKET, RANDOM_EVENTS, SEGMENTS, TECHS } from '../data';
+import { COMPAT, MARKET, RANDOM_EVENTS, REGIONS, SEGMENTS, TECHS } from '../data';
+import { entryCost, officeCost, officeError, openError, regionCap, regionOf } from './world';
 import { bodiesAt, optionsAt, powertrainsAt, unitCost } from './cars';
 import { eraTimeline, optionTech } from './events';
 import { levelForTier, platformReady, ptCostAdd, researchCost, researchError } from './research';
@@ -49,6 +50,7 @@ export interface SteadyOptions {
   subDirect?: boolean; // 3.1.0: 브랜드 자회사를 직접 운영(빈 차급에 본사 차 배지 또는 직접 기획, subs와 함께)
   autoDecide?: boolean; // 3.7.0: 결정 자동 승인을 모두 켜고 결정 창에 답하지 않는다(안전선에 걸린 것은 4주 뒤 기본 선택)
   rivalry?: boolean; // 3.5.0: 경쟁사 인재 영입·기술 제휴(기술 구매)·자회사 상장·경쟁사 인수를 쓴다(선택, 기존 균형 봇은 쓰지 않는다)
+  world?: boolean; // 4.0.0: 조건이 되면 해외 권역에 진출(싼 곳부터, 자동 수출·자동 가격 그대로)하고, 판매가 상한에 가까우면 판매 법인에 투자(선택, 기존 균형 봇은 쓰지 않는다)
   subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
 const STEADY: SteadyOptions = {
@@ -78,6 +80,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (o.rescue) rescue(g);
       if (o.subs && g.state.week % config.time.weeksPerMonth === 0) { manageSubs(g); if (o.subDirect) manageSubsDirect(g); }
       if (o.rivalry && g.state.week % config.time.weeksPerMonth === 0) manageRivalry(g);
+      if (o.world && g.state.week % config.time.weeksPerMonth === 0) manageWorld(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -157,6 +160,16 @@ function manageSubs(g: Game): void {
 }
 /** 3.5.0 경쟁 2부 봇(선택, 달 첫 주): 지난 1년 흑자일 때만. 경쟁사 인재는 같은 직무 최고 능력보다 높으면 영입, 기술 제휴는 사 올 기술이 가장 많은 곳과 맺고 가장 싼 기술을 한 달에 하나 산다,
  *  브랜드 자회사는 상장할 수 있으면 다음 단계 지분까지 판다, 인수는 가장 싼 경쟁사를 값 + 고정비 acquireMonths개월 치가 있을 때. 여유 현금 기준은 config.bots.rivalry */
+/** 4.0.0 수출 봇: 진출비가 싼 권역부터, 현금이 진출비 + 고정비 reserveMonths개월 치를 넘으면 진출. 진출한 권역의 지난달 판매가 판매 상한의 worldFill 이상이고
+ *  지난달 권역 이익이 흑자면 판매 법인 다음 등급에 투자(같은 현금 기준). 수출 목록·권역 가격은 자동에 맡긴다 */
+function manageWorld(g: Game): void {
+  const s = g.state, reserve = fixedCost(s) * B.reserveMonths, m = monthOf(s.week);
+  for (const r of [...REGIONS].sort((a, b) => a.entry - b.entry || (a.id < b.id ? -1 : 1))) {
+    const open = regionOf(s, r.id);
+    if (!open) { if (!openError(s, r.id) && s.cash >= entryCost(s, r.id) + reserve) g.command({ type: 'openRegion', region: r.id }); continue; }
+    if (!officeError(s, r.id) && s.cash >= officeCost(r.id, open.office + 1) + reserve && open.profit > 0 && open.sold >= regionCap(s, open, m) * B.worldFill) g.command({ type: 'investOffice', region: r.id });
+  }
+}
 function manageRivalry(g: Game): void {
   const s = g.state, BR = B.rivalry, floor = fixedCost(s) * BR.cashMonths;
   if (s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0) <= 0) return;
@@ -245,7 +258,7 @@ function monthly(g: Game, o: SteadyOptions): void {
   // 주문이 밀린 지 3개월: 지난 3개월 모두 한도까지 팔았고(장부 판매 ≥ 한도의 97%), 지난달 주문이 한도의 1.3배 이상
   // 1.0.0: 최고 이익 가격을 쓰면 값을 올려 주문을 한도에 맞추므로, 증설 판단은 기준가에 팔 때의 주문으로 한다(전에는 값을 올린 뒤의 주문이라 공장을 늦게 키워 기준가 판매 봇보다 뒤졌다)
   const m = monthOf(s.week), cars = gens.map((x) => toSaleCar(x, m));
-  const cap = capacityOf(s), demand = gens.reduce((a, x, i) => a + (o.best && x.pricePolicy ? monthlyDemand(s, { ...cars[i], price: genBasePrice(s, x) }, cars.filter((_, j) => j !== i), monthTime(m)) : x.lastDemand), 0), last = s.ledger.slice(-B.expandMonths);
+  const cap = capacityOf(s), demand = gens.reduce((a, x, i) => a + (o.best && x.pricePolicy ? monthlyDemand(s, { ...cars[i], price: genBasePrice(s, x) }, cars.filter((_, j) => j !== i), monthTime(m)) + Object.values(x.world ?? {}).reduce((b, w) => b + (w.on ? w.demand : 0), 0) : x.lastDemand), 0), last = s.ledger.slice(-B.expandMonths);
   const backlogged = demand >= cap * o.expandRatio && last.length === B.expandMonths && last.every((e) => e.sold >= cap * B.boundShare);
   if (o.expand) {
     const nf = config.factory.levels[s.factory.level];

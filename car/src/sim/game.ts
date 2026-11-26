@@ -11,8 +11,8 @@ import { allocate, batteryPlantError, factoryBuildMonths, hqUpkeep, capacityOf, 
 import { loanLimit, loanRate } from './finance';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, retrofitInfo, fullChangeEligibility, lookCandidates, latestGen, nameplateById, rebuyPerMonth } from './lifecycle';
 import { equipOf, expectEffect, optPerCar, optWeights, stdOf, syncOptions } from './equip';
-import { carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, rivalA, rivalBase } from './market';
-import { updateRivalsWithNews } from './rivals';
+import { carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, firstRivalModel, monthlyDemand, toSaleCar, initRivals, rivalBase, rivalCellA, entryMonth, enterRival } from './market';
+import { enterText, legacyModelName, rivalModelName, updateRivalsWithNews } from './rivals';
 import { addNews, choiceMoney, monthStart, regulationError } from './events';
 import { levelForTier, ptCostAdd, researchCost, researchError, researchWeek, worldFirstTechs } from './research';
 import { criticScores, mean } from './reviews';
@@ -25,6 +25,7 @@ import { bestPrice } from './queries';
 import { ensureHist, newPnl, noteCar, pnlOf, startHist } from './history';
 import { clearError, clearPriceOf, fixError, fixTeam } from './insight';
 import { presidents, subCommand, subsMonthStart, subsSettle } from './subs';
+import { noteLoss, settleGen, splitMade, worldCommand, worldDemand, worldPrep, worldSettle, type RegionSum } from './world';
 import { applyRivalChoice, autoChoice, emptyRivalry, rivalryCommand, rivalryMonthEnd, rivalryMonthStart, warPriceMult } from './rivalry';
 import { addReport, delegationOn } from './execs';
 import { AUTO_KINDS, autoAnswerOk, autoHold, autoInitial, autoOn, autoPick } from './autodecide';
@@ -34,7 +35,7 @@ import { STATS, type CarState, type Command, type CommandResult, type Edition, t
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
-export const SAVE_VERSION = 10; // 10(3.5.0): 경쟁 2부(rivalry), 직원 월급 가산(pay)·영입한 경쟁사(from), 세대·자회사 모델 수상, 자회사 상장 지분·인수 브랜드.  9(3.0.0): 자회사(subs)·장부의 자회사 배당·투자. 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
+export const SAVE_VERSION = 11; // 11(4.0.0): 세계 시장(world, 세대의 권역 수출 world·국내 우선 domFirst, 장부의 권역 몫), 경쟁사 6곳·모델 이름 교체.  10(3.5.0): 경쟁 2부(rivalry), 직원 월급 가산(pay)·영입한 경쟁사(from), 세대·자회사 모델 수상, 자회사 상장 지분·인수 브랜드.  9(3.0.0): 자회사(subs)·장부의 자회사 배당·투자. 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
 /** difficulty: 생략하면 'easy'(0.4.1 새 게임 기본) */
 export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty; startYear?: number; condition?: StartCondition; challenges?: Challenge[] } // 1.5.0 시작 연도(기본 1970)·조건(기본 보통)·도전 과제(기본 없음)
 
@@ -71,6 +72,7 @@ const UNDO_KIND: Record<string, string> = {
   foundSubsidiary: '자회사 설립', setSubStrategy: '자회사 전략', setSubArea: '자회사 영역', setSubDividend: '자회사 배당', investSub: '자회사 투자', setSubPresident: '자회사 사장', // 3.0.0
   setSubShare: '자회사 공유 범위', subAddModel: '자회사 모델 추가', subDropModel: '자회사 모델 단종', renameSubModel: '자회사 모델 이름', sellSubsidiary: '자회사 매각',
   setSubMode: '자회사 운영 방식', setSubModelPrice: '자회사 모델 가격', setSubTarget: '자회사 목표', // 3.1.0(개발 시작에 해당하는 기획·지시·배지는 본사 개발처럼 뺐다)
+  openRegion: '해외 진출', investOffice: '판매 법인 투자', setExport: '수출 목록', setRegionPrice: '권역 가격', setRegionAuto: '자동 수출', setDomFirst: '국내 우선', // 4.0.0
   hireRivalTalent: '경쟁사 인재 영입', allyRival: '기술 제휴', endAlliance: '기술 제휴 해지', buyRivalTech: '기술 구매', listSub: '자회사 상장', acquireRival: '경쟁사 인수', // 3.5.0
   setPrice: '가격 변경', setPricePolicy: '가격 변경', renameNameplate: '이름 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
 };
@@ -218,21 +220,33 @@ export class Game {
       if ((g.awardUntil ?? -1) > m) d *= 1 + config.rivalry.awards.salesBoost; // 3.5.0 수상 판매 보너스
       return d;
     });
-    // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로
-    const made = allocate(capacityOf(s), demand, gens.map((g) => g.allocShare));
+    // 4.0.0 해외 권역 수요(자동 가격·자동 수출을 먼저). 생산 쪽 배수(출시 달 주 수·페이스리프트 전환·단종 달)는 수출에도 같다
+    if (s.world) worldPrep(s, ev, gens, m, year);
+    const wrows = s.world ? worldDemand(s, gens, m, year, gens.map((g) => { const ed = currentEdition(g); return (g.launchMonth === m ? (m * wpm + wpm - g.launchWeek) / wpm : 1) * (ed.kind === 'facelift' && monthOf(ed.launchWeek) === m ? LC.facelift.switchMonthMult : 1) * (g.status === 'ending' ? config.discontinue.lastMonthMult : 1); })) : null;
+    const totals = wrows ? demand.map((d, i) => d + wrows[i].reduce((a, x) => a + x.d, 0)) : demand;
+    // 9.3 생산 배분: 수동 몫이 있는 차는 한도 × 몫까지, 나머지 한도는 자동 차들에 수요 비례로(4.0.0 수출 주문 포함, 차 안에서는 대당 이익이 큰 곳부터)
+    const made = allocate(capacityOf(s), totals, gens.map((g) => g.allocShare));
+    const byRegion: Record<string, RegionSum> = {};
     let revenue = 0, cogs = 0, marketing = 0, recall = 0, sold = 0;
     const carRows: LedgerCar[] = [];
     const ylog = this.yearLog(year);
     gens.forEach((g, i) => {
-      const n = made[i], p0 = g.profit, P = pnlOf(g); // 0.10.0 손익 누적(예전 저장은 여기서 추정으로 시작)
+      const p0 = g.profit, P = pnlOf(g); // 0.10.0 손익 누적(예전 저장은 여기서 추정으로 시작)
       const ed = currentEdition(g), op = optPerCar(equipOf(ed), g.body, g.segment, year, costMultOf(s)), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, genCostMult(s, g), ptCostAdd(s, g.powertrain, ed.battery, g.evPlatform)) + op.cost; // 1.2.0 배터리·플랫폼·배터리 공장. 1.1.0 선택 사양: 선택률만큼 대당 평균 매출·원가
       const mk = config.awareness.marketingCost[g.marketing], unitRev = ed.price * warPriceMult(s, g.body, m) + op.rev;
-      g.lastDemand = demand[i]; g.lostSales = Math.max(0, demand[i] - n);
+      const wr = wrows?.[i] ?? [], n = wr.length ? splitMade(made[i], demand[i], unitRev - uc, wr, !!g.domFirst) : made[i]; // 4.0.0 국내 몫
+      g.lastDemand = totals[i]; g.lostSales = Math.max(0, totals[i] - made[i]);
       g.sales.push(n); g.totalSold += n; sold += n;
       revenue += n * unitRev; cogs += n * uc; marketing += mk;
       g.profit += n * (unitRev - uc) - mk;
       const row: LedgerCar = { id: g.id, sold: n, revenue: n * unitRev, cogs: n * uc, marketing: mk, recall: 0 }; carRows.push(row);
       P.rev += n * unitRev; P.cogs += n * uc; P.mk += mk;
+      if (wrows && (wr.length || g.world)) { // 4.0.0 수출 정산: 매출·생산 원가는 합계에, 관세·운송비는 따로(세대 손익에서는 원가에 넣는다)
+        const x = settleGen(g, wr, uc); noteLoss(g, wr);
+        revenue += x.revenue; cogs += x.cogs; g.profit += x.revenue - x.cogs - x.landed; P.rev += x.revenue; P.cogs += x.cogs + x.landed;
+        row.revenue += x.revenue; row.cogs += x.cogs; if (x.sold) row.exp = { sold: x.sold, revenue: x.revenue, landed: x.landed };
+        for (const [rid, v] of Object.entries(x.by)) { const b = (byRegion[rid] ??= { sold: 0, revenue: 0, cogs: 0, landed: 0, tariff: 0, ship: 0 }); b.sold += v.sold; b.revenue += v.revenue; b.cogs += v.cogs; b.landed += v.landed; b.tariff += v.tariff; b.ship += v.ship; }
+      }
       const target = awarenessTarget(s.reputation, g.marketing, grade(ed.stats.Q, year));
       g.awareness += (target - g.awareness) * (config.awareness.rate + salesAwarenessBonus(s)); // 영업 직원이 수렴을 빠르게(9.1)
       if (ed.defects > 0) { // 6.3 리콜: 연 확률 min(40%, 결함 × 2%)을 달로 나눠 굴린다
@@ -260,10 +274,12 @@ export class Game {
     const xPay = execPay(s), salaries = s.staff.reduce((a, x) => a + payOf(x), 0) + xPay; // 0.7.0 임원 월급 포함. 3.5.0 월급 가산 포함
     const upkeep = upkeepOf(s), upkeepHq = hqUpkeep(s, s.hqLevel), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
     const sub = s.subs?.length || s.pendingSubInv ? subsSettle(s, ev, m, { revenue, cogs }) : null; // 3.0.0 자회사 판매·이익·배당(배당은 본사 이익에 더한다)
-    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff + (sub?.dividend ?? 0);
+    const ws = s.world ? worldSettle(s, ev, gens, m, byRegion) : null; // 4.0.0 권역 합계·판매 법인 유지비·인지도·평판
+    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff + (sub?.dividend ?? 0) - (ws ? ws.tariff + ws.ship + ws.upkeep : 0);
     const research = s.pendingResearch ?? 0;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; s.pendingResearch = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, ...(sub ? { subDiv: sub.dividend, subInv: s.pendingSubInv ?? 0 } : {}), cars: carRows, execPay: xPay, research };
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, ...(sub ? { subDiv: sub.dividend, subInv: s.pendingSubInv ?? 0 } : {}), ...(ws ? { world: ws.ledger, tariff: ws.tariff, ship: ws.ship, worldUpkeep: ws.upkeep, worldInv: s.pendingWorldInv ?? 0 } : {}), cars: carRows, execPay: xPay, research };
+    if (ws) { s.pendingWorldInv = 0; const yw = (ylog.world ??= {}); for (const [rid, v] of Object.entries(ws.ledger)) { const y = (yw[rid] ??= { sold: 0, revenue: 0, profit: 0 }); y.sold += v.sold; y.revenue += v.revenue; y.profit += v.profit; } }
     if (sub) { s.pendingSubInv = 0; for (const r of sub.rep) this.addRep(r.value, r.reason ?? `자회사 「${r.name}」의 명성`); }
     s.ledger.push(e);
     ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
@@ -682,6 +698,7 @@ export class Game {
       }
       case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
       case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 위임
+      case 'openRegion': case 'setExport': case 'setRegionPrice': case 'investOffice': case 'setRegionAuto': case 'setDomFirst': return worldCommand({ s, spend: (c) => this.spend(c) }, cmd, [])!; // 4.0.0 세계 시장
       case 'foundSubsidiary': case 'setSubStrategy': case 'setSubArea': case 'setSubDividend': case 'investSub': case 'setSubPresident': case 'setSubShare':
       case 'subAddModel': case 'subDropModel': case 'renameSubModel': case 'sellSubsidiary':
       case 'setSubMode': case 'subPlanModel': case 'subOrderModel': case 'subBadgeModel': case 'subCancelOrder': case 'setSubModelPrice': case 'setSubTarget': return subCommand({ s, spend: (c) => this.spend(c) }, cmd, [])!; // 3.0.0 자회사
@@ -902,6 +919,8 @@ export class Game {
         ...(plat ? { evPlatform: true as const } : {}), ...(p.variant ? { variant: p.variant } : {}), ...(deriv ? { fromGen: deriv.id } : {}),
       };
       gen.editions.push(edition(stats, 'initial', headline));
+      if (prev?.world) { const on = Object.entries(prev.world).filter(([, w]) => w.on).map(([rid]) => rid); if (on.length) gen.world = Object.fromEntries(on.map((rid) => [rid, { on: true, sold: 0, demand: 0, total: 0, rev: 0, profit: 0 }])); } // 4.0.0 풀체인지는 전 세대의 수출 권역을 이어받는다
+      if (prev?.domFirst) gen.domFirst = true;
       applyWinsToGen(gen, p.wins); // 1.3.0 직원 성과(원가 인하·인지도)
       gen.critiques = writeCritiques(s, { name: p.name, genId: gen.id, stats, year, reviews, price: cmd.price, base, missing: fx.missing, fresh: fx.fresh, // 1.3.0 평론가별 시승기
         ev: p.powertrain === EV ? { km: rangeKm(p.level, p.battery, plat), exp: expectedRange(p.body, year) } : null });
@@ -934,6 +953,7 @@ export class Game {
     if ((st.saveVersion as number) === 7) migrateV7(st);
     if ((st.saveVersion as number) === 8) (st as { saveVersion: number }).saveVersion = 9; // 형식 8 → 9(3.0.0): 자회사 없음(subs 없음과 같다)
     if ((st.saveVersion as number) === 9) { st.rivalry ??= emptyRivalry(); (st as { saveVersion: number }).saveVersion = 10; } // 형식 9 → 10(3.5.0): 경쟁 2부 빈 상태(다음 달부터 시작). 새 칸은 모두 빠질 수 있다
+    if ((st.saveVersion as number) === 10) migrateV10(st);
     fillRivalCells(st); // 0.6.0 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
     return new Game(st);
   }
@@ -1027,6 +1047,22 @@ function migrateV7(st: CarState): void {
   }
   (st as { saveVersion: number }).saveVersion = 8;
 }
+/** 저장 형식 10 → 11(4.0.0): 경쟁 모델 옛 이름(시드로 섞은 지어낸 이름)을 새 이름으로(인수 브랜드 모델·시상식 기록, 플레이어가 바꾼 이름은 그대로),
+ *  새 경쟁사(비엠브이·혼디, 등장 달이 지났으면 테슬러)를 지금 달 라인업으로 뒤에 더하고 뉴스 한 줄. 기존 회사 순번은 그대로. 세계 시장(world)은 없음 = 진출 전 */
+function migrateV10(st: CarState): void {
+  const m = monthOf(st.week);
+  const ren = (rid: string | undefined, body: string, name: string): string => {
+    const ri = rid ? st.rivals.findIndex((r) => r.id === rid) : -1;
+    return ri >= 0 && name === legacyModelName(st.seed, ri, rid!, body) ? rivalModelName(st.seed, ri, rid!, body) : name;
+  };
+  for (const sub of st.subs ?? []) if (sub.from) for (const md of sub.models) md.name = ren(sub.from, md.body, md.name);
+  for (const a of st.rivalry?.awards ?? []) a.car = ren(a.who === 'rival' ? RIVALS.find((r) => r.name === a.company)?.id : a.who === 'sub' ? st.subs?.find((x) => x.name === a.company)?.from : undefined, a.body, a.car);
+  const n0 = st.rivals.length;
+  for (const d of RIVALS) if (!st.rivals.some((r) => r.id === d.id) && m >= entryMonth(st.seed, d.id)) st.rivals.push(enterRival(st.seed, st.rivals.length, d.id, m));
+  for (const r of st.rivals) for (const body of Object.keys(r.models).sort()) r.cells[body] = rivalCellA(st.rivals, st.seed, r, body, m); // 정규화(다음 월 결산부터 경쟁 2부 가감이 다시 붙는다)
+  for (const r of st.rivals.slice(n0)) addNews(st, [], enterText(r), 'rival', 'news', undefined, 'rival');
+  (st as { saveVersion: number }).saveVersion = 11;
+}
 /** 경쟁사 자료에 있는데 저장에 없는 칸: 지금 달 기준 첫 모델(게임 난수를 쓰지 않는다). 형식 3 변환과 0.6.0 새 차체 칸이 함께 쓴다 */
 function fillRivalCells(st: CarState): void {
   const m = monthOf(st.week);
@@ -1034,7 +1070,7 @@ function fillRivalCells(st: CarState): void {
     const def = RIVALS.find((x) => x.id === r.id);
     for (const body of Object.keys(def?.cells ?? {}).sort()) if (!r.models[body]) {
       r.models[body] = firstRivalModel(st.seed, ri, body, rivalBase(m) + def!.cells[body]);
-      r.cells[body] = rivalA(r.models[body], m);
+      r.cells[body] = rivalCellA(st.rivals, st.seed, r, body, m);
     }
   });
 }

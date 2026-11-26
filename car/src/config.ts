@@ -138,6 +138,9 @@ export const config = {
     response: { from: 1985, to: 1995, share0: 0.1, k: 3 }, // 1.0.0 경쟁사의 대응(market.rivalResponse)
     // 2.0.0 경쟁 모델의 겉으로 보이는 값(표시용, 판매 계산에 쓰지 않는다. sim/rivals.ts). d = 모델 기본 A − 그때 경쟁 차 기본 A(rivalBase)
     view: { criticMid: 6, criticPer: 10, hitAt: 0.6, statJitter: 0.6, pricePer: 0.02 }, // 추정 평론 = 6 + d × 10(1~10), 히트작 = 난수 몫이 noise의 60% 이상이고 같은 차급 다른 경쟁 모델보다 추정 평론이 낮지 않음(3.1.1), 능력치 = 평론 + 회사 모양 ± 0.6, 가격 = 시장 기준가 × (1 + (평론 − 6) × 2%)
+    // 4.0.0 경쟁사 6곳: 판매 계산의 경쟁 차 A에 차급마다 같은 배수를 곱해, 그 차급 Σ(기본 A + 강약)^지수가 처음 3곳(refIds) 때와 같게 한다(회사가 늘어도 경쟁 합은 그대로, 나눠 가질 뿐).
+    // 전기차 전문 회사(rivals.json ev)는 세기 몫 = min(1, evFloor + 충전 인프라 × evPer)만큼만 센다(전기차가 퍼질수록 세진다). 등장 연도(from) ± entryJitter개월(시드 해시)
+    refIds: ['hyundae', 'porty', 'toyoda'], evFloor: 0.15, evPer: 1.5, entryJitter: 12,
     lateCells: ['suvL', 'suvS'], // 0.6.0에 더한 칸: 새 게임의 첫 모델 강약 난수를 게임 난수 대신 해시로 뽑는다(기존 시드의 난수 순서가 그대로)
   },
   lifecycle: { // 8장
@@ -162,7 +165,8 @@ export const config = {
     lookCandidates: 3, // 3D 모양 후보 수
   },
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
-    reserveMonths: 6, // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
+    reserveMonths: 6,
+    worldFill: 0.8, // 4.0.0 수출 봇: 권역 판매가 판매 상한의 80% 이상이면 판매 법인 투자 // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
     expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, expandFill: 0.75, fillFrom: 5, expandLoan: 0.7, // expandLoan(1.0.0): 증설비가 모자라면 대출 한도의 70%까지 빌린다
     // fillFrom(1.0.0): 이 등급부터 expandFill 조건(전에는 마지막 등급만). expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
     hqCashMult: 6, // 본사 승급: 현금이 승급비 × 6 + 여유분 이상일 때
@@ -431,5 +435,15 @@ export const config = {
     // 인수 브랜드의 자본 = 값 × capital, 브랜드 평판 = max(본사 평판, rep). 빈 몫: 인수한 회사의 세기는 남은 경쟁사가 absorb만큼 이어받는다(경쟁 합에 세기^지수 × absorb로 남는다)
     acquire: { hqMin: 5, salesMult: 0.6, premium: 0.3, capital: 0.5, rep: 140, absorb: 0.5, minPrice: 10000000 },
     logMax: 60,
+  },
+  // 4.0.0 세계 시장 1부(설계서 7.5, 계산은 sim/world.ts, 권역 자료는 data/regions.json). 금액 단위 만원. 권역 성격 수치는 일반적 경향을 반영한 게임용 가정
+  world: {
+    hqLevel: 3, // 진출 조건: 본사 3등급 + 권역별 평판(regions.json rep). 진출비는 권역별(entry), '수출 호황'(exportEase) 동안 그 배수
+    awStart: 0.15, awBase: 0.12, awRepDiv: 250, awRate: 0.04, // 권역 브랜드 인지도: 시작 0.15, 목표 = 0.12 + 권역 평판 효과/250 + 판매 법인 가산, 매달 (목표 − 지금) × (0.04 + 법인 가산)씩
+    repCarry: 0.25, repSoldDiv: 4000, repYearMax: 3, // 권역 평판: 시작 = 국내 평판 × 0.25, 매달 + min(3/12, 그달 판매 × 12 / 4,000 / 12)
+    capShare: [0.03, 0.08, 0.15, 0.3], // 권역 판매 상한(그 권역 월 시장 규모의 몫): 수출만 / 판매 법인 1·2·3등급
+    office: { cost: [1000000, 10000000, 40000000], upkeep: [50000, 250000, 800000], aw: [0, 0.15, 0.3, 0.45], rate: [0, 0.03, 0.06, 0.1] }, // 판매 법인 1~3등급: 투자비·월 유지비(× 권역 officeMult), 인지도 목표 가산·수렴 가산(0등급 = 법인 없음)
+    pricePcts: [0.94, 0.97, 1, 1.03, 1.06], repriceMonths: 6, // 자동 권역 가격: 권역 기준가(차별 기준가 × 권역 가격 수준)의 이 비율 중 이익이 가장 큰 값, 6개월마다(판이 바뀌면 바로) 다시 셈
+    autoMinSales: 15, autoLossMonths: 3, // 자동 수출: 예상 월 판매 15대 이상이고 대당 이익이 남는 차를 넣고, 3개월 연속 적자면 뺀다
   },
 };

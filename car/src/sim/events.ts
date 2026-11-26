@@ -2,7 +2,7 @@
 // 무작위 사건은 해마다 시드 해시로 횟수·달을 정하고, 뜬 사건과 기간 효과·뉴스만 상태(events)에 둔다. 게임 난수는 쓰지 않는다.
 import { won } from './won';
 import { config } from '../config';
-import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, segmentById } from '../data';
+import { ERA_EVENTS, MARKET, RANDOM_EVENTS, TECHS, optionById, powertrainById, bodyById, regionById, segmentById } from '../data';
 import { grades, salaryOf } from './cars';
 import { diffOf } from './difficulty';
 import { staffCap } from './company';
@@ -201,17 +201,17 @@ function eraEffectText(e: EraEffect, since: number): string {
     case 'bodyDemand': { const n = e.bodies.map((b) => bodyById(b).name).join('·'); return `${n}${josa(n, '이/가')} ${sells(e.mult)}.`; }
     case 'ptDemand': { const n = ptCar(e.powertrain); return `${n}${josa(n, '이/가')} ${sells(e.mult)}.`; }
     case 'segDemand': { const n = segmentById(e.segment).name; return `${n}${josa(n, '이/가')} 차를 ${pct(e.mult)}% ${e.mult < 1 ? '덜' : '더'} 삽니다.`; }
-    case 'marketSize': return `${e.region === 'all' ? '모든 지역의' : MARKET[e.region]?.name ?? e.region} 자동차 시장이 ${pct(e.mult)}% ${e.mult < 1 ? '줄어듭니다' : '커집니다'}.`;
+    case 'marketSize': return `${e.region === 'all' ? '모든 지역의' : MARKET[e.region]?.name ?? regionById(e.region).name} 자동차 시장이 ${pct(e.mult)}% ${e.mult < 1 ? '줄어듭니다' : '커집니다'}.`;
     case 'trend': { const n = trendName(e.id); return `${n}${josa(n, '이/가')} ${trendText(e)}`; }
     case 'loanRate': return `대출 이자가 ${e.mult === 2 ? '두 배' : `${e.mult}배`}${e.mult > 1 ? '로 오릅니다' : '로 내립니다'}.`;
     case 'production': return `모든 공장의 생산이 ${e.mult === 0.5 ? '절반으로' : `${pct(e.mult)}%`} 줄어듭니다.`;
     case 'regulation': {
-      if (e.region !== REGION) return '해외 시장에만 적용되는 규제라, 내수만 하는 지금은 영향이 없습니다.';
+      if (e.region !== REGION) { const pt = (e.powertrains ?? []).map((p) => powertrainById(p).name).join('·'); return `${regionById(e.region).name}에서만 적용되는 규제입니다.${pt ? ` 그 권역에는 ${pt}차를 수출할 수 없습니다.` : ''}`; }
       const n = optNames(e.options ?? []), left = e.graceMonths - since;
       return left > 0 ? `${left}개월 뒤부터 ${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다(그때까지는 유예 기간입니다).` : `${n}${josa(n, '이/가')} 없는 신차는 출시할 수 없습니다.`;
     }
     case 'charging': return '충전 인프라가 해마다 늘어 전기차 수요가 점점 커집니다.';
-    case 'exportEase': return '해외 진출 조건이 완화되지만, 내수만 하는 지금은 영향이 없습니다.';
+    case 'exportEase': return `해외 권역 진출비가 ${pct(e.mult)}%로 줄어듭니다.`;
   }
 }
 /** 무작위 사건이 남긴 기간 효과 한 문장 */

@@ -1,14 +1,326 @@
 [
-  { "id": "hyundae", "name": "현다이", "trait": "가성비", "color": "#3a6ea5", "field": "production", "segment": "worker", "cells": { "sedanS": 0.1, "hatch": 0.1, "sedanM": 0, "coupe": -0.1, "sedanL": -0.15, "minivan": 0, "kei": 0.1, "suvS": 0.1, "suv": 0, "suvL": -0.15, "pickup": -0.2, "sports": -0.2 },
-    "desc": "값에 비해 넉넉한 차를 낸다. 연비와 실용이 좋고 성능과 품질은 평범하다.",
-    "shape": { "P": -0.6, "E": 0.9, "U": 0.8, "D": 0, "Q": -0.4 },
-    "models": ["한빛", "누리", "다온", "미리내", "가람", "새벽", "아라", "별하", "온새", "해솔", "나래", "이음"] },
-  { "id": "porty", "name": "포티", "trait": "픽업·대형", "color": "#8a5a2b", "field": "powertrain", "segment": "family", "cells": { "sedanS": -0.15, "hatch": -0.2, "sedanM": 0.05, "coupe": 0.05, "sedanL": 0.1, "minivan": 0, "kei": -0.25, "suvS": -0.15, "suv": 0.1, "suvL": 0.2, "pickup": 0.2, "sports": 0 },
-    "desc": "큰 차와 픽업에 강하다. 힘과 적재를 앞세우고 연비는 뒤처진다.",
-    "shape": { "P": 0.9, "E": -0.9, "U": 0.7, "D": -0.1, "Q": -0.1 },
-    "models": ["메사", "오자크", "테톤", "엘크혼", "레드록", "스톤리지", "와일더", "노스포크", "블랙혼", "아이언빌", "하이플레인", "그래닛"] },
-  { "id": "toyoda", "name": "도요다", "trait": "전 차급·품질", "color": "#b0303a", "field": "eco", "segment": "worker", "cells": { "sedanS": 0.1, "hatch": 0.05, "sedanM": 0.15, "coupe": 0, "sedanL": 0.1, "minivan": 0.1, "kei": 0, "suvS": 0.05, "suv": 0.05, "suvL": 0.05, "pickup": 0, "sports": 0.05 },
-    "desc": "거의 모든 차급에 차를 낸다. 품질이 높고 고장이 적으며 디자인은 무난하다.",
-    "shape": { "P": 0, "E": 0.4, "U": 0.2, "D": -0.4, "Q": 1 },
-    "models": ["아스텔라", "카렌시아", "라피엘", "에델", "세실리오", "오르비스", "루세로", "플로렌", "아르비아", "세레스", "미라벨", "벨카노"] }
+ {
+  "id": "hyundae",
+  "name": "현다이",
+  "trait": "가성비",
+  "color": "#3a6ea5",
+  "field": "production",
+  "segment": "worker",
+  "cells": {
+   "sedanS": 0.1,
+   "hatch": 0.1,
+   "sedanM": 0,
+   "coupe": -0.1,
+   "sedanL": -0.15,
+   "minivan": 0,
+   "kei": 0.1,
+   "suvS": 0.1,
+   "suv": 0,
+   "suvL": -0.15,
+   "pickup": -0.2,
+   "sports": -0.2
+  },
+  "desc": "값에 비해 넉넉한 차를 낸다. 연비와 실용이 좋고 성능과 품질은 평범하다.",
+  "shape": {
+   "P": -0.6,
+   "E": 0.9,
+   "U": 0.8,
+   "D": 0,
+   "Q": -0.4
+  },
+  "models": {
+   "sedanS": "아반타",
+   "hatch": "액센토",
+   "sedanM": "소나투",
+   "sedanL": "그란저",
+   "coupe": "티뷰런",
+   "minivan": "스타렉",
+   "kei": "아토즈",
+   "suvS": "투산트",
+   "suv": "산타페오",
+   "suvL": "팰리세드",
+   "pickup": "포타",
+   "sports": "제네시아"
+  },
+  "legacy": [
+   "한빛",
+   "누리",
+   "다온",
+   "미리내",
+   "가람",
+   "새벽",
+   "아라",
+   "별하",
+   "온새",
+   "해솔",
+   "나래",
+   "이음"
+  ],
+  "regions": {
+   "na": 0.95,
+   "eu": 0.9,
+   "em": 1.15
+  }
+ },
+ {
+  "id": "porty",
+  "name": "포티",
+  "trait": "픽업·대형",
+  "color": "#8a5a2b",
+  "field": "powertrain",
+  "segment": "family",
+  "cells": {
+   "sedanS": -0.15,
+   "hatch": -0.2,
+   "sedanM": 0.05,
+   "coupe": 0.05,
+   "sedanL": 0.1,
+   "minivan": 0,
+   "kei": -0.25,
+   "suvS": -0.15,
+   "suv": 0.1,
+   "suvL": 0.2,
+   "pickup": 0.2,
+   "sports": 0
+  },
+  "desc": "큰 차와 픽업에 강하다. 힘과 적재를 앞세우고 연비는 뒤처진다.",
+  "shape": {
+   "P": 0.9,
+   "E": -0.9,
+   "U": 0.7,
+   "D": -0.1,
+   "Q": -0.1
+  },
+  "models": {
+   "sedanS": "에스코드",
+   "hatch": "포커즈",
+   "sedanM": "토러즈",
+   "sedanL": "크라운 빅토라",
+   "coupe": "선더버즈",
+   "minivan": "윈드스타르",
+   "kei": "피에스토",
+   "suvS": "이스케입",
+   "suv": "익스플로라",
+   "suvL": "엑스페디션",
+   "pickup": "F-160",
+   "sports": "머스탕"
+  },
+  "legacy": [
+   "메사",
+   "오자크",
+   "테톤",
+   "엘크혼",
+   "레드록",
+   "스톤리지",
+   "와일더",
+   "노스포크",
+   "블랙혼",
+   "아이언빌",
+   "하이플레인",
+   "그래닛"
+  ],
+  "regions": {
+   "na": 1.2,
+   "eu": 0.95,
+   "em": 0.95
+  }
+ },
+ {
+  "id": "toyoda",
+  "name": "도요다",
+  "trait": "전 차급·품질",
+  "color": "#b0303a",
+  "field": "eco",
+  "segment": "worker",
+  "cells": {
+   "sedanS": 0.1,
+   "hatch": 0.05,
+   "sedanM": 0.15,
+   "coupe": 0,
+   "sedanL": 0.1,
+   "minivan": 0.1,
+   "kei": 0,
+   "suvS": 0.05,
+   "suv": 0.05,
+   "suvL": 0.05,
+   "pickup": 0,
+   "sports": 0.05
+  },
+  "desc": "거의 모든 차급에 차를 낸다. 품질이 높고 고장이 적으며 디자인은 무난하다.",
+  "shape": {
+   "P": 0,
+   "E": 0.4,
+   "U": 0.2,
+   "D": -0.4,
+   "Q": 1
+  },
+  "models": {
+   "sedanS": "코롤로",
+   "hatch": "오리즈",
+   "sedanM": "캄리",
+   "sedanL": "크라온",
+   "coupe": "셀리코",
+   "minivan": "시엔나",
+   "kei": "야리즈",
+   "suvS": "라브포",
+   "suv": "하이랜드",
+   "suvL": "랜드크루자",
+   "pickup": "하이락스",
+   "sports": "수프로"
+  },
+  "legacy": [
+   "아스텔라",
+   "카렌시아",
+   "라피엘",
+   "에델",
+   "세실리오",
+   "오르비스",
+   "루세로",
+   "플로렌",
+   "아르비아",
+   "세레스",
+   "미라벨",
+   "벨카노"
+  ],
+  "regions": {
+   "na": 1.1,
+   "eu": 1.0,
+   "em": 1.1
+  }
+ },
+ {
+  "id": "bmv",
+  "name": "비엠브이",
+  "trait": "고급·성능",
+  "color": "#2a5d9f",
+  "field": "body",
+  "segment": "rich",
+  "cells": {
+   "sedanS": -0.1,
+   "hatch": -0.05,
+   "sedanM": 0.15,
+   "coupe": 0.15,
+   "sedanL": 0.15,
+   "minivan": -0.2,
+   "suvS": 0,
+   "suv": 0.1,
+   "suvL": 0.1,
+   "sports": 0.2
+  },
+  "desc": "중대형 세단·쿠페·스포츠카에 강한 고급 브랜드. 성능과 디자인이 좋고 값이 비싸다. 경차와 픽업은 내지 않는다.",
+  "shape": {
+   "P": 1,
+   "E": -0.3,
+   "U": -0.4,
+   "D": 0.7,
+   "Q": 0.5
+  },
+  "premium": 0.25,
+  "models": {
+   "sedanS": "1시리스",
+   "hatch": "미노",
+   "sedanM": "3시리스",
+   "sedanL": "7시리스",
+   "coupe": "4시리스",
+   "minivan": "그랑투어",
+   "suvS": "X-1",
+   "suv": "X-5",
+   "suvL": "X-7",
+   "sports": "Z-4"
+  },
+  "regions": {
+   "na": 1.0,
+   "eu": 1.25,
+   "em": 0.85
+  }
+ },
+ {
+  "id": "hondi",
+  "name": "혼디",
+  "trait": "소형·연비",
+  "color": "#b8323c",
+  "field": "powertrain",
+  "segment": "youth",
+  "cells": {
+   "sedanS": 0.15,
+   "hatch": 0.15,
+   "sedanM": 0.05,
+   "coupe": 0,
+   "sedanL": -0.15,
+   "minivan": 0.05,
+   "kei": 0.15,
+   "suvS": 0.1,
+   "suv": 0.05,
+   "suvL": -0.15,
+   "pickup": -0.2,
+   "sports": 0
+  },
+  "desc": "소형차에 강하다. 연비와 내구성이 좋고 엔진을 잘 만든다. 대형차와 픽업은 약하다.",
+  "shape": {
+   "P": 0.2,
+   "E": 0.9,
+   "U": 0.3,
+   "D": -0.2,
+   "Q": 0.6
+  },
+  "models": {
+   "sedanS": "시비크",
+   "hatch": "피토",
+   "sedanM": "아코드",
+   "coupe": "프렐류도",
+   "sedanL": "레전더",
+   "minivan": "오딧세아",
+   "kei": "엔복스",
+   "suvS": "HX-V",
+   "suv": "CR-W",
+   "suvL": "파일롯",
+   "pickup": "릿지레인",
+   "sports": "S2100"
+  },
+  "regions": {
+   "na": 1.1,
+   "eu": 0.9,
+   "em": 1.1
+  }
+ },
+ {
+  "id": "tesler",
+  "name": "테슬러",
+  "trait": "전기차",
+  "color": "#c42d2d",
+  "field": "electronics",
+  "segment": "youth",
+  "from": 2010,
+  "noise": 0.25,
+  "ev": true,
+  "cells": {
+   "sedanM": 0.15,
+   "sedanL": 0.15,
+   "suv": 0.15,
+   "suvL": 0.1,
+   "sports": 0.05,
+   "pickup": -0.05
+  },
+  "desc": "2010년쯤 생긴 전기차 전문 회사. 기술은 앞서지만 품질이 들쭉날쭉하다. 전기차가 퍼질수록 세진다.",
+  "shape": {
+   "P": 0.9,
+   "E": 1,
+   "U": 0,
+   "D": 0.4,
+   "Q": -0.8
+  },
+  "models": {
+   "sedanM": "모델 3i",
+   "sedanL": "모델 S1",
+   "suv": "모델 Y2",
+   "suvL": "모델 X2",
+   "sports": "로드스타",
+   "pickup": "사이버트렉"
+  },
+  "regions": {
+   "na": 1.15,
+   "eu": 1.0,
+   "em": 0.8
+  }
+ }
 ]

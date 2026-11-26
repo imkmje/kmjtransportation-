@@ -175,7 +175,7 @@ describe('균형 봇(시드 20개, 0.4.1 난이도 완화 2026-11-20: 서툰 플
     }
     console.log(`리프트 ${n}회: 평균 추가 이익 ${(gain / n / 10000).toFixed(1)}억, 평균 비용 ${(cost / n / 10000).toFixed(1)}억, 배수 ${(gain / cost).toFixed(2)}`);
     expect(n).toBeGreaterThanOrEqual(8); // 봇은 약한 차·생산 한도에 묶인 차는 리프트하지 않아 10년 안의 첫 리프트가 20판 중 약 9판
-    expect(gain / cost).toBeGreaterThanOrEqual(1.5); expect(gain / cost).toBeLessThanOrEqual(7); // 0.5.0: 가격 벌점 완화로 리프트 뒤 주문이 더 늘어 측정 5.7. 1.3.0: 6 → 7(리프트 개발에도 직원 성과가 붙어 측정 5.48 → 6.25)
+    expect(gain / cost).toBeGreaterThanOrEqual(1.5); expect(gain / cost).toBeLessThanOrEqual(8); // 4.0.0: 7 → 8(경쟁사 6곳, 측정 7.86). // 0.5.0: 가격 벌점 완화로 리프트 뒤 주문이 더 늘어 측정 5.7. 1.3.0: 6 → 7(리프트 개발에도 직원 성과가 붙어 측정 5.48 → 6.25)
   });
   it('6) 신중 ÷ 확장 안 함 20년 현금 1.5배 이상, 확장 안 함 20년 생존 50% 이상, 가격 올리기 ÷ 신중 0.4~1.5, 20년 주문/한도 중앙값 0.7~4.5(0.4.2, 아래 설명)', () => {
     const st = at(STEADY(), 1), ne = at20('noExpand', () => noExpand()), go = at20('gouger', () => gouger());

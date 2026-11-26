@@ -1580,7 +1580,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await GG(() => { for (const g of window.__car.game.state.nameplates.flatMap((n) => n.generations)) delete g.clearance; document.getElementById('toasts').innerHTML = ''; window.__car.render(); });
   // U3 설정 화면 · U2 알림 종류 켜고 끄기, 묶기, 기록함
   await gp.click('#menubtn'); await gp.click('#sheet [data-act="settings"]'); await gp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.3.0 설정 알림: 유형 13개(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인) + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 13 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 16 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
+  check('1.3.0 설정 알림: 유형 14개(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인, 4.0.0 세계 시장) + 그 밖 3개, 경고·결정 대기는 끌 수 없음', (await gp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 14 && (await gp.locator('#sheet [data-act="noteCat"]').count()) === 17 && (await gp.locator('#sheet [data-act="noteCat"]:disabled').count()) === 2);
   await mshot('settings-note-1180x820');
   await gp.click('#sheet [data-act="noteCat"][data-v="launch"]');
   check('1.0.0 알림 종류 끄기(출시·평론) → 기기 저장소', (await GG(() => JSON.parse(localStorage.getItem('car-company-notify')).launch)) === false && (await gp.locator('#sheet [data-act="noteCat"][data-v="launch"]').getAttribute('aria-pressed')) === 'false');
@@ -1885,7 +1885,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
     await mp.locator('#sheet [data-act="closeReview"]').click().catch(() => {}); }
   // (d) 알림 유형: 교육 알림을 끄면 교육 보내기 알림이 뜨지 않고 기록에는 남음, 경고는 못 끔
   await mp.click('#menubtn'); await mp.click('#sheet [data-act="settings"]'); await mp.click('#sheet [data-act="setTab"][data-v="note"]');
-  check('1.3.0 알림 설정: 유형 13종(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인 포함), 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 13 && (await mp.locator('#sheet [data-act="noteCat"][data-v="sub"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="rival"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
+  check('1.3.0 알림 설정: 유형 14종(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인, 4.0.0 세계 시장 포함), 경고는 끌 수 없음', (await mp.locator('#sheet .note-topics [data-act="noteCat"]').count()) === 14 && (await mp.locator('#sheet [data-act="noteCat"][data-v="world"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="sub"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="rival"]').count()) === 1 && (await mp.locator('#sheet [data-act="noteCat"][data-v="warning"]').isDisabled()));
   await mp.click('#sheet [data-act="noteCat"][data-v="training"]');
   check('1.3.0 교육 알림 끄기 → 기기 저장소', (await MG(() => JSON.parse(localStorage.getItem('car-company-notify')).training)) === false);
   await mshot3('settings-notify-1366x1024');
@@ -2129,7 +2129,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await A.p.fill('#sy-token', TOKEN); await A.p.click('[data-act="syncOn"]');
   const up1 = await until(() => meta()?.rev === 1);
   const wA1 = await where(A.p), m1 = meta();
-  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 10 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
+  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 11 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
   await until(async () => (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각'));
   check('1.6.0 A 상태 줄: 마지막으로 올린 시각, [지금 올리기]·[서버에서 불러오기]·[연동 끄기]', (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각') && (await A.p.locator('.sync-box [data-act="syncUp"],.sync-box [data-act="syncDown"],.sync-box [data-act="syncOff"]').count()) === 3);
   await shotS(A.p, 'menu-on-1366x1024');
@@ -2757,6 +2757,68 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('3.7.0 설정 › 결정: 최근 자동 승인 기록', (await ap.locator('#sheet .auto-log li').count()) >= 1);
   await shots('log-settings', () => AG(() => document.querySelector('#sheet .auto-log')?.scrollIntoView({ block: 'center' })));
   await actx.close(); }
+
+// ---- 4.0.0 세계 시장 1부·경쟁사 6곳: 세계 화면(진출 전·후), 권역 상세, 진출 창, 판매 법인 투자, 차 상세 권역별 판매, 월 결산 해외 항목, 알림(CAR_SMOKE_400=폴더면 640·800·1024·1366 캡처) ----
+{ const wctx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const wp = await wctx.newPage(); wp.on('pageerror', (e) => errors.push(String(e))); wp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const WG = (fn, a) => wp.evaluate(fn, a), P4 = process.env.CAR_SMOKE_400 ?? '';
+  const SZ4 = [[640, 900], [800, 1200], [1024, 768], [1366, 1024]];
+  const shots4 = async (n, fn) => { for (const [w, h] of SZ4) { await wp.setViewportSize({ width: w, height: h }); await wp.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(wp); check(`4.0.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P4) await wp.screenshot({ path: `${P4}/${n}-${w}x${h}.png` }); } await wp.setViewportSize({ width: 1366, height: 1024 }); };
+  await wp.goto(URL0); await wp.waitForSelector('#title:not([hidden])');
+  await wp.click('[data-act="titleNew"]'); await wp.fill('#t-co', '세계 시험'); await wp.click('[data-act="startNew"]'); await WG(() => window.__car.setSpeed(0));
+  await WG(() => { const c = window.__car, g = c.game, s = g.state; s.week = (2011 - 1970) * 48 + 44; s.cash = 5e9; s.hqLevel = 5; s.reputation = 90; s.factory.level = 5;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2010 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id);
+    for (const [name, body, seg] of [['아리아', 'sedanM', 'family'], ['노바', 'suvL', 'family'], ['솔라', 'hatch', 'youth']]) {
+      g.command({ type: 'startProject', name, body, segment: seg, powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 28 });
+      const p = s.projects.at(-1); g.devCheat('finishDev'); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 }); }
+    s.events.pending.length = 0; c.tick(8); c.render(); });
+  check('4.0.0 경쟁사 6곳(2011년이면 테슬러 등장)', (await WG(() => window.__car.game.state.rivals.map((r) => r.id).join())) === 'hyundae,porty,toyoda,bmv,hondi,tesler');
+  await WG(() => window.__car.goCo('world')); await wp.waitForSelector('.wmap');
+  check('4.0.0 회사 › 세계: 지도(권역 3 + 국내)·권역 표 4줄·진출 전', (await wp.locator('.wmap .wm-r[data-act="wSel"]').count()) === 3 && (await wp.locator('.w-sum tr').count()) === 5 && (await wp.locator('.w-reg [data-act="wOpen"]').count()) === 1);
+  await shots4('world-before');
+  for (const r of ['na', 'eu', 'em']) { await wp.locator(`.wmap [data-act="wSel"][data-v="${r}"]`).click(); await wp.waitForTimeout(100); check(`4.0.0 지도에서 ${r} 고르면 그 권역 상세(취향 막대·진출 단추)`, (await wp.locator('.w-reg .w-bar').count()) >= 5 && (await wp.locator(`.w-reg [data-act="wOpen"][data-v="${r}"]`).count()) === 1); }
+  await wp.locator('.wmap [data-act="wSel"][data-v="na"]').click(); await wp.locator('.w-reg [data-act="wOpen"]').click(); await wp.waitForSelector('#sheet [data-act="wOpenDo"]');
+  check('4.0.0 진출 창: 진출비·시장 규모·판매 상한·관세·운송비', /진출비/.test(await wp.locator('#sheet').innerText()) && /관세/.test(await wp.locator('#sheet').innerText()));
+  await shots4('open-sheet');
+  await wp.locator('#sheet [data-act="wOpenDo"]').click(); await wp.waitForTimeout(200);
+  check('4.0.0 [진출] → 북미 진출(판 상태), 자동 수출 켜짐', (await WG(() => JSON.stringify(window.__car.game.state.world.regions.map((r) => [r.id, r.auto])))) === '[["na",true]]');
+  await WG(() => { const c = window.__car, g = c.game; g.command({ type: 'openRegion', region: 'eu' }); g.command({ type: 'openRegion', region: 'em' }); c.tick(12); c.goCo('world'); });
+  const wst = await WG(() => { const s = window.__car.game.state; return { sold: s.world.regions.map((r) => r.sold), on: s.nameplates.flatMap((n) => n.generations).filter((g) => g.world).length, led: !!s.ledger.at(-1).world }; });
+  check('4.0.0 세 권역 진출 뒤 3개월: 수출 차가 있고 장부에 권역 칸', wst.on > 0 && wst.led && wst.sold.some((x) => x > 0), JSON.stringify(wst));
+  for (const r of ['na', 'eu', 'em']) { await wp.locator(`.wmap [data-act="wSel"][data-v="${r}"]`).click(); await wp.waitForTimeout(100); check(`4.0.0 ${r} 상세: 판매·상한·인지도·수출 차종 표·경쟁사 순위`, (await wp.locator('.w-reg .kpi').count()) >= 6 && (await wp.locator('.w-reg .w-cars tr').count()) >= 2 && (await wp.locator('.w-reg .w-rank .w-bar').count()) >= 5); await shots4(`region-${r}`); }
+  await wp.locator('.wmap [data-act="wSel"][data-v="na"]').click(); await shots4('world-after', () => WG(() => document.querySelector('.w-head')?.scrollIntoView({ block: 'start' })));
+  await wp.locator('.w-reg [data-act="wOffice"]').click(); await wp.waitForSelector('#sheet [data-act="wOfficeDo"]');
+  check('4.0.0 판매 법인 투자 창: 상한·인지도·유지비 비교', /판매 상한/.test(await wp.locator('#sheet').innerText()));
+  await shots4('office-sheet');
+  await wp.locator('#sheet [data-act="wOfficeDo"]').click(); await wp.waitForTimeout(200);
+  check('4.0.0 [투자] → 북미 판매 법인 1등급', (await WG(() => window.__car.game.state.world.regions[0].office)) === 1);
+  const gid = await WG(() => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.world?.na)?.id);
+  if (gid !== undefined) { await wp.locator(`.w-reg [data-act="wPrice"][data-id="${gid}"]`).click(); await wp.waitForSelector('#sheet #w-price');
+    await wp.fill('#sheet #w-price', String((await WG((id) => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id).world.na.ap, gid)) + 50));
+    await wp.locator('#sheet [data-act="wPriceDo"]').click(); await wp.waitForTimeout(150);
+    check('4.0.0 권역 가격 수동 지정', (await WG((id) => window.__car.game.state.nameplates.flatMap((n) => n.generations).find((g) => g.id === id).world.na.price, gid)) > 0); }
+  await WG((id) => { const c = window.__car; c.goTarget({ tab: 'garage', id }); }, gid); await WG(() => { window.__car.render(); }); await wp.waitForTimeout(200);
+  await WG((id) => { const b = document.querySelector('[data-act="gsum"]'); if (window.__car.garageSum) document.querySelector(`[data-act="gpick"][data-id="${id}"], [data-act="gopen"][data-id="${id}"]`)?.click(); }, gid); await wp.waitForTimeout(200);
+  check('4.0.0 차 상세: 권역별 판매 표', (await wp.locator('.w-regs').count()) >= 1);
+  await shots4('car-detail', () => WG(() => document.querySelector('.w-regs')?.scrollIntoView({ block: 'center' })));
+  await WG(() => { const c = window.__car; c.showMonth(c.game.state.ledger.length - 1); }); await wp.waitForSelector('#sheet .mon-world');
+  const mtxt = await wp.locator('#sheet').innerText();
+  check('4.0.0 월 결산: 해외 권역 표·관세·운송비·판매 법인 항목', /관세/.test(mtxt) && /운송비/.test(mtxt) && (await wp.locator('#sheet .mon-world tr').count()) === 4);
+  await shots4('month', () => WG(() => document.querySelector('#sheet .mon-world')?.scrollIntoView({ block: 'center' })));
+  await WG(() => { document.getElementById('sheet').hidden = true; });
+  const wn = (t) => ({ kind: 'news', text: t, category: 'world', topic: 'world' });
+  for (const [w, h] of SZ4) { await wp.setViewportSize({ width: w, height: h }); await WG(() => { document.getElementById('toasts').innerHTML = ''; }); await wp.waitForTimeout(150);
+    await WG((l) => window.__car.events(l), [wn('자동 수출: 「아리아」를 북미 수출 목록에 넣었습니다(권역 가격 3,120만원, 예상 월 420대).'), wn('자동 수출: 「솔라」를 유럽 수출 목록에 넣었습니다(권역 가격 1,430만원, 예상 월 380대).')]); await wp.waitForTimeout(300);
+    const tt = await WG(() => [...document.querySelectorAll('#toasts .toast:not(.out)')].map((x) => x.innerText.replace(/\s+/g, ' ')));
+    check(`4.0.0 세계 시장 알림 묶기 ${w}×${h}`, tt.length === 1 && tt[0].includes('세계 시장') && tt[0].includes('2건'), tt.join(' | ').slice(0, 160));
+    const o = await overflowOf(wp); check(`4.0.0 알림 ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P4) await wp.screenshot({ path: `${P4}/toast-${w}x${h}.png` }); }
+  await wp.setViewportSize({ width: 1366, height: 1024 }); await WG(() => { document.getElementById('toasts').innerHTML = ''; });
+  await wp.click('#tabs button[data-tab="fin"]'); await wp.waitForTimeout(200);
+  check('4.0.0 재무: 경쟁사 카드 6장', (await wp.locator('.rivals .rv-co').count()) === 6);
+  await shots4('fin-rivals', () => WG(() => document.querySelector('.rivals')?.scrollIntoView({ block: 'center' })));
+  await WG(() => window.__car.goCo('sum')); await wp.waitForTimeout(150);
+  check('4.0.0 회사 요약: 세계 시장 칸', (await wp.locator('.co-box[data-v="world"]').count()) === 1);
+  await wctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

@@ -13,7 +13,8 @@ import criticsJson from './critics.json';
 import staffWinsJson from './staffwins.json';
 import notifyJson from './notify.json';
 import subsJson from './subs.json';
-import type { BodyDef, PowertrainDef, OptionDef, SegmentDef, RegionMarket, RivalDef, TechDef, EraEventDef, RandomEventDef, VariantDef, CriticDef, NotifyDef, Stat, Role } from '../sim/types';
+import regionsJson from './regions.json';
+import type { BodyDef, PowertrainDef, OptionDef, SegmentDef, RegionMarket, RegionDef, RivalDef, TechDef, EraEventDef, RandomEventDef, VariantDef, CriticDef, NotifyDef, Stat, Role } from '../sim/types';
 
 export const BODIES = bodiesJson as unknown as BodyDef[];
 export const POWERTRAINS = powertrainsJson as unknown as PowertrainDef[];
@@ -23,6 +24,9 @@ export const SEGMENTS = segmentsJson as unknown as SegmentDef[];
 export const COMPAT = compatJson as Record<string, Record<string, number>>;
 export const MARKET = marketJson as unknown as Record<string, RegionMarket>;
 export const RIVALS = rivalsJson as unknown as RivalDef[];
+/** 4.0.0 해외 권역 3곳(북미·유럽·신흥 시장). 국내는 market.json */
+export const REGIONS = regionsJson as unknown as RegionDef[];
+export const regionById = (id: string): RegionDef => find(REGIONS, id, '권역');
 /** 연구 기술(10장), 등장 연도 순 */
 export const TECHS = techJson as unknown as TechDef[];
 /** 시대 사건(11.1 고정 13개 + 1.2.0 가상 6개, 11.2 무작위 8종) */

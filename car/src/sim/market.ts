@@ -1,6 +1,6 @@
 // 판매 공식(설계서 7.3). 국내 시장만, 지역 취향은 1. 유행과 시대 사건(11장)의 배수가 들어간다
 import { config } from '../config';
-import { COMPAT, MARKET, RIVALS, SEGMENTS, VARIANTS, bodyById, optionById, powertrainById } from '../data';
+import { COMPAT, MARKET, RIVALS, SEGMENTS, VARIANTS, bodyById, optionById, powertrainById, regionById } from '../data';
 import { grades, lifeFactor } from './cars';
 import { eraCostAdd, repEffect, salesFleetMult } from './company';
 import { equipOf, expectMult } from './equip';
@@ -8,7 +8,7 @@ import { REGION, chargingInfra, eraNow, type EraNow, eraWeights, marketMult, req
 import { hash01, type Rng } from './rng';
 import { EV, batteryValue, evDemandMult } from './ev';
 import { diffOf } from './difficulty';
-import { STATS, type Battery, type Equip, type CarState, type Generation, type RivalModel, type RivalState, type Stats } from './types';
+import { STATS, type Battery, type Equip, type CarState, type Generation, type RivalDef, type RivalModel, type RivalState, type Stats } from './types';
 
 export { REGION };
 
@@ -22,9 +22,9 @@ export function interp(years: number[], vals: number[], t: number, geometric = f
   return vals[vals.length - 1];
 }
 
-/** 칸(지역 × 차체)의 월 규모(대). t: 소수 연도(monthTime) */
-export function cellMonthly(body: string, t: number): number {
-  const m = MARKET[REGION], share = m.bodyShare[body];
+/** 칸(지역 × 차체)의 월 규모(대). t: 소수 연도(monthTime). region(4.0.0): 해외 권역(생략하면 국내) */
+export function cellMonthly(body: string, t: number, region = REGION): number {
+  const m = region === REGION ? MARKET[REGION] : regionById(region), share = m.bodyShare[body];
   if (!share) return 0;
   return (interp(m.years, m.annual, t, true) * interp(m.years, share, t) * config.market.scale) / config.time.monthsPerYear;
 }
@@ -69,9 +69,9 @@ export interface SaleCar { body: string; segment: string; stats: Stats; price: n
 
 /** 점유 점수 A(차, 고객층) = 매력 × 가격 매력 × 인지도 × 수명. 등급은 그해 기준(소수 연도는 내림). fleetMult: 영업 직원의 법인·택시 매력 배수(9.1).
  *  w·trend: 사건이 바꾼 고객층 가중치와 유행 계수(생략하면 자료값·1) */
-export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1, w?: Stats, trend = 1, base = bodyById(c.body).basePrice, compat?: number): number {
+export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1, w?: Stats, trend = 1, base = bodyById(c.body).basePrice, compat?: number, epsMult = 1): number {
   const attract = attractiveness(grades(c.stats, Math.floor(year)), c.body, segment, w, trend, compat) * (segment === config.staff.sales.fleetSegment ? fleetMult : 1);
-  const eps = SEGMENTS.find((s) => s.id === segment)!.eps;
+  const eps = SEGMENTS.find((s) => s.id === segment)!.eps * epsMult; // epsMult(4.0.0): 권역 가격 민감도
   const aw = Math.min(1, c.awareness * (segment === c.segment ? config.market.primaryBoost : 1));
   return attract * priceAppeal(base, attract, c.price, eps) * aw * c.life;
 }
@@ -80,10 +80,11 @@ export function scoreA(c: SaleCar, segment: string, year: number, fleetMult = 1,
  *  시대 사건(11장): 칸 규모 × 차체 수요 × 시장 규모, 고객층 비중 × 고객층 배수, 가중치 배수, 유행(차체 × 동력), 동력 수요 배수, 전기는 × 충전 인프라, 경쟁 차 히트작 */
 /** 0.10.0 판매 요인 분해용 바꿔 넣기(생략하면 실제 계산): noEra 시대 사건 효과(충전 인프라 포함) 없음, rivalA 경쟁 차마다 이 A(난이도 배수 전, 히트작 없음),
  *  noOthers 같은 차급의 우리 다른 차 없음, compatSeg 이 고객층의 궁합을 1로 */
-export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string; noExpect?: boolean; noEv?: boolean; noSubs?: boolean } // noExpect(1.1.0): 장비 기대 효과 없음, noEv(1.2.0): 주행 거리·충전 속도 효과 없음, noSubs(3.0.0): 자회사 효과(제 살 깎기·할부) 없음
+export interface DemandAlt { noEra?: boolean; rivalA?: number; noOthers?: boolean; compatSeg?: string; noExpect?: boolean; noEv?: boolean; noSubs?: boolean; region?: string } // region(4.0.0): 해외 권역의 수요(같은 공식에 권역 매개변수: 규모·차체 비중·가중치·가격 민감도·시장 가격·동력 배수·그 권역의 경쟁사 세기와 현지 업체 몫. 경쟁 2부·자회사·영업 직원 효과는 국내만) // noExpect(1.1.0): 장비 기대 효과 없음, noEv(1.2.0): 주행 거리·충전 속도 효과 없음, noSubs(3.0.0): 자회사 효과(제 살 깎기·할부) 없음
 const NO_ERA: EraNow = { statW: {}, body: {}, pt: {}, seg: {}, market: {}, trendAdd: {}, loan: 1, production: 1 };
 export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number, alt: DemandAlt = {}): number {
   const m = Math.floor((year - config.time.startYear) * config.time.monthsPerYear + 1e-6), n = alt.noEra ? NO_ERA : eraNow(state.seed, m);
+  if (alt.region) return regionDemand(state, car, others, year, m, n, alt.region);
   const size = cellMonthly(car.body, year) * (n.body[car.body] ?? 1) * marketMult(n), mix = MARKET[REGION].mix[car.body] ?? {};
   const e = config.market.shareExp, fm = salesFleetMult(state), rm = diffOf(state).rivalMult; // rm: 난이도의 경쟁 차 A 배수
   const em = new Map<SaleCar, number>(), exp = (c: SaleCar) => { let v = em.get(c); if (v === undefined) em.set(c, (v = alt.noExpect || c.legacy ? 1 : expectMult(c.equip ?? equipOf({ options: c.options ?? [] }), c.body, Math.floor(year)))); return v; }; // 1.1.0 시대의 기대(장비)
@@ -109,6 +110,44 @@ export function monthlyDemand(state: CarState, car: SaleCar, others: SaleCar[], 
   if (car.powertrain === EV && !alt.noEv) total *= evDemandMult(state, car, year); // 1.2.0 주행 거리(같은 단계 표준 배터리 대비)·충전 속도
   if (subs) total *= subSalesMult(state); // 3.0.0 할부 금융
   return total;
+}
+/** 4.0.0 해외 권역 수요: 국내 공식(monthlyDemand)과 같은 계산에 권역 매개변수를 넣는다. 경쟁 차 = 각 경쟁사 판매 계산용 세기(정규화) × 권역 배수(인수한 회사 제외) + 현지 업체 몫 */
+function regionDemand(state: CarState, car: SaleCar, others: SaleCar[], year: number, m: number, n: EraNow, rid: string): number {
+  const R = regionById(rid), size = cellMonthly(car.body, year, rid) * (n.body[car.body] ?? 1) * marketMult(n, rid);
+  if (size <= 0) return 0;
+  const mix = MARKET[REGION].mix[car.body] ?? {}, e = config.market.shareExp, pm = R.priceMult;
+  const rivals = regionRivalPull(state, rid, car.body, m);
+  const exp = (c: SaleCar): SaleCar => { const v = c.legacy ? 1 : expectMult(c.equip ?? equipOf({ options: c.options ?? [] }), c.body, Math.floor(year)); return v === 1 ? c : { ...c, life: c.life * v }; };
+  const tr = (c: SaleCar) => trendOf(c.body, year, n) * (c.powertrain ? trendOf(c.powertrain, year, n) : 1);
+  const carE = exp(car), othersE = others.filter((o) => o.body === car.body).map((o) => ({ c: exp(o), tr: tr(o), base: carBasePrice(state, o) * pm }));
+  const trMine = tr(car), baseMine = carBasePrice(state, car) * pm;
+  let total = 0;
+  for (const seg of SEGMENTS) {
+    const w = (mix[seg.id] ?? 0) * (n.seg[seg.id] ?? 1);
+    if (w <= 0) continue;
+    const ww = regionWeights(eraWeights(seg.w, n), R.w);
+    const mine = scoreA(carE, seg.id, year, 1, ww, trMine, baseMine, undefined, R.eps) ** e;
+    let rest = rivals;
+    for (const o of othersE) rest += scoreA(o.c, seg.id, year, 1, ww, o.tr, o.base, undefined, R.eps) ** e;
+    if (mine > 0) total += size * w * (mine / (mine + rest));
+  }
+  if (car.powertrain) total *= (n.pt[car.powertrain] ?? 1) * (R.pt[car.powertrain] ? interp(R.years, R.pt[car.powertrain], year) : 1) * (car.powertrain === config.events.charging.powertrain ? chargingInfra(state.seed, m) : 1);
+  if (car.powertrain === EV) total *= evDemandMult(state, car, year);
+  return total;
+}
+/** 고객층 가중치 × 권역 배수, 합 1로 다시 맞춘다 */
+const regionWeights = (w: Stats, k: Stats): Stats => { const x = { ...w }; let t = 0; for (const s of STATS) t += (x[s] *= k[s] ?? 1); for (const s of STATS) x[s] /= t; return x; };
+const pullCache = new Map<string, number>(); // 성능: 같은 달·같은 경쟁사 상태면 같은 값(권역 수요·가격 어림이 차마다 부른다)
+/** 4.0.0 권역 한 차급의 경쟁 몫 Σ(경쟁 차 A × 난이도 배수)^지수 + 현지 업체 몫 */
+export function regionRivalPull(s: CarState, rid: string, body: string, m: number): number {
+  const key = `${s.seed}:${rid}:${body}:${m}:${s.rivals.length}:${s.rivalry?.out.length ?? 0}:${s.difficulty ?? ''}`, c = pullCache.get(key);
+  if (c !== undefined) return c;
+  const e = config.market.shareExp, rm = diffOf(s).rivalMult, norm = cellNorm(s.rivals, s.seed, body, m);
+  let v = regionById(rid).local * (rivalBase(m) * rm) ** e;
+  for (const r of s.rivals) if (r.models[body] && !s.rivalry?.out.includes(r.id)) v += (rivalCellA(s.rivals, s.seed, r, body, m, norm) * (defR(r.id).regions[rid] ?? 1) * rm) ** e;
+  if (pullCache.size > 4000) pullCache.clear();
+  pullCache.set(key, v);
+  return v;
 }
 /** 3.0.0 한 차급의 자회사 모델 점유 점수 합(A^지수, 이번 달 값). 경쟁 몫 계산(본사 제 살 깎기·경쟁 모델 점유·자회사 판매)이 함께 쓴다 */
 export const subPull = (s: CarState, body: string, badge?: boolean): number => (s.subs ?? []).reduce((a, x) => a + x.models.reduce((b, md) => b + (md.body === body && (badge === undefined || (md.car?.how === 'badge') === badge) ? md.a ** config.market.shareExp : 0), 0), 0); // badge(3.1.0): true면 배지 모델만, false면 배지가 아닌 모델만
@@ -145,19 +184,43 @@ export function awarenessStart(reputation: number, reviewAvg: number): number {
   return Math.min(1, Math.max(0, a.base + repEffect(reputation) / a.repDiv + (reviewAvg - config.grade.mid) * a.reviewPer));
 }
 
-/** 경쟁사 3곳: 칸마다 첫 모델의 기본 A = 기본값 + 강약 ± 난수(게임 난수는 1단계와 같은 순서로 이것만 쓴다). 첫 모델의 나이는 해시로 흩는다 */
+/** 경쟁사: 칸마다 첫 모델의 기본 A = 기본값 + 강약 ± 난수. 처음 3곳은 게임 난수(1단계와 같은 순서), 4.0.0에 더한 회사·늦게 더한 칸은 해시. 첫 모델의 나이는 해시로 흩는다.
+ *  4.0.0: 처음부터 있는 회사만(등장 연도가 있는 회사는 updateRivals가 그때 더한다). 자료 순서 = 처음 3곳(ID 순) 뒤에 새 회사 */
 export function initRivals(rng: Rng, seed: number): RivalState[] {
-  return [...RIVALS].sort((a, b) => (a.id < b.id ? -1 : 1)).map((r, ri) => {
+  const out = RIVALS.filter((r) => !r.from).map((r, ri) => {
     const cells: Record<string, number> = {}, models: Record<string, RivalModel> = {};
     for (const body of Object.keys(r.cells).sort()) {
-      const late = (config.rivals.lateCells as readonly string[]).includes(body), n = config.rivals.noise;
-      const base = rivalBase(0) + r.cells[body] + (late ? (hash01(seed, 4, ri, bodyKey(body)) * 2 - 1) * n : rng.range(-n, n));
+      const n = rivalNoise(r.id);
+      const base = rivalBase(0) + r.cells[body] + (hashFirst(r.id, body) ? (hash01(seed, 4, ri, bodyKey(body)) * 2 - 1) * n : rng.range(-n, n));
       models[body] = firstRivalModel(seed, ri, body, base);
     }
-    const st = { id: r.id, name: r.name, cells, models };
-    updateRivals([st], seed, 0);
-    return st;
+    return { id: r.id, name: r.name, cells, models };
   });
+  updateRivals(out, seed, 0);
+  return out;
+}
+const defR = (id: string): RivalDef => RIVALS.find((x) => x.id === id)!;
+/** 강약 난수 폭(회사마다, 없으면 config) */
+export const rivalNoise = (id: string): number => defR(id).noise ?? config.rivals.noise;
+/** 첫 모델의 강약 난수를 해시로 뽑는 칸(4.0.0에 더한 회사 전부와 0.6.0에 더한 칸) */
+export const hashFirst = (id: string, body: string): boolean => !defR(id).legacy || (config.rivals.lateCells as readonly string[]).includes(body);
+/** 4.0.0 등장 연도가 있는 회사가 나타나는 달(연도 ± entryJitter개월, 시드 해시) */
+export const entryMonth = (seed: number, id: string): number => { const d = defR(id), j = config.rivals.entryJitter; return d.from === undefined ? -Infinity : (d.from - config.time.startYear) * config.time.monthsPerYear + Math.floor(hash01(seed, 91, bodyKey(id)) * (2 * j + 1)) - j; };
+/** 4.0.0 전기차 전문 회사의 세기 몫(0~1) */
+export const evPresence = (seed: number, m: number): number => Math.min(1, config.rivals.evFloor + chargingInfra(seed, m) * config.rivals.evPer);
+const presence = (d: RivalDef, seed: number, m: number): number => (d.ev ? evPresence(seed, m) : 1);
+/** 4.0.0 경쟁 세기 정규화 배수(차급마다): 지금 있는 회사들의 Σ 몫 × (기본 A + 강약)^지수가 처음 3곳의 합과 같아지게 */
+export function cellNorm(rivals: RivalState[], seed: number, body: string, m: number): number {
+  const b = rivalBase(m), e = config.market.shareExp;
+  let ref = 0, tot = 0;
+  for (const id of config.rivals.refIds) { const c = defR(id).cells[body]; if (c !== undefined) ref += Math.max(0, b + c) ** e; }
+  for (const r of rivals) { const d = defR(r.id), c = d.cells[body]; if (c !== undefined && r.models[body]) tot += presence(d, seed, m) * Math.max(0, b + c) ** e; }
+  return tot > 0 && ref > 0 ? (ref / tot) ** (1 / e) : 1;
+}
+/** 4.0.0 경쟁 차 한 칸의 판매 계산용 세기(정규화·전기차 몫 포함, 경쟁 2부 가감 전) */
+export function rivalCellA(rivals: RivalState[], seed: number, r: RivalState, body: string, m: number, norm = cellNorm(rivals, seed, body, m)): number {
+  const d = defR(r.id);
+  return rivalA(r.models[body], m) * norm * (d.ev ? evPresence(seed, m) ** (1 / config.market.shareExp) : 1);
 }
 /** 경쟁사의 성장(3단계 설계 결정 b): 경쟁 차 기본 A = 1970년 base에서 해마다 growth씩 올라 max에서 멈춘다. 새 모델을 낼 때의 달로 정한다 */
 export const rivalBase = (month: number): number => {
@@ -172,24 +235,38 @@ export function firstRivalModel(seed: number, ri: number, body: string, base: nu
   const cycle = rivalCycle(seed, ri, body, 0);
   return { n: 0, start: -Math.floor(hash01(seed, 2, ri, bodyKey(body)) * cycle), cycle, base };
 }
+/** 4.0.0 새로 나타나는 회사(또는 저장 변환으로 더하는 회사)의 첫 라인업: 첫 모델 출시를 m 이전 반 주기 안으로 흩는다. 강약 난수는 해시 */
+export function enterRival(seed: number, ri: number, id: string, m: number): RivalState {
+  const d = defR(id), models: Record<string, RivalModel> = {};
+  for (const body of Object.keys(d.cells).sort()) {
+    const md = firstRivalModel(seed, ri, body, 0), start = m + Math.floor(md.start / 2);
+    models[body] = { ...md, start, base: rivalBase(Math.max(0, start)) + d.cells[body] + (hash01(seed, 4, ri, bodyKey(body)) * 2 - 1) * rivalNoise(id) };
+  }
+  return { id, name: d.name, cells: {}, models };
+}
 /** 경쟁 차의 지금 A: 새 모델 × (1 + fresh) × (1 − decay)^수명 나이. 주기 절반에 페이스리프트(수명 나이 40%로) */
 export function rivalA(md: RivalModel, month: number): number {
   const r = config.rivals, age = month - md.start, half = md.cycle * r.faceliftAt;
   const life = age < half ? age : half * r.faceliftKeep + (age - half);
   return md.base * (1 + r.fresh) * (1 - r.decay) ** life;
 }
-/** 매달: 주기가 끝난 칸은 새 모델(기본 A를 해시 난수로 다시 뽑음, 게임 난수 소비 없음), 그리고 칸 값 갱신. ID·차체 순 */
+/** 매달: 등장할 때가 된 회사를 더하고(4.0.0), 주기가 끝난 칸은 새 모델(기본 A를 해시 난수로 다시 뽑음, 게임 난수 소비 없음), 그리고 칸 값 갱신(정규화 포함). ID·차체 순 */
 export function updateRivals(rivals: RivalState[], seed: number, month: number): void {
-  const r = config.rivals;
+  for (const d of RIVALS) if (d.from !== undefined && !rivals.some((r) => r.id === d.id) && month >= entryMonth(seed, d.id)) rivals.push(enterRival(seed, rivals.length, d.id, month));
   rivals.forEach((st, ri) => {
     const def = RIVALS.find((x) => x.id === st.id);
     for (const body of Object.keys(st.models).sort()) {
       const md = st.models[body];
       if (month - md.start >= md.cycle) {
         const n = md.n + 1;
-        st.models[body] = { n, start: month, cycle: rivalCycle(seed, ri, body, n), base: rivalBase(month) + (def?.cells[body] ?? 0) + (hash01(seed, 3, ri, bodyKey(body), n) * 2 - 1) * r.noise };
+        st.models[body] = { n, start: month, cycle: rivalCycle(seed, ri, body, n), base: rivalBase(month) + (def?.cells[body] ?? 0) + (hash01(seed, 3, ri, bodyKey(body), n) * 2 - 1) * rivalNoise(st.id) };
       }
-      st.cells[body] = rivalA(st.models[body], month);
     }
   });
+  const norms = new Map<string, number>();
+  for (const st of rivals) for (const body of Object.keys(st.models).sort()) {
+    let k = norms.get(body);
+    if (k === undefined) norms.set(body, (k = cellNorm(rivals, seed, body, month)));
+    st.cells[body] = rivalCellA(rivals, seed, st, body, month, k);
+  }
 }
