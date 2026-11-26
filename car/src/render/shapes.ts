@@ -37,7 +37,7 @@ export const BODY: Record<BodyId, BodyShape> = {
 // 휠 크기 단계별 타이어 반지름 증가와 림 비율(실제 차처럼 큰 휠은 타이어가 얇아져 바깥 지름은 조금만 는다).
 // 휠 아치는 가장 큰 휠 기준으로 고정한다: 휠을 바꿔도 옆 윤곽이 그대로다(페이스리프트에서 휠만 바뀌는 경우)
 export const WHEEL_GROW = [0, .02, .04] as const;
-export const RIM_RATIO = [.6, .66, .73] as const;
+export const RIM_RATIO = [.66, .72, .78] as const;
 export const BELT_OVER_ARCH = .13; // 허리선이 휠 아치 꼭대기보다 최소 이만큼 위(fenders 차체 제외)
 
 // 시대 스타일: 끝 둥글림(re: 위아래, rpF/rpR: 평면 앞뒤), 지붕·바닥 모서리 반경, 앞뒤 좁아짐,
@@ -57,13 +57,24 @@ export const ERA: Record<Era, EraStyle> = {
   // 쐐기형 직선: 앞이 낮고 뒤가 높은 허리선, 날 선 모서리, 검은 수지 범퍼
   1980: { re: .06, rpF: .22, rpR: .16, rc: .025, rb: .025, taper: .03, smooth: 1, wedge: .16, faceW: 1, classic: false, tumble: .16, crown: .012, bow: .004, tuck: .03, chin: .03, sh: 1, len: 1.01, roofD: -.03, beltD: -.03, wbK: .97, wrD: -.01 },
   // 모서리 둥근 비누형: 크게 둥근 끝, 배부른 옆판, 많이 누운 옆 유리
-  1990: { re: .32, rpF: .66, rpR: .56, rc: .18, rb: .12, taper: .1, smooth: 4, wedge: .04, faceW: .86, classic: false, tumble: .34, crown: .055, bow: .04, tuck: .09, chin: .08, sh: 0, len: 1, roofD: 0, beltD: 0, wbK: 1, wrD: 0 },
+  1990: { re: .3, rpF: .44, rpR: .38, rc: .18, rb: .12, taper: .12, smooth: 4, wedge: .04, faceW: .86, classic: false, tumble: .34, crown: .055, bow: .04, tuck: .1, chin: .08, sh: 0, len: 1, roofD: 0, beltD: 0, wbK: 1, wrD: 0 },
   // 높은 허리선·짧은 오버행·큰 바퀴, 쐐기
-  2010: { re: .16, rpF: .5, rpR: .38, rc: .09, rb: .06, taper: .06, smooth: 2, wedge: .12, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .02, tuck: .065, chin: .06, sh: 1, len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .04 },
+  2010: { re: .16, rpF: .4, rpR: .38, rc: .09, rb: .06, taper: .1, smooth: 2, wedge: .12, faceW: 1, classic: false, tumble: .3, crown: .03, bow: .045, tuck: .1, chin: .06, sh: 1, len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .04 },
   // 매끈한 면, 짧은 앞 오버행(전기차는 휠베이스 더 길고 보닛 짧게: variant.chassisOf)
   // 1.0.0 2030년대: 더 둥근 앞뒤(포드형), 높은 허리선·큰 휠, 긴 휠베이스
-  2030: { re: .24, rpF: .68, rpR: .5, rc: .13, rb: .08, taper: .06, smooth: 3, wedge: .04, faceW: 1, classic: false, tumble: .3, crown: .04, bow: .024, tuck: .07, chin: .09, sh: 1, len: 1.01, roofD: .02, beltD: .1, wbK: 1.08, wrD: .05 },
-  2020: { re: .2, rpF: .58, rpR: .44, rc: .11, rb: .07, taper: .05, smooth: 3, wedge: .06, faceW: 1, classic: false, tumble: .32, crown: .05, bow: .032, tuck: .07, chin: .08, sh: 1, len: 1, roofD: 0, beltD: .08, wbK: 1.06, wrD: .03 },
+  2030: { re: .24, rpF: .5, rpR: .42, rc: .13, rb: .08, taper: .1, smooth: 3, wedge: .04, faceW: 1, classic: false, tumble: .3, crown: .03, bow: .04, tuck: .1, chin: .09, sh: 1, len: 1.01, roofD: .02, beltD: .1, wbK: 1.08, wrD: .05 },
+  2020: { re: .2, rpF: .44, rpR: .44, rc: .11, rb: .07, taper: .1, smooth: 3, wedge: .06, faceW: 1, classic: false, tumble: .32, crown: .03, bow: .04, tuck: .1, chin: .08, sh: 1, len: 1, roofD: 0, beltD: .08, wbK: 1.06, wrD: .03 },
+};
+// 5.0.0 앞뒤 끝 옆모습: 윗선(보닛·트렁크)이 fT/rT 길이에 걸쳐 코 높이(ny: 지상고~허리선 비율)로 내려오고, 아랫선(턱)은 fB/rB에 걸쳐 올라온다.
+// 윗선 구간이 길수록 얼굴이 뒤로 눕는다(곧게 선 벽 대신). p: 곡선 지수(2 둥근 사분원, 클수록 각진 모서리)
+export interface EndStyle { fT: number; fB: number; rT: number; rB: number; ny: number; nyR: number; p: number }
+export const END: Record<Era, EndStyle> = {
+  1970: { fT: .2, fB: .1, rT: .16, rB: .1, ny: .5, nyR: .55, p: 3.2 },
+  1980: { fT: .3, fB: .12, rT: .2, rB: .12, ny: .42, nyR: .52, p: 2.8 },
+  1990: { fT: .6, fB: .24, rT: .46, rB: .22, ny: .4, nyR: .5, p: 2 },
+  2010: { fT: .46, fB: .2, rT: .34, rB: .18, ny: .4, nyR: .52, p: 2.9 },
+  2020: { fT: .48, fB: .22, rT: .36, rB: .2, ny: .4, nyR: .52, p: 2.8 },
+  2030: { fT: .56, fB: .26, rT: .4, rB: .22, ny: .42, nyR: .5, p: 2.4 },
 };
 export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1980 ? 1970 : e < 1990 ? 1980 : e < 2010 ? 1990 : e < 2020 ? 2010 : e < 2030 ? 2020 : 2030; };
 export const eraStyle = (look: CarLook): EraStyle => ERA[eraOf(look)];

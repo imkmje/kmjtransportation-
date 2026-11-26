@@ -29,8 +29,9 @@ import * as I from './insight';
 import * as V from './views';
 import * as EQ from './equip';
 
-type Screen = 'garage' | 'start' | 'plan' | 'lift' | 'derive' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records'; // derive: 1.3.0 파생 모델 고르기
-type Tab = 'garage' | 'dev' | 'research' | 'company' | 'fin' | 'records'; // 0.9.0 큰 메뉴 6개(연구·재무를 회사 안쪽에서 꺼냄)
+type Screen = 'today' | 'garage' | 'start' | 'plan' | 'lift' | 'derive' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records' | 'rivals'; // derive: 1.3.0 파생 모델 고르기, today·rivals: 5.0.0
+/** 5.0.0 아래쪽 주 메뉴 7탭. 기존 화면(Screen)을 탭 아래로 묶는다(mainTab) */
+type Main = 'today' | 'car' | 'research' | 'people' | 'group' | 'market' | 'fin';
 type PlanTab = 'sum' | 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir' | 'budget';
 /** 기획 초안. nameplateId 0 = 새 차종, 아니면 그 차종의 풀체인지 */
 type Draft = ProjectSpec & { equip?: EQ.Equip; equipMode?: 'rec' | 'prev' | 'custom'; color: string; nameplateId: number; chassisSeed: number; faceSeed: number; team: number[]; year?: number; mode?: 'sum' | 'step'; subId?: number }; // subId(3.1.0): 자회사 신차 기획(가상 팀, 영역 안) // year: 초안을 만든(마지막으로 맞춘) 해, mode: 한 화면 요약(0.8.0 기본) / 단계별
@@ -716,8 +717,10 @@ export function startApp(): void {
       case 'choice': // 화면 안 창이 떠 있는 동안 시간이 멈춘다. 자동 멈춤을 끄면 창 대신 알림만
         if (quietChoice) break;
         fx('event');
-        if (!pauseOn.choice) toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() }, 'choice');
-        else if (sheet.hidden && $('#ask').hidden && title.hidden) showChoice();
+        // 5.0.0 창을 띄우지 않는다: 자동 멈춤이 켜져 있으면 시간을 멈추고, 오늘 탭이면 그 결정을 연다. 다른 탭에서는 위쪽 [정할 일 n건]과 알림으로
+        if (pauseOn.choice && speed > 0 && !skipPause) setSpeed(0);
+        if (screen === 'today' && pauseOn.choice) { const c = Q.pendingChoices(s)[0]; if (c) todaySel = `choice:${c.id}`; lastPanel = ''; }
+        toast(newsLine(e.text), 'alert', '결정 대기', 12000, 'choice', { label: '결정하기', fn: () => showChoice() }, 'choice');
         break;
       case 'advice': { // 출시 대기가 된 주의 안내는 눈에 띄게, 누르면 출시 준비 화면
         const w = s.projects.find((p) => p.waiting && !waitSeen.has(p.id));
@@ -893,7 +896,7 @@ export function startApp(): void {
     const s = game.state; sheet.hidden = true; closeDrawer(); todoTab = 'todo';
     switch (t.tab) {
       case 'garage': garageAt(t.id); return;
-      case 'dev':
+      case 'dev': devFrom = 'car';
         if (t.sub === 'launch' && t.id !== undefined && Q.projectById(s, t.id)) { openLaunch(t.id); return; }
         if (t.sub === 'plan') { void act('plan', document.createElement('i')); return; }
         if (t.id !== undefined && Q.projectById(s, t.id)) devSel = t.id;
@@ -958,7 +961,7 @@ export function startApp(): void {
     put($('#co'), sx ? sx.name : s.companyName); $('#co').title = sx ? `${sx.name} · ${s.companyName}의 자회사` : s.companyName;
     put($('#mylogo'), sx ? subMark(sx.name, sx.color, 26) : myLogo(26), true);
     $('#hqback').hidden = !sx;
-    for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.hidden = !!sx && (b.dataset.tab === 'research' || b.dataset.tab === 'fin' || (!isBrandK(sx.kind) && (b.dataset.tab === 'garage' || b.dataset.tab === 'dev')));
+    for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.hidden = !!sx && !(b.dataset.tab === 'group' || b.dataset.tab === 'fin' || (isBrandK(sx.kind) && b.dataset.tab === 'car')); // 3.1.0 운영 전환: 자회사에 맞는 탭만
     put($('#date'), game.dateLabel);
     // 1.0.0 좁은 상단 바(1240px 이하)에서는 1조 이상을 "3.4조"로 줄인다(전체 금액은 title·aria)
     const topMoney = (v: number) => (innerWidth <= 1240 && Math.abs(v) >= 1e8 ? `${v < 0 ? '−' : ''}${(Math.abs(v) / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}조` : money(v));
@@ -982,9 +985,10 @@ export function startApp(): void {
     { const T = todoCount(), tb = $('#todobtn'); put($('#todo-n'), String(T.length)); tb.setAttribute('aria-expanded', String(!drawer.hidden)); tb.classList.toggle('urgent', T.some((x) => x.urgent)); tb.classList.toggle('none', !T.length);
       const un = execUnread(s); tb.classList.toggle('has-rep', un > 0); tb.setAttribute('aria-label', `할 일 ${T.length}건${un ? `, 읽지 않은 임원 보고 ${un}건` : ''} 보기`); }
     { const sb = $('#skipbtn'); sb.classList.toggle('on', !!skip); sb.setAttribute('aria-pressed', String(!!skip)); put(sb, skip ? '<span class="sk-l">진행 중 · </span>멈추기' : '<span class="sk-l">다음 일까지</span><span class="sk-s" aria-hidden="true">다음 일</span>', true); sb.setAttribute('aria-label', skip ? '진행 중, 멈추기' : '다음 일까지'); } // 0.9.0 좁은 상단 바에서는 짧게
-    const tab: Tab = deciding() ? 'dev' : (screen as Tab);
-    for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
-    { const dv = document.querySelector<HTMLElement>('#tabs button[data-tab="dev"]')!, on = !!(draft || lift); dv.classList.toggle('has-draft', on); if (on) dv.title = '기획 중인 차가 있습니다'; else dv.removeAttribute('title'); }
+    const tab = mainTab();
+    for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) { const on = b.dataset.tab === tab; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+    { const cb = document.querySelector<HTMLElement>('#tabs button[data-tab="car"]')!, on = !!(draft || lift); cb.classList.toggle('has-draft', on); if (on) cb.title = '기획 중인 차가 있습니다'; else cb.removeAttribute('title'); }
+    { const db = $('#decbtn'), L = todayList(); db.hidden = tab === 'today' || !L.length || !!sx; put($('#dec-n'), String(L.length)); db.classList.toggle('urgent', L.some((x) => x.urgent)); db.setAttribute('aria-label', `정할 일 ${L.length}건 보기(오늘 탭)`); } // 5.0.0 오늘 탭이 아닐 때 정할 일
     { // 0.9.0 큰 메뉴 점 하나: 연구(빈 연구 칸·규제 필수 미연구), 재무(현금 마이너스). 할 일 목록과 같은 판단
       const T = todos(), dot = (t: string, on: boolean, why: string) => { const el = document.querySelector<HTMLElement>(`#tabs button[data-tab="${t}"]`)!; el.classList.toggle('has-dot', on); if (on) el.title = why; else el.removeAttribute('title'); };
       const reg = T.some((x) => x.kind === 'regulation'), slot = T.some((x) => x.kind === 'research');
@@ -1016,16 +1020,26 @@ export function startApp(): void {
       if (screen === 'plan' && draft?.subId !== sx.id) screen = 'dev';
       if (!['garage', 'dev', 'plan', 'company', 'records'].includes(screen) || (!isBrandK(sx.kind) && (screen === 'garage' || screen === 'dev' || screen === 'plan'))) screen = 'company';
     }
+    isShow = false;
     const v: View = sx && screen !== 'plan' ? (screen === 'garage' ? subGarageView(sx.id) : screen === 'dev' ? subDevView(sx.id) : screen === 'records' ? subRecordsView(sx.id) : { ov: '', panel: subBar(sx) + subDetailView(sx.id), look: undefined })
+      : screen === 'today' ? todayView() : screen === 'rivals' ? { ov: '', panel: rivalsView(), look: undefined }
       : screen === 'garage' ? (garageSub && s.subs?.some((x) => x.id === garageSub!.id) ? subGarageView(garageSub.id, true) : garageView()) : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView() : screen === 'derive' ? deriveView()
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : screen === 'research' ? researchTab() : screen === 'fin' ? finTab() : recordsView(), look: undefined };
+    if (!sx) { const sb = secBar(); if (sb) v.panel = sb + v.panel; } // 5.0.0 탭 안 구역 전환 줄
+    else if (isBrandK(sx.kind) && (screen === 'garage' || screen === 'dev')) v.panel = `<div class="seg cotabs secbar" role="tablist" aria-label="자회사 차"><button role="tab" data-act="tab" data-v="garage" aria-selected="${screen === 'garage'}">차고</button><button role="tab" data-act="tab" data-v="dev" aria-selected="${screen === 'dev'}">개발</button></div>` + v.panel; // 운영 전환: 자회사 차고·개발
+    { const mt = mainTab(), flow = mt === 'car' && !sx && deciding(), carMode = mt === 'car' && !sx && !flow, side = $('#side'), m = $('#main'); side.hidden = !carMode; m.classList.toggle('flow', flow); // 기획·출시 흐름은 왼쪽 목록 없이 무대 + 넓은 패널(기존 배치)
+      if (carMode) { const h = sideList(); if (side.dataset.v !== h) { side.dataset.v = h; side.innerHTML = h; } }
+      m.classList.toggle('car', carMode); m.classList.toggle('show', carMode && isShow); m.classList.toggle('today', screen === 'today' && !sx);
+      for (const t of ['today', 'car', 'research', 'people', 'group', 'market', 'fin']) m.classList.toggle(`t-${t}`, mt === t);
+      setVar(m, '--mainh', `${m.clientHeight}px`); setVar(document.body, '--toph', `${Math.round($('#top').getBoundingClientRect().bottom)}px`); }
     $('#main').classList.toggle('full', v.look === undefined && !v.office);
     $('#main').classList.toggle('wide', !!v.office); // 개발 탭 사무실: 위에 넓게, 아래에 패널 세 칸
     if (v.ov !== lastOv) { ov.innerHTML = v.ov; lastOv = v.ov; } // 띠 높이를 사무실보다 먼저 정한다(--office-top-inset)
     { const kb = $('#keys'), kh = v.look !== undefined && !v.office ? v.keys ?? '' : ''; if (kb.dataset.v !== kh) { kb.dataset.v = kh; kb.innerHTML = kh; } kb.hidden = !kh; $('#main').classList.toggle('haskeys', !!kh); } // 0.9.0 무대 아래 핵심 수치 띠
     placeToasts();
     showOffice(v.office ?? null);
+    stage?.setZoom($('#main').classList.contains('show') ? 1.32 : 1);
     if (v.look !== undefined && !v.office) showLook(v.look);
     const ae = document.activeElement as HTMLElement | null;
     const busy = (!!ae && panel.contains(ae) && (ae.matches('input[type=text]') || (dragging && ae.matches('input[type=range]')))) || !!pxHold?.isConnected;
@@ -1047,7 +1061,126 @@ export function startApp(): void {
     const t = document.createElement('template'); t.innerHTML = html;
     for (const n of [...t.content.querySelectorAll<HTMLElement>('[data-live]')]) { const o = document.getElementById(n.id); if (o && o.outerHTML !== n.outerHTML) o.replaceWith(n); }
   }
-  const go = (sc: Screen) => { screen = sc; lastPanel = ''; panel.scrollTop = 0; render(); };
+  const go = (sc: Screen) => { screen = sc; lastPanel = ''; panel.scrollTop = 0; $('#main').scrollTop = 0; render(); };
+  // ---------- 5.0.0 주 메뉴 7탭 ----------
+  let devFrom: 'car' | 'people' = 'car', mkLast: 'rivals' | 'world' | 'awards' = 'rivals', isShow = false;
+  /** 지금 화면이 속한 주 메뉴 탭 */
+  function mainTab(): Main {
+    const sx = curSub();
+    if (sx) return screen === 'garage' || screen === 'dev' || screen === 'plan' ? 'car' : screen === 'records' ? 'fin' : 'group';
+    switch (screen) {
+      case 'today': return 'today';
+      case 'dev': return devFrom;
+      case 'research': return 'research';
+      case 'company': return coTab === 'staff' || coTab === 'exec' ? 'people' : coTab === 'world' ? 'market' : 'group';
+      case 'rivals': return 'market';
+      case 'records': return recTab === 'awards' ? 'market' : 'fin';
+      case 'fin': return 'fin';
+      default: return 'car';
+    }
+  }
+  /** 주 메뉴 탭 누르기(키보드 Enter·Space도 button이라 같다) */
+  function goTab(t: string): void {
+    if (!game) return;
+    const sx = curSub();
+    if (sx) { go(t === 'car' ? 'garage' : t === 'fin' ? 'records' : 'company'); return; }
+    switch (t) {
+      case 'today': go('today'); return;
+      case 'car': garageSum = false; devFrom = 'car'; go('garage'); return; // 차 탭은 고른 차의 무대부터(전 차종 표는 왼쪽 목록 맨 위)
+      case 'research': go('research'); return;
+      case 'people': if (coTab !== 'staff' && coTab !== 'exec') coTab = 'staff'; go('company'); return;
+      case 'group': if (!['sum', 'hq', 'factory', 'sub'].includes(coTab)) coTab = 'sum'; go('company'); return;
+      case 'market': if (mkLast === 'world') { coTab = 'world'; go('company'); } else if (mkLast === 'awards') { recTab = 'awards'; go('records'); } else go('rivals'); return;
+      case 'fin': go('fin'); return;
+    }
+  }
+  /** 탭 안에 화면이 여럿이면 위쪽 구역 전환 줄. [act, v, 이름] */
+  const SECS: Partial<Record<Main, [string, string, string][]>> = {
+    people: [['cotab', 'staff', '직원·채용'], ['cotab', 'exec', '임원'], ['sec', 'office', '사무실']],
+    group: [['cotab', 'sum', '그룹 종합'], ['cotab', 'hq', '본사'], ['cotab', 'factory', '공장'], ['cotab', 'sub', '자회사']],
+    market: [['sec', 'rivals', '경쟁사'], ['cotab', 'world', '세계'], ['rectab', 'awards', '시상식']],
+    fin: [['sec', 'fin', '재무'], ['rectab', 'cars', '차종 계보'], ['rectab', 'hall', '명예의 전당'], ['rectab', 'stats', '통계·도전 과제'], ['rectab', 'years', '연 보고서'], ['rectab', 'combo', '조합 노트'], ['rectab', 'news', '뉴스'], ['rectab', 'past', '지난 판의 차']],
+  };
+  function secBar(): string {
+    const t = mainTab(), list = SECS[t]; if (!list) return '';
+    const on = (a: string, v: string) => a === 'cotab' ? screen === 'company' && coTab === v : a === 'rectab' ? screen === 'records' && recTab === v : v === 'office' ? screen === 'dev' : screen === v;
+    const names: Record<string, string> = { people: '사람', group: '그룹', market: '시장', fin: '재무' };
+    return `<div class="seg cotabs secbar" role="tablist" aria-label="${names[t]} 구역">${list.map(([a, v, l]) => `<button role="tab" data-act="${a}" data-v="${v}" aria-selected="${on(a, v)}">${l}</button>`).join('')}</div>`;
+  }
+  /** 차 탭 왼쪽 목록: 내 차(이름·차급·평론), 개발 중, 새 차 기획 */
+  function sideList(): string {
+    const s = game!.state, GL = garageList(), cur = screen === 'garage' && !garageSum ? garageId : -1;
+    const car = (g: Generation) => `<button class="cl-it${cur === g.id ? ' on' : ''}" data-act="carOpen" data-id="${g.id}" aria-current="${cur === g.id}"><b>${esc(nameOf(g))}</b><small>${esc(bodyById(g.body).name)} · ${score(g.reviewAvg)}${g.status === 'ending' ? ' · 단종 예정' : ''}</small></button>`;
+    const left = (p: Project) => p.waiting ? '출시 대기' : p.phase === 'design' ? `${Math.max(0, p.designWeeks - p.weeksDone)}주 남음` : `시험 ${p.testWeeks}주째`;
+    const dev = (p: Project) => `<button class="cl-it dev${screen === 'dev' && devSel === p.id ? ' on' : ''}" data-act="carDev" data-id="${p.id}"><b>${esc(p.name)}</b><small>${p.auto ? '위임 · ' : ''}${left(p)}</small></button>`;
+    const plan = draft || lift ? `<button class="cl-it dev${deciding() ? ' on' : ''}" data-act="devTab"><b>${esc(draftName())}</b><small>기획 중 · 이어서 하기</small></button>` : `<button class="cl-it dev${screen === 'dev' && devSel === null ? ' on' : ''}" data-act="devTab"><b>개발 현황</b><small>사무실 · 개발팀</small></button>`;
+    return `<div class="cl" role="list">${GL.length >= 2 ? `<button class="cl-it all${screen === 'garage' && garageSum ? ' on' : ''}" data-act="gsum"><b>전 차종 비교</b><small>판매 중 ${GL.length}대</small></button>` : ''}${GL.map(car).join('')}${GL.length ? '' : '<p class="cl-none">판매 중인 차가 없습니다</p>'}
+      <p class="cl-h">개발 중</p>${plan}${s.projects.map(dev).join('')}</div><button class="cl-new" data-act="plan">새 차 기획</button>`;
+  }
+  // ---------- 5.0.0 오늘 탭: 내가 정할 일(할 일 목록과 같은 계산) · 알아서 돌아가는 일 · 상세(창 없이) ----------
+  let todaySel: string | null = null; // 고른 일(키). null = 맨 위, '' = 아무것도 펼치지 않음(세로 화면)
+  const todayList = (): Q.TodoItem[] => (game ? shownTodos() : []);
+  const todayWide = () => innerWidth >= 900;
+  const KIND_WORD: Record<string, string> = { new: '신차', fullchange: '세대교체', facelift: '페이스리프트', fix: '긴급 개선', derivative: '파생 모델' };
+  function autoRows(): { rows: string[]; foot: string } {
+    const s = game!.state, rows: string[] = [];
+    const row = (act: string, attr: string, l: string, r: string) => `<button class="td-a" data-act="${act}"${attr}><span>${l}</span><b>${r}</b></button>`;
+    for (const p of s.projects) rows.push(row('carDev', ` data-id="${p.id}"`, `「${esc(p.name)}」 ${KIND_WORD[p.kind] ?? ''} 개발${p.auto ? ' (위임)' : ''}`, p.waiting ? '출시 대기' : p.phase === 'design' ? `${Math.max(0, p.designWeeks - p.weeksDone)}주` : `시험 ${p.testWeeks}주째`));
+    for (const a of Q.researchInfo(s).active) rows.push(row('tab', ' data-v="research"', `연구 · ${esc(a.name)}`, a.weeksLeft === null ? '—' : `${a.weeksLeft}주`));
+    for (const x of s.subs ?? []) { const d = Q.subDetail(s, x.id); if (d && d.mode === 'delegate') rows.push(row('cotab', ' data-v="sub"', `자회사 「${esc(d.name)}」 (전반 위임)`, `이익 ${money(d.lastMonth?.profit ?? 0, true)}`)); }
+    for (const r of WD.regionViews(s)) if (r.open && r.auto) rows.push(row('cotab', ' data-v="world"', `자동 수출 · ${esc(r.name)}`, `${num(r.sold)}대`));
+    const n = Q.autoLog(s, 99).filter((x) => x.week > s.week - config.time.weeksPerMonth).length;
+    return { rows, foot: n ? `<p class="td-foot">자동 승인으로 최근 한 달 동안 ${n}건을 처리했습니다</p>` : '' };
+  }
+  const tdHead = (tag: string, h: string, p: string) => `<div class="td-dh"><span class="td-tag">${esc(tag)}</span><h1>${esc(h)}</h1>${p ? `<p>${esc(p)}</p>` : ''}</div>`;
+  const autoChk = new Set<number>(); // 오늘 탭 결정의 '자동 승인' 체크(패널을 다시 그려도 남게)
+  function choiceBlock(c: ReturnType<typeof Q.pendingChoices>[number]): string {
+    const def = c.choices[c.defaultChoice]?.label ?? '';
+    return `<div class="choice-sheet td-choice" data-id="${c.id}">${tdHead(`결정 · ${c.weeksLeft}주 남음`, c.name, c.text)}
+      <div class="evchoices">${c.choices.map((x, i) => `<button class="evc" data-act="resolveEv" data-id="${c.id}" data-v="${i}"><b>${esc(x.label)}${i === c.defaultChoice ? ' <small>(고르지 않으면 이것)</small>' : ''}</b><small>${esc(x.result)}</small>${x.costText ? `<span class="ev-cost ${x.cost > 0 ? 'neg' : 'pos'}">${esc(x.costText)}</span>` : ''}</button>`).join('')}</div>
+      <p class="hint">${c.weeksLeft}주 안에 고르지 않으면 「${esc(def)}」${josa(def, '으로/로')} 정해집니다.</p>
+      ${Q.autoOn(game!.state, c.eventId) ? `<p class="hint auto-held">${esc(heldWhy(c.id))}</p>` : `<label class="chk auto-chk"><input type="checkbox" data-ad="${esc(c.eventId)}"${autoChk.has(c.id) ? ' checked' : ''}> 이 종류(${esc(c.name)})는 앞으로 지금 고르는 답으로 자동 승인 ${ib('term:결정 자동 승인')}</label>`}
+      <div class="row td-btns"><button class="btn" data-act="later">나중에</button></div></div>`;
+  }
+  function todayDetail(t: Q.TodoItem): string {
+    const s = game!.state;
+    const later = `<div class="td-later">${t.kind === 'choice' ? '' : `<button class="tl" data-act="todoLater" data-k="${esc(t.key)}">나중에</button>`}${NO_MUTE.has(t.kind) ? '' : `<button class="tl" data-act="todoMute" data-v="${t.kind}">다시 알리지 않기</button>`}</div>`;
+    const go1 = (label: string) => `<button class="btn ink" data-act="todoGo" data-k="${esc(t.key)}">${label}</button>`;
+    let body = '';
+    switch (t.kind) {
+      case 'choice': { const c = Q.pendingChoices(s).find((x) => `choice:${x.id}` === t.key); if (c) return choiceBlock(c); break; }
+      case 'research': {
+        const R = Q.researchInfo(s), rec = Q.recommendTech(s) ?? R.fields.flatMap((f) => f.techs).filter((t) => t.status === 'available' && t.reason === null).sort((a, b) => a.cost.money - b.cost.money || (a.id < b.id ? -1 : 1))[0]; // 임원 추천 기준(등장 연도 지난 기술)에 맞는 것이 없으면 지금 시작할 수 있는 가장 싼 기술
+        body = tdHead('연구', t.title, `연구 칸 ${R.slots}개 중 ${R.used}개를 쓰고 있습니다. 주간 연구 점수 ${num(Math.round(R.pointsPerWeek))}.`)
+          + (rec ? `<div class="td-card"><p class="lbl">추천 연구</p><h2>${esc(rec.name)}</h2><p class="hint">${esc(rec.effects || rec.desc)}</p><div class="kpis">${kpi('연구비', money(rec.cost.money))}${kpi('걸리는 기간', rec.weeksLeft === null ? '—' : `${rec.weeksLeft}<span>주</span>`)}${rec.requiredBy ? kpi('규제', esc(rec.requiredBy.eventName)) : ''}</div>
+            <div class="row td-btns"><button class="btn ink" data-act="startResearch" data-v="${rec.id}">바로 시작 · ${money(rec.cost.money)}</button><button class="btn" data-act="tab" data-v="research">연구 화면에서 고르기</button></div></div>`
+            : `<div class="row td-btns"><button class="btn ink" data-act="tab" data-v="research">연구 화면</button></div>`);
+        break;
+      }
+      case 'fullchange': case 'facelift': {
+        const g = t.goto.id !== undefined ? Q.generationById(s, t.goto.id) : undefined, np = g ? Q.nameplateOf(s, g.id) : undefined;
+        body = tdHead(t.kind === 'fullchange' ? '세대교체' : '페이스리프트', t.title, t.detail)
+          + (g && np ? `<div class="td-card"><p class="hint">${esc(bodyById(g.body).name)} · ${g.number}세대 · ${genYear(g)}년 출시 · 평론 ${score(g.reviewAvg)} · 지난달 ${num(g.sales.at(-1) ?? 0)}대</p><div class="row td-btns">${t.kind === 'fullchange' ? `<button class="btn ink" data-act="goFull" data-id="${np.id}">세대교체 기획</button>` : `<button class="btn ink" data-act="goLift" data-id="${g.id}">페이스리프트 기획</button>`}<button class="btn" data-act="carOpen" data-id="${g.id}">「${esc(np.name)}」 보기</button></div></div>` : '');
+        break;
+      }
+      case 'team': body = tdHead('개발', t.title, t.detail) + `<div class="row td-btns"><button class="btn ink" data-act="plan">새 차 기획</button><button class="btn" data-act="devTab">개발 현황</button></div>`; break;
+      case 'ready': body = tdHead('출시', t.title, t.detail) + `<div class="row td-btns">${go1('출시 준비')}</div>`; break;
+      case 'reports': body = tdHead('보고', t.title, t.detail) + `<div class="row td-btns"><button class="btn ink" data-act="tdReports">보고 보기</button></div>`; break;
+      default: body = tdHead(TODO_KIND_NAME[t.kind], t.title, t.detail) + `<div class="row td-btns">${go1('해당 화면으로')}</div>`;
+    }
+    return body + later;
+  }
+  function todayView(): View {
+    const list = todayList(), wide = todayWide();
+    if (todaySel && !list.some((x) => x.key === todaySel)) todaySel = null;
+    const sel = todaySel === null ? list[0]?.key ?? '' : todaySel, cur = list.find((x) => x.key === sel);
+    const item = (t: Q.TodoItem) => { const on = t.key === sel; return `<div class="td-wrap${on ? ' on' : ''}${t.urgent ? ' urgent' : ''}" role="listitem"><button class="td-item" data-act="tdSel" data-k="${esc(t.key)}" ${wide ? `aria-pressed="${on}"` : `aria-expanded="${on}"`}><b>${esc(t.title)}</b><small>${esc(t.detail)}</small>${wide ? '' : `<span class="td-open" aria-hidden="true">${on ? '접기' : '열기'}</span>`}</button>${!wide && on ? `<div class="td-in">${todayDetail(t)}</div>` : ''}</div>`; };
+    const A = autoRows(), empty = `<div class="td-empty"><h1>지금 정할 일이 없습니다</h1><p>개발·연구·위임한 일은 알아서 진행됩니다. 시간을 진행하면 새 일이 생기면 멈춥니다.</p><button class="btn ink" data-act="skipGo">다음 일까지</button></div>`;
+    const left = `<section class="td-l" aria-label="오늘 할 일"><h2 class="td-h">내가 정할 일${list.length ? ` ${list.length}건` : ''}</h2>${list.length ? `<div class="td-list" role="list">${list.map(item).join('')}</div>` : wide ? '<p class="hint">정할 일이 없습니다.</p>' : empty}
+      <h2 class="td-h">알아서 돌아가는 일</h2>${A.rows.length ? `<div class="td-auto">${A.rows.join('')}</div>` : '<p class="hint">진행 중인 개발·연구·위임한 일이 없습니다.</p>'}${A.foot}</section>`;
+    const right = wide ? `<section class="td-r" aria-label="상세">${cur ? todayDetail(cur) : empty}</section>` : '';
+    return { ov: '', panel: `<div class="today${wide ? ' wide' : ' narrow'}">${left}${right}</div>`, look: undefined };
+  }
 
   const tierName = (pt: string, tier: number) => powertrainById(pt).tiers[tier - 1]?.name ?? '';
   const segName = (id: string) => SEGMENTS.find((x) => x.id === id)?.name ?? id;
@@ -1382,9 +1515,15 @@ export function startApp(): void {
     garageId = g.id;
     const price = garagePrice.get(g.id) ?? e.price, up = Q.unitProfit(g.body, g.powertrain, e.tier, e.options, price, Q.genCostMult(s, g), Q.ptCostAdd(s, g.powertrain, e.battery, g.evPlatform)), lines = Q.linesOf(s);
     const lastSale = g.sales.length ? g.sales[g.sales.length - 1] : null, lb = Q.lifeBar(s, g), ending = g.status === 'ending';
-    const ovh = ovTop(`차고 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}`, `${esc(name)}<small>${editionName(g)}</small><button class="btn rn-btn" data-act="renameOpen" data-id="${Q.nameplateOf(s, g.id)?.id ?? -1}">이름 변경</button>`, `${derivLine(g) ? `${derivLine(g)} · ` : ''}${specLine(g.body, g.powertrain, e.tier, g.segment)} · ${paintName(e.color)}`, launchWhen(g))
-      + ovHint
-      + (gens.length > 1 ? `<button class="switch l" data-act="gprev" aria-label="이전 차">‹</button><button class="switch r" data-act="gnext" aria-label="다음 차">›</button><div class="ov tr gnav"><button class="btn" data-act="gsum">← 전 차종</button><span>${gi + 1}/${GL.length}</span></div>` : '');
+    // 5.0.0 어두운 무대: 왼쪽 위 이름·차급·세대·출시 연도·상태, 오른쪽 위 수치 카드, 아래 행동 단추 4개(가격·광고·판매 분석은 무대 아래 칸으로 내려간다)
+    isShow = true; void gi;
+    const np0 = Q.nameplateOf(s, g.id)!, fc0 = elig(Q.fullChangeEligibility(s, np0.id)), isDeriv = np0.baseOf !== undefined, shr = Q.myCellShare(s, g.body);
+    const stLine = ending ? '이번 달 말에 단종됩니다' : `나온 지 ${ageText(g).replace(/ 지남$/, '')}${fc0.ok && !isDeriv ? ' · 세대교체할 수 있습니다' : g.lostSales >= 1 ? ' · 주문이 생산을 넘습니다' : ''}`;
+    const ovh = `<div class="ov tl show-h"><div class="eyebrow"><i></i>${esc(bodyById(g.body).name)} · ${g.number}세대 · ${genYear(g)}년 출시 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}</div>
+      <div class="model">${esc(name)}<small>${editionName(g)}</small><button class="btn rn-btn" data-act="renameOpen" data-id="${np0.id}">이름 변경</button></div>
+      <div class="show-st">${esc(stLine)}</div><div class="spec">${derivLine(g) ? `${esc(derivLine(g))} · ` : ''}${esc(specLine(g.body, g.powertrain, e.tier, g.segment))} · ${esc(paintName(e.color))}</div><div class="spec when">${esc(launchWhen(g))}</div></div>
+      <aside class="ov show-k" aria-label="이 차의 수치"><div class="sk-rv"><b>${score(g.reviewAvg)}</b><small>평론</small></div><div class="sk-g"><div><small>지난달</small><b>${lastSale === null ? '—' : `${qty(lastSale)}대`}</b></div><div><small>대당 이익</small><b>${esc(money(Q.generationUnitProfit(g, s), true))}</b></div><div><small>차급 점유</small><b>${Math.round(shr * 100)}%</b></div><div><small>가격</small><b>${num(e.price)}만원</b></div></div></aside>
+      <div class="ov show-a" role="group" aria-label="이 차로 할 일">${isDeriv ? `<button class="sa-main" data-act="carJump" data-v="next">다음 세대(파생)</button>` : `<button class="sa-main" data-act="showFull" data-id="${np0.id}" ${fc0.ok ? '' : `aria-disabled="true" title="${esc(fc0.reason ?? '')}"`}>세대교체 기획</button>`}<button data-act="carJump" data-v="price">가격·광고</button><button data-act="showCmp" data-id="${g.id}">경쟁 차와 비교</button><button data-act="carJump" data-v="fac">판매 분석</button></div>`;
     const sales = g.sales.slice(-12), mx = Math.max(1, ...sales);
     const chart = sales.length ? `<svg class="mini" viewBox="0 0 300 64" preserveAspectRatio="none" role="img" aria-label="최근 월별 판매">${sales.map((v, i) => { const w = 300 / 12, h = (v / mx) * 56; return `<rect x="${(i * w + 2).toFixed(1)}" y="${(60 - h).toFixed(1)}" width="${(w - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" class="${i === sales.length - 1 ? 'b-now' : 'b-ink'}"/>`; }).join('')}</svg>` : '';
     // 0.9.0 핵심 수치 4개(지난달 판매·대당 이익·수명·평론)는 무대 아래 띠에, 패널의 성적 카드는 누적·월 이익·판매 그래프·조언
@@ -1423,7 +1562,7 @@ export function startApp(): void {
     const pnl = (P ? fold('pnl', '이 차의 손익', `개발비 뺀 이익 <b class="${P.net >= 0 ? 'pos' : 'neg'}">${money(P.net, true)}</b>${P.recovered ? ' · 회수함' : ''}`, I.pnlCard(s, g.id)) : '')
       + fold('crit', '평론가 시승기', `평론 평균 ${score(g.reviewAvg)}`, critiqueList(g.id)) + (g.wins?.length ? fold('wins', '직원 성과', `개발 중 ${g.wins.length}건`, winsList(g.wins)) : ''); // 1.3.0
     // 키 큰 화면(1366×1024 등): 성적 카드(판매 그래프·조언)를 무대 아래로 옮겨 무대를 차에 맞는 비율로 줄이고 오른쪽 칸 스크롤을 줄인다
-    const t = tallStage(), c1 = t ? '' : card1;
+    const t = false && tallStage(), c1 = t ? '' : card1; // 5.0.0 무대가 화면 높이를 다 쓰고 아래 칸은 스크롤이라 성적 카드는 패널에
     return { ov: ovh, panel: card2 ? pcols(card2 + fac, c1 + pnl + card3 + devCard + planCard + subCarsCard()) : c1 + fac + pnl + card3 + devCard + planCard + subCarsCard(), look: genLook(g), keys: keys + (t ? `<div class="key-more">${card1}</div>` : '') };
   }
 
@@ -2061,7 +2200,15 @@ export function startApp(): void {
   const heldWhy = (id: number): string => { const s = game!.state, pc = s.events.pending.find((p) => p.id === id)!, why = Q.autoHold(s, pc, Q.autoPick(s, pc).choice);
     return why ? `자동 승인을 켠 종류지만 정한 답을 바로 하지 않고 묻습니다: ${why}(설정 › 결정).` : '자동 승인을 켜기 전에 생긴 결정이라 묻습니다.'; };
   /** 답을 기다리는 무작위 사건(맨 앞 것) 창: 선택지와 결과, 남은 주, [나중에] */
+  /** 5.0.0 결정할 사건은 창 대신 오늘 탭 상세에 연다(맨 앞 것) */
   function showChoice(): void {
+    const c = Q.pendingChoices(game!.state)[0];
+    sheet.hidden = true;
+    if (c) todaySel = `choice:${c.id}`;
+    go('today');
+  }
+  /** 옛 결정 창(쓰지 않음, 문구 참고용) */
+  function showChoiceSheet(): void {
     const list = Q.pendingChoices(game!.state), c = list[0];
     if (!c) { sheet.hidden = true; render(); return; }
     const def = c.choices[c.defaultChoice]?.label ?? '';
@@ -2095,8 +2242,7 @@ export function startApp(): void {
   /** 비교 줄. cost = 늘면 나쁜 값(유지비) */
   const cmpRow = (label: string, a: string, b: string, cost = false) => `<tr><td>${label}</td><td class="r">${a}</td><td class="r"><b class="${a === b ? '' : cost ? 'neg' : 'pos'}">${b}</b></td></tr>`;
   function companyView(): string {
-    const tabs = `<div class="seg cotabs" role="tablist" aria-label="회사">${CO_TABS.map(([k, l]) => `<button role="tab" data-act="cotab" data-v="${k}" aria-selected="${coTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (coTab === 'sum' ? V.companySummary(game!.state) : coTab === 'exec' ? execTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'sub' ? subTab() : coTab === 'world' ? worldTab() : staffTab());
+    return (coTab === 'sum' ? V.companySummary(game!.state) : coTab === 'exec' ? execTab() : coTab === 'hq' ? hqTab() : coTab === 'factory' ? factoryTab() : coTab === 'sub' ? subTab() : coTab === 'world' ? worldTab() : staffTab());
   }
   // ----- 4.0.0 세계 시장 -----
   let worldSel = 'na';
@@ -2196,12 +2342,13 @@ export function startApp(): void {
       <p class="note">한도는 ${money(diffOf(s).loanBase)}에 최근 1년 매출의 ${Math.round(config.loan.revenueRatio * 100)}%를 더한 값입니다. 한도의 ${Math.round(config.loan.highUse * 100)}% 넘게 빌리면 이자가 올라갑니다. 현금이 ${diffOf(s).bankruptcyMonths}개월 넘게 마이너스면 파산합니다.</p>
       <p class="hint bail-line" style="margin-top:6px">${bailInfo().line} · 난이도 ${esc(diffName(s.difficulty))}</p>
       ${s.cash < 0 && !s.loan.bailoutUsed ? `<div class="badbox" style="margin-top:10px">현금이 ${s.negMonths}개월째 마이너스입니다. 구제 금융(남은 ${bailInfo().left}번)을 받으면 현금이 0이 되지만 평판이 ${-config.bankruptcy.bailoutRep} 떨어지고 대출 한도가 절반이 됩니다.</div><button class="btn danger" data-act="bailout" style="width:100%;margin-top:8px">구제 금융 받기</button>` : ''}</div>`;
-    const mine = sellingGens(s).reduce((a, g) => a + WD.madeLast(g), 0); // 4.0.0 수출 포함
-    const rel = Q.rivalRelations(s);
-    const rivals = `<div class="card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r, i) => rel[i].out ? `<div class="rv-co rv-out">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>인수함 · 내 자회사</small></span><small class="rv-strong">${esc(s.subs?.find((x) => x.from === r.id)?.name ?? '')}</small></div>` : `<button class="rv-co" data-act="rivalOpen" data-v="${r.id}" aria-label="${esc(r.name)} 라인업 보기">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small>${relTags(rel[i])}</span><small class="rv-strong">${rivalStrong(r.cells)}<br>라인업 ${Object.keys(r.models).length}종 ›</small></button>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small>평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">회사를 누르면 모델 라인업과 지난 세대, 기술 제휴·인재 영입·인수를 봅니다. 경쟁사 이름·모델 이름·로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
-    // 0.9.0 지난 달들: 누르면 월 결산 창(장부 24개월)
     const months = led.length ? `<div class="card mon-list"><h3>월 결산 <small class="hint">최근 ${led.length}개월 · 누르면 펼쳐 봅니다</small></h3>${[...new Set(led.map((e) => e.year))].reverse().map((y) => `<p class="lbl mon-y">${y}년</p><div class="mbtns">${led.map((e, i) => [e, i] as const).filter(([e]) => e.year === y).reverse().map(([e, i]) => `<button class="btn mbtn" data-act="monthOpen" data-v="${i}" aria-label="${y}년 ${e.monthOfYear}월 결산 보기"><b>${e.monthOfYear}월</b><small class="${e.profit >= 0 ? 'pos' : 'neg'}">${money(e.profit, true)}</small></button>`).join('')}</div>`).join('')}</div>` : '';
-    return `<div class="fin-wrap"><div class="fin-l">${V.finMain(s, finRange)}${groupCard()}</div><div class="colstack">${sum}${loan}${months}${rivals}${s.subs?.length ? subHqCard(true) : ''}</div></div>`;
+    return `<div class="fin-wrap"><div class="fin-l">${V.finMain(s, finRange)}${groupCard()}</div><div class="colstack">${sum}${loan}${months}${s.subs?.length ? subHqCard(true) : ''}</div></div>`;
+  }
+  /** 5.0.0 시장 탭 › 경쟁사: 회사별 관계·라인업(누르면 라인업·기술 제휴·인재 영입·인수 창) */
+  function rivalsView(): string {
+    const s = game!.state, mine = sellingGens(s).reduce((a, g) => a + WD.madeLast(g), 0), rel = Q.rivalRelations(s);
+    return `<div class="card rivals-card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r, i) => rel[i].out ? `<div class="rv-co rv-out">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>인수함 · 내 자회사</small></span><small class="rv-strong">${esc(s.subs?.find((x) => x.from === r.id)?.name ?? '')}</small></div>` : `<button class="rv-co" data-act="rivalOpen" data-v="${r.id}" aria-label="${esc(r.name)} 라인업 보기">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small>${relTags(rel[i])}</span><small class="rv-strong">${rivalStrong(r.cells)}<br>라인업 ${Object.keys(r.models).length}종 ›</small></button>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small>평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">회사를 누르면 모델 라인업과 지난 세대, 기술 제휴·인재 영입·인수를 봅니다. 경쟁사 이름·모델 이름·로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
   }
 
   // ----- 0.8.0 직원 표 정렬·필터 -----
@@ -2683,7 +2830,6 @@ export function startApp(): void {
   }
 
   // ----- 기록 -----
-  const REC_TABS: [RecTab, string][] = [['cars', '차종 계보'], ['hall', '명예의 전당'], ['awards', '시상식'], ['stats', '통계'], ['years', '연 보고서'], ['combo', '조합 노트'], ['news', '뉴스'], ['past', '지난 판의 차']];
   const LIN_KEY = 'car-company-lineage';
   const LIN_SORTS = [['launch', '출시 순'], ['sold', '많이 팔린 순'], ['profit', '이익 큰 순'], ['review', '평론 높은 순'], ['long', '판매 기간 긴 순']] as const;
   const linView = ((): { sort: typeof LIN_SORTS[number][0]; filter: '' | 'on' | 'off' } => {
@@ -2746,8 +2892,7 @@ export function startApp(): void {
   }
   const pastBtn = (target: string) => `<button class="btn past-btn" data-act="pastOpen" data-v="${target}">지난 이름</button>`;
   function recordsView(): string {
-    const tabs = `<div class="seg cotabs rectabs" role="tablist" aria-label="기록">${REC_TABS.map(([k, l]) => `<button role="tab" data-act="rectab" data-v="${k}" aria-selected="${recTab === k}">${l}</button>`).join('')}</div>`;
-    return tabs + (recTab === 'combo' ? comboTab() : recTab === 'news' ? newsTab() : recTab === 'years' ? yearsTab() : recTab === 'hall' ? hallTab() : recTab === 'awards' ? awardsTab() : recTab === 'stats' ? statsTab() : recTab === 'past' ? pastTab() : carsTab());
+    return (recTab === 'combo' ? comboTab() : recTab === 'news' ? newsTab() : recTab === 'years' ? yearsTab() : recTab === 'hall' ? hallTab() : recTab === 'awards' ? awardsTab() : recTab === 'stats' ? statsTab() : recTab === 'past' ? pastTab() : carsTab());
   }
   /** 지난 연 보고서 목록(0.8.0): 누르면 그해 보고서 창 */
   function yearsTab(): string {
@@ -2888,7 +3033,7 @@ export function startApp(): void {
     game = g; ui = extra; screen = 'garage'; subView = null; garageSub = null; subSel = null; ordSet = null; // 3.1.0 운영 전환은 UI 상태(불러오면 본사 화면)
     draft = null; launch = null; lift = null; draftNote = '';
     restorePlan(extra.plan); garageId = -1; garageSum = true; cmpSel.clear(); gameOverShown = false; officeEvents.length = 0; thumbs.clear();
-    coTab = 'sum'; recTab = 'cars'; staffSel = null; devSel = null; allocWhy = ''; staffPick = new Set();
+    coTab = 'sum'; recTab = 'cars'; staffSel = null; devSel = null; todaySel = null; devFrom = 'car'; mkLast = 'rivals'; allocWhy = ''; staffPick = new Set();
     garagePrice.clear(); devLog.clear(); devPrev.clear(); lastPanel = ''; lastOv = ''; dirty = false; noteLog = []; noteSeen = noteId;
     logDev(); // 주간 기록은 화면 메모리에만 있어 불러오면 비므로, 지금 상태 한 줄로 시작한다
     candSeen.clear(); for (const c of g.state.candidates) candSeen.add(c.id); // 불러온 판에 이미 있던 후보는 알리지 않는다
@@ -3023,7 +3168,7 @@ export function startApp(): void {
   async function act(a: string, el: HTMLElement): Promise<void> {
     const v = el.dataset.v ?? '', s = game?.state;
     switch (a) {
-      case 'tab': if (v === 'garage') garageSum = true; go(v === 'dev' ? devScreen() : v as Screen); return; // 기획 초안·출시 준비 값은 탭을 옮겨도 남긴다
+      case 'tab': if (v === 'garage') garageSum = true; if (v === 'dev' || v === 'garage') devFrom = 'car'; go(v === 'dev' ? devScreen() : v as Screen); return; // 기획 초안·출시 준비 값은 탭을 옮겨도 남긴다
       case 'plan': // 8.7: 차종이 있으면 먼저 어디서 시작할지 고른다. 기획 중인 초안이 있으면 그것을 이어서
         if (!s) return;
         if (draft || lift) { go(draft ? 'plan' : 'lift'); return; }
@@ -3271,22 +3416,37 @@ export function startApp(): void {
       case 'techSel': showTech(v); return;
       case 'priRes': if (game && run(game.command({ type: 'prioritizeResearch', techId: v }))) { toast(`이 연구가 주간 연구 점수의 ${Math.round(config.research.priorityShare * 100)}%를 받습니다. 나머지는 다른 연구가 나눠 받습니다.`); render(); } return;
       case 'resolveEv': {
-        if (!game) return; const ad = document.querySelector<HTMLInputElement>('#sheet .auto-chk input:checked')?.dataset.ad; // 3.7.1 체크한 채 고르면 그 답으로 자동 승인
+        if (!game) return; const cb = el.closest('.choice-sheet')?.querySelector<HTMLInputElement>('.auto-chk input'), ad = cb && (cb.checked || autoChk.has(Number(el.dataset.id))) ? cb.dataset.ad : undefined; autoChk.delete(Number(el.dataset.id)); // 3.7.1 체크한 채 고르면 그 답으로 자동 승인
         const r = game.command({ type: 'resolveEvent', eventId: Number(el.dataset.id), choice: Number(v) });
         if (!r.ok) return err(r.reason);
         const n = r.events?.find((e) => e.kind === 'news'); if (n) toast(newsLine(n.text), 'alert', '결정 결과', 9000);
         if (ad && game.command({ type: 'setAutoDecide', kind: ad, on: true, choice: Number(v) }).ok) { const k = Q.AUTO_KINDS.find((x) => x.id === ad)!, l = k.choices[Number(v)].label;
           toast(`「${k.name}」 결정은 앞으로 「${l}」${josa(l, '으로/로')} 자동 승인합니다. 설정 › 결정에서 바꿀 수 있습니다.`, '', '자동 승인', 6000); }
-        if (Q.pendingChoices(game.state).length) showChoice(); else { sheet.hidden = true; render(); }
+        todaySel = null; if (Q.pendingChoices(game.state).length) showChoice(); else { sheet.hidden = true; render(); }
         return;
       }
-      case 'later': sheet.hidden = true; render(); return;
+      case 'later': { sheet.hidden = true; if (screen === 'today') { const L = todayList(), i = L.findIndex((x) => x.key === (todaySel ?? L[0]?.key)); todaySel = L[i + 1]?.key ?? ''; lastPanel = ''; } render(); return; } // 오늘 탭: 다음 일로
+      // ---- 5.0.0 주 메뉴·오늘 탭·차 탭 ----
+      case 'sec': if (v === 'office') { devFrom = 'people'; devSel = null; go('dev'); } else if (v === 'rivals') { mkLast = 'rivals'; go('rivals'); } else go('fin'); return;
+      case 'tdSel': { const L = todayList(), cur = todaySel === null ? L[0]?.key ?? '' : todaySel, k = el.dataset.k ?? ''; todaySel = !todayWide() && cur === k ? '' : k; lastPanel = ''; render(); return; }
+      case 'tdReports': showTodo('reports'); return;
+      case 'skipGo': startSkip(); return;
+      case 'carOpen': devFrom = 'car'; garageAt(Number(el.dataset.id)); return;
+      case 'carDev': devFrom = 'car'; devSel = Number(el.dataset.id); go('dev'); return;
+      case 'devTab': devFrom = 'car'; if (!draft && !lift) devSel = null; go(devScreen()); return;
+      case 'showFull': return act('goFull', el); // 무대 단추(아래 패널의 같은 단추와 이름을 나눔)
+      case 'showCmp': return act('rivalCmp', el);
+      case 'carJump': { // 무대 아래 칸으로 내려가기(가격·광고 / 판매 분석)
+        if (v === 'fac') { foldOpen.add('fac'); lastPanel = ''; render(); }
+        const t = document.querySelector<HTMLElement>(v === 'fac' ? '#panel details.fold[data-fold="fac"]' : v === 'next' ? '#panel .next-step' : '#panel .price-card') ?? panel;
+        t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return;
+      }
       case 'newsOpen': if (s) { const n = Q.newsLog(s)[Number(v)]; if (n) showNewsItem(n.text, n.week, n.category); } return;
       case 'finRange': if (V.FIN_RANGES.some(([k]) => k === v)) { finRange = v as V.FinRange; render(); } return;
       case 'linSort': if (LIN_SORTS.some(([k]) => k === v)) { linView.sort = v as typeof LIN_SORTS[number][0]; keep(LIN_KEY, linView); render(); } return;
       case 'linFilter': if (v === '' || v === 'on' || v === 'off') { linView.filter = v; keep(LIN_KEY, linView); render(); } return;
       case 'hallGo': recTab = 'cars'; linView.filter = ''; lastPanel = ''; render(); document.getElementById(`np-${v}`)?.scrollIntoView({ block: 'start' }); return;
-      case 'rectab': recTab = v as RecTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      case 'rectab': recTab = v as RecTab; if (v === 'awards') mkLast = 'awards'; screen = 'records'; lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'statsRange': statsRange = v as Q.StatsRange; lastPanel = ''; render(); return;
       case 'pastOpen': showPastPick(v); return;
       case 'pastSort': pastSort = v === 'sold' ? 'sold' : 'recent'; showPastPick(el.dataset.k ?? ''); return;
@@ -3308,7 +3468,7 @@ export function startApp(): void {
         if (run(game.command({ type: 'cancelResearch', techId: v }))) { sheet.hidden = true; toast(`「${t.name}」 연구를 취소했습니다.`); render(); }
         return;
       }
-      case 'cotab': coTab = v as CoTab; lastPanel = ''; render(); panel.scrollTop = 0; return;
+      case 'cotab': coTab = v as CoTab; if (v === 'world') mkLast = 'world'; screen = 'company'; lastPanel = ''; render(); panel.scrollTop = 0; return;
       // ---- 4.0.0 세계 시장 ----
       case 'wSel': worldSel = v; lastPanel = ''; render(); return;
       case 'goWorld': worldSel = v || worldSel; goCo('world'); return;
@@ -3407,7 +3567,7 @@ export function startApp(): void {
       case 'goCo': goCo(v); return;
       case 'devSel': devSel = Number(el.dataset.id); go('dev'); return;
       case 'devStep': if (s && s.projects.length) { const P = s.projects, i = Math.max(0, P.findIndex((p) => p.id === curProj()?.id)); devSel = P[(i + Number(v) + P.length) % P.length].id; lastPanel = ''; render(); } return;
-      case 'devHome': go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로
+      case 'devHome': devFrom = 'car'; go('dev'); return; // 기획 중이어도 개발 화면(사무실)으로
       case 'resumePlan': go(draft ? 'plan' : lift ? 'lift' : 'dev'); return;
       case 'staffSel': { const id = Number(el.dataset.id); staffSel = staffSel === id ? null : id; render(); if (staffSel !== null) document.getElementById('staff-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
       case 'hireRole': hireRole = v as Role; render(); return;
@@ -3515,7 +3675,7 @@ export function startApp(): void {
       case 'startNew': {
         const co = $<HTMLInputElement>('#t-co').value.trim(), sd = ($<HTMLInputElement>('#t-seed').value || '').trim();
         const seed = /^\d+$/.test(sd) ? Number(sd) % 4294967296 : Math.floor(Math.random() * 1e9);
-        adopt(Game.create({ seed, companyName: co, difficulty: diffSel, startYear: nsYear, condition: nsCond, challenges: Q.CHALLENGES.filter((k) => nsChal.has(k)) }), { photos: {}, colors: {}, logo: cleanLogo(logoDraft) }); toast(`「${game!.state.companyName}」${josa(game!.state.companyName, '을/를')} 세웠습니다(${nsYear}년). 첫 차를 기획할 차례입니다.`); return;
+        adopt(Game.create({ seed, companyName: co, difficulty: diffSel, startYear: nsYear, condition: nsCond, challenges: Q.CHALLENGES.filter((k) => nsChal.has(k)) }), { photos: {}, colors: {}, logo: cleanLogo(logoDraft) }); go('today'); /* 5.0.0 새 판의 첫 화면은 오늘 탭 */ toast(`「${game!.state.companyName}」${josa(game!.state.companyName, '을/를')} 세웠습니다(${nsYear}년). 첫 차를 기획할 차례입니다.`); return;
       }
       case 'continue': case 'loadSlot': {
         if (a === 'loadSlot' && game && title.hidden && dirty && !(await ask('마지막 저장 뒤의 진행은 사라집니다. 불러올까요?', '불러오기'))) return;
@@ -3575,8 +3735,8 @@ export function startApp(): void {
       case 'noteTopic': noteTopic = NOTE_CATS.some(([k]) => k === v) ? v as NoteCat : ''; showTodo('notes'); return;
       case 'noteSettings': closeDrawer(); showSettings('note'); return;
       case 'drawerClose': closeDrawer(); return;
-      case 'todoLater': if (game) { todoSnooze.set(v || el.dataset.k!, monthOf(game.state.week)); showTodo('todo'); } return; // 이번 달 동안 숨김(다음 달에 다시)
-      case 'todoMute': todoMute.add(v); keep(TODO_MUTE_KEY, [...todoMute]); showTodo('todo'); toast(`'${TODO_KIND_NAME[v as Q.TodoKind] ?? v}' 항목을 더는 알리지 않습니다. 메뉴 → 설정 → 알림에서 되돌릴 수 있습니다.`); return;
+      case 'todoLater': if (game) { todoSnooze.set(v || el.dataset.k!, monthOf(game.state.week)); if (el.closest('#drawer')) showTodo('todo'); else { todaySel = null; lastPanel = ''; render(); } } return; // 이번 달 동안 숨김(다음 달에 다시)
+      case 'todoMute': todoMute.add(v); keep(TODO_MUTE_KEY, [...todoMute]); if (el.closest('#drawer')) showTodo('todo'); else { todaySel = null; lastPanel = ''; render(); } toast(`'${TODO_KIND_NAME[v as Q.TodoKind] ?? v}' 항목을 더는 알리지 않습니다. 메뉴 → 설정 → 알림에서 되돌릴 수 있습니다.`); return;
       case 'todoUnmute': todoMute.delete(v); keep(TODO_MUTE_KEY, [...todoMute]); showSettings('note'); return;
       case 'todoUnsnooze': todoSnooze.clear(); showTodo('todo'); return;
       case 'noteGo': { const x = noteLog.find((y) => y.id === Number(v)); if (x?.open) { sheet.hidden = true; closeDrawer(); x.open.fn(); } return; }
@@ -3668,6 +3828,7 @@ export function startApp(): void {
   document.addEventListener('pointercancel', () => { dragging = false; });
   document.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
+    if (t.matches('.choice-sheet .auto-chk input')) { const id = Number(t.closest<HTMLElement>('.choice-sheet')?.dataset.id); if (t.checked) autoChk.add(id); else autoChk.delete(id); return; }
     if (t.dataset.etrain && game) { if (run(game.command({ type: 'setEliteTrain', on: t.checked }))) toast(t.checked ? '전담팀 자동 교육을 켰습니다.' : '전담팀 자동 교육을 껐습니다.'); render(); return; } // 4.1.0
     if (t.dataset.topt === 'keepEng' || t.dataset.topt === 'busy') { teamOpt[t.dataset.topt] = t.checked; lastPanel = ''; render(); return; } // 1.0.0 자동 배치 선택
     if (t.classList.contains('px-r')) render(); // 놓으면 패널 전체를 다시 그린다(예상 평론 등)
@@ -3678,17 +3839,26 @@ export function startApp(): void {
   });
   for (const b of document.querySelectorAll<HTMLElement>('#speeds button')) b.addEventListener('click', () => setSpeed(Number(b.dataset.speed)));
   $('#hqback').addEventListener('click', () => { if (game && subView !== null) closeSub(); }); // 3.1.0 운영 전환에서 본사로
-  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => { if (!game) return; if (b.dataset.tab === 'garage') garageSum = true; go(b.dataset.tab === 'dev' ? devScreen() : b.dataset.tab as Screen); }); // 차고를 누르면 전 차종 표부터
-  $('#menubtn').addEventListener('click', () => void showMenu());
+  for (const b of document.querySelectorAll<HTMLElement>('#tabs button')) b.addEventListener('click', () => goTab(b.dataset.tab ?? ''));
+  // 5.0.0 위쪽 줄의 [메뉴]: 회사 이름·평판·시대 사건·결정 대기·할 일·소리·저장·설정을 한 곳에
+  const topMenu = $('#topmenu'), setTopMenu = (on: boolean) => { topMenu.hidden = !on; $('#menubtn').setAttribute('aria-expanded', String(on)); };
+  $('#menubtn').addEventListener('click', () => setTopMenu(!!topMenu.hidden));
+  $('#menusave').addEventListener('click', () => { setTopMenu(false); void showMenu(); });
+  topMenu.addEventListener('click', (e) => { const b = (e.target as Element).closest('button'); if (b && b.id !== 'mutebtn' && b.id !== 'mylogo') setTopMenu(false); });
+  document.addEventListener('pointerdown', (e) => { const t = e.target as Element; if (!topMenu.hidden && !t.closest('#topmenu, #menubtn, #tip')) setTopMenu(false); }, true);
+  $('#decbtn').addEventListener('click', () => { if (game) { todaySel = null; go('today'); } });
+  addEventListener('resize', () => { if (game && screen === 'today') { lastPanel = ''; render(); } else setVar($('#main'), '--mainh', `${$('#main').clientHeight}px`); });
   $('#mutebtn').addEventListener('click', () => { sound.set({ muted: !sound.settings().muted }); renderMute(); });
   { let lastTap = -1e9; $('#mylogo').addEventListener('click', (e) => { if (e.timeStamp - lastTap < 550) { lastTap = -1e9; showDevMenu(); } else lastTap = e.timeStamp; }); } // 두 번 톡(확대 막기는 dblclick 기본 동작만 막으므로 click 두 번은 그대로 온다)
   $('#evchip').addEventListener('click', () => { if (game) showEvents(); });
   $('#plchip').addEventListener('click', () => { if (game) { sheet.hidden = true; go('fin'); } });
   $('#pend').addEventListener('click', () => { if (game) showChoice(); });
+  void showChoiceSheet;
   $('#todobtn').addEventListener('click', () => { if (!game) return; if (skip) setSpeed(0); showTodo(execUnread(game.state) && !todoCount().length ? 'reports' : 'todo'); });
   $('#skipbtn').addEventListener('click', () => startSkip());
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (!$('#topmenu').hidden) { $('#topmenu').hidden = true; $('#menubtn').setAttribute('aria-expanded', 'false'); $('#menubtn').focus(); return; }
     if (!$('#ask').hidden) $('#ask-no').click();
     else if (sheet.hidden && !drawer.hidden) closeDrawer();
     else if (!sheet.hidden) { const close = sheetBody.querySelector<HTMLElement>('[data-act="closeReview"],[data-act="closeSheet"],[data-act="later"]'); close?.click(); }
@@ -3723,7 +3893,7 @@ export function startApp(): void {
     setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
     get skip() { return !!skip; }, todos: () => (game ? todos() : []), Q,
-    get garageId() { return garageId; }, get garageSum() { return garageSum; }, goTarget, showMonth, goCo, // goCo(4.0.0 점검용)
+    get garageId() { return garageId; }, get coTab() { return coTab; }, get recTab() { return recTab; }, get mainTab() { return mainTab(); }, get todaySel() { return todaySel; }, get garageSum() { return garageSum; }, goTarget, showMonth, goCo, // goCo(4.0.0 점검용)
     get noteSet() { return noteSet; }, // 1.3.0 점검용: 알림 유형 켜고 끄기(기기 저장소에는 쓰지 않음)
   };
 

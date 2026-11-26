@@ -3,39 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#e7eaee" />
+    <meta name="theme-color" content="#ffffff" />
     <title>카 컴퍼니</title>
   </head>
   <body>
     <div id="app">
       <header id="top">
-        <div class="brand"><span id="mylogo"></span><span id="co"></span></div>
-        <span class="pill" id="date"></span>
-        <button class="pill evchip" id="evchip" hidden aria-label="진행 중인 시대 사건 보기"></button>
-        <button class="pill pend" id="pend" hidden aria-label="결정을 기다리는 사건 보기"></button>
-        <button class="pill todo" id="todobtn" aria-label="할 일과 임원 보고 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2M4 12h2M4 18h2M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span class="td-t">할 일</span><b id="todo-n">0</b></button>
+        <span class="top-date" id="date"></span>
+        <span class="top-cash" id="cashpill"><span id="cash-l" class="sr-only">현금</span><b id="cash"></b><small id="hqcash" hidden></small></span>
+        <button class="plchip" id="plchip" hidden aria-label="지난달 손익. 눌러서 재무 화면 보기"><span class="pl-t">지난달</span><b id="pl"></b></button>
         <button class="pill hqback" id="hqback" hidden aria-label="본사 화면으로 돌아가기">← 본사로</button>
-        <span class="pill" id="cashpill"><span id="cash-l">현금</span> <b id="cash"></b><small id="hqcash" hidden></small></span>
-        <button class="pill plchip" id="plchip" hidden aria-label="지난달 손익. 눌러서 재무 화면 보기"><span class="pl-t">지난달</span><b id="pl"></b></button>
-        <span class="pill">평판 <b id="rep"></b><span class="ib" role="button" tabindex="0" data-info="term:평판" aria-label="평판 설명"></span></span>
         <div class="sp"></div>
+        <button class="decbtn" id="decbtn" hidden aria-label="정할 일 보기">정할 일 <b id="dec-n">0</b>건</button>
         <div class="speeds" id="speeds" role="group" aria-label="빠르기">
           <button data-speed="0" aria-label="멈춤">멈춤</button><button data-speed="1" title="1주 3초" aria-label="보통"><span class="sp-t">보통</span><span class="sp-i" aria-hidden="true">▶</span></button><button data-speed="2" title="1주 1.5초" aria-label="빠름"><span class="sp-t">빠름</span><span class="sp-i" aria-hidden="true">▶▶</span></button><button data-speed="4" title="1주 0.75초" aria-label="아주 빠름"><span class="sp-t">아주 빠름</span><span class="sp-i" aria-hidden="true">▶▶▶</span></button>
         </div>
-        <button class="skipbtn" id="skipbtn" aria-pressed="false" title="결정할 일이 생길 때까지 가장 빠르게 진행합니다(최대 2년)">다음 일까지</button>
         <span class="held" id="held" hidden>결정 중 · 멈춤</span>
-        <button class="menubtn mutebtn" id="mutebtn" aria-label="소리 끄기" aria-pressed="false"></button>
-        <button class="menubtn" id="menubtn" aria-label="메뉴(저장·설정)">메뉴</button>
+        <button class="skipbtn" id="skipbtn" aria-pressed="false" title="결정할 일이 생길 때까지 가장 빠르게 진행합니다(최대 2년)">다음 일까지</button>
+        <button class="menubtn" id="menubtn" aria-haspopup="true" aria-expanded="false" aria-controls="topmenu">메뉴</button>
+        <div class="topmenu" id="topmenu" hidden role="group" aria-label="메뉴">
+          <div class="brand"><span id="mylogo"></span><span id="co"></span></div>
+          <span class="pill">평판 <b id="rep"></b><span class="ib" role="button" tabindex="0" data-info="term:평판" aria-label="평판 설명"></span></span>
+          <button class="pill evchip" id="evchip" hidden aria-label="진행 중인 시대 사건 보기"></button>
+          <button class="pill pend" id="pend" hidden aria-label="결정을 기다리는 사건 보기"></button>
+          <button class="pill todo" id="todobtn" aria-label="할 일과 임원 보고 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2M4 12h2M4 18h2M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span class="td-t">할 일·보고·알림</span><b id="todo-n">0</b></button>
+          <button class="menubtn mutebtn" id="mutebtn" aria-label="소리 끄기" aria-pressed="false"></button>
+          <button class="btn ink" id="menusave">저장·설정</button>
+        </div>
       </header>
-      <nav id="tabs" aria-label="화면">
-        <button data-tab="garage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6v10H3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 20v-6h10v6" fill="none" stroke="currentColor" stroke-width="2"/></svg>차고</button>
-        <button data-tab="dev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-9 9H5v-6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 6l6 6" stroke="currentColor" stroke-width="2"/></svg>개발</button>
-        <button data-tab="research"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7.5 15h9" stroke="currentColor" stroke-width="2"/></svg>연구</button>
-        <button data-tab="company"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V8l5 3V8l5 3V4h6v16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>회사</button>
-        <button data-tab="fin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 16v-4M10 16V8M14 16v-6M18 16V5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>재무</button>
-        <button data-tab="records"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>기록</button>
-      </nav>
       <main id="main">
+        <aside id="side" hidden aria-label="내 차 목록"></aside>
         <section class="stage" id="stage">
           <canvas id="cv" aria-label="자동차 3D 무대. 끌어서 돌려 볼 수 있습니다."></canvas>
           <div class="fallback" id="fb" hidden></div>
@@ -45,6 +42,9 @@
         <section id="keys" hidden aria-label="핵심 수치"></section>
         <section id="panel" aria-live="polite"></section>
       </main>
+      <nav id="tabs" aria-label="주 메뉴">
+        <button data-tab="today">오늘</button><button data-tab="car">차</button><button data-tab="research">연구</button><button data-tab="people">사람</button><button data-tab="group">그룹</button><button data-tab="market">시장</button><button data-tab="fin">재무</button>
+      </nav>
     </div>
 
     <div id="title" class="cover" hidden></div>
