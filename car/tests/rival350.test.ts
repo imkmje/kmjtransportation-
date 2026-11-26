@@ -31,9 +31,9 @@ function until(g: Game, eventId: string, years = 8): CarState['events']['pending
 describe('저장 형식 9 → 10', () => {
   it('형식 9 fixture가 10으로 올라오고 경쟁 2부가 빈 상태로 시작하며, 이어 돌리면 새 기능이 돌아가고 저장 왕복이 같다', () => {
     const raw = fixture();
-    expect(raw.saveVersion).toBe(9); expect(raw.rivalry).toBeUndefined(); expect(SAVE_VERSION).toBe(10);
+    expect(raw.saveVersion).toBe(9); expect(raw.rivalry).toBeUndefined(); expect(SAVE_VERSION).toBe(11);
     const g = Game.fromJSON(raw), s = g.state;
-    expect(s.saveVersion).toBe(10); expect(s.rivalry!.out).toEqual([]); expect(s.rivalry!.awards).toEqual([]);
+    expect(s.saveVersion).toBe(11); expect(s.rivalry!.out).toEqual([]); expect(s.rivalry!.awards).toEqual([]);
     ticks(g, 2 * WPY);
     expect(awardHistory(s).length).toBeGreaterThanOrEqual(1); // 12월 시상식
     expect(s.rivalry!.talent.length).toBe(R.talent.count); // 본사 5등급: 경쟁사 인재 후보
@@ -232,13 +232,15 @@ describe('경쟁사 인수', () => {
     const sub = s.subs!.at(-1)!;
     expect(sub.kind).toBe('acquired'); expect(sub.name).toBe(r0.name); expect(sub.from).toBe(r0.id);
     expect(sub.models.map((m) => m.name)).toEqual(names);
-    expect(activeRivals(s).length).toBe(2); expect(rivalRelations(s).find((x) => x.id === r0.id)!.out).toBe(true);
+    expect(activeRivals(s).length).toBe(4); expect(rivalRelations(s).find((x) => x.id === r0.id)!.out).toBe(true); // 4.0.0 경쟁사 5곳(테슬러는 2010년쯤)
     expect(subsInfo(s).used).toBe(2);
     const r1 = activeRivals(s)[0];
     ok(g.command({ type: 'acquireRival', rivalId: r1.id })); // 인수 브랜드는 종류마다 한 곳 제한의 예외
-    expect(activeRivals(s).length).toBe(1);
+    expect(activeRivals(s).length).toBe(3);
+    const out0 = [...s.rivalry!.out]; s.rivalry!.out.push(...activeRivals(s).slice(1).map((x) => x.id)); // 나머지를 판 것으로 두고 마지막 한 곳 규칙을 본다
     expect(acquireError(s, activeRivals(s)[0].id)).toMatch(/마지막 남은 경쟁사/);
     expect(g.command({ type: 'acquireRival', rivalId: activeRivals(s)[0].id }).ok).toBe(false);
+    s.rivalry!.out = out0;
     const w0 = s.week;
     ticks(g, 2 * WPY);
     expect(s.subs!.filter((x) => x.kind === 'acquired').every((x) => x.months.slice(-6).every((m) => m.sold > 0))).toBe(true);

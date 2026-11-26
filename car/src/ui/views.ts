@@ -1,5 +1,7 @@
 // 1.0.0 화면 정리: 재무(연도별·차종별 표와 그래프), 회사 요약 칸. 상태는 읽기만 한다(HTML 문자열을 돌려주고, 조작은 data-act 버튼으로 app.ts가 처리)
 import { config } from '../config';
+import { REGIONS } from '../data';
+import * as WD from '../sim/world';
 import * as Q from '../sim/queries';
 import { yearOf } from '../sim/time';
 import type { CarState, LedgerEntry } from '../sim/types';
@@ -15,14 +17,14 @@ export interface FinRow {
   cars: Record<string, number>; // 세대 ID → 차종 이익(매출 − 원가 − 광고 − 리콜)
 }
 const M = () => config.time.monthsPerYear;
-const carProfit = (c: NonNullable<LedgerEntry['cars']>[number]) => c.revenue - c.cogs - c.marketing - c.recall;
+const carProfit = (c: NonNullable<LedgerEntry['cars']>[number]) => c.revenue - c.cogs - c.marketing - c.recall - (c.exp?.landed ?? 0); // 4.0.0 수출 관세·운송비
 /** 장부 몇 달을 한 줄로: 판매관리 = 광고 + 월급 + 유지비 + 이자 + 리콜 + 일회성(연구 시작 비용 빼고), 개발 = 개발비 + 연구 시작 비용 */
 function sumRows(rows: LedgerEntry[]) {
   const t = { revenue: 0, cogs: 0, sga: 0, dev: 0, profit: 0, oneOff: 0, cars: {} as Record<string, number> };
   for (const e of rows) {
     const res = e.research ?? 0;
     t.revenue += e.revenue; t.cogs += e.cogs; t.dev += e.dev + res; t.profit += e.profit; t.oneOff += e.oneOff || 0;
-    t.sga += e.marketing + e.salaries + e.upkeep + e.interest + e.recall + (e.oneOff || 0) - res;
+    t.sga += e.marketing + e.salaries + e.upkeep + e.interest + e.recall + (e.oneOff || 0) - res + (e.tariff ?? 0) + (e.ship ?? 0) + (e.worldUpkeep ?? 0); // 4.0.0 관세·운송비·판매 법인 유지비
     for (const c of e.cars ?? []) t.cars[c.id] = (t.cars[c.id] ?? 0) + carProfit(c);
   }
   return t;
@@ -109,9 +111,9 @@ export function finMain(s: CarState, range: FinRange): string {
   return `<div class="card fin-main">${seg}
     <div class="fin-charts"><section><p class="lbl">${m ? '영업 이익(일회성 지출 뺌)' : '연 이익'}</p>${barChart(rows, (r) => (m ? r.op : r.profit), m ? '영업 이익' : '연 이익')}</section>
     <section><p class="lbl">${m ? '월말' : '연말'} 현금</p>${cashChart(rows)}</section>
-    <section class="wide"><p class="lbl">차종별 이익(매출 − 원가 − 광고 − 리콜)</p>${stackChart(s, rows)}</section></div>
+    <section class="wide"><p class="lbl">차종별 이익(매출 − 원가 − 광고 − 리콜${s.world ? ' − 관세·운송비' : ''})</p>${stackChart(s, rows)}</section></div>
     <p class="lbl" style="margin-top:12px">${m ? '최근 12개월' : '연도별'} 손익 · <small class="hint">${m ? '달을 누르면 월 결산 창' : '지난 해를 누르면 연 보고서'}</small></p>${table}
-    <p class="note">판매관리 = 광고비 + 직원·임원 월급 + 본사·공장 유지비 + 대출 이자 + 리콜 + 일회성 지출(채용 공고·교육·퇴직금·승급·건설). 개발 = 개발비 + 연구 시작 비용.${gap ? ' 장부는 최근 24개월만 남아, 그보다 오래된 해는 매출·이익·현금만 보입니다(—).' : ''}</p></div>`;
+    <p class="note">판매관리 = 광고비 + 직원·임원 월급 + 본사·공장 유지비 + 대출 이자 + 리콜 + 일회성 지출(채용 공고·교육·퇴직금·승급·건설)${s.world ? ' + 관세·운송비·판매 법인 유지비(해외 진출비 포함)' : ''}. 개발 = 개발비 + 연구 시작 비용.${gap ? ' 장부는 최근 24개월만 남아, 그보다 오래된 해는 매출·이익·현금만 보입니다(—).' : ''}</p></div>`;
 }
 
 /** 회사 탭 첫 화면: 칸마다 누르면 그 안쪽 탭 */
@@ -119,7 +121,7 @@ export function companySummary(s: CarState): string {
   const rows = Q.staffInfo(s), h = Q.hiringInfo(s), e = Q.execInfo(s), hq = Q.hqInfo(s), f = Q.factoryInfo(s);
   const byRole = (['designer', 'engineer', 'tester', 'sales'] as const).map((r) => `${ROLE_NAME[r]} ${rows.filter((x) => x.role === r).length}`).join(' · ');
   const pay = rows.reduce((a, x) => a + x.salary, 0), xpay = e.roles.reduce((a, r) => a + (r.holder?.pay ?? 0), 0), interest = Math.round(s.loan.balance * Q.loanRate(s));
-  const fix: [string, number][] = [['직원 월급', pay], ['임원 월급', xpay], ['본사 유지비', hq.current.upkeep], ['공장 유지비', f.current.upkeep], ['배터리 공장 유지비', Q.batteryPlantInfo(s).upkeep], ['대출 이자', interest]];
+  const fix: [string, number][] = [['직원 월급', pay], ['임원 월급', xpay], ['본사 유지비', hq.current.upkeep], ['공장 유지비', f.current.upkeep], ['배터리 공장 유지비', Q.batteryPlantInfo(s).upkeep], ['판매 법인 유지비', (s.world?.regions ?? []).reduce((a, r) => a + WD.officeUpkeep(r.id, r.office), 0)], ['대출 이자', interest]];
   const total = fix.reduce((a, [, v]) => a + v, 0), util = f.current.capacity ? f.produced / f.current.capacity : 0, un = Q.execUnread(s);
   const si = Q.subsInfo(s); // 3.0.0
   const n = hq.next, nextLine = n ? `다음 ${n.level}등급 ${esc(n.name)} · 비용 ${money(n.cost)}` : '최고 등급입니다';
@@ -130,6 +132,7 @@ export function companySummary(s: CarState): string {
     ${box('hq', '본사', `${hq.current.level}<span>등급 · ${esc(hq.current.name)}</span>`, `<small>${nextLine}</small><small>${n ? (hq.canUpgrade ? '지금 올릴 수 있습니다' : esc(hq.reason ?? '')) : ''}</small>`)}
     ${box('factory', '공장', `${f.current.level}<span>등급</span>`, `<small>가동률 ${Math.round(util * 100)}% · 한 달 ${num(f.produced)}/${num(f.current.capacity)}대</small><small>생산 라인 ${f.linesUsed}/${f.current.lines}개${f.building ? ` · 증설 공사 ${f.building.monthsLeft}개월 남음` : ''}</small>`)}
     ${box('sub', '자회사', `${si.used}<span>/${si.max}곳</span>`, `<small>${si.list.map((x) => esc(x.name)).join(' · ') || (si.max ? '아직 자회사가 없습니다' : `본사 ${config.subs.hqMin}등급부터 세울 수 있습니다`)}</small><small>${si.list.length ? `최근 12개월 배당 ${money(si.list.reduce((a, x) => a + x.dividend12, 0))}` : ''}</small>`)}
+    ${box('world', '세계 시장', `${s.world?.regions.length ?? 0}<span>/${REGIONS.length}권역</span>`, `<small>${s.world ? s.world.regions.map((r) => `${esc(WD.regionName(r.id))} ${num(r.sold)}대`).join(' · ') : '아직 해외에 진출하지 않았습니다'}</small><small>${s.world ? `지난달 해외 이익 ${money(s.world.regions.reduce((a, r) => a + r.profit, 0), true)}` : `본사 ${config.world.hqLevel}등급과 평판이 되면 진출할 수 있습니다`}</small>`)}
     <div class="card co-box co-fix"><span class="lbl">월 고정비</span><b>${money(total)}<span>/월</span></b><table class="tbl">${fix.filter(([, v]) => v).map(([k, v]) => `<tr><td>${k}</td><td class="r">${money(v)}</td></tr>`).join('')}</table><small>차 원가·광고비·개발비는 빼고, 지금 기준으로 매달 나가는 돈입니다.</small></div></div>`;
 }
 
@@ -149,6 +152,15 @@ function mixTable(mix: Q.StatsData['mix'], key: 'pt' | 'body', name: (id: string
   return `<div class="tblwrap"><table class="tbl st-mix"><tr><th>연대</th>${show.map((k) => `<th class="r">${esc(name(k))}</th>`).join('')}${rest ? '<th class="r">기타</th>' : ''}<th class="r">판매</th></tr>
     ${mix.map((d) => `<tr><td>${d.decade}년대</td>${show.map((k) => `<td class="r">${pct(d[key][k] ?? 0, d.total)}</td>`).join('')}${rest ? `<td class="r">${pct(cols.slice(5).reduce((a, k) => a + (d[key][k] ?? 0), 0), d.total)}</td>` : ''}<td class="r">${num(d.total)}대</td></tr>`).join('')}</table></div>`;
 }
+/** 4.0.0 통계의 권역별 매출·이익(연 기록, 끝난 해) */
+function worldStats(s: CarState, years: number[]): string {
+  const ys = years.filter((y) => s.years?.[y]?.world);
+  if (!ys.length) return '';
+  const ids = REGIONS.map((r) => r.id).filter((id) => ys.some((y) => s.years![y].world![id]));
+  return `<div class="card st-card"><h3>권역별 매출·이익 <small class="hint">해외 진출 뒤 · 끝난 해</small></h3><div class="tblwrap"><table class="tbl st-world"><tr><th>해</th><th class="r">국내 매출</th>${ids.map((id) => `<th class="r">${esc(WD.regionName(id))} 매출 · 이익</th>`).join('')}<th class="r">해외 비중</th></tr>
+    ${[...ys].reverse().map((y) => { const L = s.years![y], w = L.world!, ov = ids.reduce((a, id) => a + (w[id]?.revenue ?? 0), 0); return `<tr><td>${y}년</td><td class="r">${money(L.revenue - ov)}</td>${ids.map((id) => `<td class="r">${w[id] ? `${money(w[id].revenue)}<br><small class="${w[id].profit >= 0 ? 'pos' : 'neg'}">${money(w[id].profit, true)}</small>` : '—'}</td>`).join('')}<td class="r">${L.revenue > 0 ? Math.round((ov / L.revenue) * 100) : 0}%</td></tr>`; }).join('')}</table></div>
+    <p class="note">권역 이익 = 매출 − 원가 − 관세 − 운송비 − 판매 법인 유지비(진출비·법인 투자비는 빼지 않음).</p></div>`;
+}
 /** 통계 화면: 기간 선택, 한 줄 요약, 연도별 그래프 6개, 차종별 누적 판매·이익, 동력·차체 비중 */
 export function statsMain(s: CarState, range: Q.StatsRange, names: { pt: (id: string) => string; body: (id: string) => string }, head = ''): string {
   const d = Q.statsData(s, range), sm = d.summary, rows = d.years.map((y) => ({ ...y, label: `${y.year}년`, short: `${String(y.year).slice(2)}년` }));
@@ -165,7 +177,7 @@ export function statsMain(s: CarState, range: Q.StatsRange, names: { pt: (id: st
     <section><p class="lbl">연말 평판</p>${lineChart(rows, (r) => r.rep, '평판', (v) => String(Math.round(v)), (v) => String(Math.round(v)))}</section>
     <section><p class="lbl">연말 직원 수</p>${rows.some((r) => r.staff !== null) ? barChart(rows, (r) => r.staff ?? 0, '직원', cnt('명'), cnt('명')) : '<p class="hint">기록이 없습니다.</p>'}</section></div>
     <p class="note">끝난 해만 보입니다. 막대와 점에 손가락을 대면 그해 값이 보입니다. 평판·직원 수 기록이 없는 옛 해는 비어 있습니다.${s.subs?.length ? ' 직원 수에 임원과 자회사 사장은 넣지 않습니다.' : ''}</p>` : '<p class="hint">첫 해가 끝나면(12월 결산 뒤) 연도별 그래프가 나옵니다.</p>';
-  return `${head}<div class="card st-card">${seg}<p class="lbl">전체 기간 요약</p>${sum}</div>
+  return `${head}<div class="card st-card">${seg}<p class="lbl">전체 기간 요약</p>${sum}</div>${worldStats(s, d.years.map((y) => y.year))}
     <div class="card st-card"><h3>연도별 <small class="hint">${d.years.length ? `${d.years[0].year}~${d.years.at(-1)!.year}년` : ''}</small></h3>${charts}</div>
     <div class="card st-card"><h3>차종별 <small class="hint">기간 안 · 상위 8개 · 파생 차종은 따로</small></h3><div class="fin-charts"><section><p class="lbl">누적 판매</p>${carBars(d.cars.map((c) => ({ name: c.name, v: c.sold })), cnt('대'))}</section>
       <section><p class="lbl">누적 이익(매출 − 원가 − 광고 − 리콜)</p>${carBars(d.cars.map((c) => ({ name: c.name, v: c.profit })), (v) => money(v, true))}</section></div></div>

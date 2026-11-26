@@ -1,7 +1,7 @@
 // 2.0.0 경쟁 1부: 경쟁 모델 이름·겉으로 보이는 값(표시용 파생값)·세대교체 뉴스. 판매 계산과 게임 난수는 그대로여야 한다
 import { describe, it, expect, vi } from 'vitest';
 import { config } from '../src/config';
-import { RIVALS, bodyById } from '../src/data';
+import { NAMES, RIVALS, bodyById } from '../src/data';
 import { Game, allGens } from '../src/sim/game';
 import { steady, steadyExec } from '../src/sim/bots';
 import { rivalCycle } from '../src/sim/market';
@@ -17,10 +17,11 @@ const rivalNews = (s: CarState) => s.events.news.filter((n) => n.category === 'r
 const gens = (s: CarState) => s.rivals.reduce((a, r) => a + Object.values(r.models).reduce((b, md) => b + md.n, 0), 0);
 
 describe('2.0.0 경쟁 모델', () => {
-  it('자료: 회사마다 이름이 차체 수 이상이고, 모든 이름이 서로·플레이어 기본 이름과 다르다', () => {
-    const all = RIVALS.flatMap((r) => r.models);
-    for (const r of RIVALS) expect(r.models.length).toBeGreaterThanOrEqual(Object.keys(r.cells).length);
+  it('자료(4.0.0): 회사마다 차급마다 이름이 있고, 모든 이름이 서로·플레이어 기본 이름과 다르다', () => {
+    const all = RIVALS.flatMap((r) => Object.values(r.models));
+    for (const r of RIVALS) expect(Object.keys(r.models).sort()).toEqual(Object.keys(r.cells).sort());
     expect(new Set(all).size).toBe(all.length);
+    for (const n of NAMES.cars) expect(all).not.toContain(n);
   });
   it('이름: 같은 시드면 같고, 세대가 바뀌어도 이어지며, 한 판 안에서 겹치지 않는다', () => {
     for (const seed of [1, 2, 3, 77]) {
@@ -31,7 +32,7 @@ describe('2.0.0 경쟁 모델', () => {
       expect(gens(a.state)).toBeGreaterThan(g0); // 8년이면 세대교체가 있다
       expect(names(a.state)).toEqual(n0);
     }
-    expect(names(Game.create({ seed: 1 }).state)).not.toEqual(names(Game.create({ seed: 2 }).state)); // 시드마다 섞인다
+    expect(names(Game.create({ seed: 1 }).state)).toEqual(names(Game.create({ seed: 2 }).state)); // 4.0.0: 차급마다 정한 이름(시드와 무관)
   });
   it('겉으로 보이는 값: 범위와 결정론(평론 1~10, 등급 0~10, 가격 > 0, 칸 점유 합 ≤ 1)', () => {
     const a = Game.create({ seed: 5, difficulty: 'normal' }), b = Game.create({ seed: 5, difficulty: 'normal' });
@@ -100,7 +101,7 @@ describe('2.0.0 경쟁 모델', () => {
     const ev = ticks(g, 48), news = rivalNews(g.state);
     expect(news.length).toBe(gens(g.state) - g0);
     expect(news.length).toBeGreaterThan(3);
-    for (const n of news) { expect(n.topic).toBe('rival'); expect(n.text).toMatch(/^(현다이|포티|도요다), \S+ \d+세대 출시\. /); }
+    for (const n of news) { expect(n.topic).toBe('rival'); expect(n.text).toMatch(/^(현다이|포티|도요다|비엠브이|혼디|테슬러), .+ \d+세대 출시\. /); }
     expect(ev.filter((e) => e.kind === 'news' && 'topic' in e && e.topic === 'rival')).toEqual([]);
     const l = rivalLineup(g.state, 'toyoda')!;
     for (const m of l.models) if (news.some((n) => n.text.includes(`${m.name} ${m.number}세대`))) expect(m.n).toBeGreaterThan(0);
@@ -113,7 +114,7 @@ describe('2.0.0 경쟁 모델', () => {
     const e = ev.find((x) => 'topic' in x && x.topic === 'rival')!;
     expect(e.text).toContain(`「${name}」`);
     expect(e.text).toContain(`같은 ${bodyById(gen.body).name}`);
-    expect(rivalNews(g.state).at(-1)!.text).toBe(e.text);
+    expect(rivalNews(g.state).some((n) => n.text === e.text)).toBe(true);
   });
   it('늦은 시작(2015년): 시작 직후 지난 세대교체 뉴스가 쏟아지지 않는다', () => {
     for (const seed of [1, 2, 3]) {
@@ -121,7 +122,7 @@ describe('2.0.0 경쟁 모델', () => {
       expect(rivalNews(g.state)).toEqual([]);
       ticks(g, 2);
       expect(rivalNews(g.state).length).toBeLessThanOrEqual(3);
-      expect(names(g.state)).toEqual(names(Game.create({ seed, difficulty: 'normal' }).state)); // 이름은 시작 연도와 무관
+      expect(names(g.state).slice(0, names(Game.create({ seed, difficulty: 'normal' }).state).length)).toEqual(names(Game.create({ seed, difficulty: 'normal' }).state)); // 이름은 시작 연도와 무관(2015년 시작에는 그 전에 나타난 테슬러가 뒤에 더 있다)
     }
   });
   it('기존 판 결과 불변: 같은 시드의 판매·현금·난수·장부·경쟁 차가 2.0.0 이전(1.6.1)과 같다', () => {
@@ -132,21 +133,21 @@ describe('2.0.0 경쟁 모델', () => {
       const s = g.state;
       return { cash: s.cash, sold: allGens(s).reduce((a, x) => a + x.totalSold, 0), rng: s.rng, ledger: h(s.ledger), rivals: h(s.rivals) };
     };
-    // 1.6.1(커밋 de79c75)에서 같은 코드로 뽑은 값. 3.5.0: 경쟁 2부(시상식·대응 신차·가격 전쟁 등)를 끈 계산이 그대로인지 본다(켠 값은 아래 3.5.0 고정값)
+    // 4.0.0 경쟁사 6곳(정규화)으로 다시 뽑은 값(3.7.1까지: 87412019.57/940508, 45466261.72/792658, 98958003.82/304542). 처음 값은 1.6.1(커밋 de79c75). 3.5.0: 경쟁 2부(시상식·대응 신차·가격 전쟁 등)를 끈 계산이 그대로인지 본다(켠 값은 아래 3.5.0 고정값)
     const R = config.rivalry as { on: boolean };
     R.on = false;
     let off;
     try { off = [run(1, 20), run(2, 20, steady()), run(3, 8, steadyExec(), 2015)]; } finally { R.on = true; }
     expect(off).toEqual([
-      { cash: 87412019.56920338, sold: 940508, rng: 1249105420, ledger: 4227960597, rivals: 547975576 },
-      { cash: 45466261.71972582, sold: 792658, rng: 2087917282, ledger: 3886249014, rivals: 722100899 },
-      { cash: 98958003.81953543, sold: 304542, rng: 4270408987, ledger: 3353263113, rivals: 2834068642 },
+      { cash: 96005860.2696497, sold: 1015671, rng: 1512446508, ledger: 452230256, rivals: 3702366129 },
+      { cash: 54280678.835944586, sold: 855705, rng: 3656142007, ledger: 1093000369, rivals: 2582769295 },
+      { cash: 98947680.7056947, sold: 307802, rng: 3830396908, ledger: 48041485, rivals: 1001147149 },
     ]);
     // 3.5.0 경쟁 2부를 켠 판(지금 게임): 시상식 평판·판매 보너스, 대응 신차, 가격 전쟁(봇은 기본 선택 '버틴다'), 이직 제안(임원 봇은 인사 위임으로 붙잡는다)이 결과를 바꾼다
     expect([run(1, 20), run(2, 20, steady()), run(3, 8, steadyExec(), 2015)]).toEqual([
-      { cash: 108126213.4875947, sold: 1075924, rng: 3678870906, ledger: 69962234, rivals: 1834140196 },
-      { cash: 51269056.79065265, sold: 823653, rng: 1591540306, ledger: 1647041059, rivals: 1379558245 },
-      { cash: 95369860.96742879, sold: 312140, rng: 3623420717, ledger: 539106578, rivals: 3493211895 },
+      { cash: 125019841.36865704, sold: 1060249, rng: 1576387705, ledger: 1285195934, rivals: 2997189494 }, // 4.0.0 경쟁사 6곳(3.7.1: 108126213.49/1075924)
+      { cash: 52624735.88964106, sold: 869654, rng: 3791600701, ledger: 1494045141, rivals: 769045974 }, // (3.7.1: 51269056.79/823653)
+      { cash: 96625424.71161187, sold: 313477, rng: 3559479520, ledger: 549864667, rivals: 3651925573 }, // (3.7.1: 95369860.97/312140)
     ]);
   });
 });

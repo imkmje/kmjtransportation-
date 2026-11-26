@@ -326,8 +326,8 @@ describe('평론가별 시승기', () => {
 });
 
 describe('알림 유형', () => {
-  it('13가지(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인 포함), 경고만 끌 수 없음. 20년 봇 이벤트·뉴스가 모두 목록 안의 유형으로 나뉘고, 교육·성과·공장·결산·경고가 구분된다', () => {
-    expect(NOTIFY.map((x) => x.id)).toEqual(['training', 'hiring', 'research', 'dev', 'launch', 'exec', 'finance', 'market', 'rival', 'factory', 'sub', 'auto', 'warning']);
+  it('14가지(2.0.0 경쟁사 신차, 3.0.0 자회사, 3.7.0 자동 승인, 4.0.0 세계 시장 포함), 경고만 끌 수 없음. 20년 봇 이벤트·뉴스가 모두 목록 안의 유형으로 나뉘고, 교육·성과·공장·결산·경고가 구분된다', () => {
+    expect(NOTIFY.map((x) => x.id)).toEqual(['training', 'hiring', 'research', 'dev', 'launch', 'exec', 'finance', 'market', 'rival', 'factory', 'sub', 'auto', 'world', 'warning']);
     expect(NOTIFY.filter((x) => x.locked).map((x) => x.id)).toEqual(['warning']); expect(topicLocked('warning')).toBe(true);
     const g = big(1985, 1, { ability: 90 }), s = g.state, ev: GameEvent[] = [], ids = new Set(NOTIFY.map((x) => x.id));
     ok(g.command({ type: 'startProject', ...SPEC }));
@@ -350,7 +350,7 @@ describe('저장 형식 7(1.3.0)', () => {
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v6.json', 'utf8'));
     expect(raw.saveVersion).toBe(6);
     const a = Game.fromJSON(raw);
-    expect(a.state.saveVersion).toBe(10);
+    expect(a.state.saveVersion).toBe(11);
     const gens = allGens(a.state);
     expect(gens.length).toBeGreaterThan(2);
     for (const x of gens) { expect(x.critiques!.map((c) => c.score)).toEqual(x.reviews); for (const c of x.critiques!) expect(c.text.length).toBeGreaterThan(10); }

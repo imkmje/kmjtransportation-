@@ -14,13 +14,16 @@ export type EquipLevel = 'opt' | 'std'; // 1.1.0 선택 사양 / 기본 장비(�
 export type Equip = Record<string, EquipLevel>;
 export interface SegmentDef { id: string; name: string; info: string; w: Stats; eps: number }
 export interface RegionMarket { name: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; mix: Record<string, Record<string, number>>; trend?: Record<string, number[]> } // trend: 차체·동력의 연대별 유행 계수(없으면 1)
-export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number>; desc: string; shape: Stats; models: string[]; color: string; field: TechField; segment: string } // color·field·segment(3.5.0): 로고 색, 앞선 연구 분야(기술 제휴), 인수 브랜드의 기본 고객층 // desc·shape·models(2.0.0): 한 줄 성격, 능력치 모양(등급 가감), 모델 이름 목록(차체 수 이상)
+/** 4.0.0 해외 권역(regions.json, 게임용 가정): 시장 규모·차체 비중(market.json과 같은 꼴), 능력치 가중치 배수 w, 가격 민감도 배수 eps, 시장 가격 수준 priceMult, 동력 수요 배수(연도 표),
+ *  관세율(연도 표, 대당 원가에 곱함)과 차체별 예외, 운송비(만원/대), 기타 현지 업체 몫(local, 경쟁 차 기본 A 몇 대 분), 규제 앞섬(regLead년, 국내 의무 장비가 이만큼 먼저), 진출 평판 조건·진출비, 판매 법인 비용 배수 */
+export interface RegionDef { id: string; name: string; taste: string; years: number[]; annual: number[]; bodyShare: Record<string, number[]>; w: Stats; eps: number; priceMult: number; pt: Record<string, number[]>; tariff: number[]; tariffBody: Record<string, number>; ship: number; local: number; regLead: number; rep: number; entry: number; officeMult: number }
+export interface RivalDef { id: string; name: string; trait: string; cells: Record<string, number>; desc: string; shape: Stats; models: Record<string, string>; color: string; field: TechField; segment: string; legacy?: string[]; regions: Record<string, number>; from?: number; noise?: number; ev?: true; premium?: number } // 4.0.0: models 차체 → 모델 이름(실제 대표 차 이름을 비튼 것), legacy 3.7.1까지의 이름 목록(저장 변환용, 있으면 처음부터 있던 3곳), regions 권역별 세기 배수, from 등장 연도(없으면 처음부터), noise 강약 난수 폭(없으면 config), ev 전기차 전문(충전 인프라만큼 세진다), premium 표시 가격 웃돈 // color·field·segment(3.5.0): 로고 색, 앞선 연구 분야(기술 제휴), 인수 브랜드의 기본 고객층 // desc·shape·models(2.0.0): 한 줄 성격, 능력치 모양(등급 가감), 모델 이름 목록(차체 수 이상)
 /** 1.3.0 파생 모델(variants.json): 쓸 수 있는 차체, 기본 고객층, 능력치 배수, 시장 기준가·원가 배수, 개발비(바탕 세대 개발비의 몫)·설계 주, powertrain(전기차판), rep(출시 평판 가점) */
 export interface VariantDef { id: string; name: string; suffix: string; info: string; bodies: string[]; segment?: string; powertrain?: string; mult: Stats; price: number; cost: number; devShare: number; designWeeks: number; rep?: number }
 /** 1.3.0 평론가(critics.json): config.critics.list와 같은 id·순서 */
 export interface CriticDef { id: string; name: string; outlet: string; focus: Stat[]; open: Record<'high' | 'mid' | 'low', string[]> }
 /** 1.3.0 알림 유형(notify.json). locked: 끌 수 없음(경고) */
-export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning' | 'sub' | 'auto'; // auto(3.7.0): 결정 자동 승인 // rival(2.0.0): 경쟁사 신차, sub(3.0.0): 자회사
+export type NotifyTopic = 'training' | 'hiring' | 'research' | 'dev' | 'launch' | 'exec' | 'finance' | 'market' | 'rival' | 'factory' | 'warning' | 'sub' | 'auto' | 'world'; // auto(3.7.0): 결정 자동 승인 // rival(2.0.0): 경쟁사 신차, sub(3.0.0): 자회사
 export interface NotifyDef { id: NotifyTopic; name: string; locked: boolean }
 
 /** 연구 분야 5개(10장) */
@@ -143,6 +146,13 @@ export interface Edition {
   battery?: Battery; // 1.2.0 전기차 배터리 용량(없으면 표준)
 }
 /** 세대: 차체·동력 종류·고객층이 같은 한 묶음 */
+/** 4.0.0 세대의 권역 수출: on 수출 목록에 있음, price 수동 권역 가격(없으면 자동), ap·apAt·apEd 자동 가격과 셈한 달·판 수, sold·demand 지난달 판매·주문, total·profit 누적 판매·이익(관세·운송비 뺀 값), no 자동 수출이 적자로 뺀 차(다시 넣지 않음) */
+export interface GenWorld { on: boolean; price?: number; ap?: number; apAt?: number; apEd?: number; sold: number; demand: number; total: number; rev: number; profit: number; no?: true; ls?: number } // ls: 연속 적자 개월
+/** 4.0.0 진출한 권역: since 진출 달, aw 브랜드 인지도(0~1, 차 인지도에 곱한다), rep 권역 평판, office 판매 법인 등급(0~3), auto 자동 수출, 지난달 sold·rev·profit·share(권역 시장 점유), 누적 total·totalProfit, blocked 규제로 못 판 차 수 */
+export interface WorldRegion { id: string; since: number; aw: number; rep: number; office: number; auto: boolean; sold: number; rev: number; profit: number; share: number; total: number; totalProfit: number; tariff: number; ship: number }
+export interface WorldState { regions: WorldRegion[] } // 진출 순
+/** 장부의 권역 한 줄(4.0.0) */
+export interface LedgerWorld { sold: number; revenue: number; cogs: number; tariff: number; ship: number; upkeep: number; profit: number }
 export interface Generation {
   id: number; number: number; body: string; segment: string; powertrain: string;
   launchWeek: number; launchMonth: number; // launchMonth: 월 번호(0 = 1970년 1월)
@@ -177,6 +187,8 @@ export interface Generation {
   critiques?: Critique[]; // 1.3.0 출시 때 평론가별 시승기(reviews와 같은 순서·점수)
   awards?: string[]; // 3.5.0 수상 이력("1995년 올해의 차")
   awardUntil?: number; // 3.5.0 수상 판매 보너스가 끝나는 달(이 달 전까지)
+  world?: Record<string, GenWorld>; // 4.0.0 권역 수출(없으면 국내만)
+  domFirst?: true; // 4.0.0 생산이 모자라면 국내 먼저(없으면 대당 이익이 큰 곳 먼저)
 }
 /** 세대 손익 누적(0.10.0): 매출·원가·광고비·리콜비, 개발비(처음·페이스리프트·의무 장비·긴급 개선), 월별 이익(sales와 같은 길이). est: 예전 저장에서 추정한 값이 섞임 */
 export interface GenPnl { rev: number; cogs: number; mk: number; recall: number; dev: { base: number; lift: number; retro: number; fix: number }; months: number[]; est?: true }
@@ -197,11 +209,12 @@ export interface LedgerEntry {
   upkeepHq?: number; // 0.5.1: upkeep 중 본사 몫(공장 몫 = upkeep − upkeepHq). 예전 장부에는 없다
   oneOff: number; // 일회성 지출(채용 공고·교육·퇴직금·본사 승급·공장 건설). 명령 때 현금에서 바로 나가고, 장부에는 그달 지출로 적는다
   profit: number; cash: number; sold: number;
+  world?: Record<string, LedgerWorld>; tariff?: number; ship?: number; worldUpkeep?: number; worldInv?: number; // 4.0.0 권역별 몫(revenue·cogs에 들어 있음), 관세·운송비·판매 법인 유지비(profit에서 뺌), 진출비·법인 투자(oneOff에 들어 있음). 해외가 없던 달에는 없다
   subDiv?: number; subInv?: number; // 3.0.0 자회사 배당(profit에 더한다)·자회사 설립·투자(oneOff에 들어 있음). 자회사가 없던 달에는 없다
   cars?: LedgerCar[]; execPay?: number; research?: number; // 0.9.0 월 결산 창용(예전 장부에는 없다): 차종별 한 줄, salaries 중 임원 몫, oneOff 중 연구 시작 비용
 }
 /** 0.9.0 장부의 차종별 한 줄(세대 ID). 이익 = 매출 − 원가 − 광고 − 리콜 */
-export interface LedgerCar { id: number; sold: number; revenue: number; cogs: number; marketing: number; recall: number }
+export interface LedgerCar { id: number; sold: number; revenue: number; cogs: number; marketing: number; recall: number; exp?: { sold: number; revenue: number; landed: number } } // exp(4.0.0): 수출 몫(sold·revenue·원가는 위 칸에 들어 있음), landed 관세 + 운송비(이익에서 뺀다)
 
 /** 연구 상태(10장). done: 완료한 기술 ID(반복 기술은 여러 번), active: 진행 중(시작 순), early: 등장 연도보다 먼저 완료해 "세계 최초"를 아직 쓰지 않은 기술 */
 export interface ResearchState {
@@ -219,7 +232,7 @@ export interface RivalChoice { rivalId: string; war?: number; staffId?: number; 
 /** 무작위 사건이 남긴 기간 효과(생산·원가 배수, 경쟁 차 히트작) */
 export interface EventMod { kind: 'production' | 'cost' | 'rivalHit'; value: number; untilMonth: number; body?: string; rivalId?: string; label: string }
 /** 뉴스 종류: 예고 / 사건 시작 / 사건 끝 / 규제 시행 / 선택 사건(답 기다림) / 선택 결과 / 연구 / 그 밖(출시 기사 등) */
-export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'rival' | 'sub' | 'other'; // rival(2.0.0): 경쟁 모델 세대교체, sub(3.0.0): 자회사
+export type NewsCategory = 'preview' | 'start' | 'end' | 'regulation' | 'choice' | 'result' | 'research' | 'rival' | 'sub' | 'world' | 'other'; // rival(2.0.0): 경쟁 모델 세대교체, sub(3.0.0): 자회사
 export interface NewsItem { week: number; text: string; category?: NewsCategory; topic?: NotifyTopic } // topic(1.3.0): 알림 유형(없으면 notify.ts의 newsTopic이 정한다) // category가 없는 예전 항목은 'other'로 본다
 export interface EventsState { pending: PendingChoice[]; mods: EventMod[]; news: NewsItem[] }
 
@@ -329,7 +342,7 @@ export interface RivalryState {
 }
 
 export interface CarState {
-  saveVersion: 10;
+  saveVersion: 11;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -362,11 +375,13 @@ export interface CarState {
   subs?: Subsidiary[]; // 3.0.0 자회사(형식 9). 없으면 자회사 없음
   rivalry?: RivalryState; // 3.5.0 경쟁 2부(형식 10). 없으면 다음 월 결산에 빈 상태로 시작한다
   autoDecide?: { on: string[]; guard?: false; pick?: Record<string, AutoAnswer> }; // 3.7.0 결정 자동 승인(형식 10의 생략 가능한 칸): 켠 결정 종류(사건 ID), guard false = 안전선 끔. 없으면 모두 끔. 3.7.1 pick: 종류별 자동 답(없으면 처음 값)
+  world?: WorldState; // 4.0.0 세계 시장(형식 11). 없으면 해외 진출 전
+  pendingWorldInv?: number; // 4.0.0 이번 달 진출비·판매 법인 투자(pendingOneOff에 들어 있음)
   pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
 }
 /** 한 해의 기록(0.8.0): 평판 이유별 합, 세대 ID별 이익, 연구 완료, 월 결산 합계(months개월), 연말(12월 결산) 현금·직원 수·임원 */
-export interface YearLog { rep: Record<string, number>; cars: Record<string, number>; research: string[]; revenue: number; profit: number; sold: number; months: number; cash?: number; staff?: number; execs?: string[]; repEnd?: number } // repEnd(1.5.0): 12월 결산 뒤 평판
+export interface YearLog { rep: Record<string, number>; cars: Record<string, number>; research: string[]; revenue: number; profit: number; sold: number; months: number; cash?: number; staff?: number; execs?: string[]; repEnd?: number; world?: Record<string, { sold: number; revenue: number; profit: number }> } // world(4.0.0): 권역별 합 // repEnd(1.5.0): 12월 결산 뒤 평판
 
 // ---------- 명령 ----------
 export type Command =
@@ -447,6 +462,13 @@ export type Command =
   | { type: 'buyRivalTech'; rivalId: string; techId: string }
   | { type: 'listSub'; subId: number; pct: number } // pct: 상장 뒤 판 지분 합(%)
   | { type: 'acquireRival'; rivalId: string }
+  // ---------- 4.0.0 세계 시장 ----------
+  | { type: 'openRegion'; region: string }
+  | { type: 'setExport'; generationId: number; region: string; on: boolean }
+  | { type: 'setRegionPrice'; generationId: number; region: string; price: number | null } // null = 자동
+  | { type: 'investOffice'; region: string } // 판매 법인 다음 등급
+  | { type: 'setRegionAuto'; region: string; on: boolean }
+  | { type: 'setDomFirst'; generationId: number; on: boolean }
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';

@@ -32,13 +32,13 @@ describe('새 게임', () => {
     expect(Game.create({ difficulty: 'normal', seed: 1, companyName: '   ' }).state.companyName).toBe('새 회사');
     expect(Game.create({ difficulty: 'normal', seed: 1, companyName: ' 한빛자동차 ' }).state.companyName).toBe('한빛자동차');
   });
-  it('시작 상태: 현금 30억, 평판 10, 직원 4명(디자이너 1·엔지니어 2·테스터 1, 능력 25~35), 경쟁사 3곳', () => {
+  it('시작 상태: 현금 30억, 평판 10, 직원 4명(디자이너 1·엔지니어 2·테스터 1, 능력 25~35), 경쟁사 5곳(4.0.0, 테슬러는 나중에)', () => {
     const s = Game.create({ difficulty: 'normal', seed: 7 }).state;
-    expect(s.cash).toBe(300000); expect(s.reputation).toBe(10); expect(s.saveVersion).toBe(10); expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]);
+    expect(s.cash).toBe(300000); expect(s.reputation).toBe(10); expect(s.saveVersion).toBe(11); expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null }); expect(s.candidates).toEqual([]);
     expect(s.staff.map((x) => x.role)).toEqual(['designer', 'engineer', 'engineer', 'tester']);
     for (const x of s.staff) { expect(x.ability).toBeGreaterThanOrEqual(25); expect(x.ability).toBeLessThanOrEqual(35); expect(x.potential).toBeGreaterThanOrEqual(50); expect(x.potential).toBeLessThanOrEqual(75); }
     expect(new Set(s.staff.map((x) => x.name)).size).toBe(4);
-    expect(s.rivals.map((r) => r.name)).toEqual(['현다이', '포티', '도요다']);
+    expect(s.rivals.map((r) => r.name)).toEqual(['현다이', '포티', '도요다', '비엠브이', '혼디']); // 4.0.0 테슬러는 2010년쯤 등장
   });
 });
 

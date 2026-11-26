@@ -3,7 +3,7 @@ import { NOTIFY } from '../data';
 import type { GameEvent, NewsItem, NotifyDef, NotifyTopic } from './types';
 
 export const NOTIFY_TOPICS: NotifyDef[] = NOTIFY;
-const NEWS: Record<string, NotifyTopic> = { preview: 'market', start: 'market', end: 'market', result: 'market', choice: 'market', regulation: 'warning', research: 'research', rival: 'rival', sub: 'sub', other: 'launch' };
+const NEWS: Record<string, NotifyTopic> = { preview: 'market', start: 'market', end: 'market', result: 'market', choice: 'market', regulation: 'warning', research: 'research', rival: 'rival', sub: 'sub', world: 'world', other: 'launch' };
 const KIND: Record<string, NotifyTopic> = {
   devWeek: 'dev', designDone: 'dev', advice: 'launch', recall: 'warning', cashWarning: 'warning', gameOver: 'warning', monthEnd: 'finance', discontinued: 'launch',
   unlock: 'research', reputation: 'launch', execReport: 'exec', replacement: 'hiring', company: 'hiring', choice: 'market',

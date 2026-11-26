@@ -10,15 +10,16 @@ export const WHEELS = [{ name: '작은 휠', sub: '단정함' }, { name: '보통
 const LOGO: Record<string, string> = {
   toyotto: '<ellipse cx="16" cy="16" rx="14" ry="9.5" fill="none" stroke="#c0392b" stroke-width="2.5"/><ellipse cx="16" cy="16" rx="6" ry="9.5" fill="none" stroke="#c0392b" stroke-width="2.5"/>',
   hyundoy: '<rect x="5" y="5" width="22" height="22" rx="4" transform="rotate(45 16 16)" fill="none" stroke="#1f4e9c" stroke-width="2.5"/><path d="M11 22l4-12M17 22l4-12M12.5 17h8" stroke="#1f4e9c" stroke-width="2.4" stroke-linecap="round"/>',
-  bmv: '<circle cx="16" cy="16" r="13" fill="#fff" stroke="#555" stroke-width="2.5"/><path d="M16 16V4a12 12 0 0 1 12 12z" fill="#2a77c9"/><path d="M16 16v12A12 12 0 0 1 4 16z" fill="#2a77c9"/>',
-  tesler: '<path d="M16 3l11 4v9c0 7-5 11-11 13C10 27 5 23 5 16V7z" fill="#fff" stroke="#d6252b" stroke-width="2.4"/><path d="M10 11h12M16 11v11" stroke="#d6252b" stroke-width="2.6" stroke-linecap="round"/>',
+  bmv: '<rect x="4" y="4" width="24" height="24" rx="6" fill="#1d2b44"/><path d="M9 21l4-10 3 6 3-6 4 10" fill="none" stroke="#e8edf5" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>',
+  hondi: '<path d="M6 6h20l-3 20H9z" fill="none" stroke="#b8323c" stroke-width="2.5" stroke-linejoin="round"/><path d="M12 10v12M20 10v12M12 16h8" stroke="#b8323c" stroke-width="2.4" stroke-linecap="round"/>',
+  tesler: '<circle cx="16" cy="16" r="13" fill="none" stroke="#c42d2d" stroke-width="2.4"/><path d="M17.5 6 11 17h5l-1.5 9L21 15h-5z" fill="#c42d2d"/>',
   forty: '<rect x="2" y="8" width="28" height="16" rx="8" fill="#1d3c8f"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="sans-serif">40</text>',
   other: '<circle cx="16" cy="16" r="12" fill="none" stroke="#5b6470" stroke-width="2.5"/>',
 };
 // rivals.json의 id → 데모 로고 도형
-const RIVAL_LOGO: Record<string, string> = { toyoda: 'toyotto', hyundae: 'hyundoy', porty: 'forty', bmv: 'bmv', tesler: 'tesler' };
+const RIVAL_LOGO: Record<string, string> = { toyoda: 'toyotto', hyundae: 'hyundoy', porty: 'forty', bmv: 'bmv', hondi: 'hondi', tesler: 'tesler' }; // 4.0.0 비엠브이·혼디·테슬러 로고는 새로 그렸다(실제 로고를 따르지 않는다)
 /** 2.0.0 경쟁 모델 썸네일의 회사별 차 색 경향(PAINT 안에서) */
-export const RIVAL_PAINT: Record<string, string[]> = { hyundae: ['#1f4fd1', '#eef0f2', '#3a3f47'], porty: ['#14213d', '#c8202f', '#eef0f2'], toyoda: ['#eef0f2', '#c9b38a', '#3a3f47'] };
+export const RIVAL_PAINT: Record<string, string[]> = { hyundae: ['#1f4fd1', '#eef0f2', '#3a3f47'], porty: ['#14213d', '#c8202f', '#eef0f2'], toyoda: ['#eef0f2', '#c9b38a', '#3a3f47'], bmv: ['#3a3f47', '#14213d', '#eef0f2'], hondi: ['#c8202f', '#eef0f2', '#1f4fd1'], tesler: ['#eef0f2', '#c8202f', '#3a3f47'] };
 export const logo = (key: string, z = 26): string =>
   `<svg width="${z}" height="${z}" viewBox="0 0 32 32" aria-hidden="true" style="display:block;flex:none">${LOGO[key] ?? LOGO[RIVAL_LOGO[key]] ?? LOGO.other}</svg>`;
 

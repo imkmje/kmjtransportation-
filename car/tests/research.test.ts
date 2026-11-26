@@ -426,19 +426,19 @@ describe('조합 노트(5.5)', () => {
 
 describe('저장 형식 3 → 4', () => {
   it('형식 3 파일(0.3.0 코드로 만든 픽스처)을 올리고 이어서 실행할 수 있다', () => {
-    expect(SAVE_VERSION).toBe(10);
+    expect(SAVE_VERSION).toBe(11);
     const v3 = JSON.parse(readFileSync('car/tests/fixtures/save-v3.json', 'utf8'));
     expect(v3.saveVersion).toBe(3);
     const g = Game.fromJSON(v3), s = g.state;
-    expect(s.saveVersion).toBe(10);
+    expect(s.saveVersion).toBe(11);
     // 이미 쓰던(판매·개발 중) 라디오·에어컨·중형 세단·파워 스티어링(선행 포함)을 연구 완료로, 소형 세단·가솔린은 원래 열려 있음
     expect(s.research.done).toEqual(['el_radio', 'el_aircon', 'bd_sedanM', 'el_powerSteering']); expect(s.research.active).toEqual([]); expect(s.research.early).toEqual([]);
     expect(s.knownCombos).toEqual(['sedanS:worker', 'sedanS:youth']);
     for (const x of s.staff) expect(x.lab).toBe(false);
     for (const gen of allGens(s)) for (const e of gen.editions) expect(e.level).toBe(e.tier);
     for (const p of s.projects) expect(p.level).toBe(p.tier);
-    expect(s.events).toEqual({ pending: [], mods: [], news: [] });
-    for (const r of s.rivals) { expect(Object.keys(r.models).sort()).toEqual(BODIES.map((b) => b.id).sort()); expect(Object.keys(r.cells).sort()).toEqual(BODIES.map((b) => b.id).sort()); }
+    expect({ ...s.events, news: s.events.news.filter((n) => !n.text.startsWith('새 경쟁사')) }).toEqual({ pending: [], mods: [], news: [] }); // 4.0.0 형식 10 → 11 변환이 새 경쟁사 등장 뉴스를 남긴다
+    for (const r of s.rivals.slice(0, 3)) { expect(Object.keys(r.models).sort()).toEqual(BODIES.map((b) => b.id).sort()); expect(Object.keys(r.cells).sort()).toEqual(BODIES.map((b) => b.id).sort()); }
     const bot = steady();
     for (let i = 0; i < WPY * 3 && s.status === 'playing'; i++) { bot.step(g); g.tick(); }
     expect(s.status).toBe('playing'); expect(s.research.done.length).toBeGreaterThan(2);
@@ -450,7 +450,7 @@ describe('저장 형식 3 → 4', () => {
   it('형식 1·2 파일도 4로 올라간다', () => {
     for (const f of ['save-v1.json', 'save-v2.json']) {
       const s = Game.fromJSON(JSON.parse(readFileSync(`car/tests/fixtures/${f}`, 'utf8'))).state;
-      expect(s.saveVersion).toBe(10); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
+      expect(s.saveVersion).toBe(11); expect(s.research.done).toContain('el_radio'); expect(s.knownCombos.length).toBeGreaterThan(0);
     }
   });
 });

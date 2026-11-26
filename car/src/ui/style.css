@@ -1307,3 +1307,36 @@ body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1
 .auto-log li{font-size:13px;line-height:1.5;color:var(--ink2);overflow-wrap:anywhere}
 .auto-log .nd{color:var(--ink3);font-weight:700;margin-right:4px}
 .chip.n-auto{background:var(--pos-bg);color:var(--pos-ink)}
+/* 4.0.0 세계 시장 */
+.w-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:12px;align-items:start}
+@media (max-width:1100px){.w-wrap{grid-template-columns:minmax(0,1fr)}}
+.wmap{width:100%;max-width:600px;height:auto;display:block;margin:4px auto 8px;background:var(--soft);border-radius:14px}
+.wm-rest{fill:var(--line)}
+.wm-r path{fill:var(--off);stroke:var(--card);stroke-width:1.5}
+.wm-r text{font-size:9.5px;font-weight:800;fill:var(--ink);pointer-events:none}
+.wm-r .wm-sub{font-size:7.5px;font-weight:600;fill:var(--ink2)}
+.wm-r.ready path{fill:var(--accent-bg);stroke:var(--accent2);stroke-dasharray:3 2}
+.wm-r.open path{fill:var(--pos-bg);stroke:var(--pos)}
+.wm-r.home path{fill:var(--accent)}
+.wm-r.sel path{stroke:var(--ink);stroke-width:2.5;stroke-dasharray:none}
+.wm-r[data-act]{cursor:pointer}
+.wm-r[data-act]:focus-visible path{stroke:var(--accent);stroke-width:3}
+.w-sum tr[data-act]{cursor:pointer}
+.w-sum tr.on td{background:var(--soft)}
+.w-sum td,.w-sum th{white-space:nowrap}
+.w-bars{display:grid;gap:4px;margin:6px 0 8px}
+.w-bar{display:grid;grid-template-columns:minmax(0,7.5em) minmax(0,1fr) 3.6em;gap:8px;align-items:center;font-size:12.5px}
+.w-bar span{display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.w-bar i{height:10px;background:var(--soft);border-radius:6px;overflow:hidden;display:block}
+.w-bar u{display:block;height:100%;background:var(--ink3);border-radius:6px}
+.w-bar.me u{background:var(--accent)}
+.w-bar.me span{font-weight:800}
+.w-bar small{text-align:right;color:var(--ink2)}
+.w-rank .w-bar{grid-template-columns:minmax(0,9.5em) minmax(0,1fr) 3.6em}
+.w-office{margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:14px}
+.w-office .btn{margin-top:6px}
+.w-auto{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
+.w-cars .btn{min-height:36px;padding:0 10px;font-size:13px}
+.w-cars td{vertical-align:middle}
+.w-cars .lnk{min-height:32px}
+.w-regs td,.w-regs th{white-space:nowrap}
