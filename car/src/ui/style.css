@@ -1335,9 +1335,21 @@ body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1
 .w-bar.me u{background:var(--accent)}
 .w-bar.me span{font-weight:800}
 .w-bar small{text-align:right;color:var(--ink2)}
-.w-rank .w-bar{grid-template-columns:minmax(0,9.5em) minmax(0,1fr) 3.6em}
+.w-rank .w-bar{grid-template-columns:minmax(0,11.5em) minmax(0,1fr) 3.6em}
 .w-office{margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:14px}
 .w-office .btn{margin-top:6px}
+.w-plant{margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:14px}
+.w-plant .btn{margin-top:6px}
+.w-loc{flex-wrap:wrap;gap:6px}
+.w-loc .btn{min-height:44px}
+.w-trade{margin:10px 0;padding:10px 12px;border-radius:14px;background:var(--soft)}
+.w-tl{margin:4px 0 0;padding-left:18px;font-size:13px;line-height:1.5}
+.w-rank .w-bar.mk span small{font-weight:400}
+.w-makers{display:grid;gap:8px;margin-top:6px}
+.w-mk{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:12px}
+.w-mk p{margin:2px 0}
+.sub-wt td{vertical-align:middle}
+.sub-rseg button{min-height:44px;min-width:52px}
 .w-auto{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
 .w-cars .btn{min-height:36px;padding:0 10px;font-size:13px}
 .w-cars td{vertical-align:middle}

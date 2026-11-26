@@ -9,7 +9,7 @@ import { allocate, capacityOf, costMultOf, devTeams, isAway, isDevRole, isTraini
 import { loanLimit, loanRate } from './finance';
 import { linesUsed, noteFormer, sellingGens } from './game';
 import { criticScores } from './reviews';
-import { genUnit, landedCost, regionPrice } from './world';
+import { genUnit, landedNow, regionName, regionPrice, regionViews } from './world';
 import { josa } from './josa';
 import { compareToPrev, fullChangeEligibility, latestGen } from './lifecycle';
 import { faceliftWeekCost, fullChangeCostMult, withRequired } from './dev';
@@ -25,10 +25,10 @@ import { monthLabel, monthOf, monthTime, yearOf } from './time';
 import type { CarState, Command, CommandResult, ExecGoto, ExecRole, ExecState, GameEvent, Generation, Nameplate, Project, ProjectSpec, Replacement, Role, Staff } from './types';
 
 const X = config.exec;
-export const EXEC_ROLES: ExecRole[] = ['hr', 'product', 'finance', 'production', 'research', 'market'];
-export const EXEC_TITLE: Record<ExecRole, string> = { hr: '인사 임원', product: '기획 임원', finance: '재무 임원', production: '생산 임원', research: '연구소장', market: '시장 조사 임원' };
+export const EXEC_ROLES: ExecRole[] = ['hr', 'product', 'finance', 'production', 'research', 'market', 'world']; // world(5.5.0): 해외 담당(해외 권역에 진출한 판에서만 자리가 생긴다)
+export const EXEC_TITLE: Record<ExecRole, string> = { hr: '인사 임원', product: '기획 임원', finance: '재무 임원', production: '생산 임원', research: '연구소장', market: '시장 조사 임원', world: '해외 담당 임원' };
 /** 외부에서 뽑은 임원의 직무(능력 계산 기준) */
-const EXEC_BASE_ROLE: Record<ExecRole, Role> = { hr: 'sales', product: 'designer', finance: 'sales', production: 'tester', research: 'engineer', market: 'sales' };
+const EXEC_BASE_ROLE: Record<ExecRole, Role> = { hr: 'sales', product: 'designer', finance: 'sales', production: 'tester', research: 'engineer', market: 'sales', world: 'sales' };
 const ROLE_KO: Record<Role, string> = { designer: '디자이너', engineer: '엔지니어', tester: '테스터', sales: '영업' };
 const SKILL_KO: Record<Role, string> = { designer: '디자인', engineer: '기술', tester: '꼼꼼함', sales: '영업력' };
 /** 위임 항목(자리별). note: 화면의 한 줄 설명, warn: 되돌리기 어려운 결정이라는 안내. 가격은 자동 가격 정책, 출시는 세대교체 위임(1.3.0), 해고는 자동 해고(1.4.0)로만 위임한다 */
@@ -43,6 +43,7 @@ export const DELEGATIONS: Record<ExecRole, { key: string; label: string; note?: 
   production: [{ key: 'autoAlloc', label: '생산 배분 자동 조정' }],
   research: [{ key: 'autoResearch', label: '빈 연구 칸에 추천 연구 시작' }],
   market: [],
+  world: [{ key: 'autoWorld', label: '해외 운영 자동 조정', note: '권역마다 자동 수출을 켜 두고, 손으로 정한 권역 가격을 자동 가격으로 돌리고, 현지 공장의 생산 차종을 자동(관세·운송비가 큰 차부터)으로 둡니다. 무역 협정 결정에는 앞당겨 아끼는 관세가 로비 비용보다 크고 운영비 6개월 치가 남으면 로비합니다(5.5.0).' }],
 };
 /** 보고 종류별 제목 */
 const KIND_TITLE: Record<string, string> = {
@@ -54,6 +55,7 @@ const KIND_TITLE: Record<string, string> = {
   build: '새 차종 제안', adUp: '광고 늘리기', adDown: '광고 줄이기',
   autoPriceWar: '가격 전쟁 대응', autoPoach: '이직 제안 대응', autoRest: '자동 휴식', autoTrain: '자동 교육', autoHire: '자동 채용', autoHireFail: '자동 채용 보류', autoFire: '자동 해고', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
   autoFullChange: '자동 풀체인지', autoFacelift: '자동 페이스리프트', autoDerive: '파생 모델 세대교체', autoGenWait: '세대교체 대기', autoLaunch: '자동 출시', autoLaunchFail: '자동 출시 보류',
+  plant: '현지 공장 건설', worldOffice: '판매 법인 투자', worldOpen: '해외 진출', autoWorld: '해외 운영 자동 조정', // 5.5.0
   replaceDone: '교체 고용 완료', replaceFail: '교체 고용 실패', replaceHold: '교체 고용 보류', replaceCancel: '교체 고용 취소', replaceWait: '교체 고용 대기',
 };
 
@@ -61,7 +63,9 @@ const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const J = josa;
 
 // ---------- 자리·능력·월급 ----------
-export const seatsOf = (s: CarState): number => X.seats[s.hqLevel - 1];
+export const seatsOf = (s: CarState): number => X.seats[s.hqLevel - 1] + (s.world?.regions.length ? 1 : 0); // 5.5.0 해외 권역에 진출하면 해외 담당 자리가 하나 늘어난다
+/** 이 판에서 보이는 임원 자리(해외 담당은 진출한 판에서만) */
+export const execRolesOf = (s: CarState): ExecRole[] => EXEC_ROLES.filter((r) => r !== 'world' || !!s.world?.regions.length || !!s.execs?.seats.world);
 /** 지금 임원 자리를 다 쓰면 다음으로 자리가 느는 본사 등급(없으면 null) */
 const nextSeatHq = (s: CarState): number | null => { const i = X.seats.findIndex((n, k) => k >= s.hqLevel && n > seatsOf(s)); return i < 0 ? null : i + 1; };
 const seated = (s: CarState): [ExecRole, Staff, boolean][] => EXEC_ROLES.flatMap((r) => { const x = s.execs?.seats[r]; return x ? [[r, x.staff, x.hired] as [ExecRole, Staff, boolean]] : []; });
@@ -86,7 +90,7 @@ export function execInfo(s: CarState) {
   const used = seated(s).length, seats = seatsOf(s);
   return {
     seats, used, postCost: X.postCost, delegateSkill: X.delegateSkill, nextSeatHq: nextSeatHq(s), tiers: X.tiers,
-    roles: EXEC_ROLES.map((role) => {
+    roles: execRolesOf(s).map((role) => {
       const seat = s.execs?.seats[role], skill = seat ? execSkill(role, seat.staff) : 0;
       return {
         role, title: EXEC_TITLE[role],
@@ -141,8 +145,8 @@ export function marketIdea(s: CarState, body: string, segment: string) {
 function blendedUnit(s: CarState, g: Generation): number {
   const dom = generationUnitProfit(g, s), rows = Object.entries(g.world ?? {}).filter(([, w]) => w.on && w.demand > 0);
   if (!rows.length) return dom;
-  const y = yearOf(s.week), t = monthTime(monthOf(s.week)), { uc, opRev } = genUnit(s, g, y), exp = rows.reduce((a, [, w]) => a + w.demand, 0), domD = Math.max(0, g.lastDemand - exp);
-  const sum = rows.reduce((a, [rid, w]) => a + w.demand * (regionPrice(s, g, rid) + opRev - uc - landedCost(rid, g.body, uc, t)), domD * dom);
+  const y = yearOf(s.week), m = monthOf(s.week), { uc, opRev } = genUnit(s, g, y), ex = (w: { demand: number; loc?: number }) => Math.max(0, w.demand - (w.loc ?? 0)), exp = rows.reduce((a, [, w]) => a + ex(w), 0), domD = Math.max(0, g.lastDemand - exp); // 5.5.0 현지 공장 몫은 국내 공장 배분에서 뺀다
+  const sum = rows.reduce((a, [rid, w]) => a + ex(w) * (regionPrice(s, g, rid) + opRev - uc - landedNow(s, rid, g.body, uc, m)), domD * dom);
   return sum / Math.max(1e-9, domD + exp);
 }
 /** 생산 배분 제안·자동 조정: 주문이 한도를 넘으면 대당 이익이 큰 차부터 채운다(아니면 모두 자동). now·after: 지난달 주문 기준 월 이익(대당 이익 × 만드는 대수) */
@@ -382,7 +386,27 @@ function marketIdeas(s: CarState): Idea[] {
   return out;
 }
 
-const IDEAS: Record<ExecRole, (s: CarState) => Idea[]> = { hr: hrIdeas, product: productIdeas, finance: financeIdeas, production: productionIdeas, research: researchIdeas, market: marketIdeas };
+/** 5.5.0 해외 담당: 현지 공장(판매 법인 2등급, 지난달 수출이 다음 등급 생산의 60% 이상, 아끼는 관세·운송비 어림), 판매 법인(판매가 상한의 90% 이상), 새 권역 진출 */
+function worldIdeas(s: CarState): Idea[] {
+  const out: Idea[] = [], go: ExecGoto = { tab: 'company', sub: 'world' }, fixed = monthlyFixed(s), m = monthOf(s.week);
+  for (const v of regionViews(s)) {
+    if (!v.open) { if (!v.error) out.push({ kind: 'worldOpen', key: v.id, goto: go, facts: [`${v.name} 진출비 ${won(v.entry)}`, `한 달 시장 약 ${Math.round(v.market).toLocaleString()}대, 판매 상한 ${Math.round(v.cap).toLocaleString()}대`],
+      text: ['아직 진출하지 않은 해외 권역이 있습니다.', `${v.name} 진출 조건을 채웠습니다. 진출을 검토해 보시죠.`, `${v.name} 진출 조건을 채웠습니다. 진출비 ${won(v.entry)}${J(won(v.entry), '으로/로')} 한 달 시장 약 ${Math.round(v.market).toLocaleString()}대에서 수출로 상한 ${Math.round(v.cap).toLocaleString()}대까지 팔 수 있습니다.`] }); continue; }
+    const p = v.plant, n = p?.next;
+    if (n && !n.error && s.cash >= n.cost + fixed * X.research.cashMonths && v.sold - (p?.made ?? 0) >= n.capacity * 0.6 && n.save > n.upkeep) {
+      const net = n.save - n.upkeep, pay = Math.ceil(n.cost / Math.max(1, net)) + n.months;
+      out.push({ kind: 'plant', key: `${v.id}:${n.level}`, goto: go, facts: [`${v.name} 지난달 판매 ${v.sold.toLocaleString()}대(현지 생산 ${(p?.made ?? 0).toLocaleString()}대), 관세 ${won(v.tariff)}·운송비 ${won(v.ship)}`, `현지 공장 ${n.level}등급: 한 달 ${n.capacity.toLocaleString()}대, 건설비 ${won(n.cost)}, 월 유지비 ${won(n.upkeep)}, ${n.months}개월 공사`, `늘어나는 월 이익 약 ${won(n.save)}(관세·운송비 절감과 국내 공장이 모자라 못 판 주문) → 본전까지 약 ${pay}개월`],
+        text: ['해외 공장을 검토할 때입니다.', `${v.name}에 현지 공장을 지을 때입니다.`, `${v.name}에 현지 공장 ${n.level}등급을 지을 때입니다. 지금 수출하는 차를 현지에서 만들면 관세·운송비를 아끼고 국내 공장 한도가 비어 월 이익이 약 ${won(n.save)} 늘어, 유지비를 빼고 공사 기간을 더해 약 ${pay}개월이면 건설비를 되찾습니다. 관세 인상·수입 규제도 받지 않습니다.`] });
+    }
+    const o = v.officeNext;
+    if (o && !o.error && v.sold >= v.cap * 0.9 && v.profit > 0 && s.cash >= o.cost + fixed * X.research.cashMonths)
+      out.push({ kind: 'worldOffice', key: `${v.id}:${o.level}`, goto: go, facts: [`${v.name} 지난달 판매 ${v.sold.toLocaleString()}대 / 상한 ${Math.round(v.cap).toLocaleString()}대`, `판매 법인 ${o.level}등급: 상한 시장의 ${Math.round(o.capShare * 100)}%, 투자비 ${won(o.cost)}, 월 유지비 ${won(o.upkeep)}`],
+        text: ['해외 판매가 상한에 막혀 있습니다.', `${v.name} 판매가 상한에 닿았습니다. 판매 법인을 키우시죠.`, `${v.name} 판매가 상한(${Math.round(v.cap).toLocaleString()}대)에 닿았습니다. 판매 법인 ${o.level}등급이면 상한이 시장의 ${Math.round(o.capShare * 100)}%로 늘어납니다(투자비 ${won(o.cost)}).`] });
+  }
+  void m;
+  return out;
+}
+const IDEAS: Record<ExecRole, (s: CarState) => Idea[]> = { hr: hrIdeas, product: productIdeas, finance: financeIdeas, production: productionIdeas, research: researchIdeas, market: marketIdeas, world: worldIdeas };
 
 // ---------- 상태 바꾸기 ----------
 /** Game이 넘기는 손잡이: 일회성 지출, 명령 실행(검증 포함, 기록에는 남지 않음), 새 이름 */
@@ -588,6 +612,18 @@ function delegate(c: ExecCtx, ev: GameEvent[]): void {
     }
   }
   autoGen(c); // 1.3.0 세대교체 위임
+  if (delegationOn(s, 'world', 'autoWorld')) { // 5.5.0 해외 담당: 자동 수출 켜기, 수동 권역 가격 → 자동, 현지 생산 차종 → 자동
+    const done: string[] = [];
+    for (const r of [...(s.world?.regions ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      const nm = regionName(r.id);
+      if (!r.auto && c.run({ type: 'setRegionAuto', region: r.id, on: true }).ok) done.push(`${nm} 자동 수출을 켰습니다`);
+      const manual = sellingGens(s).filter((g) => g.world?.[r.id]?.price !== undefined);
+      for (const g of manual) c.run({ type: 'setRegionPrice', generationId: g.id, region: r.id, price: null });
+      if (manual.length) done.push(`${nm} 권역 가격 ${manual.length}대를 자동으로 돌렸습니다`);
+      if (r.plant?.cars && c.run({ type: 'setPlantCars', region: r.id, cars: null }).ok) done.push(`${nm} 현지 생산 차종을 자동으로 돌렸습니다`);
+    }
+    if (done.length) addReport(s, 'world', 'autoWorld', `${done.join('. ')}.`, [], { tab: 'company', sub: 'world' }, true);
+  }
   if (delegationOn(s, 'research', 'autoResearch'))
     for (let t = recommendTech(s, fixed() * X.research.cashMonths); t && s.research.active.length < researchSlots(s); t = recommendTech(s, fixed() * X.research.cashMonths)) {
       if (!c.run({ type: 'startResearch', techId: t.id }).ok) break;

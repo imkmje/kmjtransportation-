@@ -130,7 +130,7 @@ describe('저장 형식 8', () => {
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v7.json', 'utf8'));
     expect(raw.saveVersion).toBe(7); expect(raw.start).toBeUndefined();
     const a = Game.fromJSON(raw), s = a.state;
-    expect(SAVE_VERSION).toBe(12); expect(s.saveVersion).toBe(12); expect(s.start).toBeUndefined();
+    expect(SAVE_VERSION).toBe(13); expect(s.saveVersion).toBe(13); expect(s.start).toBeUndefined();
     const done = Object.keys(s.years!).map(Number).filter((y) => y < yearOf(s.week));
     expect(done.length).toBeGreaterThan(5);
     for (const y of done) expect(s.years![y].repEnd).toBeTypeOf('number');

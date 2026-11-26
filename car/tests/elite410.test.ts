@@ -270,14 +270,14 @@ describe('4.1.0 저장 형식 12', () => {
     const h = Game.fromJSON(g.toJSON());
     for (let i = 0; i < 60; i++) { g.tick(); h.tick(); }
     expect(JSON.stringify(h.state)).toBe(JSON.stringify(g.state));
-    expect(h.state.saveVersion).toBe(SAVE_VERSION); expect(SAVE_VERSION).toBe(12);
+    expect(h.state.saveVersion).toBe(SAVE_VERSION); expect(SAVE_VERSION).toBe(13);
   });
   it('형식 11 fixture(4.0.0으로 만든 2003년 판): 12로 올라오고 전담팀·전 직원은 없음, 인수 브랜드의 옛 모델 이름(F-160)은 새 이름으로, 이어서 돌린 결과와 저장 왕복이 같다', () => {
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v11.json', 'utf8')) as CarState;
     expect(raw.saveVersion).toBe(11);
     const old = raw.subs!.find((x) => x.from === 'porty')!.models.find((m) => m.body === 'pickup');
     const a = Game.fromJSON(raw), s = a.state;
-    expect(s.saveVersion).toBe(12); expect(s.elite).toBeUndefined(); expect(s.former).toBeUndefined();
+    expect(s.saveVersion).toBe(13); expect(s.elite).toBeUndefined(); expect(s.former).toBeUndefined();
     if (old) { expect(old.name).toBe('F-160'); expect(s.subs!.find((x) => x.from === 'porty')!.models.find((m) => m.body === 'pickup')!.name).toBe('P-170'); }
     for (let i = 0; i < 12; i++) toMonthEnd(a);
     const b = Game.fromJSON(JSON.parse(JSON.stringify(a.toJSON())));

@@ -186,7 +186,46 @@
   "regLead": 3,
   "rep": 40,
   "entry": 1000000,
-  "officeMult": 1.2
+  "officeMult": 1.2,
+  "plantMult": 1.1,
+  "makers": [
+   {
+    "id": "chevore",
+    "name": "쉐보래",
+    "trait": "픽업·대형 SUV",
+    "desc": "북미의 대형 픽업·SUV 강자. 힘과 적재를 앞세우고 작은 차는 약하다.",
+    "color": "#b8892a",
+    "share": 0.5,
+    "cells": {
+     "pickup": 0.3,
+     "suvL": 0.25,
+     "suv": 0.1,
+     "sedanL": 0.1,
+     "sports": 0.1,
+     "coupe": 0.05,
+     "sedanM": 0,
+     "minivan": 0,
+     "suvS": -0.1,
+     "sedanS": -0.2,
+     "hatch": -0.3,
+     "kei": -0.4
+    },
+    "models": {
+     "pickup": "실바라도",
+     "suvL": "서버반",
+     "suv": "블레이조",
+     "sedanL": "임팔로",
+     "sports": "콜벳트",
+     "coupe": "카마루",
+     "sedanM": "말리보",
+     "minivan": "아스트론",
+     "suvS": "트랙서",
+     "sedanS": "캐벌리오",
+     "hatch": "소니코",
+     "kei": "스파르크"
+    }
+   }
+  ]
  },
  {
   "id": "eu",
@@ -373,7 +412,46 @@
   "regLead": 4,
   "rep": 45,
   "entry": 800000,
-  "officeMult": 1.1
+  "officeMult": 1.1,
+  "plantMult": 1.15,
+  "makers": [
+   {
+    "id": "volksbagen",
+    "name": "폭스바근",
+    "trait": "대중차·해치백",
+    "desc": "유럽의 대중차 강자. 해치백과 소형차가 탄탄하고 큰 고급차는 약하다.",
+    "color": "#2a5aa8",
+    "share": 0.5,
+    "cells": {
+     "hatch": 0.3,
+     "kei": 0.15,
+     "sedanS": 0.1,
+     "sedanM": 0.1,
+     "minivan": 0.1,
+     "suvS": 0.05,
+     "suv": 0,
+     "coupe": 0,
+     "sedanL": -0.15,
+     "suvL": -0.15,
+     "sports": -0.2,
+     "pickup": -0.3
+    },
+    "models": {
+     "hatch": "골푸",
+     "kei": "루파",
+     "sedanS": "제토",
+     "sedanM": "파사토",
+     "minivan": "투라노",
+     "suvS": "티로코",
+     "suv": "티구언",
+     "coupe": "시로카",
+     "sedanL": "페이튼",
+     "suvL": "투아락",
+     "sports": "코라디",
+     "pickup": "아마락"
+    }
+   }
+  ]
  },
  {
   "id": "em",
@@ -559,7 +637,40 @@
   "local": 2.5,
   "regLead": -6,
   "rep": 25,
-  "entry": 300000,
-  "officeMult": 0.7
+  "entry": 200000,
+  "officeMult": 0.7,
+  "plantMult": 0.6,
+  "makers": [
+   {
+    "id": "datta",
+    "name": "다타",
+    "trait": "저가차",
+    "desc": "신흥 시장의 저가차 강자. 작고 값싼 차를 많이 팔고 비싼 차급에는 거의 없다.",
+    "color": "#d9822b",
+    "share": 0.55,
+    "cells": {
+     "kei": 0.3,
+     "hatch": 0.25,
+     "sedanS": 0.2,
+     "suvS": 0.1,
+     "pickup": 0.1,
+     "minivan": 0.05,
+     "suv": -0.05,
+     "sedanM": -0.1,
+     "suvL": -0.15
+    },
+    "models": {
+     "kei": "나누",
+     "hatch": "티아구",
+     "sedanS": "인디가",
+     "suvS": "넥산",
+     "pickup": "제나",
+     "minivan": "수무",
+     "suv": "해리아",
+     "sedanM": "만조",
+     "suvL": "사파레"
+    }
+   }
+  ]
  }
 ]

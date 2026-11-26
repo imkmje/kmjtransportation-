@@ -88,9 +88,9 @@ describe('옛 저장 열기(0.8.0)', () => {
   it('형식 4 저장(정책·기획 값 없음)을 열고 진행할 수 있다. 저장 형식은 4 그대로', () => {
     for (const f of ['save-v4.json', 'save-v4b.json']) {
       const g = Game.fromJSON(JSON.parse(readFileSync(`car/tests/fixtures/${f}`, 'utf8')));
-      expect(g.state.saveVersion).toBe(12);
+      expect(g.state.saveVersion).toBe(13);
       for (let i = 0; i < 8; i++) g.tick();
-      expect(g.toJSON().saveVersion).toBe(12);
+      expect(g.toJSON().saveVersion).toBe(13);
     }
   });
   it('출시한 세대에 기획 값(방향·예산·설계 기간·쓸 수 있던 옵션)이 남는다', () => {
