@@ -265,7 +265,7 @@ export function rescueTargetError(s: CarState, g: Generation): string | null {
 const onSaleError = (g: Generation | undefined): string | null => (!g || g.status !== 'onSale' ? '판매 중인 차가 아닙니다.' : null);
 const busyOn = (s: CarState, g: Generation) => s.projects.some((p) => (p.kind === 'facelift' || p.kind === 'fix') && p.targetId === g.id);
 /** 긴급 개선 팀 기본값: 쉬는 테스터·엔지니어(전담 연구원 제외) */
-export const fixTeam = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId === null && !x.lab && (x.role === 'tester' || x.role === 'engineer')).sort((a, b) => a.id - b.id);
+export const fixTeam = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId === null && !x.lab && !x.elite && (x.role === 'tester' || x.role === 'engineer')).sort((a, b) => a.id - b.id); // 4.1.0 전담팀원은 직접 골라야 들어간다
 export function fixError(s: CarState, generationId: number): string | null {
   const g = genOf(s, generationId);
   return onSaleError(g) ?? (g!.fixed ? '이 세대는 이미 긴급 개선을 했습니다(세대당 1회).' : null) ?? (busyOn(s, g!) ? '이 차의 페이스리프트나 긴급 개선이 이미 진행 중입니다.' : null)
@@ -295,7 +295,7 @@ export function rescueOptions(s: CarState, generationId: number): RescueOptions 
   const R = config.rescue, ed = currentEdition(g), y = yearOf(s.week), team = fixTeam(s), m = monthOf(s.week);
   const left = Math.max(0, ed.defects - testCut(team) * R.fixWeeks), rec = (d: number) => Math.min(config.recall.maxYear, d * config.recall.perDefect);
   const q0 = ed.stats.Q / (1 - Math.min(config.dev.defectQMax, ed.defects * config.dev.defectQPer)), qAfter = q0 * (1 + R.qGain) * (1 - Math.min(config.dev.defectQMax, left * config.dev.defectQPer));
-  const fe = fixError(s, g.id) ?? (team.length ? null : '쉬고 있는 테스터나 엔지니어가 없습니다.') ?? (s.projects.length >= devTeamsOf(s) ? '개발팀이 모두 바쁩니다.' : null);
+  const fe = fixError(s, g.id) ?? (team.length ? null : '쉬고 있는 테스터나 엔지니어가 없습니다.') ?? (s.projects.filter((p) => !p.elite).length >= devTeamsOf(s) ? '개발팀이 모두 바쁩니다.' : null);
   const price = clearPriceOf(s, g), uc = unitCost(g.body, g.powertrain, ed.tier, ed.options, genCostMult(s, g), ptCostAdd(s, g.powertrain, ed.battery, g.evPlatform)), mk = config.awareness.marketingCost[g.marketing], cap = capacityOf(s);
   const others = sellingGens(s).filter((x) => x.id !== g.id && x.status === 'onSale').map((x) => toSaleCar(x, m));
   const salesNow = g.status === 'discontinued' ? 0 : priceForecast(s, g.id, ed.price) ?? 0;

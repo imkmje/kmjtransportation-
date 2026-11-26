@@ -10,7 +10,8 @@ import { equipOf, recommendedEquip, stdOf } from './equip';
 import { specError, withRequired } from './dev';
 import { loanLimit } from './finance';
 import { hash01 } from './rng';
-import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, staffCap, trainCost, trainError } from './company';
+import { capacityOf, costMultOf, devTeams, factoryExpandError, hqUpgradeError, isAway, isDevRole, linesOf, regularStaff, staffCap, staffCount, teamsUsed, trainCost, trainError } from './company';
+import { eliteBusy, eliteCands, eliteMembers, eliteOpen, eliteSeats } from './elite';
 import { Game, allGens, linesUsed, sellingGens } from './game';
 import { REGION, carBasePrice, genBasePrice, optionValue, cellMonthly, currentEdition, monthlyDemand, toSaleCar } from './market';
 import { planPreview } from './queries';
@@ -51,6 +52,7 @@ export interface SteadyOptions {
   autoDecide?: boolean; // 3.7.0: 결정 자동 승인을 모두 켜고 결정 창에 답하지 않는다(안전선에 걸린 것은 4주 뒤 기본 선택)
   rivalry?: boolean; // 3.5.0: 경쟁사 인재 영입·기술 제휴(기술 구매)·자회사 상장·경쟁사 인수를 쓴다(선택, 기존 균형 봇은 쓰지 않는다)
   world?: boolean; // 4.0.0: 조건이 되면 해외 권역에 진출(싼 곳부터, 자동 수출·자동 가격 그대로)하고, 판매가 상한에 가까우면 판매 법인에 투자(선택, 기존 균형 봇은 쓰지 않는다)
+  elite?: boolean; // 4.1.0: 직속 전담팀을 채우고(지난 1년 흑자·현금 여유) 쉬는 전담팀으로 풀체인지·새 차종을 만든다(선택, 기존 균형 봇은 쓰지 않는다)
   subs?: boolean; // 3.0.0: 돈이 남으면 자회사를 세우고 투자(선택, 기존 균형 봇은 쓰지 않는다) // 1.0.0 옵션: 고객층에 맞는 것 / 넣지 않음 / 안 맞는 것(측정용) // 1.0.0 동력: 어림 이익이 큰 것 / 늘 가솔린(전환이 늦은 경우) / 쓸 수 있는 가장 새 동력(너무 이른 경우)
 }
 const STEADY: SteadyOptions = {
@@ -73,6 +75,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       else for (const pc of [...g.state.events.pending]) g.command({ type: 'resolveEvent', eventId: pc.id, choice: RANDOM_DEFAULT(pc.eventId) }); // 사건은 기본 선택으로 바로 답한다
       researchRequired(g); // 0.4.2: 규제 예고가 나오면 의무 장비 기술부터(연구를 안 하는 봇도, 안 하면 개발이 막힌다)
       launchReady(g, o);
+      if (o.elite) startElite(g, o); // 4.1.0
       startProjects(g, o);
       const turn = monthOf(g.state.week) % o.manageEvery === 0; // 서툰 플레이는 가끔만 챙긴다
       if (turn) hireBest(g);
@@ -81,6 +84,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (o.subs && g.state.week % config.time.weeksPerMonth === 0) { manageSubs(g); if (o.subDirect) manageSubsDirect(g); }
       if (o.rivalry && g.state.week % config.time.weeksPerMonth === 0) manageRivalry(g);
       if (o.world && g.state.week % config.time.weeksPerMonth === 0) manageWorld(g);
+      if (o.elite && g.state.week % config.time.weeksPerMonth === 0) manageElite(g);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -119,7 +123,7 @@ function manageExecs(g: Game): void {
     const yearProfit = s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0);
     if (Object.keys(s.execs?.seats ?? {}).length >= seatsOf(s) || s.cash < fixedCost(s) * B.execCashMonths || yearProfit <= 0) break; // 지난 1년 흑자이고 현금에 여유가 있을 때만(창업 초기에 가장 나은 직원을 개발에서 빼 무너지지 않게)
     if (s.execs?.seats[role]) continue;
-    const inside = s.staff.filter((x) => x.projectId === null && execSkill(role, x) >= X.delegateSkill).sort((a, b) => execSkill(role, b) - execSkill(role, a) || a.id - b.id)[0];
+    const inside = regularStaff(s).filter((x) => x.projectId === null && execSkill(role, x) >= X.delegateSkill).sort((a, b) => execSkill(role, b) - execSkill(role, a) || a.id - b.id)[0];
     if (inside) { g.command({ type: 'appointExec', role, staffId: inside.id }); continue; }
     if (s.cash < X.postCost + fixedCost(s) * B.reserveMonths || !g.command({ type: 'postExecJob', role }).ok) break;
     const best = (s.execs?.candidates ?? []).filter((c) => c.role === role).sort((a, b) => b.skill - a.skill || a.id - b.id)[0];
@@ -273,12 +277,12 @@ function monthly(g: Game, o: SteadyOptions): void {
     if (nh && !backlogged && !hqUpgradeError(s) && s.cash >= nh.cost * B.hqCashMult + reserve) g.command({ type: 'upgradeHQ' }); // 0.4.2: 주문이 밀리면 공장 증설이 먼저(평판이 올라 본사 승급이 가능해지자 증설 자금을 본사에 썼다)
   }
   // 채용 공고: 정원이 남으면 모자란 직무로(후보는 다음 주에 hireBest가 고른다)
-  if (!s.candidates.length && s.staff.length < staffCap(s)) {
+  if (!s.candidates.length && staffCount(s) < staffCap(s)) {
     const tier = s.cash >= B.tier3Cash && s.reputation >= config.staff.hire.tier3Rep ? 3 : s.cash >= B.tier2Cash ? 2 : 1, cost = config.staff.hire.postCost[tier - 1];
     if (s.cash >= cost + reserve) g.command({ type: 'postJob', role: neededRole(s), tier });
   }
   // 교육: 쉬고 있는 직원부터(ID 순), 여유 현금이 있을 때
-  for (const x of [...s.staff].sort((a, b) => a.id - b.id))
+  for (const x of regularStaff(s).sort((a, b) => a.id - b.id))
     if (x.projectId === null && !trainError(s, x) && s.cash >= trainCost(x.ability) + reserve) g.command({ type: 'train', staffId: x.id });
 }
 
@@ -287,7 +291,7 @@ function hireBest(g: Game): void {
   const s = g.state;
   if (!s.candidates.length) return;
   const best = [...s.candidates].sort((a, b) => b.ability - a.ability || a.id - b.id)[0];
-  if (s.staff.length < staffCap(s)) g.command({ type: 'hire', candidateId: best.id });
+  if (staffCount(s) < staffCap(s)) g.command({ type: 'hire', candidateId: best.id });
   if (s.candidates.length) g.command({ type: 'dismissCandidates' });
 }
 
@@ -295,7 +299,7 @@ function hireBest(g: Game): void {
 function neededRole(s: CarState): Role {
   const cap = staffCap(s), sales = Math.floor(cap * B.salesShare), dev = cap - sales;
   const want: Record<Role, number> = { designer: dev / 4, engineer: dev / 2, tester: dev / 4, sales };
-  const have = (r: Role) => s.staff.filter((x) => x.role === r).length;
+  const have = (r: Role) => regularStaff(s).filter((x) => x.role === r).length;
   return (['designer', 'engineer', 'tester', 'sales'] as Role[]).sort((a, b) => (have(a) - want[a]) - (have(b) - want[b]))[0];
 }
 
@@ -305,10 +309,10 @@ const changeAt = (s: CarState, o: SteadyOptions, x: Generation): number =>
 
 /** 새 프로젝트 팀: 개발팀이 하나면 쉬는 개발 직원 전원, 여럿이면 개발 직원 수 ÷ 팀 수만큼 직무를 고르게 */
 function pickTeam(s: CarState): number[] {
-  const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week)).sort((a, b) => a.id - b.id);
+  const idle = regularStaff(s).filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week)).sort((a, b) => a.id - b.id);
   const teams = devTeams(s);
   if (teams <= 1) return idle.map((x) => x.id);
-  const size = Math.ceil(s.staff.filter((x) => isDevRole(x.role)).length / teams), byRole = new Map<string, Staff[]>();
+  const size = Math.ceil(regularStaff(s).filter((x) => isDevRole(x.role)).length / teams), byRole = new Map<string, Staff[]>();
   for (const x of idle) byRole.set(x.role, [...(byRole.get(x.role) ?? []), x]);
   const out: number[] = [];
   for (let i = 0; out.length < Math.min(size, idle.length); i++)
@@ -340,7 +344,7 @@ function launchReady(g: Game, o: SteadyOptions): void {
 /** 빈 개발팀이 있으면: 페이스리프트 → 후속(풀체인지) → 새 차종(생산 라인 수, 쓸 수 있는 차체 수까지) 순서로 하나 시작 */
 function startProjects(g: Game, o: SteadyOptions): void {
   const s = g.state, m = monthOf(s.week);
-  if (s.projects.length >= devTeams(s) || !pickTeam(s).length) return;
+  if (teamsUsed(s) >= devTeams(s) || !pickTeam(s).length) return;
   const onSale = sellingGens(s).filter((x) => x.status === 'onSale');
   const age = (x: Generation) => m - x.launchMonth;
   const targeted = (id: number | null) => s.projects.some((p) => p.targetId === id);
@@ -362,9 +366,28 @@ function startProjects(g: Game, o: SteadyOptions): void {
   if (onSale.length - aged + newProjects < Math.max(1, want)) start(g, o, null, undefined);
 }
 
+/** 4.1.0 전담팀 봇: 쉬는 전담팀(디자이너·엔지니어·테스터가 다 있음)으로 때가 된 풀체인지, 없으면 빈 생산 라인에 새 차종 */
+function startElite(g: Game, o: SteadyOptions): void {
+  const s = g.state, m = monthOf(s.week);
+  if (eliteBusy(s)) return;
+  const team = eliteMembers(s).filter((x) => x.projectId === null && !isAway(x, s.week));
+  if (!(['designer', 'engineer', 'tester'] as Role[]).every((r) => team.some((x) => x.role === r))) return;
+  const ids = team.map((x) => x.id), onSale = sellingGens(s).filter((x) => x.status === 'onSale');
+  const due = onSale.filter((x) => { const np = s.nameplates.find((n) => n.generations.includes(x))!; return np.baseOf === undefined && latestGen(np) === x && m - x.launchMonth >= changeAt(s, o, x) - B.leadMonths && !s.projects.some((p) => p.targetId === np.id); })
+    .sort((a, b) => a.launchMonth - b.launchMonth || a.id - b.id)[0];
+  if (due) { start(g, o, s.nameplates.find((n) => n.generations.includes(due))!.id, due, ids); return; }
+  if (onSale.length + s.projects.filter((p) => p.kind === 'new').length < linesOf(s)) start(g, o, null, undefined, ids);
+}
+/** 4.1.0 전담팀 채우기: 지난 1년 흑자이고 영입비를 내고도 운영비 eliteCashMonths개월 치가 남으면, 빠진 직무부터 가장 능력 높은 후보 한 명씩 */
+function manageElite(g: Game): void {
+  const s = g.state;
+  if (!eliteOpen(s) || eliteMembers(s).length >= eliteSeats(s) || s.ledger.slice(-config.time.monthsPerYear).reduce((a, e) => a + e.profit, 0) <= 0) return;
+  const have = new Set(eliteMembers(s).map((x) => x.role)), c = eliteCands(s).sort((a, b) => Number(have.has(a.role)) - Number(have.has(b.role)) || b.ability - a.ability || (a.key < b.key ? -1 : 1))[0];
+  if (c && s.cash >= c.fee + fixedCost(s) * B.eliteCashMonths) g.command({ type: 'hireElite', key: c.key });
+}
 /** 새 차종(nameplateId null) 또는 풀체인지 시작. 차체: 아직 안 쓰는 것 중 (칸 규모 × 대당 이익)이 큰 것, 고객층: 그 차체에서 안 쓰는 것 중 궁합 × 비중이 큰 것 */
-function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Generation | undefined): void {
-  const s = g.state, year = yearOf(s.week), team = pickTeam(s);
+function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Generation | undefined, elite?: number[]): void {
+  const s = g.state, year = yearOf(s.week), team = elite ?? pickTeam(s);
   const others = sellingGens(s).filter((x) => x !== prev && x.status === 'onSale');
   const body = bestBody(s, year, others);
   const mix = MARKET[REGION].mix[body], used = new Set(others.filter((x) => x.body === body).map((x) => x.segment));
@@ -379,7 +402,7 @@ function start(g: Game, o: SteadyOptions, nameplateId: number | null, prev: Gene
   const last = prev ?? (s.nameplates.length ? latestGen(s.nameplates[s.nameplates.length - 1]) : undefined);
   const long = config.dev.designWeeks[2], tries = [spec, { ...spec, designWeeks: long }, { ...spec, designWeeks: long, budget: 'high' as Budget }];
   // 0.4.2: 풀체인지는 미리보기의 전작 비교(원점수)가 '못하다'가 아니게(모자라면 쉬는 개발 직원 전원을 넣는다), 새 차종은 직전 차의 출시 등급 이상이 되게
-  const all = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week) && !x.lab).map((x) => x.id);
+  const all = elite ?? regularStaff(s).filter((x) => x.projectId === null && isDevRole(x.role) && !isAway(x, s.week) && !x.lab).map((x) => x.id);
   const cands = [...tries.map((t) => ({ t, team })), ...(prev && all.length > team.length ? tries.map((t) => ({ t, team: all })) : [])];
   const okTry = (c: (typeof cands)[number]) => { const pv = planPreview(s, { ...c.t, name: '' }, s.staff.filter((x) => c.team.includes(x.id))); return prev ? compareToPrev(prev, pv.stats, c.t.body) !== 'worse' : pv.avg >= launchAvgGrade(last!); };
   const pick = o.sloppy ? cands[0] : (last && cands.find(okTry)) || cands[last ? tries.length - 1 : 0];

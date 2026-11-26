@@ -2,11 +2,11 @@
 // 실제 사무실 비율(1m = U 사용자 단위, 사람 키 1.7m). 상태는 표정 대신 자세로, 사람은 통로를 따라 걸어 다닌다.
 // 난수는 연출에만 쓴다(직원 외모는 id 해시로 고정).
 import './office.css';
-import { roomFor, assignSeats, findPath, nearestFree, CAPACITY, DESK_H, type Face, type Furn, type Level, type Room, type Spot, type WallItem, type Zone } from './layout';
+import { roomFor, assignSeats, findPath, nearestFree, CAPACITY, ELITE_SEATS, DESK_H, type Face, type Furn, type Level, type Room, type Spot, type WallItem, type Zone } from './layout';
 import { pickLine, type Mood } from './lines';
 
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
-export interface OfficeStaff { id: string; name: string; role: Role; condition: number /*0~1, 낮으면 지침*/; working: boolean /*프로젝트에 배치됨*/ }
+export interface OfficeStaff { id: string; name: string; role: Role; condition: number /*0~1, 낮으면 지침*/; working: boolean /*프로젝트에 배치됨*/; elite?: boolean /*4.1.0 직속 전담팀원(금색 자리)*/ }
 export interface OfficeView {
   level: Level;
   staff: OfficeStaff[];
@@ -265,7 +265,7 @@ function wallSvg(it: WallItem, room: Room): string {
 }
 
 const FLOOR: Record<Zone['kind'], string> = {
-  office: '#c9ccd0', studio: '#dccbb0', test: '#bfc3c7', garage: '#c4c2bd', pantry: '#e2ddd3', meeting: '#c3c8cf', lab: '#c8cdd2', lobby: '#e6e2da', lounge: '#d9d6cf', exec: '#cbbfae',
+  office: '#c9ccd0', studio: '#dccbb0', test: '#bfc3c7', garage: '#c4c2bd', pantry: '#e2ddd3', meeting: '#c3c8cf', lab: '#c8cdd2', lobby: '#e6e2da', lounge: '#d9d6cf', exec: '#cbbfae', elite: '#e9dcb4',
 };
 /** 등급별 마감: 바닥(전체·사무 구역), 벽 두 면, 바닥 줄눈(콘크리트 이음·카펫 타일·마루), 조명 모양.
     1 차고형(콘크리트, 알전구) → 2 사무실 한 층(카펫 타일, 형광등) → 3 넓은 층 → 4 유리 벽·마루 스튜디오(긴 펜던트) → 5 대형 본사(돌 바닥) */
@@ -357,7 +357,8 @@ export function createOffice(host: HTMLElement): Office {
   function build(v: OfficeView) {
     const rm = roomFor(v.level);
     room = rm;
-    const staff = [...v.staff].sort((a, b) => ROLE[a.role].order - ROLE[b.role].order || (a.id < b.id ? -1 : 1)).slice(0, CAPACITY[rm.level]);
+    const sorted0 = [...v.staff].sort((a, b) => ROLE[a.role].order - ROLE[b.role].order || (a.id < b.id ? -1 : 1));
+    const staff = [...sorted0.filter((x) => !x.elite).slice(0, CAPACITY[rm.level]), ...sorted0.filter((x) => x.elite).slice(0, ELITE_SEATS[rm.level])]; // 4.1.0 전담팀원은 금색 자리
     const seatOf = assignSeats(rm.level, staff);
     const occupant = new Map<number, OfficeStaff>();
     for (const s of staff) { const i = seatOf.get(s.id); if (i !== undefined) occupant.set(i, s); }
@@ -374,7 +375,7 @@ export function createOffice(host: HTMLElement): Office {
     s += poly([P(0, 0, H), P(0, D, H), P(-0.2, D, H), P(-0.2, -0.2, H), P(W, -0.2, H), P(W, 0, H)], '#b7b2aa');
     s += poly([P(W, 0), P(W, D), P(W, D, -0.25), P(W, 0, -0.25)], '#9c968d') + poly([P(0, D), P(W, D), P(W, D, -0.25), P(0, D, -0.25)], '#aaa49b');
     s += top(0, 0, 0, W, D, ls.base);
-    for (const z of rm.zones) s += top(z.x, z.y, 0.001, z.w, z.d, z.kind === 'office' ? ls.office : FLOOR[z.kind]) + (z.kind === 'garage' || z.kind === 'test' ? top(z.x + 0.3, z.y + 0.3, 0.002, z.w - 0.6, z.d - 0.6, 'none', 'stroke="#c9a94a" stroke-width="2" stroke-dasharray="8 6"') : '');
+    for (const z of rm.zones) s += top(z.x, z.y, 0.001, z.w, z.d, z.kind === 'office' ? ls.office : FLOOR[z.kind]) + (z.kind === 'garage' || z.kind === 'test' || z.kind === 'elite' ? top(z.x + 0.3, z.y + 0.3, 0.002, z.w - 0.6, z.d - 0.6, 'none', 'stroke="#c9a94a" stroke-width="2" stroke-dasharray="8 6"') : '');
     // 바닥 줄눈: 콘크리트 이음(3m) / 카펫 타일(사무 구역 1m 격자) / 마루(사무 구역 한 방향 .3m) / 돌(전체 1.5m 격자)
     const seam = (x0: number, y0: number, x1: number, y1: number, col: string, op: number) => `<path d="M${P(x0, y0, 0.003)} L${P(x1, y1, 0.003)}" stroke="${col}" stroke-width="1" opacity="${op}"/>`;
     const oz = rm.zones.find((z) => z.kind === 'office')!;
@@ -394,7 +395,7 @@ export function createOffice(host: HTMLElement): Office {
     const list: Item[] = [];
     for (const fu of rm.furn) {
       const occ = fu.seat !== undefined ? occupant.get(fu.seat) : undefined;
-      const svg0 = fu.kind === 'desk' ? deskSvg(fu, occ?.role, kit) : fu.kind === 'xdesk' ? xdeskSvg(fu, kit, !!v.execs?.[rm.furn.filter((q) => q.kind === 'xdesk').indexOf(fu)]) : furnSvg(fu, rm, carCol);
+      const svg0 = fu.kind === 'desk' ? deskSvg(fu, occ?.role, kit, fu.elite ? '#d8bb6c' : undefined) : fu.kind === 'xdesk' ? xdeskSvg(fu, kit, !!v.execs?.[rm.furn.filter((q) => q.kind === 'xdesk').indexOf(fu)]) : furnSvg(fu, rm, carCol);
       list.push({ fp: [fu.x, fu.y, fu.x + fu.w, fu.y + fu.d], svg: fu.kind === 'desk' ? `<g class="desk" data-seat="${fu.seat}">${svg0}</g>` : svg0 });
     }
     rm.seats.forEach((st, i) => {
@@ -437,7 +438,8 @@ export function createOffice(host: HTMLElement): Office {
     const sign = rm.walls.find((w) => w.kind === 'sign')!;
     signEls = { name: q('.sign-name'), bar: q('.sign-bar'), barW: sign.w * U - 16, bugs: q('.bugs'), bugn: q('.bugn'), bugi: q('.bugi') };
     fx.replaceChildren(); fxBub.replaceChildren(); bubbles.length = 0; tagPop.hidden = true;
-    svg.setAttribute('aria-label', `${rm.name} 사무실, 직원 ${actors.size}명`);
+    const eN = staff.filter((x) => x.elite && actors.has(x.id)).length;
+    svg.setAttribute('aria-label', `${rm.name} 사무실, 직원 ${actors.size - eN}명${eN ? `, 직속 전담팀 ${eN}명(금색 자리)` : ''}`);
   }
 
   // ---------- 배우 위치·자세 ----------
@@ -879,7 +881,7 @@ export function createOffice(host: HTMLElement): Office {
   return {
     update(v) {
       if (disposed) return;
-      const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name]).sort(), v.carSvg ?? '', kitOf(v.year), v.execs ?? []]);
+      const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name, !!s.elite]).sort(), v.carSvg ?? '', kitOf(v.year), v.execs ?? []]);
       const lvChanged = !view || view.level !== v.level, phaseChanged = !!view && view.phase !== v.phase;
       view = v;
       const rebuilt = key !== structKey;

@@ -5,7 +5,7 @@
 export type Level = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type Face = '+x' | '-x' | '+y' | '-y';
 export type Role = 'designer' | 'engineer' | 'tester' | 'sales';
-export type ZoneKind = 'office' | 'studio' | 'test' | 'garage' | 'pantry' | 'meeting' | 'lab' | 'lobby' | 'lounge' | 'exec';
+export type ZoneKind = 'office' | 'studio' | 'test' | 'garage' | 'pantry' | 'meeting' | 'lab' | 'lobby' | 'lounge' | 'exec' | 'elite';
 export type FurnKind =
   | 'desk' | 'divider' | 'glass' | 'cabinet' | 'rack' | 'counter' | 'fridge' | 'sofa' | 'plant' | 'table' | 'mchair'
   | 'drafting' | 'clay' | 'car' | 'post' | 'cart' | 'diag' | 'workbench' | 'boxes' | 'dyno' | 'tunnel' | 'reception'
@@ -15,10 +15,10 @@ export type SpotKind = 'test' | 'studio' | 'lab' | 'coffee' | 'meeting';
 
 export interface Zone { kind: ZoneKind; x: number; y: number; w: number; d: number }
 /** 바닥 가구: 발자국(x,y,w,d)과 높이 h. seat는 책상이 속한 자리 번호 */
-export interface Furn { kind: FurnKind; x: number; y: number; w: number; d: number; h: number; seat?: number; face?: Face }
+export interface Furn { kind: FurnKind; x: number; y: number; w: number; d: number; h: number; seat?: number; face?: Face; elite?: true }
 /** 벽 그림: 'R'=y=0 벽(at=x), 'L'=x=0 벽(at=y). z=아래쪽 높이 */
 export interface WallItem { kind: WallKind; wall: 'L' | 'R'; at: number; w: number; z: number; h: number }
-export interface Seat { x: number; y: number; face: Face; col: number; row: number; used: boolean; access: [number, number] }
+export interface Seat { x: number; y: number; face: Face; col: number; row: number; used: boolean; access: [number, number]; elite?: true } // elite(4.1.0): 직속 전담팀 자리
 export interface Spot { kind: SpotKind; x: number; y: number; face: Face }
 /** 임원 자리: 의자 위치(x,y)와 방향, 문패 위치(at: 앞 유리 x, z 높이). glass=유리방 */
 export interface ExecSeat { x: number; y: number; face: Face; plate: [number, number]; glass: boolean }
@@ -33,6 +33,7 @@ export interface Room {
 export const CELL = 0.5;                 // 걷기 격자 칸(m)
 const CLEAR = 0.12;                      // 가구에서 띄울 거리(m)
 export const CAPACITY: Record<Level, number> = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 32, 7: 40 }; // 4인 묶음 단위(6·7등급 정원 30·40을 담는다)
+export const ELITE_SEATS: Record<Level, number> = { 1: 0, 2: 0, 3: 4, 4: 5, 5: 7, 6: 8, 7: 10 }; // 4.1.0 직속 전담팀 자리(config.elite.seats와 같다). 사무 구역 뒤쪽 묶음, 금색 바닥
 export const EXEC_SEATS: Record<Level, number> = { 1: 1, 2: 2, 3: 4, 4: 5, 5: 6, 6: 6, 7: 6 }; // config.exec.seats와 같다(본사 등급별 임원 자리)
 const EXW = 2.2, BACKE = 3.2;            // 임원실 한 칸 폭, 깊이(오른쪽 벽 쪽 띠 안)
 const NAME: Record<Level, string> = { 1: '창고 공장', 2: '소형 사옥', 3: '본사 빌딩', 4: '연구 단지', 5: '글로벌 본사', 6: '그룹 본사', 7: '글로벌 캠퍼스' };
@@ -47,7 +48,7 @@ export function roomFor(level: number): Room {
   const lv = clampLevel(level);
   const hit = cache.get(lv);
   if (hit) return hit;
-  const nPods = CAPACITY[lv] / 4;
+  const regPods = CAPACITY[lv] / 4, nPods = regPods + Math.ceil(ELITE_SEATS[lv] / 4);
   const pc = lv <= 2 ? nPods : lv >= 5 ? 3 : 2, pr = Math.ceil(nPods / pc);
   const BACK = 3.4;                                    // 오른쪽 벽 쪽 띠(탕비·회의실·임원실·수납장)
   const studio = lv >= 2, glass = lv >= 3, lab = lv >= 4, lobby = lv >= 5;
@@ -79,10 +80,12 @@ export function roomFor(level: number): Room {
       F('table', px + 0.6, py + 0.2, 1.6, 1.0, 0.74); F('plant', px + 2.3, py + 1.6, 0.5, 0.5, 1.2);
       continue;
     }
+    const elite = podNo > regPods;
+    if (elite) zones.push({ kind: 'elite', x: px - 0.35, y: py - 0.75, w: POD_W + 0.7, d: POD_D - 0.1 });
     for (const [i, [dx, back]] of ([[0, true], [1.4, true], [0, false], [1.4, false]] as [number, boolean][]).entries()) {
       const si = seats.length;
-      F('desk', px + dx, back ? py : py + 0.8, 1.4, 0.75, DESK_H, { seat: si, face: back ? '+y' : '-y' });
-      seats.push({ x: px + dx + 0.7, y: back ? py - 0.35 : py + 1.9, face: back ? '+y' : '-y', col: c * 2 + (i % 2), row: r * 2 + (back ? 0 : 1), used: false, access: [0, 0] });
+      F('desk', px + dx, back ? py : py + 0.8, 1.4, 0.75, DESK_H, { seat: si, face: back ? '+y' : '-y', ...(elite ? { elite: true as const } : {}) });
+      seats.push({ x: px + dx + 0.7, y: back ? py - 0.35 : py + 1.9, face: back ? '+y' : '-y', col: c * 2 + (i % 2), row: r * 2 + (back ? 0 : 1), used: false, access: [0, 0], ...(elite ? { elite: true as const } : {}) });
     }
     F('divider', px, py + 0.75, POD_W, 0.05, 1.05);
   }
@@ -207,15 +210,15 @@ export function seatsFor(level: number, staffCount: number): Seat[] {
 
 /** 직무 구역 쪽 자리부터 채운다(디자이너는 스튜디오 가까이, 엔지니어·테스터는 시험실·연구실 가까이, 영업은 앞쪽).
  *  넘친 사람은 자리가 없다(결과에 없음). */
-export function assignSeats(level: number, staff: { id: string; role: Role }[]): Map<string, number> {
+export function assignSeats(level: number, staff: { id: string; role: Role; elite?: boolean }[]): Map<string, number> {
   const rm = roomFor(level), out = new Map<string, number>(), taken = new Set<number>();
   const order: Role[] = ['designer', 'tester', 'engineer', 'sales'];
   const list = [...staff].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const s of list) {
     const [ax, ay] = rm.anchors[s.role];
     let best = -1, bd = Infinity;
-    rm.seats.forEach((st, i) => { if (taken.has(i)) return; const d = Math.hypot(st.x - ax, st.y - ay); if (d < bd) { bd = d; best = i; } });
-    if (best < 0) break;
+    rm.seats.forEach((st, i) => { if (taken.has(i) || !!st.elite !== !!s.elite) return; const d = Math.hypot(st.x - ax, st.y - ay); if (d < bd) { bd = d; best = i; } });
+    if (best < 0) continue; // 4.1.0 전담팀 자리와 일반 자리를 따로 채운다
     taken.add(best); out.set(s.id, best);
   }
   return out;

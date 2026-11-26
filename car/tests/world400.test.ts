@@ -181,7 +181,7 @@ describe('4.0.0 경쟁사 6곳', () => {
   });
   it('저장 변환 10 → 11: 새 회사는 뒤에 붙고(순번 유지), 인수 브랜드·시상식의 옛 모델 이름이 새 이름으로, 테슬러는 등장 달이 지났으면 불러올 때', () => {
     const old = raw(), g = Game.fromJSON(old), s = g.state;
-    expect(s.saveVersion).toBe(11);
+    expect(s.saveVersion).toBe(12);
     expect(s.rivals.map((r) => r.id)).toEqual(['hyundae', 'porty', 'toyoda', 'bmv', 'hondi']);
     expect(s.rivalry!.out).toEqual(['porty']);
     const sub = s.subs!.find((x) => x.from === 'porty')!;

@@ -178,7 +178,7 @@ function launchModel(s: CarState, ev: GameEvent[], sub: Subsidiary, md: SubModel
 const WPM = config.time.weeksPerMonth;
 /** 팀 능력을 대신하는 가상 팀: 직무 config.subs.team.roles, 능력 = max(floor, 본사 개발 직원 평균) + presBonus × 사장 능력/100. 컨디션 최상 */
 export function subTeam(s: CarState, sub: Subsidiary): Staff[] {
-  const T = S.team, dev = s.staff.filter((x) => x.role !== 'sales'), avg = dev.length ? dev.reduce((a, x) => a + x.ability, 0) / dev.length : 0;
+  const T = S.team, dev = s.staff.filter((x) => x.role !== 'sales' && !x.elite), avg = dev.length ? dev.reduce((a, x) => a + x.ability, 0) / dev.length : 0;
   const ability = Math.round(Math.min(100, Math.max(T.floor, avg) + T.presBonus * (sub.president ? sub.president.ability / 100 : 0)));
   return T.roles.map((role, i) => ({ id: -1 - i, name: '', role, ability, potential: ability, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }));
 }
@@ -496,7 +496,7 @@ export function subCommand(c: SubCtx, cmd: Command, ev: GameEvent[]): CommandRes
       const x = s.staff.find((y) => y.id === cmd.staffId); if (!x) return fail('없는 직원입니다.');
       releasePresident(s, sub);
       x.projectId = null; x.lab = false; // 본사 일에서 빠진다(임원 임명과 같다)
-      s.staff = s.staff.filter((y) => y !== x); sub.president = x;
+      s.staff = s.staff.filter((y) => y !== x); delete x.elite; sub.president = x;
       for (const r of s.execs?.replacements ?? []) if (r.staffId === x.id && (r.status === 'proposed' || r.status === 'approved' || r.status === 'waiting')) { r.status = 'cancelled'; r.waitingFor = null; }
       return OK;
     }

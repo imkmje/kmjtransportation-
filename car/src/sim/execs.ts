@@ -5,9 +5,11 @@ import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById, optionById, segmentById, techById } from '../data';
 import { equipOf, expectEffect, recommendedEquip, stdOf } from './equip';
 import { grade, payOf, salaryOf, unitCost } from './cars';
-import { allocate, capacityOf, costMultOf, devTeams, isAway, isDevRole, isTraining, linesOf, repEffect, severanceOf, staffCap, trainCost, trainError, upkeepOf } from './company';
+import { allocate, capacityOf, costMultOf, devTeams, isAway, isDevRole, isTraining, linesOf, regularStaff, repEffect, severanceOf, staffCap, staffCount, teamsUsed, trainCost, trainError, upkeepOf } from './company';
 import { loanLimit, loanRate } from './finance';
-import { linesUsed, sellingGens } from './game';
+import { linesUsed, noteFormer, sellingGens } from './game';
+import { criticScores } from './reviews';
+import { genUnit, landedCost, regionPrice } from './world';
 import { josa } from './josa';
 import { compareToPrev, fullChangeEligibility, latestGen } from './lifecycle';
 import { faceliftWeekCost, fullChangeCostMult, withRequired } from './dev';
@@ -35,7 +37,7 @@ export const DELEGATIONS: Record<ExecRole, { key: string; label: string; note?: 
   hr: [{ key: 'autoRest', label: '지친 직원 자동 휴식' }, { key: 'autoTrain', label: '성장 여지가 있는 직원 자동 교육' },
     { key: 'autoHire', label: '빈자리 자동 채용', note: '정원에 빈자리가 있고 현금에 여유가 있으면 가장 부족한 직무를 뽑습니다. 같은 직무 직원 평균 능력 이상인 후보를 뽑고, 공고로 평균에 닿기 어려우면 가장 높은 등급 공고에서 가장 나은 후보를 뽑습니다.' },
     { key: 'autoFire', label: '성장이 멈춘 직원 자동 해고', note: `성장 한계에 닿았고 같은 직무 평균보다 능력이 ${config.exec.hr.weakGap} 이상 낮은 직원을 한 달에 한 명까지 내보냅니다. 개발 중·교육·휴식 중이거나 입사 ${AS.tenureMonths}개월이 안 된 직원은 제외합니다.`,
-      warn: '해고는 되돌릴 수 없습니다. 퇴직금이 나가고, 내보낸 직원은 다시 데려올 수 없습니다.' },
+      warn: `해고는 되돌릴 수 없습니다. 퇴직금이 나가고, 내보낸 직원은 ${config.former.months}개월 동안만 채용 화면의 전 직원 목록에서 다시 채용할 수 있습니다(채용비 월급 ${config.former.feeMonths}개월 치).` },
     { key: 'autoPoach', label: '이직 제안 자동 대응', note: '경쟁사가 직원에게 이직을 제안하면, 그 직원 능력이 같은 직무 평균 이상일 때 월급을 올려 붙잡습니다. 어느 쪽이든 직원은 남습니다(3.5.0).' }],
   product: [], finance: [{ key: 'autoPriceWar', label: '가격 전쟁 자동 대응', note: '경쟁사가 가격을 내리면, 버틸 때 줄어드는 판매가 인하 폭보다 크면 따라 내리고 아니면 가격을 지킵니다(3.5.0).' }],
   production: [{ key: 'autoAlloc', label: '생산 배분 자동 조정' }],
@@ -119,7 +121,7 @@ export const execUnread = (s: CarState): number => (s.execs?.reports ?? []).filt
 /** 시장 조사: 이 차체 × 고객층으로 지금 회사 개발 직원 전원·가솔린 표준·보통 예산·중간 기간으로 만들어 기준가·광고 1에 내면 예상 월 판매(생산 한도까지).
  *  mainSegment: 이 차급에서 손님이 가장 많은 고객층, weakRival: 이 차급에서 가장 약한 경쟁사(고르면 null), known: 내 본 조합이면 조합 노트 */
 export function marketIdea(s: CarState, body: string, segment: string) {
-  const team = s.staff.filter((x) => isDevRole(x.role));
+  const team = regularStaff(s).filter((x) => isDevRole(x.role));
   const pv = planPreview(s, { name: '', body, segment, powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: config.dev.designWeeks[1] }, team);
   const m = monthOf(s.week), price = Math.round(basePriceOf(s, body));
   const others = sellingGens(s).filter((g) => g.status === 'onSale').map((g) => toSaleCar(g, m));
@@ -134,10 +136,19 @@ export function marketIdea(s: CarState, body: string, segment: string) {
   };
 }
 
+/** 4.1.0 대당 이익: 수출하는 차는 지난달 국내·권역 주문 비율로 섞은 값(권역은 권역 가격 − 원가 − 관세·운송비). 수출이 없으면 국내 대당 이익 그대로.
+ *  (4.0.0까지는 국내 값만 봐서, 권역에서 잘 팔리는 값싼 차가 생산 배분에서 밀렸다) */
+function blendedUnit(s: CarState, g: Generation): number {
+  const dom = generationUnitProfit(g, s), rows = Object.entries(g.world ?? {}).filter(([, w]) => w.on && w.demand > 0);
+  if (!rows.length) return dom;
+  const y = yearOf(s.week), t = monthTime(monthOf(s.week)), { uc, opRev } = genUnit(s, g, y), exp = rows.reduce((a, [, w]) => a + w.demand, 0), domD = Math.max(0, g.lastDemand - exp);
+  const sum = rows.reduce((a, [rid, w]) => a + w.demand * (regionPrice(s, g, rid) + opRev - uc - landedCost(rid, g.body, uc, t)), domD * dom);
+  return sum / Math.max(1e-9, domD + exp);
+}
 /** 생산 배분 제안·자동 조정: 주문이 한도를 넘으면 대당 이익이 큰 차부터 채운다(아니면 모두 자동). now·after: 지난달 주문 기준 월 이익(대당 이익 × 만드는 대수) */
 export function profitAlloc(s: CarState) {
   const gens = sellingGens(s), cap = capacityOf(s), demand = gens.map((g) => g.lastDemand), total = demand.reduce((a, b) => a + b, 0);
-  const unit = gens.map((g) => generationUnitProfit(g, s));
+  const unit = gens.map((g) => blendedUnit(s, g));
   let shares: (number | null)[] = gens.map(() => null);
   if (gens.length >= 2 && total > cap) {
     let rem = cap;
@@ -160,9 +171,9 @@ export function recommendTech(s: CarState, cashFloor = 0) {
 }
 
 // ---------- 직원 판정(인사) ----------
-const roleAvg = (s: CarState, x: Staff): number | null => { const o = s.staff.filter((y) => y.role === x.role && y.id !== x.id); return o.length ? mean(o.map((y) => y.ability)) : null; };
-/** 성장 한계에 닿았고 같은 직무 평균보다 weakGap 이상 낮다 */
-export const weakCapped = (s: CarState, x: Staff): boolean => { const a = roleAvg(s, x); return x.ability >= x.potential && a !== null && x.ability <= a - X.hr.weakGap; };
+const roleAvg = (s: CarState, x: Staff): number | null => { const o = regularStaff(s).filter((y) => y.role === x.role && y.id !== x.id); return o.length ? mean(o.map((y) => y.ability)) : null; }; // 4.1.0 전담팀원은 비교에서 뺀다
+/** 성장 한계에 닿았고 같은 직무 평균보다 weakGap 이상 낮다(전담팀원은 대상이 아니다) */
+export const weakCapped = (s: CarState, x: Staff): boolean => { const a = roleAvg(s, x); return !x.elite && x.ability >= x.potential && a !== null && x.ability <= a - X.hr.weakGap; };
 const replaceTier = (s: CarState, min: number): 2 | 3 => (min > config.staff.hire.abilityMax[1] - 10 && s.reputation >= config.staff.hire.tier3Rep ? 3 : 2);
 const repBonus = (s: CarState): number => Math.floor(repEffect(s.reputation) / config.staff.hire.repBonusDiv);
 /** 교체 기준 능력(대상 능력 + replace.minGain과 같은 직무 평균 중 큰 값, 공고로 닿을 수 있을 때만) */
@@ -177,7 +188,7 @@ const openReplacement = (s: CarState): Replacement | undefined => s.execs?.repla
 
 /** 부족한 직무 순서(채용 권유·자동 채용): 개발팀 구성(디자이너 1·엔지니어 2·테스터 1, 본사 2등급부터 영업 1) 대비 인원 비율이 낮은 순 */
 function lackingRoles(s: CarState): { role: Role; have: number; want: number }[] {
-  const want: Record<Role, number> = { designer: 1, engineer: 2, tester: 1, sales: s.hqLevel >= 2 ? 1 : 0 }, have = (r: Role) => s.staff.filter((x) => x.role === r).length;
+  const want: Record<Role, number> = { designer: 1, engineer: 2, tester: 1, sales: s.hqLevel >= 2 ? 1 : 0 }, have = (r: Role) => regularStaff(s).filter((x) => x.role === r).length;
   return (['designer', 'engineer', 'tester', 'sales'] as Role[]).filter((k) => want[k] > 0).sort((a, b) => have(a) / want[a] - have(b) / want[b]).map((role) => ({ role, have: have(role), want: want[role] }));
 }
 /** 인사 임원이 낸 공고의 후보(교체 고용·자동 채용). 후보는 채용 화면에 오지 않고 임원이 바로 고른다 */
@@ -193,7 +204,7 @@ const staffGoto = (id?: number): ExecGoto => (id === undefined ? { tab: 'company
 
 function hrIdeas(s: CarState): Idea[] {
   const out: Idea[] = [], fixed = monthlyFixed(s), C = config.staff.condition, T = config.staff.train;
-  const weak = s.staff.filter((x) => weakCapped(s, x)).sort((a, b) => a.ability - b.ability || a.id - b.id);
+  const weak = regularStaff(s).filter((x) => weakCapped(s, x)).sort((a, b) => a.ability - b.ability || a.id - b.id);
   const autoFire = delegationOn(s, 'hr', 'autoFire'), canReplace = !openReplacement(s) && s.cash > fixed * X.replace.cashMonths && !(autoFire && delegationOn(s, 'hr', 'autoHire')); // 1.4.0 자동 채용·해고를 둘 다 켜면 교체 제안은 겹치므로 내지 않는다
   for (const x of weak) {
     const avg = Math.round(roleAvg(s, x)!), sk = SKILL_KO[x.role], min = replaceMin(s, x);
@@ -213,21 +224,21 @@ function hrIdeas(s: CarState): Idea[] {
         `${x.name}(${ROLE_KO[x.role]}, ${sk} ${x.ability})${J(x.name + ')', '은/는')} 성장 한계에 닿았고 같은 직무 평균(${avg})보다 ${avg - x.ability} 낮습니다. 더 성장하기 어렵습니다. 해고를 권유합니다.`] });
     break;
   }
-  for (const x of [...s.staff].filter((y) => y.condition < C.low && !isAway(y, s.week)).sort((a, b) => a.condition - b.condition || a.id - b.id).slice(0, 1)) {
+  for (const x of regularStaff(s).filter((y) => y.condition < C.low && !isAway(y, s.week)).sort((a, b) => a.condition - b.condition || a.id - b.id).slice(0, 1)) {
     const w = X.hr.restWeeks;
     out.push({ kind: 'rest', key: String(x.id), goto: staffGoto(x.id), facts: [`${x.name} 컨디션 ${pct(x.condition)}`, `지친 상태에서는 일의 양이 ${pct(1 - C.lowMult)} 줄어듭니다`],
       text: ['지친 직원이 있습니다. 쉬게 해 주는 편이 낫습니다.', `${x.name}${J(x.name, '이/가')} 많이 지쳤습니다. 휴식을 권합니다.`, `${x.name}의 컨디션이 ${pct(x.condition)}입니다. 이대로면 일의 양이 ${pct(1 - C.lowMult)} 줄어듭니다. ${w}주 휴식을 권합니다.`] });
   }
-  for (const x of [...s.staff].filter((y) => y.projectId === null && y.potential - y.ability >= X.hr.growGap && !trainError(s, y)).sort((a, b) => (b.potential - b.ability) - (a.potential - a.ability) || a.id - b.id).slice(0, 1)) {
+  for (const x of regularStaff(s).filter((y) => y.projectId === null && y.potential - y.ability >= X.hr.growGap && !trainError(s, y)).sort((a, b) => (b.potential - b.ability) - (a.potential - a.ability) || a.id - b.id).slice(0, 1)) {
     const sk = SKILL_KO[x.role];
     out.push({ kind: 'train', key: String(x.id), goto: staffGoto(x.id), facts: [`${x.name}: ${sk} ${x.ability}, 성장 한계 ${x.potential}`, `교육비 ${won(trainCost(x.ability))}, 능력 +${T.gainMin}~${T.gainMax}, ${T.weeks}주`],
       text: ['교육으로 더 클 수 있는 직원이 있습니다.', `${x.name}${J(x.name, '은/는')} 교육으로 더 클 수 있습니다. 교육을 보내 보시죠.`,
         `${x.name}(${sk} ${x.ability})${J(x.name + ')', '은/는')} 성장 한계까지 ${x.potential - x.ability} 남았고 지금 개발에 들어가 있지 않습니다. 교육비 ${won(trainCost(x.ability))}로 능력이 ${T.gainMin}~${T.gainMax} 오릅니다.`] });
   }
-  if (s.staff.length < staffCap(s) && !delegationOn(s, 'hr', 'autoHire')) { // 자동 채용을 켜면 임원이 직접 뽑는다
+  if (staffCount(s) < staffCap(s) && !delegationOn(s, 'hr', 'autoHire')) { // 자동 채용을 켜면 임원이 직접 뽑는다
     const { role: r, have } = lackingRoles(s)[0], n = ROLE_KO[r];
-    out.push({ kind: 'hire', key: r, goto: staffGoto(), facts: [`정원 ${s.staff.length}/${staffCap(s)}명`, `${n} ${have}명`],
-      text: ['정원에 여유가 있습니다. 채용을 검토해 보시죠.', `${n} 쪽 인력이 부족합니다. 채용을 권합니다.`, `정원 ${s.staff.length}/${staffCap(s)}명입니다. ${n}${J(n, '이/가')} ${have}명뿐이라 가장 부족합니다. ${n} 채용 공고를 권합니다.`] });
+    out.push({ kind: 'hire', key: r, goto: staffGoto(), facts: [`정원 ${staffCount(s)}/${staffCap(s)}명`, `${n} ${have}명`],
+      text: ['정원에 여유가 있습니다. 채용을 검토해 보시죠.', `${n} 쪽 인력이 부족합니다. 채용을 권합니다.`, `정원 ${staffCount(s)}/${staffCap(s)}명입니다. ${n}${J(n, '이/가')} ${have}명뿐이라 가장 부족합니다. ${n} 채용 공고를 권합니다.`] });
   }
   return out;
 }
@@ -395,7 +406,7 @@ export function execCommand(c: ExecCtx, cmd: Command): CommandResult | null {
       const err = roleErr(cmd.role) ?? seatErr(cmd.role); if (err) return fail(err);
       const x = s.staff.find((y) => y.id === cmd.staffId); if (!x) return fail('없는 직원입니다.');
       s.execs ??= emptyExecs();
-      x.projectId = null; x.lab = false; // 현업에서 빠진다
+      x.projectId = null; x.lab = false; delete x.elite; // 현업에서 빠진다(4.1.0 전담팀에서도)
       s.staff = s.staff.filter((y) => y !== x);
       s.execs.seats[cmd.role] = { staff: x, hired: false, since: s.week }; noteExec(x, cmd.role, s.week, true);
       for (const r of s.execs.replacements) if (r.staffId === x.id && (r.status === 'proposed' || r.status === 'approved' || r.status === 'waiting')) { r.status = 'cancelled'; r.waitingFor = null; }
@@ -512,7 +523,7 @@ function runReplacement(c: ExecCtx, rp: Replacement, ev: GameEvent[]): void {
   if (best) {
     const id = s.nextId++, name = c.newName();
     c.spend(severanceOf(salaryOf(x.ability)));
-    s.staff = s.staff.filter((y) => y !== x);
+    s.staff = s.staff.filter((y) => y !== x); noteFormer(s, x); // 4.1.0 전 직원 목록
     s.staff.push(startHist({ id, name, role: x.role, ability: best.ability, potential: best.potential, condition: 1, projectId: null, trainings: [], restUntil: null, lab: false }, s.week));
     rp.nextWeek = s.week;
     return end('done', 'replaceDone', `${x.name} → ${name}(${sk} ${best.ability}). 공고비 ${won(cost)}, 퇴직금 ${won(severanceOf(salaryOf(x.ability)))}.`);
@@ -555,13 +566,13 @@ function delegate(c: ExecCtx, ev: GameEvent[]): void {
   const s = c.s, fixed = () => monthlyFixed(s);
   autoStaff(c, ev); // 1.4.0 자동 해고 → 자동 채용(내보낸 자리를 같은 달에 채운다)
   if (delegationOn(s, 'hr', 'autoRest'))
-    for (const x of [...s.staff].sort((a, b) => a.id - b.id).filter((y) => y.condition < config.staff.condition.low && !isAway(y, s.week))) {
+    for (const x of regularStaff(s).sort((a, b) => a.id - b.id).filter((y) => y.condition < config.staff.condition.low && !isAway(y, s.week))) {
       const w = X.hr.restWeeks;
       if (c.run({ type: 'rest', staffId: x.id, weeks: w }).ok) addReport(s, 'hr', 'autoRest', `${x.name}${J(x.name, '이/가')} 지쳐 ${w}주 쉬게 했습니다(컨디션 ${pct(x.condition)}).`, [], staffGoto(x.id), true);
     }
   if (delegationOn(s, 'hr', 'autoTrain')) {
     const H = X.hr;
-    for (const x of [...s.staff].filter((y) => y.projectId === null && y.ability < y.potential).sort((a, b) => (b.potential - b.ability) - (a.potential - a.ability) || a.id - b.id)) {
+    for (const x of regularStaff(s).filter((y) => y.projectId === null && y.ability < y.potential).sort((a, b) => (b.potential - b.ability) - (a.potential - a.ability) || a.id - b.id)) {
       if (s.staff.filter((y) => isTraining(y, s.week)).length >= H.trainMax) break;
       if (trainError(s, x) || s.cash - trainCost(x.ability) < fixed() * H.trainCashMonths) continue;
       const a0 = x.ability, cost = trainCost(x.ability);
@@ -588,12 +599,12 @@ function delegate(c: ExecCtx, ev: GameEvent[]): void {
 /** 자동 해고: 성장 한계·같은 직무 평균보다 weakGap 낮음(해고 권유와 같은 판정), 개발 중·교육·휴식 중·입사 tenureMonths개월 미만 제외, 한 달 1명, 직무별·전체 최소 인원 유지, 퇴직금 뒤 운영비 fireCashMonths개월 치.
  *  자동 채용: 정원에 빈자리, 부족한 직무 순으로 기준(같은 직무 평균, 직원이 없으면 그 공고 후보 평균)에 공고로 닿는 첫 직무, 현금 = 교체 고용과 같은 기준. 기준 이상 후보 중 가장 나은 사람(상한 없음), 없으면 retryWeeks 뒤 */
 function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
-  const s = c.s, e = s.execs!, H = config.staff.hire, count = (r: Role) => s.staff.filter((y) => y.role === r).length;
+  const s = c.s, e = s.execs!, H = config.staff.hire, count = (r: Role) => regularStaff(s).filter((y) => y.role === r).length;
   const log = (kind: string, text: string, facts: string[], go: ExecGoto, key = '') => { addReport(s, 'hr', kind, text, facts, go, true, null, key); ev.push({ kind: 'replacement', text }); };
   const bonus = repBonus(s), topTier = s.reputation >= H.tier3Rep ? 3 : 2, topReach = H.abilityMax[topTier - 1] + bonus - 5; // 가장 높은 공고로 기대할 만한 능력(교체 기준과 같은 여유)
   const hireOn = delegationOn(s, 'hr', 'autoHire');
-  if (delegationOn(s, 'hr', 'autoFire') && s.staff.length > AS.minStaff) {
-    const x = s.staff.filter((y) => weakCapped(s, y) && y.projectId === null && !isAway(y, s.week) && !(y.hist?.join != null && s.week - y.hist.join < AS.tenureMonths * WPM) && count(y.role) > AS.minPerRole
+  if (delegationOn(s, 'hr', 'autoFire') && staffCount(s) > AS.minStaff) {
+    const x = regularStaff(s).filter((y) => weakCapped(s, y) && y.projectId === null && !isAway(y, s.week) && !(y.hist?.join != null && s.week - y.hist.join < AS.tenureMonths * WPM) && count(y.role) > AS.minPerRole
       && !(hireOn && (roleAvg(s, y) ?? 0) > topReach && y.ability >= H.abilityMin[topTier - 1] + bonus)) // 자동 채용을 켜 두고 같은 직무 평균에 공고로 닿지 않을 때는, 가장 높은 공고의 어느 후보보다도 낮은 사람만(평균 미달로 뽑은 사람을 다시 내보내는 왕복 방지)
       .sort((a, b) => a.ability - b.ability || a.id - b.id)[0];
     const sev = x ? severanceOf(salaryOf(x.ability)) : 0;
@@ -603,16 +614,16 @@ function autoStaff(c: ExecCtx, ev: GameEvent[]): void {
     }
   }
   const retry = 'hr:autoHire:retry';
-  if (!hireOn || s.staff.length >= staffCap(s) || (e.cooldown[retry] ?? -1) > s.week) return;
+  if (!hireOn || staffCount(s) >= staffCap(s) || (e.cooldown[retry] ?? -1) > s.week) return;
   const order = lackingRoles(s);
   let pick: { role: Role; have: number; want: number; i: number; min: number; tier: number; basis: string; avg?: number } | undefined = order.map((o, i) => {
-    const same = s.staff.filter((y) => y.role === o.role), mid = (t: number) => Math.round((H.abilityMin[t - 1] + H.abilityMax[t - 1]) / 2) + bonus;
+    const same = regularStaff(s).filter((y) => y.role === o.role), mid = (t: number) => Math.round((H.abilityMin[t - 1] + H.abilityMax[t - 1]) / 2) + bonus;
     const min = same.length ? Math.ceil(mean(same.map((y) => y.ability))) : mid(2), tier = replaceTier(s, min);
     return { ...o, i, min, tier, basis: same.length ? `같은 직무 평균 ${min}` : `공고 후보 평균 ${min}`, reach: min <= H.abilityMax[tier - 1] + bonus - 5 }; // 교체 기준과 같은 여유(공고로 거의 닿지 않으면 공고비만 든다)
   }).find((o) => o.reach);
-  const head = `정원 ${s.staff.length}/${staffCap(s)}명`;
+  const head = `정원 ${staffCount(s)}/${staffCap(s)}명`;
   if (!pick) { // 어느 직무도 공고로 평균에 닿지 않는다: 가장 부족한 직무를 가장 높은 공고로 내 가장 나은 후보를 뽑는다(빈자리는 아무 일도 못 한다)
-    const o = order[0], avg = Math.ceil(mean(s.staff.filter((y) => y.role === o.role).map((y) => y.ability)));
+    const o = order[0], avg = Math.ceil(mean(regularStaff(s).filter((y) => y.role === o.role).map((y) => y.ability)));
     pick = { ...o, i: 0, min: 0, tier: topTier, avg, basis: `같은 직무 평균 ${avg}에는 공고로 닿지 않아 ${topTier}등급 공고의 가장 나은 후보` };
   }
   const cost = H.postCost[pick.tier - 1], need = monthlyFixed(s) * X.replace.cashMonths + cost;
@@ -656,12 +667,11 @@ export function nextGenSpec(s: CarState, nameplateId: number): Omit<ProjectSpec,
 
 /** 위임 팀: 쉬는 개발 직원(전담 연구원·교육·휴식 중 제외), 능력 높은 순으로 직무를 고르게. parts몫으로 나눈 한 몫(빈 개발팀 수가 상한, 1이면 전원) */
 function autoTeam(s: CarState, parts: number): number[] {
-  const idle = s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !x.lab && !isAway(x, s.week)).sort((a, b) => b.ability - a.ability || a.id - b.id);
-  parts = Math.min(parts, devTeams(s) - s.projects.length);
+  const idle = regularStaff(s).filter((x) => x.projectId === null && isDevRole(x.role) && !x.lab && !isAway(x, s.week)).sort((a, b) => b.ability - a.ability || a.id - b.id); // 4.1.0 위임은 전담팀원을 쓰지 않는다
+  parts = Math.min(parts, devTeams(s) - teamsUsed(s));
   if (parts <= 1) return idle.map((x) => x.id).sort((a, b) => a - b);
-  const size = Math.ceil(idle.length / parts), lists = (['designer', 'engineer', 'tester'] as Role[]).map((r) => idle.filter((x) => x.role === r)), out: number[] = [];
-  for (let i = 0; out.length < size; i++) { const x = lists[i % 3].shift(); if (x) out.push(x.id); }
-  return out.sort((a, b) => a - b);
+  // 4.1.0 직무마다 능력 순위에서 parts칸마다 한 명씩(1·4·7…번째): 나눈 팀들이 고르게 강하다(예전: 앞 팀이 직무를 돌며 가장 나은 사람부터 가져가 뒤 팀이 약했다)
+  return (['designer', 'engineer', 'tester'] as Role[]).flatMap((r) => idle.filter((x) => x.role === r).filter((_, i) => i % parts === 0)).map((x) => x.id).sort((a, b) => a - b);
 }
 /** 위임 팀에 꼭 있어야 하는 직무(1.6.1: 빠지면 시작하지 않고 기다린다). 페이스리프트 설계는 디자이너만 한다 */
 const NEED_ROLES: Record<GenStep['kind'], Role[]> = { autoFullChange: ['designer', 'engineer', 'tester'], autoDerive: ['designer', 'engineer', 'tester'], autoFacelift: ['designer', 'tester'] };
@@ -689,11 +699,15 @@ function genAutoStep(s: CarState, n: Nameplate): GenStep | null {
     const life = lifeBar(s, g);
     if (fullChangeDue(s, n)) {
       // 1.6.1 팀: 풀체인지 때가 된 위임 차종끼리 쉬는 직원을 나누되, 그 몫으로 전작보다 못한 차가 나오면(평론 감점) 전원, 전원으로도 못하면 직원이 돌아와 나아질 수 있을 때 기다린다(봇 pickTeam과 같은 기준)
-      const spec = nextGenSpec(s, n.id)!, worse = (ids: number[]) => compareToPrev(g, planPreview(s, { ...spec, name: n.name }, s.staff.filter((x) => ids.includes(x.id))).stats, spec.body) === 'worse';
+      const spec = nextGenSpec(s, n.id)!, crew = (ids: number[]) => s.staff.filter((x) => ids.includes(x.id)), worse = (ids: number[]) => compareToPrev(g, planPreview(s, { ...spec, name: n.name }, crew(ids)).stats, spec.body) === 'worse';
       const map = s.execs?.genAuto ?? {}, all = autoTeam(s, 1), share = autoTeam(s, s.nameplates.filter((x) => map[x.id] && fullChangeDue(s, x)).length);
-      const team = share.length < all.length && !worse(share) ? share : all, roster = s.staff.filter((x) => isDevRole(x.role) && !x.lab).map((x) => x.id);
-      return { kind: 'autoFullChange', cmd: { type: 'startFullChange', nameplateId: n.id, ...spec }, cost: planPreview(s, { ...spec, name: n.name }, s.staff.filter((x) => team.includes(x.id))).cost * fullChangeCostMult(true), error: null, team,
-        worse: team.length < roster.length && worse(team) && !worse(roster),
+      // 4.1.0 나눈 팀의 예상 평론이 전작(전원 팀 예상이 더 낮으면 그 값)보다 splitTol 이하로만 낮으면 나눠 동시에 진행하고, splitWaitMonths개월 넘게 기다린 차종은 나눈 팀으로라도 시작한다
+      const waited = map[n.id]?.waitSince != null && s.week - map[n.id]!.waitSince! >= GA.splitWaitMonths * WPM;
+      const ref = Math.min(g.reviewAvg, estReview(s, g, spec, crew(all))), est = share.length < all.length ? estReview(s, g, spec, crew(share)) : -Infinity;
+      const split = share.length < all.length && (!worse(share) || est >= ref - GA.splitTol || (waited && est >= g.reviewAvg - GA.splitWaitDrop)); // 기다린 차종도 전작보다 splitWaitDrop 넘게 떨어지는 팀으로는 나누지 않는다(급락 방지)
+      const team = split ? share : all, roster = regularStaff(s).filter((x) => isDevRole(x.role) && !x.lab).map((x) => x.id);
+      return { kind: 'autoFullChange', cmd: { type: 'startFullChange', nameplateId: n.id, ...spec }, cost: planPreview(s, { ...spec, name: n.name }, crew(team)).cost * fullChangeCostMult(true), error: null, team,
+        worse: !split && team.length < roster.length && worse(team) && !worse(roster) && !(waited && estReview(s, g, spec, crew(team)) >= g.reviewAvg - GA.splitWaitDrop),
         what: `${g.number + 1}세대 풀체인지`, why: age >= GA.fullChangeAt ? `출시 ${age}개월째로, 노후가 시작되는 ${config.life.oldMonths}개월 전에 다음 세대가 나와야 합니다` : `출시 ${age}개월째에 수명이 ${pct(life)}까지 떨어졌습니다`, genId: g.id };
     }
   }
@@ -705,10 +719,16 @@ function genAutoStep(s: CarState, n: Nameplate): GenStep | null {
   return null;
 }
 
+/** 4.1.0 이 팀으로 전작 그대로 풀체인지하면 예상 평론(흔들림 없이 시장 기준가, 전작 비교 가감 포함) */
+function estReview(s: CarState, prev: Generation, spec: Omit<ProjectSpec, 'name'>, team: Staff[]): number {
+  const pv = planPreview(s, { ...spec, name: '' }, team), y = yearOf(s.week + spec.designWeeks + config.dev.minTestWeeks), base = carBasePrice(s, { ...spec, options: withRequired(s, spec.options) });
+  const cmp = compareToPrev(prev, pv.stats, spec.body), fc = config.lifecycle.fullChange;
+  return mean(criticScores(pv.stats, y, base, base, 0, () => 0)) + (cmp === 'worse' ? fc.worseReview : cmp === 'better' ? fc.betterReview : 0);
+}
 /** 지금 시작하지 못하는 이유(시작할 수 있으면 null) */
 function genAutoWait(s: CarState, step: GenStep): string | null {
   const team = step.team, need = step.cost * GA.cashDevMult + monthlyFixed(s) * GA.cashMonths, lack = NEED_ROLES[step.kind].find((r) => !s.staff.some((x) => x.role === r && team.includes(x.id)));
-  return step.error ?? (s.projects.length >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다' : lack ? `쉬고 있는 ${ROLE_KO[lack]}${J(ROLE_KO[lack], '이/가')} 없습니다`
+  return step.error ?? (teamsUsed(s) >= devTeams(s) ? '개발팀이 모두 바쁩니다' : !team.length ? '쉬고 있는 개발 직원이 없습니다' : lack ? `쉬고 있는 ${ROLE_KO[lack]}${J(ROLE_KO[lack], '이/가')} 없습니다`
     : step.worse ? `지금 쉬고 있는 개발 직원 ${team.length}명으로는 전작보다 못한 차가 나옵니다. 다른 일을 하는 직원이 돌아오면 시작합니다`
     : s.cash < need ? `현금이 ${won(need)}(예상 개발비 ${won(step.cost)}의 ${GA.cashDevMult}배와 운영비 ${GA.cashMonths}개월 치)에 못 미칩니다` : null);
 }

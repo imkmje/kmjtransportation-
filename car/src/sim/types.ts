@@ -88,7 +88,12 @@ export interface Staff {
   hist?: StaffHist; // 0.10.0 성장 기록(없으면 예전 저장: 다음 월 결산부터 쌓는다)
   pay?: number; // 3.5.0 월급 가산(만원, 이직 제안을 붙잡은 인상분·경쟁사 인재의 웃돈). 없으면 0
   from?: string; // 3.5.0 경쟁사에서 영입한 직원이면 그 경쟁사 ID
+  elite?: true; // 4.1.0 직속 전담팀원(정원 밖, 위임·자동 처리가 쓰지 않는다)
 }
+/** 4.1.0 직속 전담팀: 자동 교육(끄면 false), 팀 호흡(chem)과 마지막으로 차를 완성한 전담팀원(crew), 이번 갱신 주기에 데려간 전용 후보 키(taken: "주기:번호") */
+export interface EliteState { train: boolean; chem: number; crew: number[]; taken: string[]; cars: number }
+/** 4.1.0 전 직원(해고 뒤 다시 채용할 수 있는 사람): 나간 주, 그때의 직원 기록 그대로 */
+export interface FormerStaff { left: number; staff: Staff }
 /** 1.3.0 개발 중 직원 성과(항상 이득, 자동 적용). kind: 'stat:P' 같은 능력치 배수(출시 때) / defects 결함 감소(바로) / time 설계 한 주 단축(바로) / cost 대당 원가 인하(세대) / acclaim 출시 인지도 가산 */
 export type WinKind = 'stat:P' | 'stat:E' | 'stat:U' | 'stat:D' | 'stat:Q' | 'defects' | 'time' | 'cost' | 'acclaim';
 export interface StaffWin { week: number; staffId: number; name: string; role: Role; kind: WinKind; value: number; text: string; project?: string }
@@ -132,6 +137,7 @@ export interface Project extends ProjectSpec {
   into?: number; // 1.3.0 파생의 다음 세대: 이어 갈 파생 차종 ID(없으면 새 파생 차종)
   wins?: StaffWin[]; // 1.3.0 개발 중 직원 성과
   auto?: true; // 1.3.0 세대교체 위임으로 기획 임원이 시작한 개발(위임 옵션에 따라 출시도 자동)
+  elite?: true; // 4.1.0 직속 전담팀원이 들어간 개발(전담팀 자리를 쓴다)
 }
 
 /** 판: 초기형 / 페이스리프트(2단계). 가격·옵션·능력치는 판마다 다를 수 있다 */
@@ -189,6 +195,7 @@ export interface Generation {
   awardUntil?: number; // 3.5.0 수상 판매 보너스가 끝나는 달(이 달 전까지)
   world?: Record<string, GenWorld>; // 4.0.0 권역 수출(없으면 국내만)
   domFirst?: true; // 4.0.0 생산이 모자라면 국내 먼저(없으면 대당 이익이 큰 곳 먼저)
+  elite?: true; opus?: true; // 4.1.0 직속 전담팀이 만든 세대, 수작(전담팀 차 중 평론 9.5 이상)
 }
 /** 세대 손익 누적(0.10.0): 매출·원가·광고비·리콜비, 개발비(처음·페이스리프트·의무 장비·긴급 개선), 월별 이익(sales와 같은 길이). est: 예전 저장에서 추정한 값이 섞임 */
 export interface GenPnl { rev: number; cogs: number; mk: number; recall: number; dev: { base: number; lift: number; retro: number; fix: number }; months: number[]; est?: true }
@@ -342,7 +349,7 @@ export interface RivalryState {
 }
 
 export interface CarState {
-  saveVersion: 11;
+  saveVersion: 12;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -371,11 +378,13 @@ export interface CarState {
   history: { week: number; cmd: Command }[]; // 성공한 명령 기록
   execs?: ExecState; // 0.7.0 임원(처음 임원 명령을 쓸 때 생긴다. 없으면 임원 없음, 저장 형식은 그대로 4)
   devUsed?: true; // 개발자 메뉴를 한 번이라도 쓴 게임(업적 제외용). 없으면 안 씀
-  start?: { year: number; condition: StartCondition; challenges: Challenge[] }; // 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
+  start?: { year: number; condition: StartCondition; challenges: Challenge[]; failed?: { id: Challenge; week: number; why: string }[] }; // 4.1.0 failed: 실패한 도전 과제(되돌릴 수 없다). 1.5.0 새 게임 선택지(형식 8). 없으면 1970년·보통·도전 없음
   subs?: Subsidiary[]; // 3.0.0 자회사(형식 9). 없으면 자회사 없음
   rivalry?: RivalryState; // 3.5.0 경쟁 2부(형식 10). 없으면 다음 월 결산에 빈 상태로 시작한다
   autoDecide?: { on: string[]; guard?: false; pick?: Record<string, AutoAnswer> }; // 3.7.0 결정 자동 승인(형식 10의 생략 가능한 칸): 켠 결정 종류(사건 ID), guard false = 안전선 끔. 없으면 모두 끔. 3.7.1 pick: 종류별 자동 답(없으면 처음 값)
   world?: WorldState; // 4.0.0 세계 시장(형식 11). 없으면 해외 진출 전
+  elite?: EliteState; // 4.1.0 직속 전담팀(형식 12). 없으면 아직 쓰지 않음
+  former?: FormerStaff[]; // 4.1.0 전 직원(형식 12). 없으면 없음
   pendingWorldInv?: number; // 4.0.0 이번 달 진출비·판매 법인 투자(pendingOneOff에 들어 있음)
   pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
@@ -469,6 +478,11 @@ export type Command =
   | { type: 'investOffice'; region: string } // 판매 법인 다음 등급
   | { type: 'setRegionAuto'; region: string; on: boolean }
   | { type: 'setDomFirst'; generationId: number; on: boolean }
+  // ---------- 4.1.0 직속 전담팀·전 직원 ----------
+  | { type: 'hireElite'; key: string } // 전용 후보 영입(key: eliteCands의 키)
+  | { type: 'setElite'; staffId: number; on: boolean } // 기존 직원을 전담팀으로 옮기기(on)·빼기
+  | { type: 'setEliteTrain'; on: boolean } // 자동 교육 켜기·끄기
+  | { type: 'rehire'; staffId: number } // 전 직원 다시 채용
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';

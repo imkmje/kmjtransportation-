@@ -2129,7 +2129,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await A.p.fill('#sy-token', TOKEN); await A.p.click('[data-act="syncOn"]');
   const up1 = await until(() => meta()?.rev === 1);
   const wA1 = await where(A.p), m1 = meta();
-  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 11 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
+  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 12 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
   await until(async () => (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각'));
   check('1.6.0 A 상태 줄: 마지막으로 올린 시각, [지금 올리기]·[서버에서 불러오기]·[연동 끄기]', (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각') && (await A.p.locator('.sync-box [data-act="syncUp"],.sync-box [data-act="syncDown"],.sync-box [data-act="syncOff"]').count()) === 3);
   await shotS(A.p, 'menu-on-1366x1024');
@@ -2820,6 +2820,56 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await WG(() => window.__car.goCo('sum')); await wp.waitForTimeout(150);
   check('4.0.0 회사 요약: 세계 시장 칸', (await wp.locator('.co-box[data-v="world"]').count()) === 1);
   await wctx.close(); }
+
+// ---- 4.1.0 직속 전담팀·전 직원·수작·도전 과제 실패·새 로고(CAR_SMOKE_410=폴더면 800×1200·1024×768·1366×1024 캡처) ----
+{ const ectx = await browser.newContext({ viewport: { width: 1366, height: 1024 } });
+  const ep = await ectx.newPage(); ep.on('pageerror', (e) => errors.push(String(e))); ep.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const EG = (fn, a) => ep.evaluate(fn, a), P5 = process.env.CAR_SMOKE_410 ?? '', SZ5 = [[800, 1200], [1024, 768], [1366, 1024]];
+  const shots5 = async (n, fn) => { for (const [w, h] of SZ5) { await ep.setViewportSize({ width: w, height: h }); await ep.waitForTimeout(250); await EG(() => { document.getElementById('toasts').innerHTML = ''; }); if (fn) await fn(); await ep.waitForTimeout(100); const o = await overflowOf(ep); check(`4.1.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P5) await ep.screenshot({ path: `${P5}/${n}-${w}x${h}.png` }); } await ep.setViewportSize({ width: 1366, height: 1024 }); };
+  await ep.goto(URL0); await ep.waitForSelector('#title:not([hidden])');
+  await ep.click('[data-act="titleNew"]'); await ep.fill('#t-co', '전담 시험');
+  await ep.locator('details.ns-chal').evaluate((d) => { d.open = true; }); await ep.locator('[data-ch="noLoan"]').check();
+  await ep.click('[data-act="startNew"]'); await EG(() => window.__car.setSpeed(0));
+  await EG(() => { const c = window.__car, g = c.game, s = g.state; s.week = (2013 - 1970) * 48 + 44; s.cash = 5e9; s.hqLevel = 5; s.reputation = 120; s.factory.level = 5;
+    for (const t of c.Q.researchInfo(s).fields.flatMap((f) => f.techs)) if (t.year <= 2012 && !t.repeatable && !s.research.done.includes(t.id)) s.research.done.push(t.id);
+    for (const k of c.Q.eliteInfo(s).cands.slice(0, 3)) g.command({ type: 'hireElite', key: k.key });
+    const eng = s.staff.find((x) => !x.elite && x.role === 'engineer'); g.command({ type: 'setElite', staffId: eng.id, on: true });
+    for (const x of s.staff) if (x.elite) { x.ability = 92; x.potential = 92; }
+    g.command({ type: 'fire', staffId: s.staff.find((x) => !x.elite && x.role === 'designer').id });
+    s.cash = -100; g.command({ type: 'bailout' }); s.cash = 5e9; s.events.pending.length = 0; c.render(); });
+  await EG(() => window.__car.goCo('staff')); await ep.waitForSelector('.elite-card');
+  check('4.1.0 직원 화면: 직속 전담팀 구역(자리 n/상한·팀원·호흡·자동 교육·전용 후보)', (await ep.locator('.elite-card .e-row').count()) === 4 && (await ep.locator('.elite-card [data-etrain]').count()) === 1 && (await ep.locator('.elite-card [data-act="hireElite"]').count()) >= 1 && /자리 4\/7명/.test(await ep.locator('.elite-card h3').innerText()));
+  check('4.1.0 일반 직원 목록에 전담팀원이 없다', (await EG(() => [...document.querySelectorAll('.staff-list .srow[data-id]')].map((b) => Number(b.dataset.id)).filter((id) => window.__car.game.state.staff.find((x) => x.id === id)?.elite).length)) === 0);
+  await shots5('elite-staff', () => EG(() => document.querySelector('.elite-card')?.scrollIntoView({ block: 'start' })));
+  await shots5('elite-cands', () => EG(() => document.querySelector('.elite-card .e-cand')?.scrollIntoView({ block: 'center' })));
+  check('4.1.0 채용: 전 직원 목록(다시 채용)', (await ep.locator('.hire-card .former [data-act="rehire"]').count()) === 1);
+  await shots5('former', () => EG(() => { const d = document.querySelector('.hire-card .former'); if (d) d.open = true; d?.scrollIntoView({ block: 'center' }); }));
+  const fid = await EG(() => window.__car.game.state.former[0].staff.id); await ep.locator(`[data-act="rehire"][data-id="${fid}"]`).click(); await ep.waitForTimeout(150);
+  check('4.1.0 전 직원을 다시 채용하면 직원 목록으로 돌아온다', await EG((id) => window.__car.game.state.staff.some((x) => x.id === id), fid));
+  // 기획: 팀 고르기에서 [직속 전담팀]
+  await ep.click('#tabs button[data-tab="dev"]'); await ep.waitForTimeout(150); await ep.locator('[data-act="plan"]').first().click(); await ep.waitForTimeout(150); if ((await EG(() => window.__car.screen)) === 'start') { await ep.locator('[data-act="pickNew"]').first().click(); await ep.waitForTimeout(150); }
+  await EG(() => { const b = document.querySelector('[data-act="ptab"][data-v="budget"]'); b?.click(); }); await ep.waitForTimeout(150);
+  await ep.locator('[data-act="eliteTeam"]').first().click(); await ep.waitForTimeout(150);
+  check('4.1.0 기획 화면: [직속 전담팀]을 누르면 쉬는 전담팀원 전원이 골라진다', (await EG(() => { const d = window.__car.draft, s = window.__car.game.state; return d.team.length === s.staff.filter((x) => x.elite).length && d.team.every((id) => s.staff.find((x) => x.id === id).elite); })));
+  await shots5('elite-plan', () => EG(() => document.querySelector('.elite-pick')?.scrollIntoView({ block: 'center' })));
+  await ep.locator('[data-act="startDev"]').first().click(); await ep.waitForTimeout(150);
+  check('4.1.0 전담팀 개발이 시작되고 전담팀 자리를 쓴다', await EG(() => window.__car.game.state.projects.some((p) => p.elite)));
+  await EG(() => window.__car.tick(1)); await ep.waitForTimeout(400);
+  check('4.1.0 사무실: 전담팀원은 금색 자리에 앉는다', (await EG(() => document.querySelector('#office svg, .office svg')?.getAttribute('aria-label') ?? '')).includes('직속 전담팀 4명'));
+  await shots5('office');
+  await EG(() => { const c = window.__car, g = c.game, s = g.state; g.devCheat('finishDev'); const p = s.projects.find((x) => x.elite); g.command({ type: 'launch', projectId: p.id, price: Math.round(c.Q.carBasePrice(s, p) / 10) * 10, marketing: 1, color: '#2e7d5b', wheels: 1 }); const gen = s.nameplates.flatMap((n) => n.generations).at(-1); gen.opus = true; gen.elite = true; gen.reviews = [9.8, 9.6, 9.7, 9.7]; gen.reviewAvg = 9.7; document.getElementById('sheet').hidden = true; c.render(); });
+  await ep.click('#tabs button[data-tab="garage"]'); await ep.waitForTimeout(200);
+  check('4.1.0 차고: 수작 표시', (await ep.locator('.opus-chip, .opus-s').count()) >= 1);
+  await shots5('opus-garage', () => EG(() => document.querySelector('.opus-chip, .opus-s')?.scrollIntoView({ block: 'center' })));
+  await ep.click('#tabs button[data-tab="records"]').catch(() => {}); await ep.waitForTimeout(200);
+  await EG(() => document.querySelector('[data-act="rectab"][data-v="stats"]')?.click()); await ep.waitForTimeout(200);
+  check('4.1.0 통계: 도전 과제 실패 표시', (await ep.locator('.ch-list li.failed').count()) === 1);
+  await shots5('challenge-failed', () => EG(() => document.querySelector('.ch-list')?.scrollIntoView({ block: 'center' })));
+  await EG(() => { window.__car.tick(4); document.getElementById('sheet').hidden = true; }); // 월 결산: 테슬러 등장(등장 달이 지났다)
+  await ep.click('#tabs button[data-tab="fin"]'); await ep.waitForTimeout(200);
+  check('4.1.0 재무: 경쟁사 6곳 로고(새 도형)', (await ep.locator('.rivals .rv-co svg').count()) === 6);
+  await shots5('logos', () => EG(() => document.querySelector('.rivals')?.scrollIntoView({ block: 'center' })));
+  await ectx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

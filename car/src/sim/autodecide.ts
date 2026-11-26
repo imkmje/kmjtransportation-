@@ -3,7 +3,7 @@
 // 안전선: 고른 선택지의 현금 지출이 지금 현금의 guardShare 이상이거나 현금보다 크면 자동으로 하지 않고 평소처럼 묻는다(끌 수 있다)
 import { config } from '../config';
 import { RANDOM_EVENTS } from '../data';
-import { staffCap } from './company';
+import { staffCap, staffCount } from './company';
 import { choiceMoney } from './events';
 import { autoChoice } from './rivalry';
 import type { AutoAnswer, CarState, PendingChoice } from './types';
@@ -34,7 +34,7 @@ export function autoBlocked(s: CarState, pc: PendingChoice, choice: number): str
   const def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, x = pc.rv;
   const car = pc.genId !== null && s.nameplates.some((n) => n.generations.some((g) => g.id === pc.genId && g.status !== 'discontinued')); // applyChoice·choiceMoney와 같은 대상
   for (const e of def.choices[choice].effects) {
-    if (e.type === 'hire' && s.staff.length >= staffCap(s)) return '직원 정원이 다 찼습니다';
+    if (e.type === 'hire' && staffCount(s) >= staffCap(s)) return '직원 정원이 다 찼습니다';
     if ((e.type === 'fixDefects' || e.type === 'awarenessMult' || (e.type === 'awareness' && e.target === 'car')) && !car) return '대상 차가 판매 중이 아닙니다';
     if (e.type === 'warFollow' && !(s.rivalry?.wars ?? []).some((w) => w.id === x?.war && w.follow === null)) return '가격 전쟁이 이미 끝났습니다';
     if (e.type === 'retain' && !s.staff.some((y) => y.id === x?.staffId)) return '대상 직원이 회사에 없습니다';

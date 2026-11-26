@@ -129,7 +129,7 @@ describe('결정 자동 승인', () => {
   });
 
   it('저장 왕복: 켠 종류·안전선이 저장되고 이어서 돌린 결과가 같다. 형식은 10 그대로, 예전 저장은 모두 끔', () => {
-    expect(SAVE_VERSION).toBe(11);
+    expect(SAVE_VERSION).toBe(12);
     const old = load(); expect(old.state.autoDecide).toBeUndefined();
     const g = load();
     ok(g.command({ type: 'setAutoDecide', kind: 'all', on: true })); ok(g.command({ type: 'setAutoDecide', kind: 'motorshow', on: false })); ok(g.command({ type: 'setAutoDecideGuard', on: false }));

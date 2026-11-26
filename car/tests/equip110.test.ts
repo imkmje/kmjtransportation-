@@ -87,9 +87,9 @@ describe('명령과 저장 형식 5(1.1.0)', () => {
     expect(g.command({ type: 'startProject', ...SPEC, options: [], equip: { radio: 'x' as never } }).ok).toBe(false);
   });
   it('형식 4 저장의 옵션은 모두 기본 장비로 바뀌고(형식 5), 형식 5 fixture가 열리며 저장 왕복이 같다', () => {
-    expect(SAVE_VERSION).toBe(11);
+    expect(SAVE_VERSION).toBe(12);
     const v4 = Game.fromJSON(JSON.parse(readFileSync('car/tests/fixtures/save-v4.json', 'utf8')));
-    expect(v4.state.saveVersion).toBe(11);
+    expect(v4.state.saveVersion).toBe(12);
     for (const g of allGens(v4.state)) for (const e of g.editions) expect(e.equip).toEqual(Object.fromEntries(e.options.map((o) => [o, 'std'])));
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v5.json', 'utf8'));
     expect(raw.saveVersion).toBe(5);

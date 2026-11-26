@@ -8,16 +8,16 @@ export const paintName = (hex: string): string => PAINT.find((p) => p[1] === hex
 export const WHEELS = [{ name: '작은 휠', sub: '단정함' }, { name: '보통 휠', sub: '기본' }, { name: '큰 휠', sub: '멋스러움' }];
 
 const LOGO: Record<string, string> = {
-  toyotto: '<ellipse cx="16" cy="16" rx="14" ry="9.5" fill="none" stroke="#c0392b" stroke-width="2.5"/><ellipse cx="16" cy="16" rx="6" ry="9.5" fill="none" stroke="#c0392b" stroke-width="2.5"/>',
-  hyundoy: '<rect x="5" y="5" width="22" height="22" rx="4" transform="rotate(45 16 16)" fill="none" stroke="#1f4e9c" stroke-width="2.5"/><path d="M11 22l4-12M17 22l4-12M12.5 17h8" stroke="#1f4e9c" stroke-width="2.4" stroke-linecap="round"/>',
+  toyotto: '<circle cx="16" cy="16" r="12.5" fill="none" stroke="#c0392b" stroke-width="2.4"/><path d="M16 8.5l5.5 8h-11z" fill="#c0392b"/><path d="M9 20.5h14" stroke="#c0392b" stroke-width="2.4" stroke-linecap="round"/>', // 4.1.0 해돋이(겹친 타원은 실제 로고를 떠올리게 해 바꿈)
+  hyundoy: '<path d="M16 3l11.3 6.5v13L16 29 4.7 22.5v-13z" fill="none" stroke="#1f4e9c" stroke-width="2.4" stroke-linejoin="round"/><path d="M10.5 11l5 5-5 5M16.5 11l5 5-5 5" fill="none" stroke="#1f4e9c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>', // 4.1.0 육각형 안의 겹화살(기울어진 H를 뺐다)
   bmv: '<rect x="4" y="4" width="24" height="24" rx="6" fill="#1d2b44"/><path d="M9 21l4-10 3 6 3-6 4 10" fill="none" stroke="#e8edf5" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>',
-  hondi: '<path d="M6 6h20l-3 20H9z" fill="none" stroke="#b8323c" stroke-width="2.5" stroke-linejoin="round"/><path d="M12 10v12M20 10v12M12 16h8" stroke="#b8323c" stroke-width="2.4" stroke-linecap="round"/>',
+  hondi: '<rect x="4" y="4" width="24" height="24" rx="7" fill="#b8323c"/><path d="M8.5 19.5c2.6-6 5-6 7.3-1.6s4.8 4.4 7.7-1.9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>', // 4.1.0 물결 배지(사다리꼴 H를 뺐다)
   tesler: '<circle cx="16" cy="16" r="13" fill="none" stroke="#c42d2d" stroke-width="2.4"/><path d="M17.5 6 11 17h5l-1.5 9L21 15h-5z" fill="#c42d2d"/>',
-  forty: '<rect x="2" y="8" width="28" height="16" rx="8" fill="#1d3c8f"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="sans-serif">40</text>',
+  forty: '<path d="M16 3l11 4v8c0 7-5 11.5-11 14C10 26.5 5 22 5 15V7z" fill="#5a3b1c"/><path d="M10 18.5l6-7 6 7" fill="none" stroke="#f1d9a8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>', // 4.1.0 방패와 봉우리(파란 타원 배지를 뺐다)
   other: '<circle cx="16" cy="16" r="12" fill="none" stroke="#5b6470" stroke-width="2.5"/>',
 };
 // rivals.json의 id → 데모 로고 도형
-const RIVAL_LOGO: Record<string, string> = { toyoda: 'toyotto', hyundae: 'hyundoy', porty: 'forty', bmv: 'bmv', hondi: 'hondi', tesler: 'tesler' }; // 4.0.0 비엠브이·혼디·테슬러 로고는 새로 그렸다(실제 로고를 따르지 않는다)
+const RIVAL_LOGO: Record<string, string> = { toyoda: 'toyotto', hyundae: 'hyundoy', porty: 'forty', bmv: 'bmv', hondi: 'hondi', tesler: 'tesler' }; // 4.0.0 비엠브이·혼디·테슬러 로고는 새로 그렸다(실제 로고를 따르지 않는다). 4.1.0 실제 로고를 떠올리게 하던 현다이·도요다·혼디·포티를 다시 그렸다
 /** 2.0.0 경쟁 모델 썸네일의 회사별 차 색 경향(PAINT 안에서) */
 export const RIVAL_PAINT: Record<string, string[]> = { hyundae: ['#1f4fd1', '#eef0f2', '#3a3f47'], porty: ['#14213d', '#c8202f', '#eef0f2'], toyoda: ['#eef0f2', '#c9b38a', '#3a3f47'], bmv: ['#3a3f47', '#14213d', '#eef0f2'], hondi: ['#c8202f', '#eef0f2', '#1f4fd1'], tesler: ['#eef0f2', '#c8202f', '#3a3f47'] };
 export const logo = (key: string, z = 26): string =>

@@ -102,7 +102,7 @@
    "suvS": "이스케입",
    "suv": "익스플로라",
    "suvL": "엑스페디션",
-   "pickup": "F-160",
+   "pickup": "P-170",
    "sports": "머스탕"
   },
   "legacy": [
@@ -223,10 +223,10 @@
    "sedanL": "7시리스",
    "coupe": "4시리스",
    "minivan": "그랑투어",
-   "suvS": "X-1",
-   "suv": "X-5",
-   "suvL": "X-7",
-   "sports": "Z-4"
+   "suvS": "V-2",
+   "suv": "V-5",
+   "suvL": "V-8",
+   "sports": "ZR-4"
   },
   "regions": {
    "na": 1.0,
@@ -275,7 +275,7 @@
    "suv": "CR-W",
    "suvL": "파일롯",
    "pickup": "릿지레인",
-   "sports": "S2100"
+   "sports": "SR-200"
   },
   "regions": {
    "na": 1.1,

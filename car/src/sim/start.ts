@@ -1,6 +1,6 @@
 // 1.5.0 새 게임 선택지: 시작 연도·시작 조건·도전 과제. 수치는 config.newGame. 상태의 start가 없으면(옛 저장) 1970년·보통·도전 없음
 import { config } from '../config';
-import { TECHS, techById } from '../data';
+import { RIVALS, TECHS, techById } from '../data';
 import { derivativePlan } from './derive';
 import { eraTimeline, optionTech, REGION } from './events';
 import { updateRivals } from './market';
@@ -47,12 +47,23 @@ export function applyLateStart(s: CarState, year: number): void {
 
 /** 새 차종이 생기는 명령인가(차종 세 개까지 과제) */
 const newNames = (s: CarState): number => s.nameplates.length + s.projects.filter((p) => p.kind === 'new' || (p.kind === 'derivative' && p.into === undefined)).length;
+/** 4.1.0 도전 과제 실패(되돌릴 수 없다). 그 과제를 고르지 않았거나 이미 실패면 그대로 */
+export function failChallenge(s: CarState, id: Challenge, why: string): void {
+  const st = s.start;
+  if (!st?.challenges.includes(id) || st.failed?.some((f) => f.id === id)) return;
+  (st.failed ??= []).push({ id, week: s.week, why });
+}
+/** 4.1.0 전기차만: 가솔린 등 전기 외 모델이 있는 경쟁사(인수하면 그 모델을 물려받는다) */
+const hasNonEv = (rivalId: string): boolean => { const r = RIVALS.find((x) => x.id === rivalId); return !!r && !r.ev; };
 /** 도전 과제가 막는 명령의 이유(없으면 null) */
 export function challengeError(s: CarState, cmd: Command): string | null {
   const ch = startOf(s).challenges;
   if (!ch.length) return null;
   const C = NG.challenges, tail = ' (도전 과제)';
   if (ch.includes('evOnly') && (cmd.type === 'startProject' || cmd.type === 'startFullChange') && cmd.powertrain !== C.evOnly.powertrain) return `「${C.evOnly.name}」: 전기 외 동력으로는 개발을 시작할 수 없습니다.${tail}`;
+  if (ch.includes('evOnly') && cmd.type === 'acquireRival' && hasNonEv(cmd.rivalId)) return `「${C.evOnly.name}」: 이 회사는 전기차가 아닌 모델을 팔고 있어, 인수하면 가솔린 차를 물려받습니다. 인수할 수 없습니다.${tail}`; // 4.1.0
+  if (ch.includes('evOnly') && cmd.type === 'foundSubsidiary' && (cmd.kind === 'premium' || cmd.kind === 'value')) return `「${C.evOnly.name}」: 브랜드 자회사는 가솔린 모델로 시작하므로 세울 수 없습니다. 부품 회사·할부 금융은 세울 수 있습니다.${tail}`;
+  if (ch.includes('evOnly') && cmd.type === 'subPlanModel' && cmd.powertrain !== C.evOnly.powertrain) return `「${C.evOnly.name}」: 전기 외 동력으로는 개발을 시작할 수 없습니다.${tail}`;
   if (ch.includes('names3')) {
     const plan = cmd.type === 'startDerivative' ? derivativePlan(s, cmd.generationId, cmd.variant, { name: cmd.name }) : null;
     const adds = cmd.type === 'startProject' || (!!plan && typeof plan !== 'string' && !plan.into);
@@ -64,7 +75,7 @@ export function challengeError(s: CarState, cmd: Command): string | null {
 }
 
 /** 화면용: 이 판의 도전 과제와 진행(규칙으로 막으므로 늘 지켜지는 중, 햇수 = 시작부터 지난 해) */
-export function challengeInfo(s: CarState): { id: Challenge; name: string; desc: string; years: number }[] {
+export function challengeInfo(s: CarState): { id: Challenge; name: string; desc: string; years: number; failed: { year: number; why: string } | null }[] {
   const years = Math.max(0, yearOf(s.week) - startYearOf(s));
-  return startOf(s).challenges.map((id) => ({ id, name: NG.challenges[id].name, desc: NG.challenges[id].desc, years }));
+  return startOf(s).challenges.map((id) => { const f = startOf(s).failed?.find((x) => x.id === id); return { id, name: NG.challenges[id].name, desc: NG.challenges[id].desc, years: f ? Math.max(0, yearOf(f.week) - startYearOf(s)) : years, failed: f ? { year: yearOf(f.week), why: f.why } : null }; });
 }
