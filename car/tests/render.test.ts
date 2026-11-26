@@ -103,12 +103,12 @@ describe('3D 차 모양', { timeout: 60000 }, () => {
     }
   });
 
-  it('형상 검사: 데칼 빠짐 0, 좌우 대칭, 바퀴는 땅에 닿고 아치 안에, 삼각형 2만 4천 이하', () => {
+  it('형상 검사: 데칼 빠짐 0, 좌우 대칭, 바퀴는 땅에 닿고 아치 안에, 삼각형 6만 이하', () => {
     for (const bodyId of BODIES) for (const era of ERAS) for (let s = 0; s < 4; s++) {
       const l = look({ bodyId, era, chassisSeed: s * 19 + 2, faceSeed: s * 5 + 1, wheel: (s % 3) as 0 | 1 | 2, sporty: s === 1, powertrain: s === 3 ? 'ev' : 'gas' });
       const g = buildCar(l, M), c = chassisOf(l);
       expect(g.userData.decalMiss).toBe(0);
-      expect(tris(g)).toBeLessThanOrEqual(24000);
+      expect(tris(g)).toBeLessThanOrEqual(60000); // 5.2.0 무대용 고급 판 한도
       // 좌우 대칭: 차 전체 꼭짓점의 z 합이 0 근처, 최대·최소 z가 같다
       const box = new THREE.Box3().setFromObject(g);
       expect(Math.abs(box.max.z + box.min.z)).toBeLessThan(1e-3);
@@ -218,7 +218,7 @@ describe('외관 후보·직접 고르기(1.0.0)', () => {
     const summary = (l: CarLook) => {
       const g = buildCar(l, M), out: Record<string, number> = {};
       expect(g.userData.decalMiss).toBe(0);
-      expect(tris(g)).toBeLessThanOrEqual(24000);
+      expect(tris(g)).toBeLessThanOrEqual(60000); // 5.2.0 무대용 고급 판 한도
       g.traverse(o => { if (!(o instanceof THREE.Mesh)) return; const k = Array.isArray(o.material) ? 'body' : KEY.get(o.material) ?? '?'; out[`n:${k}`] = (out[`n:${k}`] ?? 0) + 1; out[`t:${k}`] = (out[`t:${k}`] ?? 0) + tris(o); });
       const b = new THREE.Box3().setFromObject(g), w = g.children.find(o => o instanceof THREE.Group)!;
       Object.assign(out, { L: Math.round((b.max.x - b.min.x) * 100), W: Math.round((b.max.z - b.min.z) * 100), H: Math.round((b.max.y - b.min.y) * 100), wheelZ: Math.round(Math.abs(w.position.z) * 100), wheelR: Math.round(w.position.y * 100) });

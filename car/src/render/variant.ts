@@ -50,8 +50,8 @@ function sideOf(look: CarLook, b: BodyShape): SideSpec {
   return {
     // 2010은 날 선 캐릭터 라인(늘 1~2줄, 뒤로 치켜 오름), 2020은 매끈한 면(없거나 1줄)
     crease: era === 2010 ? (nc < .45 ? [c1] : [c1, c2]) : era === 2020 ? (nc < .5 ? [] : [c1]) : era === 2030 ? (nc < .35 ? [] : nc < .75 ? [c1] : [c1, c2]) : nc < (old ? .35 : .15) ? [] : nc < (old ? .9 : .7) ? [c1] : [c1, c2],
-    kick: era === 2010 ? .05 + .07 * kick : era >= 2020 ? .02 * kick : era === 1990 ? .02 * kick : 0,
-    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2010: .5, 2020: .12, 2030: .2 }[era], // 대형 세단은 늘 크롬 띠. 2010은 크롬 창틀이 흔하고 2020은 드물다
+    kick: era === 2010 ? .05 + .07 * kick : era >= 2020 ? .02 * kick : era === 1990 || era === 2000 ? .03 * kick : 0,
+    beltChrome: id === 'sedanL' || bc < { 1970: .85, 1980: .45, 1990: .3, 2000: .55, 2010: .5, 2020: .12, 2030: .2 }[era], // 대형 세단은 늘 크롬 띠. 2010은 크롬 창틀이 흔하고 2020은 드물다
     strip: old ? (st < .45 ? (era === 1970 ? 'chrome' : 'dark') : st < .65 ? 'dark' : 'none') : era === 1990 && st < .4 ? 'dark' : 'none',
     sunroof: sr < (id === 'pickup' || id === 'kei' ? .15 : .35),
     rack: rk < (({ suvS: .6, suv: .85, suvL: .9, minivan: .45, hatch: .2, kei: .2 } as Partial<Record<BodyId, number>>)[id] ?? 0),
@@ -93,7 +93,7 @@ export function chassisOf(look: CarLook): Chassis {
   const rt = has ? r() : 0, sporty = look.bodyId === 'coupe' || look.bodyId === 'sports';
   const roofType: RoofType = !b.deck ? 'notch' : !has ? (sporty ? 'fast' : 'notch') : rt < (sporty ? .3 : .5) ? 'notch' : rt < (sporty ? .6 : .8) ? 'semi' : 'fast'; // 5.1.0 시드 없는 기본 스포츠카·쿠페는 패스트백(세단처럼 보이지 않게)
   const s = E.len * (1 + VARY.len * dev.len), h = b.L * s / 2, tmin = b.deck ? MIN_TRUNK : .2;
-  let rf = b.rf * s * (1 + VARY.rake * dev.rake), rr = b.rr * s * (1 + VARY.rear * dev.rear);
+  let rf = b.rf * s * (1 + VARY.rake * dev.rake) * E.rake, rr = b.rr * s * (1 + VARY.rear * dev.rear);
   if (b.deck) rr = REAR[roofType](rr);
   // 전기차는 보닛이 짧다(객실을 앞으로)
   const cab = VARY.cab * dev.cab + (ev && eraOf(look) >= 2010 ? .22 : 0);
