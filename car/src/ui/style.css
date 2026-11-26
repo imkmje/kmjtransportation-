@@ -4,15 +4,17 @@
   /* 1.0.0 색 토큰. 회색 단계: --ink(본문) > --ink2(보조 글) > --ink3(작은 설명, 흰 바탕 5.6:1·배경 4.7:1) > --off(꺼진 칸) > --line > --soft > --card.
      의미 색: 강조 주황(--accent, 글자·작은 버튼은 --accent2), 이익 초록(--pos), 손실 빨강(--neg), 올림 파랑(--up), 경고 노랑(--caution 채움, 글자는 --warn).
      *-bg·*-ink·*-line: 옅은 바탕 칸(배지·안내 상자)의 바탕·글자·테두리(글자 대비 5.6:1 이상). 시대별 테마는 이 이름들을 덮어쓰면 된다 */
-  --bg:#e7eaee; --stage1:#ffffff; --stage2:#dfe4ea; --stage3:#c9d0d9;
-  --card:#ffffff; --ink:#14171c; --ink2:#4f5763; --ink3:#5f6874; --off:#c9ced6; --line:#d8dde4; --soft:#f1f3f6; --on-ink:#ffffff;
-  --accent:#ff5a1f; --accent2:#c93f0c; --accent-l:#ffb15c; --accent-bg:#ffe7dc;
+  /* 5.0.0 새 뼈대 색: 바탕 흰색, 보조 바탕 #F5F7FA, 글자·주색 남색 #0B1F3A, 강조 노랑 #FFC94A(채움 전용, 위 글자는 남색), 선 #D9DEE7, 보조 글자 #44546A.
+     --accent2는 흰 바탕 위 강조 글자·작은 단추용(노랑은 글자 대비가 모자라 짙은 황갈색), 차 무대만 어두운 --stage-dark */
+  --bg:#ffffff; --stage1:#1d232d; --stage2:#151a22; --stage3:#12161d; --stage-dark:#12161d;
+  --card:#ffffff; --ink:#0b1f3a; --ink2:#44546a; --ink3:#44546a; --off:#c3cad6; --line:#d9dee7; --soft:#f5f7fa; --on-ink:#ffffff; --on-accent:#0b1f3a;
+  --accent:#ffc94a; --accent2:#7a5200; --accent-l:#ffe08f; --accent-bg:#fff4d6;
   --pos:#0f7f4e; --pos-bg:#dff3e9; --pos-ink:#0d6b41; --pos-line:#b9e2c9; --pos-soft:#f3faf6;
   --neg:#c53030; --neg-bg:#fdecec; --neg-ink:#8a1f1f; --neg-line:#f1c2c2;
   --warn:#a35f00; --warn-bg:#fff4e5; --warn-ink:#6b4300; --warn-line:#f3d4a6; --caution:#e0a020;
   --up:#2f63c4; --up-bg:#eef3fb; /* 판매 요인: 올리는 쪽(내리는 쪽은 --neg) */
   --gold-bg:#ffe7a8; --gold-ink:#6b4c00;
-  --cat0:#14171c; --cat1:#ff5a1f; --cat2:#2f63c4; --cat3:#0f7f4e; --cat4:#e0a020; --cat5:#8a5cc2; --cat6:#a3abb6; /* 차종별 쌓은 막대 */
+  --cat0:#0b1f3a; --cat1:#d9480f; --cat2:#2f63c4; --cat3:#0f7f4e; --cat4:#e0a020; --cat5:#8a5cc2; --cat6:#a3abb6; /* 차종별 쌓은 막대 */
   --kr:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif;
   color-scheme:light;
 }
@@ -87,7 +89,7 @@ h2,h3,p{margin:0}
 .ov{position:absolute;pointer-events:none}
 .ov.tl{left:22px;top:20px;right:22px}
 .eyebrow{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--ink2);display:flex;align-items:center;gap:8px}
-.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px #ff5a1f2e;flex:none}
+.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px #ffc94a55;flex:none}
 .model{font-weight:900;font-size:clamp(30px,4.6vw,60px);line-height:1.05;letter-spacing:-.04em;margin:8px 0 6px;overflow-wrap:anywhere}
 .model small{font-size:.38em;letter-spacing:-.01em;color:var(--ink2);margin-left:8px;font-weight:800}
 .model .rn-btn{pointer-events:auto;min-height:30px;padding:0 10px;font-size:12px;letter-spacing:0;margin-left:10px;vertical-align:middle;border-radius:10px;background:#fffd} /* 1.5.0 차고 상세 이름 옆 [이름 변경] */
@@ -125,7 +127,7 @@ h2,h3,p{margin:0}
 .btn.danger{color:var(--neg);border-color:var(--neg-line)}
 .btn:disabled{opacity:.45}
 .btn small{font-weight:600;font-size:11px;opacity:.8}
-.go{width:100%;border:0;border-radius:16px;min-height:56px;margin-top:12px;background:var(--accent);color:#fff;font-weight:900;font-size:17px;letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 22px -10px var(--accent2);transition:transform .12s}
+.go{width:100%;border:0;border-radius:16px;min-height:56px;margin-top:12px;background:var(--accent);color:var(--on-accent);font-weight:900;font-size:17px;letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 22px -10px var(--accent2);transition:transform .12s}
 .go:hover:not(:disabled){transform:translateY(-1px)}.go:active:not(:disabled){transform:translateY(1px)}
 .go.dark{background:var(--ink);box-shadow:none}
 .go:disabled{background:var(--off);box-shadow:none}
@@ -280,7 +282,7 @@ input[type=range]{width:100%;accent-color:var(--ink);margin:10px 0 2px;min-heigh
 .toast.bad{background:#fff;color:var(--ink);border:2px solid var(--neg)}
 .toast b{display:block;font-size:12px;letter-spacing:.06em;color:var(--accent2)}
 .toast.bad b{color:var(--neg)}
-.toast .open{display:block;margin-top:6px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;font-size:12.5px;min-height:34px;padding:0 12px}
+.toast .open{display:block;margin-top:6px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);font-weight:800;font-size:12.5px;min-height:34px;padding:0 12px}
 .toast .x{margin-left:auto;border:0;background:transparent;font-size:18px;min-width:32px;min-height:32px;line-height:1;color:inherit;opacity:.6}
 .toast.out{opacity:0;transform:translateY(8px);transition:opacity .3s,transform .3s}
 #debug{position:fixed;z-index:60;left:8px;bottom:8px;background:#14171ccc;color:#fff;font:12px/1.4 ui-monospace,monospace;padding:6px 8px;border-radius:8px;pointer-events:none;white-space:pre}
@@ -390,7 +392,7 @@ button.s-pick[aria-pressed="true"]::before{content:"✓";border-color:var(--ink)
 .lv5 li{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;font-size:11px;font-weight:700;color:var(--ink3);position:relative}
 .lv5 li b{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-size:14px;color:var(--ink3)}
 .lv5 li.done b{background:var(--ink);color:#fff}
-.lv5 li.on b{background:var(--accent);color:#fff;box-shadow:0 0 0 4px #ff5a1f2e}
+.lv5 li.on b{background:var(--accent);color:var(--on-accent);box-shadow:0 0 0 4px #ffc94a55}
 .lv5 li.on{color:var(--ink)}
 .lv5 small{line-height:1.25}
 /* 공장 */
@@ -438,7 +440,7 @@ button.s-pick[aria-pressed="true"]::before{content:"✓";border-color:var(--ink)
 /* ---- 상단바: 진행 중 사건 칩·결정 대기 ---- */
 .pill.evchip,.pill.pend{cursor:pointer;font-weight:800;color:var(--ink);min-height:36px;display:inline-block;line-height:20px;overflow:hidden;text-overflow:ellipsis;max-width:280px}
 .pill.evchip{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-ink)}
-.pill.pend{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill.pend{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 @media (max-width:899px){.pill.evchip{max-width:200px}}
 
 /* ---- 연구로 여는 칸(흐림)·규제 강조·궁합 ---- */
@@ -476,7 +478,7 @@ button.s-pick[aria-pressed="true"]::before{content:"✓";border-color:var(--ink)
 .tc.available{border-color:var(--ink)}
 .tc.available .tc-h em{background:var(--ink);color:#fff}
 .tc.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.tc.active .tc-h em{background:var(--accent);color:#fff}
+.tc.active .tc-h em{background:var(--accent);color:var(--on-accent)}
 .tc.done{background:var(--pos-soft);border-color:var(--pos-line)}
 .tc.done .tc-h em{background:var(--pos-bg);color:var(--pos-ink)}
 .tc.done .desc,.tc.done .yr{display:none}
@@ -724,7 +726,7 @@ body{word-break:keep-all;overflow-wrap:break-word} /* 0.5.1: 한국어가 글자
 .pill.todo.has-rep{position:relative}
 .pill.todo.has-rep::after{content:"";position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--neg)}
 .skipbtn{border:1px solid var(--line);background:var(--card);border-radius:14px;min-height:44px;padding:0 12px;font-weight:700;font-size:13px;color:var(--ink2);white-space:nowrap}
-.skipbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.skipbtn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 @media (max-width:1240px){.td-t{display:none}.skipbtn{padding:0 10px}}
 .todo-tabs{margin:4px 0 12px}
 .todo-list{display:flex;flex-direction:column;gap:6px}

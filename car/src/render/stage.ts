@@ -9,13 +9,13 @@ const LEGACY = Math.PI;
 
 /** 10년 단위 무대 분위기(미묘하게): 조명 색온도(주·반구광), 원판 색. 70년대 따뜻한 노란빛 → 2020년대 차가운 흰빛 */
 const ERA_LOOK: [number, { key: number; sky: number; ground: number; disc: number }][] = [
-  [1970, { key: 0xfff0d8, sky: 0xfff3e2, ground: 0xc8bba4, disc: 0xf2ece1 }],
-  [1980, { key: 0xfff3e4, sky: 0xfdf2ea, ground: 0xc4bcb2, disc: 0xf3efea }],
-  [1990, { key: 0xfff7ee, sky: 0xfffaf2, ground: 0xc0bfb9, disc: 0xf4f3f0 }],
-  [2000, { key: 0xffffff, sky: 0xffffff, ground: 0xb9c2cc, disc: 0xf5f6f8 }],
-  [2010, { key: 0xf8fbff, sky: 0xf6f9ff, ground: 0xb5bfcc, disc: 0xf4f6f9 }],
-  [2020, { key: 0xf2f6ff, sky: 0xf2f6ff, ground: 0xb0bccb, disc: 0xf3f5f9 }],
-  [2030, { key: 0xeef4ff, sky: 0xeef5ff, ground: 0xaab8ca, disc: 0xf2f5fa }],
+  [1970, { key: 0xfff0d8, sky: 0xfff3e2, ground: 0x3a414c, disc: 0x1d232d }],
+  [1980, { key: 0xfff3e4, sky: 0xfdf2ea, ground: 0x3a414c, disc: 0x1d232d }],
+  [1990, { key: 0xfff7ee, sky: 0xfffaf2, ground: 0x3a414c, disc: 0x1d232d }],
+  [2000, { key: 0xffffff, sky: 0xffffff, ground: 0x3a414c, disc: 0x1d232d }],
+  [2010, { key: 0xf8fbff, sky: 0xf6f9ff, ground: 0x3a414c, disc: 0x1d232d }],
+  [2020, { key: 0xf2f6ff, sky: 0xf2f6ff, ground: 0x3a414c, disc: 0x1d232d }],
+  [2030, { key: 0xeef4ff, sky: 0xeef5ff, ground: 0x3a414c, disc: 0x1d232d }],
 ];
 /** 출시 연출 조명 단계: off 평소, dark 어두운 무대에 뒤 윤곽광만(실루엣), lit 스포트라이트 */
 export type RevealLight = 'off' | 'dark' | 'lit';
@@ -44,7 +44,7 @@ export class Stage {
   private rim: THREE.DirectionalLight;
   private spot: THREE.SpotLight;
   private disc: THREE.MeshStandardMaterial;
-  private eraT = { key: new THREE.Color(0xffffff), sky: new THREE.Color(0xffffff), ground: new THREE.Color(0xb9c2cc), disc: new THREE.Color(0xf5f6f8) };
+  private eraT = { key: new THREE.Color(0xffffff), sky: new THREE.Color(0xffffff), ground: new THREE.Color(0x3a414c), disc: new THREE.Color(0x1d232d) };
   // 조명 배율(지금 값 → 목표 값으로 부드럽게): 주·반구광, 윤곽광, 스포트, 환경 반사
   private lk = { main: 1, rim: 1, spot: 0, env: 1 };
   private lkT = { main: 1, rim: 1, spot: 0, env: 1 };
@@ -65,48 +65,49 @@ export class Stage {
     const keep = <T extends { dispose(): void }>(x: T) => (owned.push(x), x);
 
     // 반사용 가상 스튜디오(조명 판 3장 + 바닥)
-    const es = new THREE.Scene(); es.background = new THREE.Color(0x8e98a4);
+    // 5.0.0 어두운 스튜디오: 짙은 방에 밝은 조명 판(위 큰 판 + 옆 가늘고 긴 판 + 뒤 판). 도장·유리에 또렷한 반사 띠가 생겨 곡면이 읽힌다
+    const es = new THREE.Scene(); es.background = new THREE.Color(0x56606e);
     const board = (w: number, h: number, x: number, y: number, z: number, c: number) => {
       const m = new THREE.Mesh(keep(new THREE.PlaneGeometry(w, h)), keep(new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })));
       m.position.set(x, y, z); m.lookAt(0, 0, 0); es.add(m);
     };
-    board(12, 5, 0, 9, 0, 0xffffff); board(9, 4, -9, 3, 5, 0xffffff); board(9, 4, 9, 3, -5, 0xdfe9ff); board(40, 40, 0, -4, 0, 0x6a7078);
+    board(10, 3.2, 0, 9, 0, 0xffffff); board(14, 1.4, -8, 2.6, 6, 0xf2f6ff); board(14, 1.4, 8, 2.6, -6, 0xffffff); board(8, 2.4, -9, 4, -6, 0xc9d8ff); board(6, 2, 9, 3, 6, 0x9aa6b8); board(40, 40, 0, -4, 0, 0x30363f);
     const pm = keep(new THREE.PMREMGenerator(R));
     scene.environment = keep(pm.fromScene(es, .03).texture);
     const hemi = this.hemi = new THREE.HemisphereLight(0xffffff, 0xb9c2cc, .55 * LEGACY); scene.add(hemi);
     const key = this.key = new THREE.DirectionalLight(0xffffff, 1.05 * LEGACY);
-    key.position.set(4, 9, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+    key.position.set(4, 9, 5); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
     Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 1, far: 25 });
     key.shadow.bias = -.0004; key.shadow.radius = 3; scene.add(key);
     // 림 라이트: 뒤 위에서 차 윤곽(지붕선·어깨)을 밝혀 바닥과 떨어져 보이게(그림자 없음, 비용 거의 없음)
-    const rim = this.rim = new THREE.DirectionalLight(0xdfe9ff, .55 * LEGACY); rim.position.set(-6, 5, -7); scene.add(rim);
+    const rim = this.rim = new THREE.DirectionalLight(0xdfe9ff, .9 * LEGACY); rim.position.set(-6, 5, -7); scene.add(rim);
     // 출시 연출용 스포트라이트: 그림자 없음(그림자 맵을 더 만들지 않는다), 평소에는 꺼 둔다
     const spot = this.spot = new THREE.SpotLight(0xfff4e0, 0, 22, .42, .55, 0); spot.position.set(1.5, 9, 3.5); spot.target.position.set(0, .4, 0); scene.add(spot, spot.target);
 
     // 회전 무대
     scene.add(table);
-    const disc = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.05, 3.05, .08, 96)), this.disc = keep(new THREE.MeshStandardMaterial({ color: 0xf5f6f8, roughness: .5, metalness: .05 })));
+    const disc = new THREE.Mesh(keep(new THREE.CylinderGeometry(3.05, 3.05, .08, 96)), this.disc = keep(new THREE.MeshStandardMaterial({ color: 0x1d232d, roughness: .32, metalness: .1 })));
     disc.position.y = -.04; disc.receiveShadow = true; table.add(disc);
-    const ring = new THREE.Mesh(keep(new THREE.RingGeometry(2.86, 2.89, 128)), keep(new THREE.MeshBasicMaterial({ color: 0x14171c })));
+    const ring = new THREE.Mesh(keep(new THREE.RingGeometry(2.86, 2.89, 128)), keep(new THREE.MeshBasicMaterial({ color: 0x3a4352 })));
     ring.rotation.x = -Math.PI / 2; ring.position.y = .002; table.add(ring);
-    const tickMat = [keep(new THREE.MeshBasicMaterial({ color: 0x9aa3ae })), keep(new THREE.MeshBasicMaterial({ color: 0xff5a1f }))];
+    const tickMat = [keep(new THREE.MeshBasicMaterial({ color: 0x4a5362 })), keep(new THREE.MeshBasicMaterial({ color: 0xffc94a }))];
     const tickGeo = [keep(new THREE.PlaneGeometry(.05, .012)), keep(new THREE.PlaneGeometry(.12, .012))];
     for (let i = 0; i < 48; i++) {
       const t = new THREE.Mesh(tickGeo[i % 4 ? 0 : 1], tickMat[i % 12 ? 0 : 1]), a = i / 48 * Math.PI * 2;
       t.rotation.x = -Math.PI / 2; t.rotation.z = -a; t.position.set(Math.cos(a) * 2.74, .002, Math.sin(a) * 2.74); table.add(t);
     }
-    const floor = new THREE.Mesh(keep(new THREE.PlaneGeometry(40, 40)), keep(new THREE.ShadowMaterial({ opacity: .16 })));
+    const floor = new THREE.Mesh(keep(new THREE.PlaneGeometry(40, 40)), keep(new THREE.ShadowMaterial({ opacity: .35 })));
     floor.rotation.x = -Math.PI / 2; floor.position.y = -.08; floor.receiveShadow = true; scene.add(floor);
     // 바닥에 붙는 부드러운 그림자
     const c2 = document.createElement('canvas'); c2.width = c2.height = 128;
     const g = c2.getContext('2d')!, gr = g.createRadialGradient(64, 64, 6, 64, 64, 64);
-    gr.addColorStop(0, 'rgba(10,14,20,.55)'); gr.addColorStop(1, 'rgba(10,14,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    gr.addColorStop(0, 'rgba(0,0,0,.6)'); gr.addColorStop(1, 'rgba(10,14,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
     this.blob = new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1)), keep(new THREE.MeshBasicMaterial({ map: keep(new THREE.CanvasTexture(c2)), transparent: true, depthWrite: false })));
     this.blob.rotation.x = -Math.PI / 2; this.blob.position.y = .004; table.add(this.blob);
     // 접촉 그림자: 차 바로 밑의 좁고 진한 그림자(바퀴·차체가 바닥에 닿아 보이게)
     const c3 = document.createElement('canvas'); c3.width = c3.height = 128;
     const g3 = c3.getContext('2d')!, gr3 = g3.createRadialGradient(64, 64, 20, 64, 64, 64);
-    gr3.addColorStop(0, 'rgba(6,8,12,.7)'); gr3.addColorStop(.6, 'rgba(6,8,12,.35)'); gr3.addColorStop(1, 'rgba(6,8,12,0)'); g3.fillStyle = gr3; g3.fillRect(0, 0, 128, 128);
+    gr3.addColorStop(0, 'rgba(0,0,0,.85)'); gr3.addColorStop(.6, 'rgba(0,0,0,.45)'); gr3.addColorStop(1, 'rgba(6,8,12,0)'); g3.fillStyle = gr3; g3.fillRect(0, 0, 128, 128);
     this.contact = new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1)), keep(new THREE.MeshBasicMaterial({ map: keep(new THREE.CanvasTexture(c3)), transparent: true, depthWrite: false })));
     this.contact.rotation.x = -Math.PI / 2; this.contact.position.y = .005; this.blob.parent!.add(this.contact);
     table.add(this.carG);
@@ -143,8 +144,8 @@ export class Stage {
     const a = Math.min(1, dt * 1.2), b = Math.min(1, dt * this.lkRate), E = this.eraT, k = this.lk, T = this.lkT;
     this.key.color.lerp(E.key, a); this.hemi.color.lerp(E.sky, a); this.hemi.groundColor.lerp(E.ground, a); this.disc.color.lerp(E.disc, a);
     for (const n of ['main', 'rim', 'spot', 'env'] as const) k[n] += (T[n] - k[n]) * b;
-    this.hemi.intensity = .55 * LEGACY * k.main; this.key.intensity = 1.05 * LEGACY * k.main;
-    this.rim.intensity = .55 * LEGACY * k.rim; this.spot.intensity = 2.8 * LEGACY * k.spot; this.spot.visible = k.spot > .01;
+    this.hemi.intensity = .35 * LEGACY * k.main; this.key.intensity = 1.1 * LEGACY * k.main;
+    this.rim.intensity = .9 * LEGACY * k.rim; this.spot.intensity = 2.8 * LEGACY * k.spot; this.spot.visible = k.spot > .01;
     this.scene.environmentIntensity = k.env;
   }
 
@@ -177,11 +178,15 @@ export class Stage {
     const cam = this.cam;
     this.R.setSize(w, h, false); cam.aspect = w / h;
     // 0.9.0 무대가 좁고 길어져(화면의 약 40%) 원판 전체 대신 차 길이(약 5m)에 맞춰 당긴다: 차가 폭의 약 85%를 채워 작아 보이지 않게(원판 가장자리는 잘려도 된다)
-    const d = Math.max(7.8, 10.8 / cam.aspect); // 차 길이(약 5m)가 무대 폭의 약 75~90%
+    const d = Math.max(7.8, 10.8 / cam.aspect) * this.zoomK; // 차 길이(약 5m)가 무대 폭의 약 75~90%(5.0.0 차 탭 큰 무대는 zoomK로 물러나 글자·단추 자리를 남긴다)
     // 세로로 긴 무대: 위쪽 이름 글자를 피해 차를 화면 가운데보다 조금 아래(높이의 약 55%)에 둔다. 카메라 높이는 그대로 두고 보는 점만 올린다(위에서 내려다보지 않게)
     const below = Math.min(.08, Math.max(0, 1 - cam.aspect) * .25), ty = .5 + 2 * below * Math.tan(cam.fov * Math.PI / 360) * d;
     cam.position.set(0, d * .22 + .5, d); cam.lookAt(0, ty, 0); cam.updateProjectionMatrix();
   }
+
+  private zoomK = 1;
+  /** 5.0.0 카메라 거리 배율(1 = 기본). 차 탭의 큰 무대는 위 글자·오른쪽 수치·아래 단추를 피해 차를 조금 작게 */
+  setZoom(k: number): void { if (k !== this.zoomK) { this.zoomK = k; this.size(); } }
 
   /** 그리기 켜기/끄기: 무대가 안 보일 때(회사·기록 탭, 숨은 문서) 끈다 */
   setActive(on: boolean): void {

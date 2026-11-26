@@ -8,19 +8,19 @@
 @property --era-stage-bottom { syntax: '<color>'; inherits: true; initial-value: #c9d0d9; }
 @property --era-paper { syntax: '<color>'; inherits: true; initial-value: #faf7f0; }
 @property --era-rule { syntax: '<color>'; inherits: true; initial-value: #e3dccb; }
-@property --era-accent { syntax: '<color>'; inherits: true; initial-value: #ff5a1f; }
+@property --era-accent { syntax: '<color>'; inherits: true; initial-value: #ffc94a; }
 :root{--era-stage-top:#ffffff;--era-stage-bottom:#c9d0d9;--era-paper:#faf7f0;--era-rule:#e3dccb;--era-mast-rule:2px solid var(--ink,#14171c);--era-head:900;
-  --era-news-font:inherit;--era-accent:#ff5a1f;--era-accent-shift:0%;
+  --era-news-font:inherit;--era-accent:#ffc94a;--era-accent-shift:0%;
   transition:--era-stage-top 2.5s ease,--era-stage-bottom 2.5s ease,--era-paper 2.5s ease,--era-rule 2.5s ease,--era-accent 2.5s ease}
 :root.era-1970{--era-stage-top:#fff0d4;--era-stage-bottom:#d9c6a2;--era-paper:#f2e7cd;--era-rule:#c4b28c;--era-mast-rule:4px double var(--ink,#14171c);--era-head:800;
-  --era-news-font:"Nanum Myeongjo","AppleMyungjo","Noto Serif KR","Batang","바탕",serif;--era-accent:#dc6a3c;--era-accent-shift:-22%}
+  --era-news-font:"Nanum Myeongjo","AppleMyungjo","Noto Serif KR","Batang","바탕",serif;--era-accent:#ffc94a;--era-accent-shift:-22%}
 :root.era-1980{--era-stage-top:#fdeee6;--era-stage-bottom:#d6c9c2;--era-paper:#f5ecd9;--era-rule:#cdbf9f;--era-mast-rule:3px double var(--ink,#14171c);--era-head:900;
-  --era-news-font:"Nanum Myeongjo","AppleMyungjo","Noto Serif KR","Batang","바탕",serif;--era-accent:#ea6332;--era-accent-shift:-12%}
-:root.era-1990{--era-stage-top:#fff7ec;--era-stage-bottom:#d4d1c8;--era-paper:#f8f2e4;--era-rule:#d8cdb6;--era-mast-rule:3px solid var(--ink,#14171c);--era-head:900;--era-accent:#f75e26;--era-accent-shift:-5%}
-:root.era-2000{--era-stage-top:#ffffff;--era-stage-bottom:#c9d0d9;--era-paper:#faf7f0;--era-rule:#e3dccb;--era-mast-rule:2px solid var(--ink,#14171c);--era-head:900;--era-accent:#ff5a1f;--era-accent-shift:0%}
-:root.era-2010{--era-stage-top:#f7faff;--era-stage-bottom:#c6d0dc;--era-paper:#fbfaf6;--era-rule:#e0ddd5;--era-mast-rule:1.5px solid var(--ink,#14171c);--era-head:800;--era-accent:#ff5a1f;--era-accent-shift:0%}
-:root.era-2020{--era-stage-top:#f3f7ff;--era-stage-bottom:#c1cddc;--era-paper:#fcfcfa;--era-rule:#e4e4df;--era-mast-rule:1px solid var(--ink,#14171c);--era-head:800;--era-accent:#ff5220;--era-accent-shift:4%}
-:root.era-2030{--era-stage-top:#f0f6ff;--era-stage-bottom:#bccbdd;--era-paper:#fdfdfc;--era-rule:#e2e5ea;--era-mast-rule:1px solid var(--ink,#14171c);--era-head:700;--era-accent:#ff4d24;--era-accent-shift:6%}
+  --era-news-font:"Nanum Myeongjo","AppleMyungjo","Noto Serif KR","Batang","바탕",serif;--era-accent:#ffc94a;--era-accent-shift:-12%}
+:root.era-1990{--era-stage-top:#fff7ec;--era-stage-bottom:#d4d1c8;--era-paper:#f8f2e4;--era-rule:#d8cdb6;--era-mast-rule:3px solid var(--ink,#14171c);--era-head:900;--era-accent:#ffc94a;--era-accent-shift:-5%}
+:root.era-2000{--era-stage-top:#ffffff;--era-stage-bottom:#c9d0d9;--era-paper:#faf7f0;--era-rule:#e3dccb;--era-mast-rule:2px solid var(--ink,#14171c);--era-head:900;--era-accent:#ffc94a;--era-accent-shift:0%}
+:root.era-2010{--era-stage-top:#f7faff;--era-stage-bottom:#c6d0dc;--era-paper:#fbfaf6;--era-rule:#e0ddd5;--era-mast-rule:1.5px solid var(--ink,#14171c);--era-head:800;--era-accent:#ffc94a;--era-accent-shift:0%}
+:root.era-2020{--era-stage-top:#f3f7ff;--era-stage-bottom:#c1cddc;--era-paper:#fcfcfa;--era-rule:#e4e4df;--era-mast-rule:1px solid var(--ink,#14171c);--era-head:800;--era-accent:#ffc94a;--era-accent-shift:4%}
+:root.era-2030{--era-stage-top:#f0f6ff;--era-stage-bottom:#bccbdd;--era-paper:#fdfdfc;--era-rule:#e2e5ea;--era-mast-rule:1px solid var(--ink,#14171c);--era-head:700;--era-accent:#ffc94a;--era-accent-shift:6%}
 
 /* 무대 배경: 기존 토큰에 시대 색을 조금 섞는다 */
 :root[class*="era-"] .stage{background:radial-gradient(120% 90% at 50% 62%,color-mix(in oklab,var(--stage1,#fff) 72%,var(--era-stage-top)) 0,color-mix(in oklab,var(--stage2,#dfe4ea) 72%,var(--era-stage-bottom)) 48%,color-mix(in oklab,var(--stage3,#c9d0d9) 70%,var(--era-stage-bottom)) 100%)}
