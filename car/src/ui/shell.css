@@ -236,3 +236,47 @@ body.sub-premium .top-date,body.sub-premium .top-cash small,body.sub-premium .pl
 body.sub-premium .top-cash b{color:#fff}
 body.sub-premium #top .skipbtn,body.sub-premium #top #menubtn{background:#2f3846;border-color:#465062;color:#e6e9ee}
 body.sub-on #tabs{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+/* 5.1.0 자동 멈춤 띠(위쪽 줄 아래 한 줄, 창 아님) */
+.alertbar{flex:none;display:flex;align-items:center;gap:12px;padding:8px 24px;background:var(--accent-bg);border-bottom:1px solid var(--accent);color:var(--ink);font-size:15px;font-weight:700}
+.alertbar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alertbar .btn{min-height:44px}
+.alertbar .ab-x{min-width:44px;min-height:44px;border:0;background:transparent;font-size:22px;color:var(--ink2)}
+@keyframes dec-flash{0%,100%{box-shadow:0 0 0 0 #ffc94a00}30%{box-shadow:0 0 0 8px #ffc94acc}}
+.decbtn.flash{animation:dec-flash 1s ease-in-out 3}
+@media (prefers-reduced-motion:reduce){.decbtn.flash{animation:none;outline:3px solid var(--ink)}}
+/* 5.1.0 오늘 탭 참고 묶음·묶음 상세 */
+.td-ref{border-top:1px solid var(--line);padding-top:10px}
+.td-ref summary{display:flex;align-items:baseline;gap:8px;min-height:44px;align-items:center;cursor:pointer;list-style:none}
+.td-ref summary::-webkit-details-marker{display:none}
+.td-ref summary small{font-size:13px;color:var(--ink2)}
+.td-ref summary .td-h{margin:0}
+.td-ref[open] summary{margin-bottom:8px}
+.td-grp{display:flex;flex-direction:column;gap:10px}
+.td-grp .td-card b{font-size:16px}
+.td-grp .tl{min-height:44px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:0 14px;font-weight:700;color:var(--ink2);text-decoration:none}
+/* 5.1.0 탭 문법: 탭 머리(상태 한 줄 + 핵심 숫자), 왼쪽 목록 + 오른쪽 상세(split), 세로는 한 칸 */
+.tab-head{flex:none;display:flex;flex-direction:column;gap:10px}
+.th-line{font-size:16px;font-weight:700;color:var(--ink);margin:0;line-height:1.45}
+.tab-head .kpis{margin:0;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}
+.th-bars{display:flex;flex-direction:column;gap:6px}
+.th-bar{display:grid;grid-template-columns:56px minmax(0,1fr) auto;align-items:center;gap:10px;font-size:13px}
+.th-bar span{color:var(--ink2);font-weight:700}.th-bar b{font-size:13px;white-space:nowrap}
+.th-bar .life{height:10px}
+.th-chart .fin-chart{max-height:150px}
+.secbar.sec2{margin-top:-4px;background:transparent;padding:0}
+.secbar.sec2 button{border:1px solid var(--line);margin:2px;background:var(--card)}
+.secbar.sec2 button[aria-selected="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+#panel>.split{flex:1;min-height:0}
+.split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;min-height:0}
+.split>.sp-l,.split>.sp-r{overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:12px}
+.split>.sp-r{padding:22px 24px}
+body #main>#panel:has(>.split){overflow:hidden}
+details.rfield>summary{list-style:none;cursor:pointer;min-height:44px;display:flex;align-items:center}
+details.rfield>summary::-webkit-details-marker{display:none}
+details.rfield>summary h3{margin:0}
+details.rfield>summary::after{content:"펼치기";margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2)}
+details.rfield[open]>summary::after{content:"접기"}
+details.rfield[open]>summary{margin-bottom:10px}
+.tech-in{grid-column:1/-1;background:var(--soft);border-radius:16px;padding:16px}
+.rv-in{margin-top:12px}
+.staff-pick .td-empty h1{font-size:24px}

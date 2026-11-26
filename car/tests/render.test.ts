@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { buildCar, createCarMaterials, disposeCar } from '../src/render/carBuilder';
 import { chassisOf, chassisWords, describeLook, distinctFaces, faceOf } from '../src/render/variant';
 import { silhouetteSvg } from '../src/render/silhouette';
-import { BODY } from '../src/render/shapes';
+import { BELT_OVER_ARCH, BODY } from '../src/render/shapes';
 import type { BodyId, CarLook } from '../src/render/look';
 import { roomFor, findPath, EXEC_SEATS, CAPACITY } from '../src/ui/office/layout';
 import { decadeOf } from '../src/ui/era';
@@ -63,7 +63,7 @@ describe('3D 차 모양', { timeout: 60000 }, () => {
       if (c.deck) expect(c.cR - c.rr + h).toBeGreaterThanOrEqual(.45 - 1e-9);
       expect(h - (c.cF + c.rf)).toBeGreaterThanOrEqual(.65 - 1e-9);
       expect(c.rf).toBeGreaterThan(.1); expect(c.rr).toBeGreaterThan(.05); expect(c.cF - c.cR).toBeGreaterThanOrEqual(.45 - 1e-9);
-      if (!c.fenders) expect(c.belt).toBeGreaterThanOrEqual(c.archY + c.archR + .13 - 1e-9);
+      if (!c.fenders) expect(c.belt).toBeGreaterThanOrEqual(c.archY + c.archR + BELT_OVER_ARCH - 1e-9);
       expect(c.archR).toBeGreaterThan(c.wr); // 타이어가 아치를 뚫지 않는다
     }
   });
