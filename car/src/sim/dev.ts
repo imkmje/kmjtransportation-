@@ -2,7 +2,8 @@
 import { config } from '../config';
 import { BODIES, POWERTRAINS, OPTIONS, SEGMENTS, bodyById } from '../data';
 import { defectCut, devSpeed, unlockedIds } from './research';
-import { salaryOf, zeroStats } from './cars';
+import { baseSalaryOf, zeroStats } from './cars';
+import { boostOf } from './elite';
 import { conditionMult, isAway } from './company';
 import type { Rng } from './rng';
 import { diffOf } from './difficulty';
@@ -42,7 +43,7 @@ export const withRequired = (state: CarState, options: string[]): string[] => [.
 
 /** 주간 개발비 = 참여 직원 월급 합 ÷ 4 × 직원 몫 비율 × 비용 배수 + 시제차 비용 × 난이도 배수(protoMult, 생략하면 1) */
 export const devCostPerWeek = (team: Staff[], budget: Budget, protoMult = 1): number =>
-  (team.reduce((a, s) => a + salaryOf(s.ability), 0) / config.time.weeksPerMonth) * config.dev.staffCostShare * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
+  (team.reduce((a, s) => a + baseSalaryOf(s), 0) / config.time.weeksPerMonth) * config.dev.staffCostShare * config.dev.budgets[budget].cost + config.dev.prototypePerWeek * protoMult;
 /** 1.0.0 시제차 비용의 시대·차급 배수 = 1 + (시대 배수 − 1) × (차체 기준가 ÷ 소형 세단 기준가)^bodyExp. 시대 배수는 devEra 표(1980년까지 1)를 직선 보간.
  *  1970년대는 그대로, 2000년대 이후 중형 이상은 수백억~천억대(사용자 지적: 차 한 대가 1조를 버는데 개발비가 수십억). 페이스리프트·긴급 개선 비용은 세대 개발비에 비례해 따라 오른다 */
 export function devScale(state: CarState, body: string): number {
@@ -76,32 +77,32 @@ export function weeklyDevCost(state: CarState, p: Project): number {
 export const teamSizeMult = (n: number): number => (n <= config.dev.teamBase ? 1 : (n / config.dev.teamBase) ** -config.dev.teamExp);
 /** 설계 한 주의 직원별 능력치 점수(팀 순서). rand(): 직원마다 한 번 부르는 난수(0.85~1.15, 자리를 비운 직원도 불러 순서를 지킨다).
  *  컨디션은 단계 배수(9.1), week를 주면 교육·휴식 중인 직원은 0 */
-export function designWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number, week?: number): Stats[] {
+export function designWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number, week?: number, boost?: (x: Staff) => number): Stats[] {
   const d = config.dev, size = teamSizeMult(team.length);
   return team.map((s) => {
     const r = rand(), away = week !== undefined && isAway(s, week);
-    const out = away ? 0 : (s.ability / d.abilityDiv) * d.budgets[spec.budget].out * conditionMult(s.condition) * r * d.scale * size;
+    const out = away ? 0 : (s.ability / d.abilityDiv) * d.budgets[spec.budget].out * conditionMult(s.condition) * r * d.scale * size * (boost ? boost(s) : 1); // 4.1.0 전담팀 배수
     const split = d.roleSplit[s.role], w = zeroStats();
     for (const k of STATS) w[k] = out * (split[k] ?? 0) * (d.dirBase + spec.direction[k] / d.dirDiv);
     return w;
   });
 }
 /** 설계 한 주의 능력치별 점수(직원 합) */
-export function designWeek(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number): Stats {
+export function designWeek(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number, boost?: (x: Staff) => number): Stats {
   const week = zeroStats();
-  for (const w of designWeekByStaff(team, spec, rand)) for (const k of STATS) week[k] += w[k];
+  for (const w of designWeekByStaff(team, spec, rand, undefined, boost)) for (const k of STATS) week[k] += w[k];
   return week;
 }
 /** 페이스리프트 설계 한 주(8.2): 디자이너만, 점수는 D에만(디자이너 산출의 D 몫, 방향 배수 1) */
-export function faceliftWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number, week?: number): Stats[] {
-  const designers = designWeekByStaff(team.filter((s) => s.role === 'designer'), spec, rand, week);
+export function faceliftWeekByStaff(team: Staff[], spec: Pick<ProjectSpec, 'budget' | 'direction'>, rand: () => number, week?: number, boost?: (x: Staff) => number): Stats[] {
+  const designers = designWeekByStaff(team.filter((s) => s.role === 'designer'), spec, rand, week, boost);
   let i = 0;
   return team.map((s) => { const w = zeroStats(); if (s.role === 'designer') w.D = designers[i++].D; return w; });
 }
 /** 시험 한 주에 줄어드는 결함 = Σ 테스터 꼼꼼함/10 + Σ 엔지니어 기술/30 (week를 주면 교육·휴식 중인 직원 제외) */
-export const testCut = (team: Staff[], week?: number): number =>
+export const testCut = (team: Staff[], week?: number, boost?: (x: Staff) => number): number =>
   team.filter((s) => week === undefined || !isAway(s, week))
-    .reduce((a, s) => a + s.ability / (s.role === 'tester' ? config.dev.testerDiv : s.role === 'engineer' ? config.dev.engineerDiv : Infinity), 0);
+    .reduce((a, s) => a + (s.ability * (boost ? boost(s) : 1)) / (s.role === 'tester' ? config.dev.testerDiv : s.role === 'engineer' ? config.dev.engineerDiv : Infinity), 0); // 4.1.0 전담팀원은 시험도 배수만큼 빠르다
 
 /** 한 주 진행 결과: 설계가 끝났는지 + 직원별 점수와 결함 증감(사무실 화면용 주간 기록) */
 export interface WeekLog { designDone: boolean; staff: { id: number; stats: Stats }[]; defectsAdded: number; defectsRemoved: number; waitingNow: boolean } // waitingNow: 이번 주에 출시 대기가 됨
@@ -111,20 +112,22 @@ export function stepProject(state: CarState, p: Project, rng: Rng): WeekLog {
   const d = config.dev, team = p.waiting ? [] : staffOn(state, p);
   const log: WeekLog = { designDone: false, staff: team.map((s) => ({ id: s.id, stats: zeroStats() })), defectsAdded: 0, defectsRemoved: 0, waitingNow: false };
   if (p.waiting) return log;
+  const boost = boostOf(state, p, team); // 4.1.0 전담팀원(없으면 undefined, 계산이 예전과 같다)
   if (p.phase === 'design') {
     const rand = () => rng.range(d.randMin, d.randMax);
-    const per = p.kind === 'facelift' ? faceliftWeekByStaff(team, p, rand, state.week) : designWeekByStaff(team, p, rand, state.week);
+    const per = p.kind === 'facelift' ? faceliftWeekByStaff(team, p, rand, state.week, boost) : designWeekByStaff(team, p, rand, state.week, boost);
     const week = zeroStats(), speed = 1 + devSpeed(state); // 연구: 개발 속도
     per.forEach((w, i) => { for (const k of STATS) { w[k] *= speed; week[k] += w[k]; } log.staff[i].stats = w; });
     let made = 0;
     for (const k of STATS) { p.points[k] += week[k]; made += week[k]; }
+    if (boost) made = per.reduce((a, w, i) => a + STATS.reduce((b, k) => b + w[k], 0) / boost(team[i]), 0); // 전담팀원의 가산 점수에는 결함이 붙지 않는다
     log.defectsAdded = made * d.defectPerPoint * (p.kind === 'facelift' ? config.lifecycle.facelift.defectRate : p.kind === 'derivative' ? config.derivative.defectRate : 1) * (1 - defectCut(state)); // 연구: 결함 감소
     p.defects += log.defectsAdded;
     p.weeksDone++;
     if (p.weeksDone >= p.designWeeks) { p.phase = 'test'; log.designDone = true; }
   } else {
     const before = p.defects;
-    p.defects = Math.max(0, p.defects - testCut(team, state.week));
+    p.defects = Math.max(0, p.defects - testCut(team, state.week, boost));
     log.defectsRemoved = before - p.defects;
     p.testWeeks++;
   }

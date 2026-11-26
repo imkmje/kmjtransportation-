@@ -14,6 +14,11 @@ export const hqDef = (s: CarState) => config.hq.levels[s.hqLevel - 1];
 export const factoryDef = (s: CarState) => config.factory.levels[s.factory.level - 1];
 /** 직원 정원 = 본사 등급의 정원. 임원은 정원 밖(0.8.0, 사용자 지시) */
 export const staffCap = (s: CarState): number => hqDef(s).staff;
+/** 4.1.0 정원에 드는 직원(직속 전담팀원은 정원 밖) */
+export const regularStaff = (s: CarState): Staff[] => s.staff.filter((x) => !x.elite);
+export const staffCount = (s: CarState): number => regularStaff(s).length;
+/** 4.1.0 일반 개발팀이 쓰는 개발 수(전담팀 개발은 따로 센다) */
+export const teamsUsed = (s: CarState): number => s.projects.filter((p) => !p.elite).length;
 /** 동시 개발팀 수(6.4) */
 export const devTeams = (s: CarState): number => hqDef(s).teams;
 /** 옵션 슬롯(5.4) */
@@ -57,7 +62,8 @@ export function allocate(cap: number, demand: number[], shares: (number | null)[
 
 export const isDevRole = (r: Role): boolean => r !== 'sales';
 /** 교육 중(교육을 시작한 주부터 4주) */
-export const isTraining = (x: Staff, week: number): boolean => x.trainings.length > 0 && week < x.trainings[x.trainings.length - 1] + C.train.weeks;
+export const trainWeeksOf = (x: Staff): number => (x.elite ? config.elite.train.weeks : C.train.weeks); // 4.1.0 전담팀 교육은 짧다
+export const isTraining = (x: Staff, week: number): boolean => x.trainings.length > 0 && week < x.trainings[x.trainings.length - 1] + trainWeeksOf(x);
 export const isResting = (x: Staff, week: number): boolean => x.restUntil !== null && week < x.restUntil;
 /** 교육·휴식 때문에 자리를 비움(프로젝트 산출 0) */
 export const isAway = (x: Staff, week: number): boolean => isTraining(x, week) || isResting(x, week);
@@ -68,6 +74,9 @@ export const trainingsThisYear = (x: Staff, week: number): number => {
 };
 /** 교육비 = 능력 × 20만원(최소 300만) */
 export const trainCost = (ability: number): number => Math.max(C.train.min, ability * C.train.perAbility);
+/** 4.1.0 교육으로 오를 수 있는 한계(전담팀원은 성장 한계 + capAdd, 최대 100)와 그 직원의 교육비 */
+export const trainCap = (x: Staff): number => (x.elite ? Math.max(x.potential, Math.min(100, x.potential + config.elite.train.capAdd)) : x.potential);
+export const staffTrainCost = (x: Staff): number => Math.round(trainCost(x.ability) * (x.elite ? config.elite.train.costMult : 1));
 /** 컨디션에 따른 산출 배수: 0.3 미만 ×0.6, 0.3~0.6 ×0.85, 그 이상 ×1 */
 export const conditionMult = (c: number): number => (c < C.condition.low ? C.condition.lowMult : c < C.condition.mid ? C.condition.midMult : 1);
 /** 퇴직금 = 월급 × 2 */
@@ -77,9 +86,10 @@ export const severanceOf = (salary: number): number => salary * C.severanceMonth
 export function trainError(s: CarState, x: Staff): string | null {
   if (isTraining(x, s.week)) return '이미 교육 중입니다.';
   if (isResting(x, s.week)) return '휴식 중에는 교육할 수 없습니다.';
-  if (x.ability >= x.potential) return '잠재력에 도달해 더 배울 수 없습니다.';
-  if (trainingsThisYear(x, s.week) >= C.train.perYear) return `올해 교육을 이미 ${C.train.perYear}번 받았습니다.`;
-  if (s.cash < trainCost(x.ability)) return '현금이 모자랍니다.';
+  if (x.ability >= trainCap(x)) return '잠재력에 도달해 더 배울 수 없습니다.';
+  const per = x.elite ? config.elite.train.perYear : C.train.perYear;
+  if (trainingsThisYear(x, s.week) >= per) return `올해 교육을 이미 ${per}번 받았습니다.`;
+  if (s.cash < staffTrainCost(x)) return '현금이 모자랍니다.';
   return null;
 }
 

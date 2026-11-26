@@ -433,7 +433,7 @@ export function startApp(): void {
     return {
       level: Math.min(config.hq.levels.length, Math.max(1, s.hqLevel)) as OfficeView['level'], phase: p && !p.waiting ? p.phase : 'rest', budget: p?.budget ?? 'normal',
       // 출시 대기면 쉬는 모습. 교육·휴식 중이면 일하지 않는 자세. 영업 직원은 프로젝트 없이도 일하는 중
-      staff: Q.staffInfo(s).map((x) => ({ id: String(x.id), name: x.name, role: x.role, condition: x.condition, working: x.status === 'working' || x.status === 'sales' })),
+      staff: Q.staffInfo(s).map((x) => ({ id: String(x.id), name: x.name, role: x.role, condition: x.condition, working: x.status === 'working' || x.status === 'sales', ...(x.elite ? { elite: true } : {}) })), // 4.1.0 전담팀원은 금색 자리
       projectName: p ? `${p.name}${p.kind === 'facelift' ? ' 페이스리프트' : ''}` : undefined,
       carSvg: p ? silhouetteSvg(projLook(p, ui.colors[p.id] ?? PAINT[0][1]), { color: ui.colors[p.id] ?? PAINT[0][1] }) : undefined,
       progress: p ? (p.phase === 'design' ? p.weeksDone / p.designWeeks : 1) : undefined, defects: p?.defectEst, logo: myLogo(32),
@@ -1117,10 +1117,14 @@ export function startApp(): void {
   };
   const editionName = (g: Generation) => `${g.number}세대${currentEdition(g).kind === 'facelift' ? ' · 페이스리프트' : ''}`;
   const busyReason = (): string | null => {
-    const s = game!.state, n = Q.devTeams(s); if (s.projects.length < n) return null;
+    const s = game!.state, n = Q.devTeams(s); if (Q.teamsUsed(s) < n || eliteFree()) return null; // 4.1.0 일반 팀이 모두 바빠도 전담팀이 쉬면 기획할 수 있다
     const w = s.projects.filter((p) => p.waiting).map((p) => `「${p.name}」`).join(', ');
     return `개발팀 ${n}개가 모두 바쁩니다. 진행 중인 개발이 끝나야 합니다.${w ? ` 출시 대기 중인 ${w}${josa(w.slice(-2, -1), '을/를')} 출시하거나 취소하면 자리가 납니다.` : ''}${s.hqLevel < config.hq.levels.length ? ' 본사를 키우면 개발팀이 늘어납니다.' : ''}`;
   };
+  /** 4.1.0 전담팀이 쉬고(개발 없음) 쉬는 팀원이 있다 */
+  const eliteFree = (): boolean => { const s = game!.state, E = Q.eliteInfo(s); return E.open && !E.busy && s.staff.some((x) => x.elite && x.projectId === null); };
+  /** 새 개발을 시작할 자리가 있다(일반 개발팀 또는 전담팀) */
+  const canPlan = (): boolean => Q.teamsUsed(game!.state) < Q.devTeams(game!.state) || eliteFree();
   /** 조건 버튼: 안 되면 흐리게 + 이유 */
   const elig = (e: Q.Eligibility) => { const b = busyReason(); return b && e.ok ? { ok: false, reason: b } : { ok: e.ok, reason: e.reason }; };
 
@@ -1173,6 +1177,7 @@ export function startApp(): void {
     if (g.status === 'ending') b.push(['이번 달 단종', 'bad']);
     if (s.projects.some((p) => (p.targetId === (p.kind === 'fullchange' ? np?.id : g.id) && (p.kind === 'facelift' || p.kind === 'fullchange')) || (p.kind === 'derivative' && p.into === np?.id))) b.push(['개발 중', 'dev']);
     if (np && gaCar(np.id)?.on) b.push(['위임', 'on']); // 1.3.0 세대교체 위임
+    if (g.elite && !g.opus) b.push(['전담팀', '']); // 4.1.0 전담팀 차(수작은 평론 칸에 표시)
     if (s.projects.some((p) => p.kind === 'fix' && p.targetId === g.id)) b.push(['개선 중', 'dev']);
     if (g.clearance) b.push(['가격 인하 판매 중', 'warn']);
     else { const R = Q.rescueOptions(s, g.id); if (R && R.target === null && (R.fix.ok || R.clearance.ok)) b.push(['수습 가능', 'bad']); } // 0.10.0 혹평·부진 차의 긴급 개선·가격 인하 판매
@@ -1199,7 +1204,7 @@ export function startApp(): void {
         <span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name" title="${esc(EQ.equipLine(edEquip(e)))}"><b>${dl ? '<i class="d-mark" aria-hidden="true">↳</i>' : ''}${esc(name)}</b><small>${g.number}세대 · ${dl ? esc(dl) : bodyById(g.body).name}</small></span>
         <span class="g-when g-opt">${Q.monthLabel(g.launchMonth)}<small>${ageText(g)}</small></span><span class="g-num g-opt">${num(e.price)}<small>${policyShort(g)}</small></span>
         <span class="g-num">${qty(g.sales.at(-1) ?? 0)}대</span><span class="g-num g-opt ${up >= 0 ? 'pos' : 'neg'}">${money(up, true)}</span><span class="g-num ${mp >= 0 ? 'pos' : 'neg'}">${money(mp, true)}</span>
-        ${lifeMini(Q.lifeBar(s, g))}<span class="g-num g-opt">${score(g.reviewAvg)}${g.masterpiece ? '<small>명차</small>' : ''}${g.awards?.length ? '<small class="aw-s">수상</small>' : ''}</span><span class="g-st">${genBadges(g)}</span></button>${gaCol ? (g.status === 'onSale' ? gaBtn(np.id, true) : '<span class="g-auto" aria-hidden="true"></span>') : ''}</div>`;
+        ${lifeMini(Q.lifeBar(s, g))}<span class="g-num g-opt">${score(g.reviewAvg)}${g.opus ? '<small class="opus-s">수작</small>' : g.masterpiece ? '<small>명차</small>' : ''}${g.awards?.length ? '<small class="aw-s">수상</small>' : ''}</span><span class="g-st">${genBadges(g)}</span></button>${gaCol ? (g.status === 'onSale' ? gaBtn(np.id, true) : '<span class="g-auto" aria-hidden="true"></span>') : ''}</div>`;
     };
     // 1.0.0 같은 네모로 비교(2~4대)와 여러 대 한 번에 바꾸기(자동 가격·광고)
     const n = cmpSel.size, every = n === L.length, bar = `<div class="cmp-bar"><span>고른 차 <small>표 왼쪽 네모로 고릅니다 · 비교는 2~4대, 1대면 경쟁 차와</small></span><b>${n}대 고름</b>
@@ -1211,7 +1216,7 @@ export function startApp(): void {
     const dev = s.projects.length ? `<div class="card gsec"><h3>개발 중 ${s.projects.length}대</h3>${s.projects.map((p) => `<button class="gsr" data-act="devSel" data-id="${p.id}"><span class="g-th">${thumb(projLook(p, ui.colors[p.id] ?? PAINT[0][1]), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(p.name)}</b><small>${kindLabel(p)}</small></span><span>${p.waiting ? '<span class="gb on">출시 대기</span>' : phaseText(p)}</span><span>결함 약 ${num(p.defectEst)}개</span><span aria-hidden="true">→</span></button>`).join('')}</div>` : '';
     const gone = all.filter((g) => g.status === 'discontinued').sort((a, b) => b.launchMonth - a.launchMonth || b.id - a.id);
     const old = gone.length ? `<details class="card gsec gone"><summary><h3>단종된 차 ${gone.length}대</h3></summary>${gone.map((g) => `<div class="gsr"><span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(nameOf(g))}</b><small>${g.number}세대 · ${bodyById(g.body).name}</small></span><span>${Q.monthLabel(g.launchMonth)} 출시${g.endMonth !== null && g.endMonth !== undefined ? ` · ${Q.monthLabel(g.endMonth)} 단종` : ''}</span><span>누적 ${num(g.totalSold)}대 · 평론 ${score(g.reviewAvg)}</span><span></span></div>`).join('')}</details>` : '';
-    const plan = s.projects.length < Q.devTeams(s) ? `<div class="row g-plan"><button class="btn ink" data-act="plan">+ 신차 기획</button></div>` : '';
+    const plan = canPlan() ? `<div class="row g-plan"><button class="btn ink" data-act="plan">+ 신차 기획</button></div>` : '';
     return { ov: '', panel: main + subCarsCard() + dev + old + plan, look: undefined };
   }
   /** 내 차 비교(2~4대): 능력치 5개·가격·판매·이익·수명·평론, 경쟁사는 차급별 세기 한 줄 */
@@ -1386,7 +1391,7 @@ export function startApp(): void {
     const gup = Q.generationUnitProfit(g, s), gmp = carMonthProfit(g);
     const keys = `<div class="key"><small>지난달 판매</small><b>${lastSale === null ? '—' : `${qty(lastSale)}<span>대</span>`}</b></div><div class="key"><small>대당 이익${ib('term:대당 이익')}</small><b class="${gup >= 0 ? 'pos' : 'neg'}">${unitSmall(money(gup, true))}</b></div>
       <div class="key key-life"><small>수명${ib('term:수명')}</small><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lb * 100)}" aria-label="수명"><u style="width:${(lb * 100).toFixed(1)}%"></u></div><b>${Math.round(lb * 100)}<span>%</span></b></div>
-      <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}${g.awards?.length ? `<span class="aw-chip">수상 ${g.awards.length}</span>` : ''}</b></div></div>`;
+      <div class="key key-rv">${ring(g.reviewAvg)}<div><small>평론 평균${ib('term:평론 평균')}</small><b>${score(g.reviewAvg)}${g.masterpiece ? '<span>명차</span>' : ''}${g.opus ? `<span class="opus-chip">수작</span>` : ''}${g.awards?.length ? `<span class="aw-chip">수상 ${g.awards.length}</span>` : ''}</b></div></div>`;
     const card1 = `<div class="card perf-card"><p class="lbl">이 차의 성적</p><p class="hint launch-when" style="margin:-4px 0 4px">${launchWhen(g)}</p><p class="hint eq-line" style="margin:0 0 10px">${esc(EQ.equipLine(edEquip(e)))}${(() => { const ei = genEquipInfo(g); return ei.legacy ? `<br><span class="eq-legacy">${esc(ei.legacyText)}</span>` : ei.totals.missingExpected.length ? `<br><span class="why">장비 기대 미달: ${esc(ei.totals.missingExpected.join('·'))}</span>` : ''; })()}</p>${evLine(g)}<div class="kpis">${kpi('누적 판매', `${qty(g.totalSold)}<span>대</span>`)}${kpi('지난달 월 이익', money(gmp, true), gmp >= 0 ? 'pos' : 'neg')}</div>
       ${chart ? `<p class="lbl" style="margin-top:12px">최근 판매(달마다)</p>${chart}` : ''}
       <p class="hint">수명은 출시 뒤 시간이 지날수록 줄고, 줄수록 판매가 줄어듭니다.</p>${genWorldCard(g)}
@@ -1411,7 +1416,7 @@ export function startApp(): void {
       <hr><div class="toggle ga-one"><span>세대교체 위임${ib('term:세대교체 위임')}<small>${esc(gaLine(gaCar(np.id)))}</small></span><span class="ga-btns">${gaLaunchBtn(np.id)}${gaBtn(np.id)}</span></div>${!gaInfo().available && !gaCar(np.id)?.on ? `<p class="note why">${esc(gaInfo().whyNot ?? '')}</p>` : ''}
       ${I.rescueBlock(s, g.id)}
       <hr><button class="btn danger" data-act="discontinue" data-id="${g.id}" ${ending ? 'disabled' : ''} style="width:100%">${ending ? '이번 달 말에 단종됩니다' : '단종하기'}</button></div>`;
-    const planCard = s.projects.length < Q.devTeams(s) ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
+    const planCard = canPlan() ? `<div class="card"><p class="lbl">다음 차</p><p class="hint">판매하는 동안 다음 차를 미리 개발할 수 있습니다. ${Q.hasFreeLine(s) ? `생산 라인이 ${lines - gens.length}개 비어 있어 새 차를 함께 팔 수 있습니다.` : `생산 라인 ${lines}개가 모두 차 있어, 새 차를 내려면 지금 차를 단종하거나 공장을 증설해야 합니다.`}</p><button class="go dark" data-act="plan">신차 기획</button></div>` : '';
     // 0.9.0 넓어진 패널은 두 칸: 왼쪽 가격 카드 + 판매 요인(접힘), 오른쪽 성적 + 이 차의 손익(접힘)·다음 단계(태블릿 가로에서 가격과 성적이 스크롤 없이 함께 보이게)
     const F = Q.salesFactors(s, g.id), P = Q.modelPnL(s, g.id);
     const fac = F ? fold('fac', '판매 요인', esc(F.summary ?? '판매를 크게 깎거나 올리는 요인이 없습니다'), I.factorsCard(s, g.id)) : '';
@@ -1575,9 +1580,14 @@ export function startApp(): void {
     const sw = (k: 'keepEng' | 'busy', label: string) => `<label class="chk"><input type="checkbox" data-topt="${k}" ${teamOpt[k] ? 'checked' : ''}> ${label}</label>`;
     const auto = spec ? `<div class="auto-team"><button class="btn ink" data-act="autoTeam" data-v="${act}">고객층에 맞게 자동 배치</button>${sw('keepEng', '연구에 엔지니어 1명 남기기')}${sw('busy', '다른 개발 중인 직원도 포함')}</div>
       ${autoNote?.act === act && autoNote.team === [...team].sort((a, b) => a - b).join() ? autoNote.html : ''}` : '';
+    const E = Q.eliteInfo(s), eIdle = list.filter((x) => x.elite && x.projectId === null), withE = team.some((id) => s.staff.find((y) => y.id === id)?.elite);
+    const eMiss = E.missing.filter((r) => !eIdle.some((x) => ROLE_NAME[x.role] === r)), eRoles = (['디자이너', '엔지니어', '테스터'] as const).filter((r) => !eIdle.some((x) => ROLE_NAME[x.role] === r));
+    const elite = !E.open || !E.used ? '' : `<div class="elite-pick"><button class="btn ink" data-act="eliteTeam" data-v="${act}" ${E.busy || !eIdle.length ? 'disabled' : ''}>직속 전담팀 ${eIdle.length}명 고르기</button>${ib('term:직속 전담팀')}
+      ${E.busy ? '<small class="hint">전담팀이 다른 차를 개발 중입니다.</small>' : eRoles.length && eIdle.length ? `<small class="warn-t">전담팀에 지금 쉬는 ${esc(eRoles.join('·'))}${josa(eRoles.at(-1)!, '이/가')} 없습니다${eMiss.length ? '' : '(개발·교육 중)'}.</small>` : withE ? '<small class="hint">전담팀원이 들어가 이 개발은 전담팀 자리를 씁니다.</small>' : ''}</div>`;
+    const regBusy = Q.teamsUsed(s) >= Q.devTeams(s) && !withE ? '<div class="warnbox">일반 개발팀이 모두 바쁩니다. 전담팀원을 넣어야 시작할 수 있습니다.</div>' : '';
     return `<div class="team-pick"><p class="lbl" style="margin-top:14px">개발팀 구성 <span class="team-n">${team.length}명</span></p>
-      ${busy ? `<div class="badbox">${esc(busy)}</div>` : ''}${auto}
-      ${list.length ? `<div class="picks">${list.map((x) => `<button class="pick" data-act="${act}" data-id="${x.id}" aria-pressed="${team.includes(x.id)}"><i aria-hidden="true"></i><span><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} ${x.ability}${x.projectId !== null ? ` · 「${esc(pname(x.projectId))}」 개발 중(넣으면 그 개발에서 빠짐)` : x.status === 'training' ? ` · 교육 중(${x.weeksLeft}주 동안 일 못 함)` : x.status === 'resting' ? ` · 휴식 중(${x.weeksLeft}주)` : x.conditionMult < 1 ? ' · 지침' : ''}</small></span></button>`).join('')}</div>`
+      ${busy ? `<div class="badbox">${esc(busy)}</div>` : ''}${elite}${regBusy}${auto}
+      ${list.length ? `<div class="picks">${list.map((x) => `<button class="pick${x.elite ? ' elite' : ''}" data-act="${act}" data-id="${x.id}" aria-pressed="${team.includes(x.id)}"><i aria-hidden="true"></i><span><b>${esc(x.name)}${x.elite ? ' <em class="e-tag">전담</em>' : ''}</b><small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} ${x.ability}${x.projectId !== null ? ` · 「${esc(pname(x.projectId))}」 개발 중(넣으면 그 개발에서 빠짐)` : x.status === 'training' ? ` · 교육 중(${x.weeksLeft}주 동안 일 못 함)` : x.status === 'resting' ? ` · 휴식 중(${x.weeksLeft}주)` : x.conditionMult < 1 ? ' · 지침' : ''}</small></span></button>`).join('')}</div>`
         : '<div class="warnbox">쉬고 있는 개발 직원이 없습니다. 회사 탭에서 채용하거나 다른 개발에서 직원을 빼야 합니다.</div>'}
       <p class="note">${teamOpt.busy ? '다른 차를 개발 중인 직원을 넣으면 개발을 시작할 때 그 개발에서 빠집니다.' : '다른 차를 개발 중인 직원은 고를 수 없습니다(위 선택을 켜면 고를 수 있습니다).'} 인원을 줄이면 예상 등급이 내려가고 개발비(인건비)는 줄어듭니다.</p></div>`;
   }
@@ -1880,13 +1890,13 @@ export function startApp(): void {
     return `<div class="card draft-card"><p class="lbl">기획 중</p><p class="draft-line"><b>기획 중인 차가 있습니다: 「${esc(draftName())}」</b> · ${what}</p><div class="row" style="margin-top:8px"><button class="btn ink" data-act="resumePlan">이어서 하기</button><button class="btn" data-act="cancelPlan">그만두기</button></div></div>`;
   };
   function devView(): View {
-    const s = game!.state, p = curProj(), teams = Q.devTeams(s), free = s.projects.length < teams;
+    const s = game!.state, p = curProj(), teams = Q.devTeams(s), free = canPlan();
     if (!p) {
       return { ov: `<div class="ov ofc"><div class="ofc-t"><div class="eyebrow"><i></i>개발팀 · 쉬는 중</div><b>진행 중인 개발이 없습니다</b><span class="ofc-s">새 차를 기획하면 직원들이 설계를 시작합니다.</span></div>${free ? '<button class="go" data-act="plan">신차 기획</button>' : ''}</div>`,
         panel: `<div class="card"><p class="lbl">개발</p><h2>개발팀이 쉬고 있습니다</h2><p class="hint" style="margin-top:8px">직원 ${s.staff.length}명 가운데 기획 때 고른 개발 직원이 그 차를 맡습니다. 개발팀은 ${teams}개라 한 번에 ${teams}대까지 개발할 수 있습니다.${s.hqLevel < config.hq.levels.length ? ' 본사를 키우면 개발팀이 늘어납니다.' : ''}</p>${free ? '<button class="go" data-act="plan">신차 기획 시작</button>' : ''}</div>${draftCard()}`, office: officeView() };
     }
     // 동시 개발: 위쪽에 프로젝트 전환 칩. 빈 개발팀이 있으면 [신차 기획]
-    const chips = s.projects.length >= 2 || free ? `<div class="pchips"><span class="lbl">개발팀 ${s.projects.length}/${teams}</span>${s.projects.length >= 2 ? s.projects.map((x) => `<button class="pchip" data-act="devSel" data-id="${x.id}" aria-pressed="${x.id === p.id}"><b>${esc(x.name)}</b><small>${phaseText(x)}</small></button>`).join('') : ''}${free ? '<button class="btn ink" data-act="plan">+ 신차 기획</button>' : ''}</div>` : '';
+    const chips = s.projects.length >= 2 || free ? `<div class="pchips"><span class="lbl">개발팀 ${Q.teamsUsed(s)}/${teams}${s.projects.some((x) => x.elite) ? ' · 전담팀 1' : ''}</span>${s.projects.length >= 2 ? s.projects.map((x) => `<button class="pchip" data-act="devSel" data-id="${x.id}" aria-pressed="${x.id === p.id}"><b>${esc(x.name)}</b><small>${phaseText(x)}${x.elite ? ' · 전담팀' : ''}</small></button>`).join('') : ''}${free ? '<button class="btn ink" data-act="plan">+ 신차 기획</button>' : ''}</div>` : '';
     const pv = devGrades(p)!, minT = config.dev.minTestWeeks, ready = p.kind !== 'fix' && p.phase === 'test' && p.testWeeks >= minT, adv = Q.defectAdvice(p, s);
     const phase = phaseText(p);
     const pi = s.projects.indexOf(p), nav = s.projects.length >= 2 ? `<div class="ofc-nav" role="group" aria-label="프로젝트 넘기기"><button class="btn" data-act="devStep" data-v="-1" aria-label="이전 프로젝트">‹</button><span>${pi + 1}/${s.projects.length}</span><button class="btn" data-act="devStep" data-v="1" aria-label="다음 프로젝트">›</button></div>` : ''; // 1.0.0 동시 개발: 띠에서도 넘긴다
@@ -1921,7 +1931,7 @@ export function startApp(): void {
     const steps = `<ol class="dsteps" aria-label="개발 단계"><li class="${cls(test, !test)}" style="--p:${pct.toFixed(0)}%">1 설계<b>${p.weeksDone}/${p.designWeeks}주</b></li>
       <li class="${cls(fix, test && !fix)}" style="--p:${((p.testWeeks / minT) * 100).toFixed(0)}%">2 시험<b>${test ? `${Math.min(p.testWeeks, minT)}/${minT}주` : `최소 ${minT}주`}</b></li>
       <li class="${cls(wait, fix && !wait)}" style="--p:50%">3 결함 잡기<b>${wait ? '끝' : `약 ${num(p.defectEst)}개 남음`}</b></li></ol>`;
-    const rate = testCut(team, game!.state.week), ok = config.critics.okDefects; // 시험 주당 결함 감소(sim과 같은 식)
+    const rate = testCut(team, game!.state.week, Q.boostOf(game!.state, p, team)), ok = config.critics.okDefects; // 시험 주당 결함 감소(sim과 같은 식)
     const fixLine = (n: number) => rate <= 0 ? '시험할 테스터·엔지니어가 없어 결함이 줄지 않습니다' : `결함 ${ok}개 이하까지 약 <b>${Math.ceil(Math.max(0, n - ok) / rate)}주</b> · 0개까지 약 <b>${Math.ceil(n / rate)}주</b>${ib('term:출시 기준 결함', '출시 기준 결함')}`;
     const mins = (w: number) => { const m = Math.round((w * WEEK_MS) / 60000); return m >= 1 ? ` · 보통 빠르기로 약 ${m}분` : ''; };
     const left = p.designWeeks - p.weeksDone + minT;
@@ -2018,7 +2028,7 @@ export function startApp(): void {
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
     sheetBody.innerHTML = `<div class="eyebrow"><i></i>출시 평가 · ${esc(Q.monthLabel(g.launchMonth))}</div><h2>「${esc(name)}」 평론가 4명의 점수</h2>
       <div class="rgrid"><div><div class="critics">${list.map((cr, i) => { const t = crit.find((x) => x.critic === cr.id); return `<div class="critic wait" data-i="${i}" data-tip="critic:${cr.id}"><small>${cr.name}${ib(`critic:${cr.id}`, cr.name)}</small><em>${t ? `${esc(t.name)} · ${esc(t.outlet)}` : CRITIC_SUB[cr.id] ?? ''}</em><b>${score(g.reviews[i])}<span> / 10</span></b>${t ? `<p class="crit-t">${esc(t.text)}</p>` : ''}</div>`; }).join('')}</div>
-      <div class="avgline later" id="rv-avg"><div><small class="hint">평균</small><b>${score(avg)}</b></div>${g.masterpiece ? `<span class="badge">명차 등록 · ${repWord(repChange)}</span>` : avg <= c.flop ? `<span class="badge flop">혹평 · ${repWord(repChange)}</span>` : avg >= 6 ? `<span class="chip on">호평 · ${repWord(repChange)}</span>` : `<span class="chip">무난한 평가 · ${repWord(repChange)}</span>`}</div></div>
+      <div class="avgline later" id="rv-avg"><div><small class="hint">평균</small><b>${score(avg)}</b></div>${g.opus ? `<span class="badge opus">직속 전담팀의 수작</span>` : ''}${g.masterpiece ? `<span class="badge">명차 등록 · ${repWord(repChange)}</span>` : avg <= c.flop ? `<span class="badge flop">혹평 · ${repWord(repChange)}</span>` : avg >= 6 ? `<span class="chip on">호평 · ${repWord(repChange)}</span>` : `<span class="chip">무난한 평가 · ${repWord(repChange)}</span>`}</div></div>
       <div class="later" id="rv-news"><div class="news"><div class="mast"><span>모터 데일리</span><span>${esc(Q.monthLabel(g.launchMonth))}</span></div><h3>${esc(head)}</h3><p>${esc(bodyTxt)}</p>${rival ? `<div class="rv">${logo(rival.id, 22)}<span>${esc(rival.name)} 관계자: "${quote}"</span></div>` : ''}</div>
       ${winsList(g.wins)}<button class="go dark" data-act="closeReview">닫기</button></div></div>`;
     sheet.hidden = false; renderTop();
@@ -2203,13 +2213,13 @@ export function startApp(): void {
     const k = staffView.sort, cmp = (a: Q.StaffRow, b: Q.StaffRow): number => k === 'name' ? a.name.localeCompare(b.name, 'ko') : k === 'role' ? ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)
       : k === 'abil' ? a.ability - b.ability : k === 'grow' ? (a.potential - a.ability) - (b.potential - b.ability) : k === 'pay' ? a.salary - b.salary : k === 'cond' ? a.condition - b.condition
       : STATUS_RANK[a.status] - STATUS_RANK[b.status] || (a.projectId ?? 0) - (b.projectId ?? 0);
-    return Q.staffInfo(game!.state).filter((x) => staffFits(x, staffView.filter)).sort((a, b) => (staffView.desc ? -1 : 1) * cmp(a, b) || a.id - b.id);
+    return Q.staffInfo(game!.state).filter((x) => !x.elite && staffFits(x, staffView.filter)).sort((a, b) => (staffView.desc ? -1 : 1) * cmp(a, b) || a.id - b.id);
   }
   const sortBtn = (k: StaffSort, label: string) => { const on = staffView.sort === k; return `<button class="sh" data-act="staffSort" data-v="${k}" aria-pressed="${on}"${on ? ` aria-label="${label} ${staffView.desc ? '내림차순' : '오름차순'} 정렬됨"` : ''}>${label}${on ? `<i aria-hidden="true">${staffView.desc ? '▼' : '▲'}</i>` : ''}</button>`; };
   const staffFilterChips = (rows: Q.StaffRow[], execN: number) => `<div class="s-chips" role="group" aria-label="직원 거르기">${STAFF_FILTERS.map(([k, l]) => `<button class="s-chip" data-act="staffFilter" data-v="${k}" aria-pressed="${staffView.filter === k}">${l}<small>${k === 'exec' ? execN : rows.filter((x) => staffFits(x, k)).length}</small></button>`).join('')}</div>`;
   function staffTab(): string {
-    const s = game!.state, rows = Q.staffInfo(s), h = Q.hiringInfo(s), T = config.staff.train;
-    if (staffSel !== null && !rows.some((x) => x.id === staffSel)) staffSel = null;
+    const s = game!.state, all = Q.staffInfo(s), rows = all.filter((x) => !x.elite), h = Q.hiringInfo(s); // 4.1.0 전담팀원은 따로
+    if (staffSel !== null && !all.some((x) => x.id === staffSel)) staffSel = null;
     const pname = (id: number | null) => s.projects.find((p) => p.id === id)?.name ?? '';
     const lab = new Set(s.staff.filter((x) => x.lab).map((x) => x.id));
     const doing = (x: Q.StaffRow) => x.status === 'working' ? `「${esc(pname(x.projectId))}」 개발${x.role === 'engineer' ? ` · 연구 ${Math.round(config.research.projectShare * 100)}%` : ''}` : x.status === 'training' ? `교육 중 · ${x.weeksLeft}주 남음` : x.status === 'resting' ? `휴식 중 · ${x.weeksLeft}주 남음` : x.status === 'sales' ? '영업' : lab.has(x.id) ? '전담 연구원' : x.role === 'engineer' ? '쉬는 중 · 연구' : '쉬는 중';
@@ -2220,24 +2230,28 @@ export function startApp(): void {
     const ex = Q.execInfo(s).roles.filter((r) => r.holder); // 0.7.0 임원은 직함으로(누르면 임원 화면)
     const execRows = ex.length && (f === '' || f === 'exec') ? `<p class="lbl grp">임원 ${ex.length}명</p>${ex.map((r) => `<div class="srow-w"><span class="s-pick" aria-hidden="true"></span><button class="srow s-exec" data-act="cotab" data-v="exec"><span class="s-name"><b>${esc(r.holder!.name)}</b><small>${esc(r.title)}</small></span><span class="s-abil">임원 능력 <b>${r.holder!.skill}</b></span><span class="s-pay">${money(r.holder!.pay)}</span><span class="s-cond"></span><span class="s-do">${r.holder!.hired ? '외부 임원' : `${ROLE_NAME[r.holder!.staffRole]} 출신`}</span></button></div>`).join('')}` : '';
     const pay = rows.reduce((a, x) => a + x.salary, 0), salesN = rows.filter((x) => x.role === 'sales').length;
-    for (const id of staffPick) if (!rows.some((x) => x.id === id)) staffPick.delete(id); // 해고·퇴사한 직원은 뺀다
+    for (const id of staffPick) if (!rows.some((x) => x.id === id)) staffPick.delete(id); // 해고·퇴사한 직원(4.1.0 전담팀으로 옮긴 직원)은 뺀다
     const nPick = staffPick.size, bulk = `<div class="row bulk"><button class="btn" data-act="pickVisible" ${vis.length ? '' : 'disabled'}>보이는 ${vis.length}명 모두 고르기</button><button class="btn ink" data-act="trainPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 교육 보내기</button><button class="btn" data-act="restPicked" ${nPick ? '' : 'disabled'}>고른 ${nPick}명 2주 쉬기</button>${nPick ? '<button class="btn" data-act="pickNone">고르기 해제</button>' : ''}</div>`;
     const card1 = `<div class="card staff-list"><h3>직원 ${rows.length}명 <small class="hint">정원 ${h.staffCount}/${h.capacity}명 · 월급 합계 ${money(pay)}/월</small></h3>${Q.presidents(s).length ? `<p class="hint sub-pres-n">자회사 사장 ${Q.presidents(s).length}명은 직원 목록과 정원에서 빠져 있습니다. <button class="btn" data-act="cotab" data-v="sub">자회사 보기</button></p>` : ''}${rows.length ? bulk : ''}
       ${rows.length ? staffFilterChips(rows, ex.length) : ''}<div class="srow-w head"><span class="s-pick"></span><div class="srow head"><span class="sh2">${sortBtn('name', '이름')}${sortBtn('role', '직무')}</span><span class="sh2">${sortBtn('abil', '능력')}${sortBtn('grow', '성장 여지')}</span><span>${sortBtn('pay', '월급')}</span><span>${sortBtn('cond', '컨디션')}</span><span>${sortBtn('do', '하는 일')}</span></div></div>${execRows}${list || `<p class="hint" style="margin:8px 10px">${rows.length ? (f === 'exec' && ex.length ? '' : '조건에 맞는 직원이 없습니다.') : '직원이 없습니다. 채용에서 공고를 내면 후보 3명이 옵니다.'}</p>`}
       <p class="note">${salesN ? SALES_EFFECT : `영업 직원이 없습니다. ${SALES_EFFECT}`} 능력 막대의 점선은 성장 한계입니다. 머리글을 누르면 정렬, 다시 누르면 반대로 정렬합니다. 직원을 누르면 교육·휴식·배치·해고를 할 수 있습니다. 왼쪽 네모를 눌러 여러 명을 고르면 한 번에 교육·휴식을 보낼 수 있습니다.</p></div>`;
-    const x = rows.find((y) => y.id === staffSel);
+    const x = all.find((y) => y.id === staffSel), E = Q.eliteInfo(s);
     let card2 = '';
     if (x) {
+      const T = x.elite ? config.elite.train : config.staff.train, mvErr = x.elite ? Q.moveOutError(s, s.staff.find((y) => y.id === x.id)!) : Q.moveInError(s, s.staff.find((y) => y.id === x.id)!);
+      const move = x.role === 'sales' || (!E.open && !x.elite) ? '' : x.elite ? `<p class="lbl" style="margin-top:14px">직속 전담팀${ib('term:직속 전담팀')}</p><button class="btn" data-act="eliteOut" data-id="${x.id}" ${mvErr ? 'disabled' : ''} style="width:100%">전담팀에서 빼기 <small>(일반 직원으로, 월급 ${money(Q.salaryOf(x.ability))})</small></button>${mvErr ? `<p class="note why">${esc(mvErr)}</p>` : ''}`
+        : `<p class="lbl" style="margin-top:14px">직속 전담팀${ib('term:직속 전담팀')}</p><button class="btn ink" data-act="eliteIn" data-id="${x.id}" ${mvErr ? 'disabled' : ''} style="width:100%">전담팀으로 옮기기 <small>(월급 ${money(x.salary)} → ${money(Math.round(Q.salaryOf(x.ability) * E.payMult))})</small></button>${mvErr ? `<p class="note why">${esc(mvErr)}</p>` : ''}`;
       const assign = x.role === 'sales' ? `<p class="hint">영업 직원은 개발에 넣지 않습니다. 회사에 있는 것만으로 판매를 돕습니다.</p>`
         : x.projectId !== null ? `<button class="btn" data-act="assign" data-id="${x.id}" data-v="" style="width:100%">「${esc(pname(x.projectId))}」 개발에서 빼기</button>`
         : s.projects.length ? `<div class="row">${s.projects.map((p) => `<button class="btn" data-act="assign" data-id="${x.id}" data-v="${p.id}">「${esc(p.name)}」 개발에 넣기</button>`).join('')}</div>` : '<p class="hint">개발 중인 차가 없습니다. 신차를 기획할 때 팀을 고릅니다.</p>';
-      card2 = `<div class="card staff-card" id="staff-card"><p class="lbl">직원 자세히</p><h2>${esc(x.name)}<small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} ${x.ability}</small></h2>
-        <div class="kpis" style="margin-top:10px">${kpi('능력', `${x.ability}<span>/ 한계 ${x.potential}</span>`)}${kpi('월급', money(x.salary))}${kpi('컨디션', condWord(x.condition))}${kpi('올해 교육', `${x.trainingsThisYear}<span>/ ${T.perYear}번</span>`)}</div>
-        <p class="hint" style="margin-top:8px">지금 하는 일: <b>${doing(x)}</b>. ${x.atPotential ? '성장 한계에 닿아 더 크지 못합니다.' : `앞으로 ${x.potential - x.ability}만큼 더 클 수 있습니다.`}</p>
-        <p class="lbl" style="margin-top:14px">교육</p><button class="btn ink" data-act="train" data-id="${x.id}" ${x.canTrain ? '' : 'disabled'} style="width:100%">교육 보내기 · ${money(x.trainCost)} <small>(능력 +${T.gainMin}~${T.gainMax}, ${T.weeks}주 동안 일 못 함)</small></button>${x.canTrain ? '' : `<p class="note why">${esc(x.trainReason ?? '')}</p>`}
+      card2 = `<div class="card staff-card" id="staff-card"><p class="lbl">${x.elite ? '전담팀원 자세히' : '직원 자세히'}</p><h2>${esc(x.name)}<small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} ${x.ability}${x.elite ? ' · 직속 전담팀' : ''}</small></h2>
+        <div class="kpis" style="margin-top:10px">${kpi('능력', `${x.ability}<span>/ 한계 ${x.elite ? x.trainCap : x.potential}</span>`)}${kpi('월급', money(x.salary))}${kpi('컨디션', condWord(x.condition))}${kpi('올해 교육', `${x.trainingsThisYear}<span>/ ${x.trainPerYear}번</span>`)}</div>
+        <p class="hint" style="margin-top:8px">지금 하는 일: <b>${doing(x)}</b>. ${x.ability >= x.trainCap ? '성장 한계에 닿아 더 크지 못합니다.' : `앞으로 ${x.trainCap - x.ability}만큼 더 클 수 있습니다.`}</p>
+        <p class="lbl" style="margin-top:14px">교육${x.elite ? ib('term:전담팀 자동 교육') : ''}</p><button class="btn ink" data-act="train" data-id="${x.id}" ${x.canTrain ? '' : 'disabled'} style="width:100%">교육 보내기 · ${money(x.trainCost)} <small>(능력 +${T.gainMin}~${T.gainMax}, ${T.weeks}주 동안 일 못 함)</small></button>${x.canTrain ? '' : `<p class="note why">${esc(x.trainReason ?? '')}</p>`}
         <p class="lbl" style="margin-top:14px">휴식</p><div class="row">${[2, 4].map((w) => `<button class="btn" data-act="rest" data-id="${x.id}" data-v="${w}" ${x.status === 'training' ? 'disabled' : ''}>${w}주 쉬기</button>`).join('')}</div><p class="note">쉬는 동안 일하지 않고 컨디션이 회복됩니다. 개발에서 빠지지는 않습니다.</p>
         <p class="lbl" style="margin-top:14px">개발 배치</p>${assign}${x.role !== 'engineer' ? '' : lab.has(x.id) ? `<p class="hint" style="margin-top:8px">전담 연구원입니다. 개발에 넣지 않고 연구 점수를 1.5배로 냅니다.</p><button class="btn" data-act="assign" data-id="${x.id}" data-v="" style="width:100%;margin-top:6px">연구소에서 빼기</button>`
           : s.hqLevel >= config.research.labHq ? `<button class="btn lab-btn" data-act="assign" data-id="${x.id}" data-v="lab" style="width:100%;margin-top:8px">전담 연구원으로 <small>(연구 점수 1.5배, 개발에는 못 넣음)</small></button>` : `<p class="note">본사 ${config.research.labHq}등급부터 전담 연구원으로 둘 수 있습니다. 엔지니어는 그냥 두어도 연구합니다(개발 중이면 ${Math.round(config.research.projectShare * 100)}% 속도).</p>`}
+ ${move}
         ${I.careerBlock(s, x.id)}
         <hr><button class="btn danger" data-act="fire" data-id="${x.id}" style="width:100%">해고 · 퇴직금 ${money(x.severance)}</button>
         <button class="btn" data-act="staffSel" data-id="${x.id}" style="width:100%;margin-top:8px">닫기</button></div>`;
@@ -2249,8 +2263,26 @@ export function startApp(): void {
     const cands = `<p class="hint">후보 ${h.candidates.length}명이 기다립니다. 고르지 않으면 ${Math.max(0, ...h.candidates.map((c) => c.weeksLeft))}주 뒤 다른 회사로 갑니다.</p><div class="cands">${h.candidates.map((c) => `<div class="cand"><b>${esc(c.name)}</b><small>${ROLE_NAME[c.role]} · ${ROLE_SKILL[c.role]} <b>${c.ability}</b></small><span class="chip">${growWord(c.potential - c.ability)}</span><small>요구 월급 ${money(c.salary)} · ${c.weeksLeft}주 남음</small><button class="btn ink" data-act="hire" data-id="${c.id}">채용</button></div>`).join('')}</div>
       <button class="btn" data-act="dismissCands" style="width:100%;margin-top:8px">모두 돌려보내기</button>`;
     const fullBox = `<div class="warnbox hire-full">${esc(h.reason ?? '')}</div><p class="hint" style="margin-top:8px">본사를 키우면 더 뽑을 수 있습니다.</p><button class="btn ink" data-act="cotab" data-v="hq" style="width:100%;margin-top:8px">본사 보기</button>`;
-    const card3 = `<div class="card hire-card"><h3>채용 <small class="hint">정원 <b class="cap-n">${h.staffCount}/${h.capacity}</b>명</small></h3>${h.candidates.length ? cands + (h.full ? fullBox : '') : h.full ? fullBox : post}</div>`;
-    return `<div class="cols co-staff">${card1}<div class="colstack">${card2}${card3}</div></div>`;
+    const former = h.former.length ? `<details class="former"${h.former.length <= 3 ? ' open' : ''}><summary><b>전 직원 ${h.former.length}명</b>${ib('term:전 직원')} <small class="hint">나간 뒤 ${config.former.months}개월 동안 다시 채용할 수 있습니다</small></summary><div class="cands">${h.former.map((f) => `<div class="former-c"><b>${esc(f.name)}</b><small>${ROLE_NAME[f.role]} · ${ROLE_SKILL[f.role]} <b>${f.ability}</b> · 한계 ${f.potential}${f.cars ? ` · 참여한 차 ${f.cars}대` : ''}</small><small>월급 ${money(f.salary)} · ${f.monthsLeft}개월 남음</small><button class="btn" data-act="rehire" data-id="${f.id}" ${h.full ? 'disabled' : ''}>다시 채용 · ${money(f.fee)}</button></div>`).join('')}</div></details>` : '';
+    const card3 = `<div class="card hire-card"><h3>채용 <small class="hint">정원 <b class="cap-n">${h.staffCount}/${h.capacity}</b>명</small></h3>${h.candidates.length ? cands + (h.full ? fullBox : '') : h.full ? fullBox : post}${former}</div>`;
+    return `<div class="cols co-staff"><div class="colstack">${card1}${eliteCard(all)}</div><div class="colstack">${card2}${card3}</div></div>`; // 4.1.0 전담팀 구역은 직원 표 아래(표 머리글 고정 유지)
+  }
+  /** 4.1.0 직속 전담팀 구역: 자리·팀원·팀 호흡·자동 교육·전용 후보 */
+  function eliteCard(all: Q.StaffRow[]): string {
+    const s = game!.state, E = Q.eliteInfo(s), head = `<h3>직속 전담팀${ib('term:직속 전담팀')} <small class="hint">자리 <b>${E.used}/${E.seats}</b>명 · 정원과 따로</small></h3>`;
+    if (!E.open) return `<div class="card elite-card locked">${head}<p class="hint">${esc(E.locked ?? '')} 위임이 쓰지 않는 플레이어 전용 최정예 팀으로, 일반 개발팀과 따로 한 대를 더 만듭니다.</p></div>`;
+    const mem = all.filter((x) => x.elite), pname = (id: number | null) => s.projects.find((p) => p.id === id)?.name ?? '';
+    const doing = (x: Q.StaffRow) => x.status === 'working' ? `「${esc(pname(x.projectId))}」 개발` : x.status === 'training' ? `교육 중 · ${x.weeksLeft}주` : x.status === 'resting' ? `휴식 중 · ${x.weeksLeft}주` : '쉬는 중';
+    const rowsH = mem.length ? `<div class="e-mem">${mem.map((x) => `<button class="e-row" data-act="staffSel" data-id="${x.id}" aria-pressed="${staffSel === x.id}"><b>${esc(x.name)}</b><small>${ROLE_NAME[x.role]} · ${ROLE_SKILL[x.role]} <b>${x.ability}</b></small><small>${money(x.salary)}/월</small><small class="s-${x.status}">${doing(x)}</small></button>`).join('')}</div>` : '<p class="hint">아직 팀원이 없습니다. 아래 전용 후보를 영입하거나, 직원을 눌러 전담팀으로 옮기세요.</p>';
+    const chem = `<span class="chem"><u style="width:${((E.chem / E.chemMax) * 100).toFixed(0)}%"></u></span> +${Math.round(E.chem * 100)}%p`;
+    const cands = E.cands.length ? `<div class="cands">${E.cands.map((c) => `<div class="e-cand"><b>${esc(c.name)}</b><small>${ROLE_NAME[c.role]} · ${ROLE_SKILL[c.role]} <b>${c.ability}</b> · 한계 ${c.potential}</small><small>월급 ${money(c.pay)} · ${c.monthsLeft}개월 뒤 바뀜</small><button class="btn ink" data-act="hireElite" data-v="${c.key}" ${E.used >= E.seats ? 'disabled' : ''}>영입 · ${money(c.fee)}</button></div>`).join('')}</div>` : '<p class="hint">이번 주기의 후보를 모두 데려왔습니다. 다음 주기에 새 후보가 옵니다.</p>';
+    return `<div class="card elite-card">${head}
+      <div class="kpis">${kpi(`팀 호흡${ib('term:팀 호흡')}`, chem)}${kpi('함께 완성한 차', `${E.cars}<span>대</span>`)}${kpi('개발', E.busy ? '진행 중' : '쉬는 중')}</div>
+      ${E.keep < 1 && E.chem > 0 ? `<p class="note">마지막으로 차를 완성한 구성과 ${Math.round(E.keep * 100)}%가 같습니다. 이 구성으로 다음 차를 완성하면 팀 호흡이 그만큼만 남고 더해집니다.</p>` : ''}
+      ${rowsH}${mem.length && E.missing.length ? `<div class="warnbox">전담팀에 ${esc(E.missing.join('·'))}${josa(E.missing.at(-1)!, '이/가')} 없습니다. 이대로 개발하면 그 직무의 점수(디자인·기술·꼼꼼함)가 비고, 시험에서 결함이 덜 줄어듭니다.</div>` : ''}
+      <label class="chk e-train"><input type="checkbox" data-etrain="1" ${E.train ? 'checked' : ''}> 개발이 없는 동안 자동 교육${ib('term:전담팀 자동 교육')}</label>
+      <p class="lbl" style="margin-top:12px">전용 후보 <small class="hint">영입비 ${money(E.fee)} · 월급은 일반의 ${E.payMult}배</small></p>${cands}
+      <p class="note">전담팀은 일반 개발팀 ${Q.devTeams(s)}개와 따로 한 대를 더 개발합니다. 신차 기획·풀체인지·파생·페이스리프트의 팀 고르기에서 [직속 전담팀]을 누르면 한 번에 고를 수 있고, 일반 직원과 섞어도 됩니다. 임원 위임·자회사는 전담팀원을 쓰지 않습니다.${E.nextSeatHq ? ` 본사 ${E.nextSeatHq}등급부터 자리가 늘어납니다.` : ''}</p></div>`;
   }
 
   // ----- 임원(0.7.0) -----
@@ -2545,7 +2577,7 @@ export function startApp(): void {
       <div class="kpis">${kpi('정원', `${h.staffCount}/${c.staffCap}<span>명</span>`)}${kpi('동시에 개발할 수 있는 차', `${c.teams}<span>대</span>`)}${kpi('월 유지비', money((c.upkeep)))}</div>
       <p class="note">본사가 클수록 직원을 더 뽑고, 여러 차를 함께 개발하고, 차에 옵션을 더 넣을 수 있습니다. 개발 탭의 사무실도 넓어집니다.</p></div>`;
     const next = n ? `<div class="card hq-next"><p class="lbl">다음 등급 · ${n.level}등급</p><h2>${esc(n.name)}</h2>
-      <table class="tbl" style="margin-top:8px"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">키우면</th></tr>${cmpRow('정원', `${c.staffCap}명`, `${n.staffCap}명`)}${cmpRow('동시에 개발할 수 있는 차', `${c.teams}대`, `${n.teams}대`)}${cmpRow('월 유지비', money((c.upkeep)), money((n.upkeep)), true)}</table>
+      <table class="tbl" style="margin-top:8px"><tr><th>무엇이 늘어나나</th><th class="r">지금</th><th class="r">키우면</th></tr>${cmpRow('정원', `${c.staffCap}명`, `${n.staffCap}명`)}${cmpRow('동시에 개발할 수 있는 차', `${c.teams}대`, `${n.teams}대`)}${config.elite.seats[n.level - 1] ? cmpRow('직속 전담팀 자리', config.elite.seats[c.level - 1] ? `${config.elite.seats[c.level - 1]}명` : '없음', `${config.elite.seats[n.level - 1]}명`) : ''}${cmpRow('월 유지비', money((c.upkeep)), money((n.upkeep)), true)}</table>
       <div class="kpis" style="margin-top:10px">${kpi('승급 비용', money(n.cost))}${kpi('필요한 평판', n.rep ? `${n.rep}<span>이상 (지금 ${Math.floor(s.reputation)})</span>` : '없음')}</div>
       ${h.canUpgrade ? '' : `<div class="badbox" style="margin-top:10px">${esc(h.reason ?? '')}</div>`}
       <button class="go" data-act="upgradeHQ" ${h.canUpgrade ? '' : 'disabled'}>본사 키우기 · ${money(n.cost)}</button></div>`
@@ -2685,7 +2717,7 @@ export function startApp(): void {
     if (!s.start) return '';
     const cond = config.newGame.conditions[st.condition].name;
     return `<div class="card st-start"><p class="lbl">이 판의 시작</p><p><b>${st.year}년 시작</b> · ${esc(diffName(s.difficulty))} · ${esc(cond)}</p>
-      ${ch.length ? `<p class="lbl" style="margin-top:8px">도전 과제</p><ul class="ch-list">${ch.map((c) => `<li><b>${esc(c.name)}</b> <span class="chip on">지켜지는 중 · ${c.years ? `${c.years}년째` : '첫해'}</span><small>${esc(c.desc)}</small></li>`).join('')}</ul>` : '<p class="hint">도전 과제 없음</p>'}</div>`;
+      ${ch.length ? `<p class="lbl" style="margin-top:8px">도전 과제</p><ul class="ch-list">${ch.map((c) => `<li${c.failed ? ' class="failed"' : ''}><b>${esc(c.name)}</b> ${c.failed ? `<span class="chip bad">실패 · ${c.failed.year}년${ib('term:도전 과제 실패')}</span><small>${esc(c.failed.why)}. 실패는 되돌릴 수 없습니다(${c.years ? `${c.years}년째에` : '첫해에'} 실패).</small>` : `<span class="chip on">지켜지는 중 · ${c.years ? `${c.years}년째` : '첫해'}</span>`}<small>${esc(c.desc)}</small></li>`).join('')}</ul>` : '<p class="hint">도전 과제 없음</p>'}</div>`;
   }
   function statsTab(): string {
     const nm = <T extends { id: string; name: string }>(list: T[]) => (id: string) => list.find((x) => x.id === id)?.name ?? id;
@@ -2755,11 +2787,11 @@ export function startApp(): void {
         ${lift ? `<div class="lift-ph" title="페이스리프트 뒤 모습">${lph ? `<img src="${lph}" alt="페이스리프트 뒤 사진">` : thumb(genLook(g, lift.id), -0.65, 160, 100)}<span>바뀐 얼굴</span></div>` : ''}</div>
         <div class="bd"><h3>${l.number}세대 <small class="hint">${bodyById(g.body).name}</small></h3>
         <div class="meta">${Q.monthLabel(l.launchMonth)} 출시 · 평론 ${score(l.reviewAvg)} · 누적 ${num(l.totalSold)}대<br>${esc(EQ.equipLine(edEquip(currentEdition(g))))}${lift ? `<br>페이스리프트 ${Q.monthLabel(monthOf(lift.launchWeek))}` : ''}</div>
-        <div class="row">${g.masterpiece ? '<span class="chip gold">명차</span>' : ''}<span class="chip ${l.status === 'onSale' ? 'on' : ''}">${esc(l.label)}</span>${lift ? '<span class="chip">페이스리프트</span>' : ''}${g.recalls ? `<span class="chip bad">리콜 ${g.recalls}번</span>` : ''}${l.variant ? `<span class="chip">${esc(Q.variantById(l.variant)?.name ?? '')}</span>` : ''}</div>
+        <div class="row">${g.opus ? '<span class="chip opus">수작</span>' : ''}${g.masterpiece ? '<span class="chip gold">명차</span>' : ''}<span class="chip ${l.status === 'onSale' ? 'on' : ''}">${esc(l.label)}</span>${lift ? '<span class="chip">페이스리프트</span>' : ''}${g.recalls ? `<span class="chip bad">리콜 ${g.recalls}번</span>` : ''}${l.variant ? `<span class="chip">${esc(Q.variantById(l.variant)?.name ?? '')}</span>` : ''}</div>
         ${l.fromGen !== null ? `<p class="hint rec-from">${esc(derivLine(g))}</p>` : ''}
         ${l.critiques.length ? `<details class="rec-crit"><summary>평론가 시승기 ${l.critiques.length}명</summary>${critiqueList(g.id)}</details>` : ''}${l.wins.length ? `<details class="rec-crit"><summary>직원 성과 ${l.wins.length}건</summary>${winsList(l.wins)}</details>` : ''}</div></article>`;
     };
-    return `<div class="card"><div class="rec-co">${myLogo(36)}<b>${esc(s.companyName)}</b></div><h3>지금까지 낸 차 ${gens.length}대</h3><div class="kpis">${kpi('누적 판매', `${qty(total)}<span>대</span>`)}${kpi('차종', `${nps.length}<span>개</span>`)}${kpi('명차', `${gens.filter((g) => g.masterpiece).length}<span>대</span>`)}${kpi('평판', String(Math.round(s.reputation)))}</div></div>
+    return `<div class="card"><div class="rec-co">${myLogo(36)}<b>${esc(s.companyName)}</b></div><h3>지금까지 낸 차 ${gens.length}대</h3><div class="kpis">${kpi('누적 판매', `${qty(total)}<span>대</span>`)}${kpi('차종', `${nps.length}<span>개</span>`)}${kpi('명차', `${gens.filter((g) => g.masterpiece).length}<span>대</span>`)}${gens.some((g) => g.opus) ? kpi('수작', `${gens.filter((g) => g.opus).length}<span>대</span>`) : ''}${kpi('평판', String(Math.round(s.reputation)))}</div></div>
       ${bar}${nps.length ? '' : '<div class="card"><p class="hint">조건에 맞는 차종이 없습니다.</p></div>'}${nps.map((n) => `<div class="card lineage-card${n.baseOf !== undefined ? ' deriv' : ''}" data-np="${n.id}" id="np-${n.id}"><p class="lbl">${n.baseOf !== undefined ? `↳ 「${esc(s.nameplates.find((x) => x.id === n.baseOf)?.name ?? '')}」의 파생 모델 · ${esc(Q.variantById(n.variant)?.name ?? '')}` : '차종 계보'}</p><h3>${esc(n.name)} <small class="hint">${n.generations.length}세대 · 누적 ${num(n.generations.reduce((a, g) => a + g.totalSold, 0))}대 · 이름값 ${EQ_WORD(Q.nameplateEquity(s, n.id))}</small></h3>
         ${I.nameplatePnlLine(s, n.id)}<div class="lineage">${Q.lineage(s, n.id).map(genCard).join('<span class="arrow" aria-hidden="true">→</span>')}</div></div>`).join('')}`;
   }
@@ -3050,6 +3082,10 @@ export function startApp(): void {
       }
       case 'liftPick': if (lift) { (lift as unknown as Record<string, number>)[el.dataset.k!] = Number(v); render(); } return;
       case 'autoTeam': autoTeam(v); return;
+      case 'eliteTeam': { // 4.1.0 쉬는 전담팀원 전원으로(일반 직원은 뺀다)
+        const o = v === 'liftTeam' ? lift : v === 'dvTeam' ? derive : draft; if (!o || !game) return;
+        o.team = game.state.staff.filter((x) => x.elite && x.projectId === null).map((x) => x.id); autoNote = null; render(); return;
+      }
       case 'teamPick': case 'liftTeam': case 'dvTeam': { const o = a === 'teamPick' ? draft : a === 'dvTeam' ? derive : lift, id = Number(el.dataset.id); if (o) { o.team = o.team.includes(id) ? o.team.filter((x) => x !== id) : [...o.team, id]; render(); } return; }
       case 'startLift': {
         if (!game || !lift) return; const L = lift, g = Q.generationById(game.state, L.genId);
@@ -3384,7 +3420,7 @@ export function startApp(): void {
       case 'dismissCands': if (game && (await ask('후보를 모두 돌려보낼까요?\n공고에 쓴 돈은 돌아오지 않습니다.', '돌려보내기', true)) && run(game.command({ type: 'dismissCandidates' }))) { toast('후보를 모두 돌려보냈습니다'); render(); } return;
       case 'train': {
         if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)); if (!x) return; const a0 = x.ability;
-        if (run(game.command({ type: 'train', staffId: x.id }))) { toast(`${x.name} 교육을 보냈습니다. 능력 ${a0} → ${x.ability}. ${config.staff.train.weeks}주 동안 일하지 않습니다.`); render(); }
+        if (run(game.command({ type: 'train', staffId: x.id }))) { toast(`${x.name} 교육을 보냈습니다. 능력 ${a0} → ${x.ability}. ${x.elite ? config.elite.train.weeks : config.staff.train.weeks}주 동안 일하지 않습니다.`); render(); }
         return;
       }
       case 'rest': { if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)); if (x && run(game.command({ type: 'rest', staffId: x.id, weeks: Number(v) }))) { toast(`${x.name}에게 ${v}주 휴식을 줬습니다.`); render(); } return; }
@@ -3413,10 +3449,26 @@ export function startApp(): void {
         let n = 0; for (const x of rows) if (x.status !== 'training' && run(game.command({ type: 'rest', staffId: x.id, weeks: 2 }, n > 0))) n++;
         staffPick.clear(); if (n) toast(`${n}명에게 2주 휴식을 줬습니다.${skip.length ? ` 교육 중인 ${skip.length}명은 쉴 수 없어 뺐습니다.` : ''}`); else err('교육 중인 직원은 쉴 수 없습니다.'); render(); return;
       }
+      case 'eliteIn': case 'eliteOut': { // 4.1.0
+        if (!game) return; const x = game.state.staff.find((y) => y.id === Number(el.dataset.id)); if (!x) return;
+        if (run(game.command({ type: 'setElite', staffId: x.id, on: a === 'eliteIn' }))) { toast(a === 'eliteIn' ? `${x.name}${josa(x.name, '을/를')} 직속 전담팀으로 옮겼습니다. 월급 ${money(Q.staffInfo(game.state).find((y) => y.id === x.id)!.salary)}.` : `${x.name}${josa(x.name, '을/를')} 전담팀에서 뺐습니다.`); render(); }
+        return;
+      }
+      case 'hireElite': {
+        if (!game) return; const c = Q.eliteInfo(game.state).cands.find((y) => y.key === v); if (!c) return;
+        if (!(await ask(`${c.name}(${ROLE_NAME[c.role]}, 능력 ${c.ability})${josa(c.name, '을/를')} 직속 전담팀으로 영입할까요?\n영입비 ${money(c.fee)}이 바로 나가고, 월급은 ${money(c.pay)}입니다.`, '영입'))) return;
+        if (run(game.command({ type: 'hireElite', key: c.key }))) { toast(`${c.name}${josa(c.name, '을/를')} 직속 전담팀으로 영입했습니다.`); render(); }
+        return;
+      }
+      case 'rehire': {
+        if (!game) return; const f = Q.hiringInfo(game.state).former.find((y) => y.id === Number(el.dataset.id)); if (!f) return;
+        if (run(game.command({ type: 'rehire', staffId: f.id }))) { toast(`${f.name}${josa(f.name, '을/를')} 다시 채용했습니다. 채용비 ${money(f.fee)}.`); render(); }
+        return;
+      }
       case 'assign': if (game && run(game.command({ type: 'assign', staffId: Number(el.dataset.id), projectId: v === '' ? null : v === 'lab' ? 'lab' : Number(v) }))) render(); return;
       case 'fire': {
         if (!game) return; const x = Q.staffInfo(game.state).find((y) => y.id === Number(el.dataset.id)); if (!x) return;
-        if (!(await ask(`${x.name}(${ROLE_NAME[x.role]}, 능력 ${x.ability})${josa(x.name, '을/를')} 해고할까요?\n퇴직금 ${money(x.severance)}이 바로 나갑니다. 되돌릴 수 없습니다.`, '해고', true))) return;
+        if (!(await ask(`${x.name}(${ROLE_NAME[x.role]}, 능력 ${x.ability})${josa(x.name, '을/를')} 해고할까요?\n퇴직금 ${money(x.severance)}이 바로 나갑니다. ${config.former.months}개월 동안은 채용 화면의 전 직원 목록에서 다시 채용할 수 있습니다(채용비 월급 ${config.former.feeMonths}개월 치).`, '해고', true))) return;
         if (run(game.command({ type: 'fire', staffId: x.id }))) { staffSel = null; toast(`${x.name}${josa(x.name, '을/를')} 해고했습니다. 퇴직금 ${money(x.severance)}`); render(); }
         return;
       }
@@ -3616,6 +3668,7 @@ export function startApp(): void {
   document.addEventListener('pointercancel', () => { dragging = false; });
   document.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
+    if (t.dataset.etrain && game) { if (run(game.command({ type: 'setEliteTrain', on: t.checked }))) toast(t.checked ? '전담팀 자동 교육을 켰습니다.' : '전담팀 자동 교육을 껐습니다.'); render(); return; } // 4.1.0
     if (t.dataset.topt === 'keepEng' || t.dataset.topt === 'busy') { teamOpt[t.dataset.topt] = t.checked; lastPanel = ''; render(); return; } // 1.0.0 자동 배치 선택
     if (t.classList.contains('px-r')) render(); // 놓으면 패널 전체를 다시 그린다(예상 평론 등)
     else if (t.classList.contains('alloc-r') && game) { // 직접 배분: 놓을 때 적용. 합이 100%를 넘으면 sim의 이유를 그대로 보여 준다

@@ -379,9 +379,10 @@ button.s-pick[aria-pressed="true"]::before{content:"✓";border-color:var(--ink)
 }
 /* 채용 후보 */
 .cands{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin-top:10px}
-.cand{background:var(--soft);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
-.cand > b{font-size:16px;font-weight:900}
-.cand small{font-size:12px;color:var(--ink2);line-height:1.4}
+.cand,.e-cand,.former-c{background:var(--soft);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cand > b,.e-cand > b,.former-c > b{font-size:16px;font-weight:900}
+.cand small,.e-cand small,.former-c small{font-size:12px;color:var(--ink2);line-height:1.4}
+.e-cand .btn,.former-c .btn{margin-top:auto}
 .cand .chip{align-self:flex-start;background:#fff}
 .cand .btn{margin-top:auto}
 /* 본사 5등급 */
@@ -1340,3 +1341,24 @@ body.sub-premium #top .pill.pend{background:#c93f0c;border-color:#c93f0c} /* 3.1
 .w-cars td{vertical-align:middle}
 .w-cars .lnk{min-height:32px}
 .w-regs td,.w-regs th{white-space:nowrap}
+/* 4.1.0 직속 전담팀 */
+.elite-card{border:1.5px solid var(--gold-bg)}
+.elite-card.locked{border-color:var(--line);opacity:.85}
+.elite-card .kpis{margin-top:8px}
+.chem{display:inline-block;width:56px;height:8px;border-radius:999px;background:var(--soft);overflow:hidden;vertical-align:middle;margin-right:4px}.chem u{display:block;height:100%;background:var(--gold-ink)}
+.e-mem{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:8px;margin-top:10px}
+.e-row{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--soft);border:1.5px solid transparent;border-radius:14px;padding:10px;min-width:0}
+.e-row[aria-pressed="true"]{border-color:var(--ink)}
+.e-row b{font-size:15px;font-weight:900;overflow-wrap:anywhere}.e-row small{font-size:12px;color:var(--ink2);line-height:1.35}
+.e-row .s-working{color:var(--pos-ink);font-weight:800}
+.e-train{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px}
+.e-cand{border:1.5px solid var(--gold-bg)}
+.elite-pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
+.elite-pick small{font-size:12px;line-height:1.4;flex:1 1 200px}.warn-t{color:var(--warn-ink)}
+.pick.elite{border-color:var(--gold-bg)}
+.e-tag{font-style:normal;font-size:11px;font-weight:800;border-radius:999px;padding:1px 6px;background:var(--gold-bg);color:var(--gold-ink);vertical-align:middle}
+.opus-s,.opus-chip{display:inline-block;margin-left:6px;font-size:11px;font-weight:800;border-radius:999px;padding:2px 7px;background:#2b2a3d;color:#f3e3b0;vertical-align:middle}
+.g-num small.opus-s{display:inline-block;margin-left:0}
+.chip.opus,.badge.opus{background:#2b2a3d;color:#f3e3b0}
+.former{margin-top:14px}.former summary{cursor:pointer;font-size:14px}.former .former-c{background:var(--card);border:1.5px solid var(--line)}
+.ch-list li.failed b{text-decoration:line-through;text-decoration-thickness:1.5px}

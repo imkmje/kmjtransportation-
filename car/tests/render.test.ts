@@ -161,7 +161,8 @@ describe('사무실·시대 분위기(1.0.0)', () => {
       const rm = roomFor(lv), coffee = rm.spots.find((q) => q.kind === 'coffee')!;
       expect(rm.execs.length).toBe(EXEC_SEATS[lv]);
       expect(EXEC_SEATS[lv]).toBe(config.exec.seats[lv - 1]);
-      expect(rm.seats.length).toBe(CAPACITY[lv]);
+      expect(rm.seats.filter((x) => !x.elite).length).toBe(CAPACITY[lv]);
+      expect(rm.seats.filter((x) => x.elite).length, `등급 ${lv} 전담팀 자리`).toBeGreaterThanOrEqual(config.elite.seats[lv - 1]); // 4.1.0
       if (lv >= 2) expect(CAPACITY[lv], `등급 ${lv} 자리가 정원보다 적다`).toBeGreaterThanOrEqual(config.hq.levels[lv - 1].staff); // 3.0.0 6·7등급 정원 30·40
       expect(rm.W * rm.D).toBeGreaterThan(lastArea); lastArea = rm.W * rm.D;
       for (const st of rm.seats) expect(findPath(rm.grid, st.access, [coffee.x, coffee.y]), `등급 ${lv} 자리 길 없음`).not.toBeNull();

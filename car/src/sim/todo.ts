@@ -2,7 +2,7 @@
 import { config } from '../config';
 import { TECHS, optionById } from '../data';
 import { sellingGens } from './game';
-import { devTeams, isResting, isTraining, isDevRole, staffCap } from './company';
+import { devTeams, isResting, isTraining, isDevRole, staffCap, staffCount } from './company';
 import { activeEvents, pendingChoices, regulationBlock } from './events';
 import { faceliftEligibility, fullChangeEligibility, latestGen, retrofitInfo } from './lifecycle';
 import { currentEdition } from './market';
@@ -51,7 +51,7 @@ export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
   if (exec.unread > 0) add(`reports:${exec.lastUnread}`, 'reports', `읽지 않은 임원 보고 ${exec.unread}건`, '임원이 올린 제안과 기록을 볼 수 있습니다.', { tab: 'reports' });
   if (exec.vacant > 0) add('exec', 'exec', `비어 있는 임원 자리 ${exec.vacant}개`, '임원을 두면 매달 제안을 받고 일을 위임할 수 있습니다.', { tab: 'company', sub: 'exec' });
 
-  const freeTeams = blk ? 0 : devTeams(s) - s.projects.length;
+  const freeTeams = blk ? 0 : devTeams(s) - s.projects.filter((p) => !p.elite).length;
   for (const g of sellingGens(s)) {
     if (g.status !== 'onSale') continue;
     const name = nameOfGen(s, g.id), rf = retrofitInfo(s, g.id);
@@ -77,7 +77,7 @@ export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
   if (slotsLeft > 0 && TECHS.some((t) => researchError(s, t.id) === null)) add('research', 'research', `비어 있는 연구 칸 ${slotsLeft}개`, '지금 시작할 수 있는 기술이 있습니다.', { tab: 'company', sub: 'research' });
   const tired = s.staff.filter((x) => x.condition < config.staff.condition.low && !isResting(x, s.week) && !isTraining(x, s.week)).length;
   if (tired) add('tired', 'tired', `지친 직원 ${tired}명`, '컨디션이 낮아 일의 성과가 줄었습니다. 휴식을 줄 수 있습니다.', { tab: 'company', sub: 'staff' });
-  if (!s.candidates.length && s.staff.length < staffCap(s) && !delegationOn(s, 'hr', 'autoHire')) add('hire', 'hire', `정원에 여유가 있습니다(${s.staff.length}/${staffCap(s)}명)`, '채용 공고를 낼 수 있습니다.', { tab: 'company', sub: 'staff' });
+  if (!s.candidates.length && staffCount(s) < staffCap(s) && !delegationOn(s, 'hr', 'autoHire')) add('hire', 'hire', `정원에 여유가 있습니다(${staffCount(s)}/${staffCap(s)}명)`, '채용 공고를 낼 수 있습니다.', { tab: 'company', sub: 'staff' });
 
   return out.sort((a, b) => Number(b.urgent) - Number(a.urgent) || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
 }

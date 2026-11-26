@@ -166,6 +166,7 @@ export const config = {
   },
   bots: { // 균형 봇의 경영 규칙(16장, 테스트용)
     reserveMonths: 6,
+    eliteCashMonths: 12, // 4.1.0 전담팀 봇: 영입비를 내고도 운영비 12개월 치가 남을 때만
     worldFill: 0.8, // 4.0.0 수출 봇: 권역 판매가 판매 상한의 80% 이상이면 판매 법인 투자 // 고정비(월급 + 유지비) 몇 개월치를 남기고 투자하는가
     expandRatio: 1.3, expandMonths: 3, boundShare: 0.97, expandFill: 0.75, fillFrom: 5, expandLoan: 0.7, // expandLoan(1.0.0): 증설비가 모자라면 대출 한도의 70%까지 빌린다
     // fillFrom(1.0.0): 이 등급부터 expandFill 조건(전에는 마지막 등급만). expandFill(0.4.2): 마지막 등급은 지난달 주문이 그 한도의 75% 이상일 때만 증설 // 공장 증설: 지난 3개월 모두 한도의 97% 이상 팔았고 지난달 주문이 한도의 1.3배 이상
@@ -227,9 +228,9 @@ export const config = {
       lean: { name: '맨손', cash: 0.7 },
     },
     challenges: { // 고르면 해당 명령을 거절한다. 보상 없음(기록에만 남는다)
-      evOnly: { name: '전기차만', desc: '전기 외 동력으로는 신차·풀체인지 개발을 시작할 수 없습니다. 2010년 이후 시작에서만.', minYear: 2010, powertrain: 'ev', max: 0 },
-      names3: { name: '차종 세 개까지', desc: '차종(파생 포함)은 세 개까지. 풀체인지·페이스리프트는 됩니다.', minYear: 0, powertrain: '', max: 3 },
-      noLoan: { name: '대출 없이', desc: '은행 대출을 받을 수 없습니다(구제 금융은 됩니다).', minYear: 0, powertrain: '', max: 0 },
+      evOnly: { name: '전기차만', desc: '전기 외 동력으로는 신차·풀체인지 개발을 시작할 수 없습니다. 가솔린 차를 내는 브랜드 자회사는 세울 수 없고, 전기차가 아닌 모델이 있는 경쟁사는 인수할 수 없습니다. 2010년 이후 시작에서만.', minYear: 2010, powertrain: 'ev', max: 0 },
+      names3: { name: '차종 세 개까지', desc: '차종(파생 포함)은 세 개까지. 풀체인지·페이스리프트는 됩니다. 자회사·인수 브랜드의 모델은 세지 않습니다.', minYear: 0, powertrain: '', max: 3 },
+      noLoan: { name: '대출 없이', desc: '은행 대출을 받을 수 없습니다. 구제 금융은 받을 수 있지만 받으면 이 과제는 실패로 남습니다.', minYear: 0, powertrain: '', max: 0 },
       noExec: { name: '임원 없이', desc: '임원을 임명하거나 채용할 수 없습니다.', minYear: 0, powertrain: '', max: 0 },
     },
   },
@@ -267,7 +268,25 @@ export const config = {
   // 1.3.0 세대교체 위임(기획 임원): 판매 중 세대 나이(개월) faceliftAt부터 페이스리프트(fullChangeAt − faceliftGap 전까지만), fullChangeAt부터(또는 수명 막대가 exec.product.fullChangeLife 아래로) 풀체인지.
   // 노후(life.oldMonths 72개월) 전에 다음 세대가 나오도록 개발 기간(약 10~12개월)만큼 앞서 시작한다. 현금: 예상 개발비 × cashDevMult + 운영비 cashMonths개월 치 이상일 때만.
   // waitReportMonths개월 넘게 못 하면 이유를 한 번 보고. 자동 출시: 결함을 다 잡았거나 시험이 maxTestWeeks주를 넘으면
-  genAuto: { faceliftAt: 30, fullChangeAt: 58, faceliftGap: 18, cashDevMult: 1.5, cashMonths: 6, waitReportMonths: 6, maxTestWeeks: 28 },
+  genAuto: { faceliftAt: 30, fullChangeAt: 58, faceliftGap: 18, cashDevMult: 1.5, cashMonths: 6, waitReportMonths: 6, maxTestWeeks: 28,
+    splitTol: 0.3, splitWaitMonths: 12, splitWaitDrop: 2.5 }, // 4.1.0 풀체인지 팀 나누기: 나눈 팀의 예상 평론이 전작(전원 팀 예상이 더 낮으면 그 값)보다 splitTol 이하로만 낮으면 나눠 동시에.
+  // splitWaitMonths개월 넘게 기다린 차종은 나눈 팀(또는 쉬는 직원 전원)으로라도 시작하되, 예상 평론이 전작보다 splitWaitDrop 넘게 떨어지면 기다린다(1.6.1 급락 방지)
+  // 4.1.0 직속 전담팀(설계서 9.10, 계산은 sim/elite.ts). 본사 hq등급부터, 자리는 본사 등급별(정원과 따로), 개발팀 수와 별개인 한 팀. 위임·자동 처리는 쓰지 않는다
+  elite: {
+    hq: 3, seats: [0, 0, 4, 5, 7, 8, 10],
+    payMult: 2.5, // 월급 = 일반 월급 공식 × 2.5(옮겨 온 직원도 같다)
+    // 전용 후보: refreshMonths개월마다 count명(직무는 디자이너·엔지니어·테스터 차례), 능력 abilityMin~abilityMax + 평판 효과/repDiv(최대 maxAbility), 성장 한계 = 능력 + potMin~potMax(최대 100). 시드 해시(게임 난수를 쓰지 않는다)
+    cand: { count: 4, refreshMonths: 6, abilityMin: 76, abilityMax: 90, repDiv: 40, maxAbility: 96, potMin: 4, potMax: 12 },
+    feeMult: 2.5, // 영입비 = 3등급 공고비 × 2.5
+    // 자동 교육: 개발이 없는 동안. 주 수·연 횟수·능력 가산·비용 배수(일반 교육비 × costMult), 한계 = 성장 한계 + capAdd(최대 100)
+    train: { weeks: 2, perYear: 4, gainMin: 2, gainMax: 4, costMult: 1.5, capAdd: 10, cashMonths: 3 },
+    // 산출: 전담팀원의 주간 산출 × (1 + (out + 팀 호흡) × 기획 궁합). 궁합 = min(1, 차체·고객층 궁합)^compatExp × 동력 등급(tierFit[등급 − 1]). 결함은 산출 배수만큼 덜 생기고(같은 점수에 결함 1/배수), 시험은 배수만큼 빠르다
+    out: 1.5, compatExp: 4, tierFit: [0.3, 0.6, 1],
+    chem: { step: 0.05, max: 0.2 }, // 팀 호흡: 같은 구성으로 차를 완성할 때마다 +step(최대 max). 구성이 바뀌면 겹치는 비율(전담팀원 기준)만큼만 남기고 더한다
+    noise: 0.4, // 전담팀 차의 평론 흔들림 배수(일반 ×1)
+    opus: 9.5, awardBonus: 0.3, // 수작: 전담팀이 만든 평론 9.5 이상인 차. 시상식 점수 +0.3
+  },
+  former: { months: 12, feeMonths: 3 }, // 4.1.0 전 직원: 해고 뒤 12개월 동안 채용비(월급 3개월 치)로 다시 채용(능력·경력 그대로)
   nameMax: 16, // 1.5.0 차종 이름 최대 글자 수(이름 바꾸기 검증, 화면 입력칸 maxlength와 같다)
   derivative: { defectRate: 0.5 }, // 1.3.0 파생 모델 설계 중 결함은 보통의 절반 속도(차대를 그대로 쓴다). 종류별 수치는 data/variants.json
   // 1.3.0 개발 중 직원 성과: 배치된 직원마다 주당 확률 = chance × 능력, 크기는 능력에 비례(size [능력 0, 능력 100]). 프로젝트당 최대 maxPerProject건, 종류별 합계 상한 caps

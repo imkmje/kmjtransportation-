@@ -4,7 +4,7 @@ import { won } from './won';
 import { config } from '../config';
 import { NAMES, RIVALS, TECHS, bodyById, techById } from '../data';
 import { grade, payOf, salaryOf } from './cars';
-import { allocate, capacityOf, staffCap } from './company';
+import { allocate, capacityOf, staffCap, staffCount } from './company';
 import { generationUnitProfit } from './queries';
 import { addNews } from './events';
 import { startHist } from './history';
@@ -209,12 +209,12 @@ function detectCounters(s: CarState, ev: GameEvent[], m: number): void {
   }
 }
 /** 시상 후보 한 대 */
-interface Entry { who: Award['who']; company: string; car: string; body: string; critic: number; tech: number; design: number; genId?: number; subId?: number }
+interface Entry { who: Award['who']; company: string; car: string; body: string; critic: number; tech: number; design: number; genId?: number; subId?: number; bonus?: number } // bonus(4.1.0): 수작 가점
 function entries(s: CarState, m: number): Entry[] {
   const W = R.awards.window, y = yearOfMonth(m), out: Entry[] = [];
   for (const g of onSale(s)) if (m - g.launchMonth < W) {
     const st = currentEdition(g).stats, gr = (k: 'P' | 'E' | 'U' | 'D' | 'Q') => grade(st[k], y);
-    out.push({ who: 'mine', company: s.companyName, car: nameOfGen(s, g), body: g.body, critic: g.reviewAvg, tech: (gr('P') + gr('E') + gr('Q')) / 3, design: gr('D'), genId: g.id });
+    out.push({ who: 'mine', company: s.companyName, car: nameOfGen(s, g), body: g.body, critic: g.reviewAvg, tech: (gr('P') + gr('E') + gr('Q')) / 3, design: gr('D'), genId: g.id, ...(g.opus ? { bonus: config.elite.awardBonus } : {}) });
   }
   for (const sub of [...(s.subs ?? [])].sort((a, b) => a.id - b.id)) if (isBrand(sub.kind)) for (const md of sub.models) if (m - md.start < W) {
     const v = subModelView(s, sub, md);
@@ -231,7 +231,7 @@ function awards(s: CarState, ev: GameEvent[], m: number): { value: number; reaso
   A.cats.forEach((c, ci) => {
     const pool = all.filter((x) => !c.bodies || c.bodies.includes(x.body));
     if (!pool.length) return;
-    const score = (x: Entry) => (c.score === 'critic' ? x.critic : c.score === 'tech' ? x.tech : x.design) + (hash01(s.seed, 89, y, ci, strKey(x.car)) * 2 - 1) * A.jitter;
+    const score = (x: Entry) => (c.score === 'critic' ? x.critic : c.score === 'tech' ? x.tech : x.design) + (x.bonus ?? 0) + (hash01(s.seed, 89, y, ci, strKey(x.car)) * 2 - 1) * A.jitter;
     const win = pool.map((x) => ({ x, v: score(x) })).sort((a, b) => b.v - a.v || (a.x.car < b.x.car ? -1 : 1))[0].x;
     const label = `${y}년 ${c.name}`;
     st.awards.push({ year: y, cat: c.id, name: c.name, who: win.who, company: win.company, car: win.car, body: win.body, score: Math.round((c.score === 'critic' ? win.critic : c.score === 'tech' ? win.tech : win.design) * 10) / 10, ...(win.genId !== undefined ? { genId: win.genId } : {}), ...(win.subId !== undefined ? { subId: win.subId } : {}) });
@@ -278,7 +278,7 @@ function refreshTalent(s: CarState, m: number): void {
 export function talentError(s: CarState, id: number): string | null {
   const t = s.rivalry?.talent.find((x) => x.id === id);
   if (!t) return '없는 후보입니다.';
-  if (s.staff.length >= staffCap(s)) return `직원 정원(${staffCap(s)}명)이 찼습니다.`;
+  if (staffCount(s) >= staffCap(s)) return `직원 정원(${staffCap(s)}명)이 찼습니다.`;
   if (s.cash < t.fee) return `현금이 모자랍니다(영입비 ${won(t.fee)}).`;
   return null;
 }

@@ -1,11 +1,11 @@
 // 화면이 쓰는 조회 함수(순수 함수, 상태를 바꾸지 않는다)
 import { config } from '../config';
 import { COMPAT, MARKET, SEGMENTS, bodyById } from '../data';
-import { avgGrade, finalStats, grade, grades, lifeFactor, payOf, salaryOf, standard, unitCost, zeroStats } from './cars';
+import { avgGrade, finalStats, grade, grades, lifeFactor, payOf, standard, unitCost, zeroStats } from './cars';
 import { equipOf, optPerCar, optWeights, stdOf } from './equip';
 import { withRequired, devScale, designWeek, devCostPerWeek, faceliftWeekByStaff, faceliftWeekCost, fullChangeCostMult, testCut, weeklyDevCost } from './dev';
-import { allGens, linesUsed, sellingGens } from './game';
-import { factoryBuildMonths, factoryUpkeep, hqUpkeep, capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, trainCost, trainError, trainingsThisYear, upkeepOf } from './company';
+import { allGens, linesUsed, rehireFee, sellingGens } from './game';
+import { factoryBuildMonths, factoryUpkeep, hqUpkeep, capacityOf, conditionMult, costMultOf, factoryExpandError, hqUpgradeError, isDevRole, isResting, isTraining, linesOf, staffCap, staffCount, staffTrainCost, trainCap, trainError, trainingsThisYear, trainWeeksOf, upkeepOf } from './company';
 import { carriedEquity, compareToPrev, faceliftEligibility, faceliftRefresh, fullChangeEligibility, launchAvgGrade, nameplateById, latestGen, rebuyPerMonth, type Eligibility } from './lifecycle';
 export { basePriceOf, carBasePrice, genBasePrice, optionValue } from './market';
 import { REGION, carBasePrice, genBasePrice, awarenessStart, awarenessTarget, currentEdition, monthlyDemand, toSaleCar, lifeAge } from './market';
@@ -18,6 +18,7 @@ export { startYearOf, startOf, challengeInfo, startOptionsError, START_YEARS, CO
 import { defectCut, devSpeed, levelForTier, ptCostAdd } from './research';
 import { monthLabel, monthOf, monthTime, yearOf, yearOfMonth } from './time';
 import { platformUMult, projectPlatform } from './ev';
+import { boostOf } from './elite';
 import { genCostMult, variantById, variantStats } from './derive';
 import { winStats } from './wins';
 import { STATS, type Equip, type CarState, type Generation, type Project, type ProjectSpec, type Role, type Staff, type Stats } from './types';
@@ -69,7 +70,7 @@ export function defectAdvice(p: Project, s?: CarState): { level: 'many' | 'some'
 }
 
 /** 쉬고 있는 개발 직무 직원(팀을 고르지 않았을 때의 기본 팀) */
-const idleDevStaff = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId === null && isDevRole(x.role));
+const idleDevStaff = (s: CarState): Staff[] => s.staff.filter((x) => x.projectId === null && isDevRole(x.role) && !x.elite); // 4.1.0 전담팀원은 직접 골라야 들어간다
 
 /** 기획 미리보기: 지금 쉬는 개발 직원(team을 주면 그 팀)으로 개발하면 받을 표시 등급과 개발비(설계 + 최소 시험).
  *  min = 주간 난수가 모두 최저·최소 시험 주로 출시, max = 모두 최고·시험으로 결함을 다 없앤 경우. grades·avg는 난수 1.0·최소 시험 */
@@ -78,11 +79,12 @@ export function planPreview(s: CarState, spec: ProjectSpec, team: Staff[] = idle
   const d = config.dev;
   const y = yearOf(s.week + spec.designWeeks + d.minTestWeeks); // 출시하는 해 기준(해가 바뀌면 등급이 낮아진다)
   const level = levelForTier(s, spec.powertrain, spec.tier), speed = 1 + devSpeed(s), cut = 1 - defectCut(s); // 연구: 동력 단계·개발 속도·결함 감소
+  const boost = boostOf(s, spec, team); // 4.1.0 전담팀원
   const at = (r: number, defectFree: boolean): Stats => {
-    const w = designWeek(team, spec, () => r), pts = zeroStats();
+    const w = designWeek(team, spec, () => r, boost), pts = zeroStats();
     for (const k of STATS) pts[k] = w[k] * spec.designWeeks * speed;
-    const made = STATS.reduce((a, k) => a + pts[k], 0);
-    const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint * cut - testCut(team) * d.minTestWeeks);
+    const base = boost ? designWeek(team, spec, () => r) : w, made = STATS.reduce((a, k) => a + base[k], 0) * spec.designWeeks * speed; // 전담팀 가산 점수에는 결함이 붙지 않는다
+    const defects = defectFree ? 0 : Math.max(0, made * d.defectPerPoint * cut - testCut(team, undefined, boost) * d.minTestWeeks);
     return finalStats(spec.body, spec.powertrain, level, withRequired(s, stdOpts(spec)), pts, defects, optWeights(equipOf(spec), spec.body, spec.segment, y), platformUMult(projectPlatform(s, spec))); // 의무 장비 포함(0.4.2), 1.1.0 선택 사양은 일부, 1.2.0 전용 플랫폼
   };
   const mid = at(1, false), lo = avgGrade(at(d.randMin, false), y), hi = avgGrade(at(d.randMax, true), y);
@@ -265,7 +267,7 @@ export type HqLevelInfo = ReturnType<typeof hqLevelInfo>;
 /** 본사(9.2): 지금 등급, 다음 등급(없으면 null)과 승급 가능 여부·이유 */
 export function hqInfo(s: CarState): { current: HqLevelInfo; next: HqLevelInfo | null; canUpgrade: boolean; reason: string | null; staffCount: number } {
   const reason = hqUpgradeError(s);
-  return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: s.staff.length }; // 임원은 정원 밖(0.8.0)
+  return { current: hqLevelInfo(s, s.hqLevel), next: s.hqLevel < config.hq.levels.length ? hqLevelInfo(s, s.hqLevel + 1) : null, canUpgrade: reason === null, reason, staffCount: staffCount(s) }; // 임원은 정원 밖(0.8.0), 4.1.0 전담팀원도 정원 밖
 }
 
 const factoryLevelInfo = (s: CarState, level: number) => { const f = config.factory.levels[level - 1]; return { level, capacity: f.capacity, lines: f.lines, cost: f.cost, upkeep: factoryUpkeep(s, level), costMult: f.costMult, buildMonths: factoryBuildMonths(level) }; }; // upkeep: 실제 월 청구액(난이도 배수·연구 감면, 0.5.1)
@@ -297,25 +299,28 @@ export interface StaffRow {
   condition: number; conditionMult: number; projectId: number | null;
   status: 'working' | 'idle' | 'training' | 'resting' | 'sales'; weeksLeft: number; // 교육·휴식 남은 주
   canTrain: boolean; trainReason: string | null; trainCost: number; trainingsThisYear: number; severance: number;
+  elite: boolean; trainCap: number; trainWeeks: number; trainPerYear: number; // 4.1.0 전담팀원·교육 한계·교육 주 수·연 횟수
 }
 export function staffInfo(s: CarState): StaffRow[] {
   return [...s.staff].sort((a, b) => a.id - b.id).map((x) => {
     const tr = isTraining(x, s.week), rs = isResting(x, s.week), why = trainError(s, x);
-    const weeksLeft = tr ? x.trainings[x.trainings.length - 1] + config.staff.train.weeks - s.week : rs ? x.restUntil! - s.week : 0;
+    const weeksLeft = tr ? x.trainings[x.trainings.length - 1] + trainWeeksOf(x) - s.week : rs ? x.restUntil! - s.week : 0;
     return {
-      id: x.id, name: x.name, role: x.role, ability: x.ability, potential: x.potential, atPotential: x.ability >= x.potential, salary: payOf(x), from: x.from ?? null,
+      id: x.id, name: x.name, role: x.role, ability: x.ability, potential: x.potential, atPotential: x.ability >= trainCap(x), salary: payOf(x), from: x.from ?? null,
       condition: x.condition, conditionMult: conditionMult(x.condition), projectId: x.projectId,
       status: tr ? 'training' : rs ? 'resting' : x.role === 'sales' ? 'sales' : x.projectId !== null ? 'working' : 'idle', weeksLeft,
-      canTrain: why === null, trainReason: why, trainCost: trainCost(x.ability), trainingsThisYear: trainingsThisYear(x, s.week), severance: salaryOf(x.ability) * config.staff.severanceMonths,
+      canTrain: why === null, trainReason: why, trainCost: staffTrainCost(x), trainingsThisYear: trainingsThisYear(x, s.week), severance: payOf(x) * config.staff.severanceMonths,
+      elite: !!x.elite, trainCap: trainCap(x), trainWeeks: trainWeeksOf(x), trainPerYear: x.elite ? config.elite.train.perYear : config.staff.train.perYear,
     };
   });
 }
 
 /** 채용(9.1): 정원, 공고 등급별 비용, 후보 목록(남은 주) */
 export function hiringInfo(s: CarState) {
-  const H = config.staff.hire, full = s.staff.length >= staffCap(s);
+  const H = config.staff.hire, full = staffCount(s) >= staffCap(s);
   return {
-    staffCount: s.staff.length, capacity: staffCap(s), full,
+    staffCount: staffCount(s), capacity: staffCap(s), full, // 4.1.0 전담팀원은 정원 밖
+    former: (s.former ?? []).map((f) => ({ id: f.staff.id, name: f.staff.name, role: f.staff.role, ability: f.staff.ability, potential: f.staff.potential, salary: payOf({ ...f.staff, elite: undefined }), fee: rehireFee(f.staff), monthsLeft: Math.max(1, Math.ceil((f.left + config.former.months * config.time.weeksPerMonth - s.week) / config.time.weeksPerMonth)), cars: f.staff.hist?.cars.length ?? 0 })).reverse(), // 4.1.0 전 직원(최근 순)
     tiers: H.postCost.map((cost, i) => ({ tier: (i + 1) as 1 | 2 | 3, cost, abilityMin: H.abilityMin[i], abilityMax: H.abilityMax[i], minRep: i === 2 ? H.tier3Rep : 0 })), // minRep: 그 등급 공고에 필요한 평판
     canPost: !full && !s.candidates.length, reason: full ? `정원(${staffCap(s)}명)이 찼습니다. 본사 등급을 올리면 정원이 늘어납니다.` : s.candidates.length ? '이미 공고한 후보가 있습니다.' : null,
     candidates: s.candidates.map((c) => ({ ...c, weeksLeft: c.expiresWeek - s.week })),
@@ -339,7 +344,9 @@ export function capacityAdvice(s: CarState): string {
 }
 
 export { hqDef, factoryDef, staffCap, devTeams, optionSlots, capacityOf, linesOf, costMultOf, upkeepOf, factoryUpkeep, hqUpkeep } from './company';
-export { linesUsed } from './game';
+export { linesUsed, rehireFee } from './game';
+export { eliteInfo, eliteMult, eliteFit, boostOf, moveInError, moveOutError } from './elite';
+export { teamsUsed, staffCount } from './company';
 
 /** 판매 중인 차의 가격을 price로 바꾸면 이번 달 예상 판매(대, 생산 한도까지). 가격 슬라이더 미리 보기용(배분·재구매·단종 달 보정은 뺀 어림) */
 export function priceForecast(s: CarState, generationId: number, price: number): number | null {
@@ -447,7 +454,7 @@ export interface BestTeam { team: number[]; segmentScore: number; grade: number;
  *  keepEngineer: 전담 연구원이 없으면 쉬는 엔지니어 1명(능력 낮은 쪽)을 연구에 남긴다. 순서는 ID로 고정(결정론) */
 export function bestTeam(s: CarState, spec: ProjectSpec, opts: { includeBusy?: boolean; keepEngineer?: boolean } = {}): BestTeam {
   const keepEng = opts.keepEngineer !== false, reason: string[] = [];
-  let cands = s.staff.filter((x) => isDevRole(x.role) && !x.lab && !isTraining(x, s.week) && !isResting(x, s.week) && (x.projectId === null || opts.includeBusy)).sort((a, b) => a.id - b.id);
+  let cands = s.staff.filter((x) => isDevRole(x.role) && !x.lab && !x.elite && !isTraining(x, s.week) && !isResting(x, s.week) && (x.projectId === null || opts.includeBusy)).sort((a, b) => a.id - b.id);
   let reserved: number | null = null;
   if (keepEng && !s.staff.some((x) => x.lab)) {
     const eng = cands.filter((x) => x.role === 'engineer' && x.projectId === null).sort((a, b) => a.ability - b.ability || a.id - b.id)[0];
