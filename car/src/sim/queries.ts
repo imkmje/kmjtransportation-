@@ -502,6 +502,6 @@ export { subRegionInfo } from './subs'; // 5.5.0
 export { subPlanPreview, autoSpec as subAutoSpec, badgeChoices, groupSummary, subTeam, isDirect, newModelName as subModelName, slotError as subSlotError, shareTechError, targetProgress } from './subs'; // 3.1.0
 export { partsCut } from './company';
 export { subSalesMult } from './market';
-export { rivalRelations, acquireInfo, acquireError, awardHistory, rivalryLog, subValue, listError, warPriceMult, activeWar, allianceFee, buyableTechs, pressureFrom, type RivalRelation } from './rivalry'; // 3.5.0 경쟁 2부
+export { rivalRelations, rivalValue, acquireInfo, acquireError, awardHistory, rivalryLog, subValue, listError, warPriceMult, activeWar, allianceFee, buyableTechs, pressureFrom, type RivalRelation } from './rivalry'; // 3.5.0 경쟁 2부
 export { activeRivals, isOut } from './rivals';
 export { AUTO_KINDS, autoOn, autoGuardOn, autoPick, autoHold, autoLog, autoAnswer, autoInitial } from './autodecide'; // 3.7.0 결정 자동 승인

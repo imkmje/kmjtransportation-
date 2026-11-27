@@ -14,9 +14,9 @@ const LOGO: Record<string, string> = {
   hondi: '<rect x="4" y="4" width="24" height="24" rx="7" fill="#b8323c"/><path d="M8.5 19.5c2.6-6 5-6 7.3-1.6s4.8 4.4 7.7-1.9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>', // 4.1.0 물결 배지(사다리꼴 H를 뺐다)
   tesler: '<circle cx="16" cy="16" r="13" fill="none" stroke="#c42d2d" stroke-width="2.4"/><path d="M17.5 6 11 17h5l-1.5 9L21 15h-5z" fill="#c42d2d"/>',
   forty: '<path d="M16 3l11 4v8c0 7-5 11.5-11 14C10 26.5 5 22 5 15V7z" fill="#5a3b1c"/><path d="M10 18.5l6-7 6 7" fill="none" stroke="#f1d9a8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>', // 4.1.0 방패와 봉우리(파란 타원 배지를 뺐다)
-  // 5.5.0 현지 경쟁사(실제 로고를 따르지 않는다): 쉐보래 = 넓은 판 위 세로 그릴 세 줄, 폭스바근 = 파란 원 안 위아래로 마주 본 호, 다타 = 주황 원 안의 멀어지는 길
+  // 5.5.0 현지 경쟁사(실제 로고를 따르지 않는다): 쉐보래 = 넓은 판 위 세로 그릴 세 줄, 폭스바근 = 둥근 사각형 안 가로 줄무늬 성문(5.5.1), 다타 = 주황 원 안의 멀어지는 길
   chevore: '<rect x="3" y="8" width="26" height="16" rx="4" fill="#2f3a33"/><path d="M10.5 12.5v7M16 11.5v9M21.5 12.5v7" stroke="#d6aa45" stroke-width="2.6" stroke-linecap="round"/>',
-  volksbagen: '<circle cx="16" cy="16" r="13" fill="#2a5aa8"/><path d="M9 13.5Q16 7.5 23 13.5M9 18.5Q16 24.5 23 18.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>',
+  volksbagen: '<rect x="3.5" y="3.5" width="25" height="25" rx="6" fill="#1d5b74"/><path d="M8.5 25V12.5h2.6V9.5h3.1v3h3.6v-3h3.1v3h2.6V25z" fill="#f2f5f8"/><path d="M10.5 15.2h11M10.5 18.2h11" stroke="#1d5b74" stroke-width="1.4"/><path d="M13 25.2v-3.4a3 3 0 0 1 6 0v3.4z" fill="#1d5b74"/>', // 5.5.1 둥근 사각형 안의 성문(가로 줄무늬). 원형 배지는 실제 로고를 떠올리게 해 바꿈
   datta: '<circle cx="16" cy="16" r="13" fill="#d9822b"/><path d="M11.5 25.5 15 8.5M20.5 25.5 17 8.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M16 12.5v2.5M16 18.5v3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>',
   other: '<circle cx="16" cy="16" r="12" fill="none" stroke="#5b6470" stroke-width="2.5"/>',
 };
