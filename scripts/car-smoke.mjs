@@ -303,7 +303,7 @@ check('확인하면 가격 1500만원·정책 수동', await G(() => { const g =
 // ---- 회사·기록 ----
 await page.click('#tabs button[data-tab="group"]');
 check('회사 화면(5.0.0 그룹 탭): 구역 줄 그룹 종합·본사·공장·자회사, 처음은 그룹 종합. 직원·임원·사무실은 사람 탭, 세계는 시장 탭', (await page.locator('#panel .secbar button').allInnerTexts()).join() === '그룹 종합,본사,공장,자회사' && (await page.locator('#panel [data-act="cotab"][data-v="sum"]').getAttribute('aria-selected')) === 'true'
-  && await (async () => { await page.click('#tabs button[data-tab="people"]'); const a = (await page.locator('#panel .secbar button').allInnerTexts()).join(); await page.click('#tabs button[data-tab="market"]'); const b = (await page.locator('#panel .secbar button').allInnerTexts()).join(); await page.click('#tabs button[data-tab="group"]'); return a === '직원,채용,직속 전담팀,임원,사무실' && b === '경쟁사,세계,시상식'; })());
+  && await (async () => { await page.click('#tabs button[data-tab="people"]'); const a = (await page.locator('#panel .secbar button').allInnerTexts()).join(); await page.click('#tabs button[data-tab="market"]'); const b = (await page.locator('#panel .secbar button').allInnerTexts()).join(); await page.click('#tabs button[data-tab="group"]'); return a === '직원,채용,직속 전담팀,임원,사무실' && b === '경쟁사,세계,모터스포츠,시상식'; })());
 await page.click('#tabs button[data-tab="fin"]');
 const ctext = await page.locator('#panel').innerText();
 check('재무 화면(큰 메뉴): 재무·지난달 표, 경쟁사는 시장 탭(5.0.0)', (await G(() => window.__car.screen)) === 'fin' && ctext.includes('재무') && (await page.locator('#panel .tbl').first().count()) === 1 && !ctext.includes('도요다') && ctext.includes('본사') && ctext.includes('공장')
@@ -2171,7 +2171,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await A.p.fill('#sy-token', TOKEN); await A.p.click('[data-act="syncOn"]');
   const up1 = await until(() => meta()?.rev === 1);
   const wA1 = await where(A.p), m1 = meta();
-  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 13 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
+  check('1.6.0 A 연동 켜기: 비밀 보관함을 만들고 지금 판을 올림(rev 1, 기기·회사·날짜·형식·버전)', up1 && gists.size === 1 && m1.device === 'PC' && m1.company === '연동 모터스' && m1.saveVersion === 14 && /^\d+\.\d+\.\d+$/.test(m1.gameVersion) && m1.date.includes('1970'), JSON.stringify(m1));
   await until(async () => (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각'));
   check('1.6.0 A 상태 줄: 마지막으로 올린 시각, [지금 올리기]·[서버에서 불러오기]·[연동 끄기]', (await A.p.locator('.sync-line').innerText()).includes('마지막으로 올린 시각') && (await A.p.locator('.sync-box [data-act="syncUp"],.sync-box [data-act="syncDown"],.sync-box [data-act="syncOff"]').count()) === 3);
   await shotS(A.p, 'menu-on-1366x1024');
@@ -2726,11 +2726,11 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   // 설정 › 결정
   await openSave(ap); await ap.click('#sheet [data-act="settings"]'); await ap.click('#sheet [data-act="setTab"][data-v="decide"]'); await ap.waitForSelector('#sheet .auto-kinds');
   const st7 = await ap.locator('#sheet .set-body').innerText();
-  check('3.7.0 설정 › 결정: 종류 11개(5.5.0 무역 협정 포함, 모두 꺼짐)·모두 켜기/끄기·안전선(켜짐)·ⓘ', (await ap.locator('#sheet [data-act="autoKind"]').count()) === 11 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 0
+  check('3.7.0 설정 › 결정: 종류 12개(5.5.0 무역 협정·5.6.0 우승 기념 한정판 포함, 모두 꺼짐)·모두 켜기/끄기·안전선(켜짐)·ⓘ', (await ap.locator('#sheet [data-act="autoKind"]').count()) === 12 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 0
     && (await ap.locator('#sheet [data-act="autoAll"]').count()) === 2 && (await ap.locator('#sheet [data-act="autoGuard"]').getAttribute('aria-pressed')) === 'true' && (await ap.locator('#sheet [data-info="term:결정 자동 승인"]').count()) === 1
     && ['노조 파업', '가격 전쟁', '임원 위임과 같은 규칙', '기본 선택', '큰돈이 드는 결정은 묻기', '10%'].every((x) => st7.includes(x)), st7.replace(/\s+/g, ' ').slice(0, 200));
   await ap.click('#sheet [data-act="autoAll"][data-v="1"]');
-  check('3.7.0 [모두 켜기]: 판 상태에 11종 모두 켜짐', (await AG(() => window.__car.game.state.autoDecide.on.length)) === 11 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 11);
+  check('3.7.0 [모두 켜기]: 판 상태에 12종 모두 켜짐', (await AG(() => window.__car.game.state.autoDecide.on.length)) === 12 && (await ap.locator('#sheet [data-act="autoKind"][aria-pressed="true"]').count()) === 12);
   await ap.click('#sheet [data-act="autoGuard"]');
   check('3.7.0 안전선 끄기 → 판 상태 guard false', (await AG(() => window.__car.game.state.autoDecide.guard)) === false);
   await ap.click('#sheet [data-act="autoGuard"]'); await ap.click('#sheet [data-act="autoAll"][data-v="0"]');
@@ -2742,15 +2742,15 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   const P71 = process.env.CAR_SMOKE_371 ?? '';
   const shots71 = async (n, fn) => { for (const [w, h] of SZ7) { await ap.setViewportSize({ width: w, height: h }); await ap.waitForTimeout(250); if (fn) await fn(); const o = await overflowOf(ap); check(`3.7.1 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (P71) await ap.screenshot({ path: `${P71}/${n}-${w}x${h}.png` }); } await ap.setViewportSize({ width: 1366, height: 1024 }); };
   const ms = '#sheet [data-act="autoPick"][data-k="motorshow"]';
-  check('3.7.1 설정 › 결정: 종류마다 답 고르기(선택지 수 + 규칙 종류는 "규칙대로"), 처음 값에 "기본 선택"', (await ap.locator('#sheet .auto-pick').count()) === 11 && (await ap.locator(ms).count()) === 2
-    && (await ap.locator('#sheet [data-act="autoPick"][data-v="rule"]').count()) === 3 && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('이번엔 불참') && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('기본 선택')
+  check('3.7.1 설정 › 결정: 종류마다 답 고르기(선택지 수 + 규칙 종류는 "규칙대로"), 처음 값에 "기본 선택"', (await ap.locator('#sheet .auto-pick').count()) === 12 && (await ap.locator(ms).count()) === 2
+    && (await ap.locator('#sheet [data-act="autoPick"][data-v="rule"]').count()) === 4 && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('이번엔 불참') && (await ap.locator(`${ms}[aria-pressed="true"]`).innerText()).includes('기본 선택')
     && (await ap.locator('#sheet [data-act="autoPick"][data-k="poach"][aria-pressed="true"]').innerText()).includes('규칙대로'));
   await ap.click(`${ms}[data-v="0"]`);
   const mrow = await ap.locator('#sheet .auto-kind:has([data-v="motorshow"]) .toggle').innerText();
   check('3.7.1 모터쇼 초청 답을 "콘셉트카 출품"으로 → 판 상태 pick, 줄에 한 줄 효과, 켜기·끄기는 그대로', JSON.stringify(await AG(() => window.__car.game.state.autoDecide)) === '{"on":["strike"],"pick":{"motorshow":0}}'
     && mrow.includes('콘셉트카 출품') && mrow.includes('평판이 3 오릅니다') && !mrow.includes('기본 선택'), mrow.replace(/\s+/g, ' ').slice(0, 160));
   await ap.click('#sheet [data-act="autoAll"][data-v="1"]');
-  check('3.7.1 [모두 켜기]는 정한 답을 건드리지 않는다', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.pick)) === '{"motorshow":0}' && (await AG(() => window.__car.game.state.autoDecide.on.length)) === 11);
+  check('3.7.1 [모두 켜기]는 정한 답을 건드리지 않는다', JSON.stringify(await AG(() => window.__car.game.state.autoDecide.pick)) === '{"motorshow":0}' && (await AG(() => window.__car.game.state.autoDecide.on.length)) === 12);
   await ap.click('#sheet [data-act="autoAll"][data-v="0"]'); await ap.click('#sheet [data-act="autoKind"][data-v="strike"]');
   await shots71('settings-pick', () => AG(() => document.querySelector('#sheet .auto-kind:has([data-v="motorshow"])')?.scrollIntoView({ block: 'center' })));
   await ap.click(`${ms}[data-v="1"]`);
@@ -2997,7 +2997,7 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   await wp.waitForSelector('#title', { state: 'hidden' });
   await WG(() => { const c = window.__car, g = c.game, s = g.state; c.setSpeed(0); s.events.pending.length = 0; document.getElementById('toasts').innerHTML = '';
     if (s.execs?.delegations.production?.includes('autoAlloc')) g.command({ type: 'setDelegation', role: 'production', key: 'autoAlloc', on: false }); c.render(); });
-  check('5.5.0 형식 12 저장(5.2.0으로 만든 판)을 불러오면 형식 13, 세 권역 진출', (await WG(() => [window.__car.game.state.saveVersion, window.__car.game.state.world.regions.length].join())) === '13,3');
+  check('5.5.0 형식 12 저장(5.2.0으로 만든 판)을 불러오면 형식 14(5.6.0), 세 권역 진출', (await WG(() => [window.__car.game.state.saveVersion, window.__car.game.state.world.regions.length].join())) === '14,3');
   await WG(() => window.__car.goCo('world')); await wp.waitForSelector('.wmap');
   await wp.locator('.wmap [data-act="wSel"][data-v="na"]').click(); await wp.waitForTimeout(150);
   check('5.5.0 북미 상세: 현지 공장 구역(법인 2등급이라 건설 단추)·순위에 현지 경쟁사 쉐보래(주력 모델)·현지 경쟁사 소개', (await wp.locator('.w-reg .w-plant [data-act="wPlant"]').count()) === 1 && (await wp.locator('.w-reg .w-rank .w-bar.mk').count()) === 1 && (await wp.locator('.w-reg .w-rank').innerText()).includes('쉐보래') && (await wp.locator('.w-reg .w-mk').count()) === 1);
@@ -3111,6 +3111,91 @@ check('알림: 한 번에 최대 2개, 오래된 보통 알림부터 닫히고 �
   check('5.5.1 운영 전환 재무 탭: 머리(자본·판매·이익·배당) + 실적·분기 보고', (await pp.locator('#panel .sub-fhead .kpi').count()) >= 3 && (await pp.locator('#panel .sub-res').count()) === 1);
   for (const [w, h] of [[1194, 834], [834, 1194], [1024, 768], [800, 1280], [640, 900]]) for (const t of ['car', 'group', 'fin']) { await pp.setViewportSize({ width: w, height: h }); await pp.click(`#tabs button[data-tab="${t}"]`); await pp.waitForTimeout(120); const o = await overflowOf(pp); check(`5.5.1 운영 전환 ${t} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (S551 && (w === 1194 || w === 834)) await pp.screenshot({ path: `${S551}/sub-${t}-${w}x${h}.png` }); }
   await pctx.close(); }
+
+// ---- 5.6.0 모터스포츠: 시장 › 모터스포츠 구역(머리·급 목록·상세·예산 단계·출전 차·전담팀·전력·예상 순위·순위표·지난 시즌), 오늘 탭(연초 계획·시즌 결과·한정판 결정·경기 참고), 차 무대 표시, 월 결산 지출, 위임, 명예의 전당(CAR_SMOKE_560=폴더면 캡처) ----
+{ const mctx = await browser.newContext({ viewport: { width: 1194, height: 834 } });
+  const mp = await mctx.newPage(); mp.on('pageerror', (e) => errors.push(String(e))); mp.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  const MG = (fn, a) => mp.evaluate(fn, a), S560 = process.env.CAR_SMOKE_560 ?? '';
+  const toMotor = async () => { await mp.click('#tabs button[data-tab="market"]'); await mp.click('#panel [data-act="sec"][data-v="motor"]'); await mp.waitForTimeout(120); };
+  const narrowOpen = async (id = 'touring') => { if (!(await MG(() => innerWidth >= 900)) && !(await mp.locator(`.ms-wrap.on [data-act="msSel"][data-v="${id}"]`).count())) await mp.locator(`[data-act="msSel"][data-v="${id}"]`).click(); };
+  const sizes = async (n, fn, all = false) => { for (const [w, h] of all ? [[1194, 834], [834, 1194], [1024, 768], [800, 1280], [640, 900]] : [[1194, 834], [834, 1194]]) { await mp.setViewportSize({ width: w, height: h }); await mp.waitForTimeout(200); await MG(() => { document.getElementById('toasts').innerHTML = ''; }); if (fn) await fn(w); await mp.waitForTimeout(120); const o = await overflowOf(mp); check(`5.6.0 ${n} ${w}×${h}: 가로 넘침 없음`, o <= 0, String(o)); if (S560 && (w === 1194 || w === 834)) await mp.screenshot({ path: `${S560}/${n}-${w}x${h}.png` }); } await mp.setViewportSize({ width: 1194, height: 834 }); };
+  await mp.goto(URL0); await mp.waitForSelector('#title:not([hidden])');
+  const [fc] = await Promise.all([mp.waitForEvent('filechooser'), mp.click('[data-act="import"]')]); await fc.setFiles('car/tests/fixtures/save-v13.json');
+  await mp.waitForSelector('#title', { state: 'hidden' });
+  await MG(() => { const c = window.__car; c.setSpeed(0); c.game.state.events.pending.length = 0; c.tick(4); c.game.state.events.pending.length = 0; document.getElementById('toasts').innerHTML = ''; c.render(); });
+  check('5.6.0 형식 13 저장(5.5.1로 만든 판)을 불러오면 형식 14, 모터스포츠는 아직 없음', (await MG(() => [window.__car.game.state.saveVersion, window.__car.game.state.motor === undefined].join())) === '14,true');
+  await toMotor();
+  check('5.6.0 시장 › 모터스포츠: 머리(상태 한 줄 + 참가 급·올해 예산·현재 순위·통산 우승), 급 목록 3개, 오른쪽 상세(예산 단계 5개·출전 차·전력·예상 순위)', (await mp.locator('#panel .ms-head .kpi').count()) === 4 && (await mp.locator('#panel .ms-head .th-line').innerText()).includes('2005 시즌 계획')
+    && (await mp.locator('#panel .ms-list [data-act="msSel"]').count()) === 3 && (await mp.locator('.ms-det [data-act="msStep"]').count()) === 5 && (await mp.locator('.ms-det .ms-car').count()) >= 1 && (await mp.locator('[data-act="msSel"][data-v="formula"]').innerText()).includes('6등급'));
+  await sizes('before', async (w) => { await toMotor(); await narrowOpen(); }, true);
+  { const big = await MG(() => [...document.querySelectorAll('.ms-it, .ms-steps button, .ms-car, .ms-elite')].filter((b) => b.offsetParent && b.getBoundingClientRect().height < 44).length); check('5.6.0 모터스포츠 단추 44px 이상', big === 0, String(big)); }
+  // 오늘 탭: 연초 계획(정할 일)
+  await mp.click('#tabs button[data-tab="today"]'); await mp.waitForTimeout(120);
+  check('5.6.0 오늘 탭 정할 일: 「올해 모터스포츠 계획을 정하세요」(1~2월, 정할 일 건수에 들어감)', (await mp.locator('#panel .td-l > .td-list .td-item[data-k="motor:2005"]').count()) === 1);
+  await toMotor();
+  await mp.locator('.ms-det [data-act="msStep"][data-k="touring"][data-v="3"]').click(); await mp.waitForTimeout(100);
+  await mp.locator('.ms-det .ms-car').first().click(); await mp.waitForTimeout(100);
+  { const st = await MG(() => window.__car.game.state.motor.plan.touring); check('5.6.0 [전력]·출전 차 → 계획(전력·차종), 전력 표와 예상 순위', st?.step === 3 && typeof st.car === 'number' && (await mp.locator('.ms-det .ms-pt tr').count()) === 6 && /예상 순위 \d/.test(await mp.locator('.ms-det .ms-fc').innerText()), JSON.stringify(st)); }
+  await mp.locator('[data-act="msSel"][data-v="rally"]').click(); await mp.locator('.ms-det [data-act="msStep"][data-k="rally"][data-v="1"]').click(); await mp.waitForTimeout(100);
+  check('5.6.0 세계 랠리·내구 [보통] → 계획, 목록 줄에 예산', (await MG(() => window.__car.game.state.motor.plan.rally?.step)) === 1 && (await mp.locator('[data-act="msSel"][data-v="rally"]').innerText()).includes('보통'));
+  { const w = await MG(() => { const c = window.__car, s = c.game.state, k = s.cash; s.cash = 3e6; c.render(); const t = document.querySelector('.ms-warn')?.textContent ?? ''; s.cash = k; c.render(); return t; }); check('5.6.0 연 예산 합이 현금의 25%를 넘으면 경고', w.includes('25%'), w); }
+  await MG(() => { const c = window.__car, s = c.game.state; for (const x of s.staff.filter((y) => y.role !== 'sales' && !y.lab).slice(0, 4)) { x.projectId = null; x.elite = true; } s.cash += 0.01; c.render(); });
+  await mp.locator('[data-act="msSel"][data-v="touring"]').click(); await mp.locator('.ms-det [data-act="msElite"]').click(); await mp.waitForTimeout(100);
+  check('5.6.0 직속 전담팀 배치 → 계획에 전담팀, 전력 표의 전담팀 점수', (await MG(() => window.__car.game.state.motor.plan.touring.elite)) === true && (await mp.locator('.ms-det .ms-pt tr:nth-child(4) td.r').innerText()) !== '0');
+  await sizes('plan', async () => { await toMotor(); await narrowOpen(); });
+  await MG(() => { const s = window.__car.game.state; delete s.motor.planned; s.cash += 0.01; window.__car.render(); });
+  await sizes('today-plan', async (w) => { await mp.click('#tabs button[data-tab="today"]'); await mp.waitForTimeout(100); if (w >= 900 || !(await mp.locator('.td-wrap.on .td-item[data-k="motor:2005"]').count())) await mp.locator('.td-item[data-k="motor:2005"]').click(); }, true);
+  await mp.locator('.td-item[data-k="motor:2005"]').click(); await mp.waitForTimeout(100);
+  check('5.6.0 오늘 탭 계획 상세: 급마다 예산·예상 순위, [모터스포츠에서 정하기]·[이대로 확정]', (await mp.locator('#panel .td-r .ms-tt tr').count()) === 3 && (await mp.locator('#panel .td-r [data-act="msConfirm"]').count()) === 1);
+  await mp.locator('#panel .td-r [data-act="msConfirm"]').click(); await mp.waitForTimeout(120);
+  check('5.6.0 [이대로 확정] → 정할 일에서 사라짐', (await mp.locator('#panel .td-item[data-k="motor:2005"]').count()) === 0);
+  // 시즌 중: 2월 확정 + 4경기
+  await MG(() => { const c = window.__car; c.tick(4 * 6); c.game.state.events.pending.length = 0; c.render(); });
+  await toMotor();
+  { const n = await MG(() => window.__car.game.state.motor.season.entries[0].field.length); check('5.6.0 시즌 중: 순위표(팀 수만큼, 회사 로고·내 팀 강조), 머리에 참가 중·현재 순위, 낸 예산', (await mp.locator('.ms-det .ms-table tr').count()) === n + 1 && (await mp.locator('.ms-det .ms-table .ms-team svg').count()) === n && (await mp.locator('.ms-det .ms-table tr.me').count()) === 1 && (await mp.locator('#panel .ms-head .th-line').innerText()).includes('참가 중')); }
+  check('5.6.0 월 결산 장부에 모터스포츠 지출(연 예산 ÷ 10)', await MG(() => { const s = window.__car.game.state, L = s.ledger.at(-1), b = s.motor.season.entries.reduce((a, e) => a + e.budget, 0); return Math.abs(L.motor - b / 10) < 1; }));
+  await sizes('season', async () => { await toMotor(); await narrowOpen(); }, true);
+  await MG(() => window.__car.showMonth(window.__car.game.state.ledger.length - 1)); await mp.waitForTimeout(150);
+  check('5.6.0 월 결산 지출 내역에 「모터스포츠」 줄', (await mp.locator('#sheet .mon-costs').innerText()).includes('모터스포츠'));
+  await sizes('month', async () => { await MG(() => { const c = window.__car; c.showMonth(c.game.state.ledger.length - 1); }); await mp.waitForTimeout(120); await MG(() => document.querySelector('#sheet .mon-costs')?.scrollIntoView({ block: 'center' })); }, true);
+  await MG(() => { document.getElementById('sheet').hidden = true; });
+  await MG(() => { const c = window.__car, e = c.game.state.motor.season.entries[0]; c.goTarget({ tab: 'garage', id: e.car }); }); await mp.waitForTimeout(250);
+  check('5.6.0 차 탭 무대: 출전 차에 「모터스포츠 출전」 표시', (await mp.locator('#ov .ms-tag').innerText()).includes('모터스포츠 출전'));
+  if (S560) await mp.screenshot({ path: `${S560}/stage-tag-1194x834.png` });
+  await mp.click('#tabs button[data-tab="today"]'); await mp.waitForTimeout(120);
+  check('5.6.0 오늘 탭: 경기 결과는 참고(정할 일 건수에 세지 않음), 알아서 돌아가는 일에 모터스포츠', (await mp.locator('#panel .td-ref .td-item[data-k^="motorRace:"]').count()) >= 1 && (await mp.locator('#panel .td-l > .td-list .td-item[data-k^="motorRace:"]').count()) === 0 && (await mp.locator('#panel .td-auto [data-act="msGo"]').count()) === 1);
+  check('5.6.0 전담팀을 배치한 시즌에는 전담팀으로 개발을 시작할 수 없다', await MG(() => { const g = window.__car.game, s = g.state, ids = s.staff.filter((x) => x.elite).map((x) => x.id), r = g.command({ type: 'startProject', name: '점검차', body: 'sedanS', segment: 'worker', powertrain: 'gasoline', tier: 2, options: [], direction: { P: 2, E: 2, U: 2, D: 2, Q: 2 }, budget: 'normal', designWeeks: 20, team: ids }); return !r.ok && r.reason.includes('모터스포츠'); }));
+  // 우승시키고 12월 결산까지: 시즌 결과·한정판 결정
+  await MG(() => { const c = window.__car; for (const e of c.game.state.motor.season.entries) for (const t of e.field) if (t.id !== 'me') t.power = -999; c.tick(4 * 6); c.render(); });
+  const lim = await MG(() => window.__car.game.state.events.pending.filter((x) => x.eventId === 'motorLimited').map((x) => x.id));
+  check('5.6.0 12월 결산: 두 급 우승 기록·통산 우승, 우승 기념 한정판 결정 2건', lim.length === 2 && (await MG(() => window.__car.game.state.motor.history.filter((h) => h.rank === 1).length)) === 2);
+  await mp.click('#tabs button[data-tab="today"]'); await mp.waitForTimeout(120);
+  check('5.6.0 오늘 탭 정할 일: 시즌 결과, 한정판 결정', (await mp.locator('#panel .td-l > .td-list .td-item[data-k="motorResult:2005"]').count()) === 1 && (await mp.locator(`#panel .td-l > .td-list .td-item[data-k="choice:${lim[0]}"]`).count()) === 1);
+  await sizes('today-result', async (w) => { await mp.click('#tabs button[data-tab="today"]'); await mp.waitForTimeout(100); if (w >= 900 || !(await mp.locator('.td-wrap.on .td-item[data-k="motorResult:2005"]').count())) await mp.locator('.td-item[data-k="motorResult:2005"]').click(); }, true);
+  await sizes('today-limited', async (w) => { await mp.click('#tabs button[data-tab="today"]'); await mp.waitForTimeout(100); if (w >= 900 || !(await mp.locator(`.td-wrap.on .td-item[data-k="choice:${lim[0]}"]`).count())) await mp.locator(`.td-item[data-k="choice:${lim[0]}"]`).click(); }, true);
+  await mp.locator(`.td-item[data-k="choice:${lim[0]}"]`).click(); await mp.waitForTimeout(120);
+  { const t = await mp.locator('#panel .td-r .choice-sheet').innerText(); check('5.6.0 한정판 결정: 낸다·내지 않는다, 비용·대수·남는 돈, 자동 승인 체크', (await mp.locator('#panel .td-r [data-act="resolveEv"]').count()) === 2 && t.includes('우승 기념') && t.includes('대당') && (await mp.locator('#panel .td-r [data-ad="motorLimited"]').count()) === 1, t.replace(/\s+/g, ' ').slice(0, 140)); }
+  { const c0 = await MG(() => window.__car.game.state.cash), cost = await MG((id) => window.__car.game.state.events.pending.find((x) => x.id === id).ms.cost, lim[0]);
+    await mp.locator('#panel .td-r [data-act="resolveEv"][data-v="0"]').click(); await mp.waitForTimeout(150);
+    const st = await MG(() => { const s = window.__car.game.state; return { cash: s.cash, lim: s.motor.limited.length }; });
+    check('5.6.0 [한정판을 낸다] → 비용이 나가고 한정판 판매가 걸림', Math.abs(c0 - cost - st.cash) < 1 && st.lim === 1, JSON.stringify(st)); }
+  await mp.locator('.td-item[data-k="motorResult:2005"]').click(); await mp.locator('#panel .td-r [data-act="msAck"]').click(); await mp.waitForTimeout(120);
+  check('5.6.0 시즌 결과 [확인] → 정할 일에서 사라짐', (await mp.locator('#panel .td-item[data-k="motorResult:2005"]').count()) === 0);
+  await toMotor();
+  check('5.6.0 지난 시즌 기록(해·순위·점수·낸 예산·출전 차)과 받고 있는 보상', (await mp.locator('.ms-det .ms-ht tr.win').count()) === 1 && (await mp.locator('.ms-list .ms-boosts li').count()) >= 3);
+  await sizes('history', async () => { await toMotor(); await narrowOpen(); await MG(() => document.querySelector('.ms-hist')?.scrollIntoView({ block: 'start' })); });
+  // 명예의 전당
+  await tab5(mp, 'fin', 'rectab', 'hall'); await mp.waitForTimeout(120);
+  check('5.6.0 명예의 전당: 모터스포츠 통산 우승', (await mp.locator('#panel').innerText()).includes('모터스포츠 통산 우승'));
+  // 위임: 시장 조사 임원 '모터스포츠 예산 자동 조정'
+  await MG(() => { const c = window.__car, g = c.game, s = g.state, x = [...s.staff].filter((y) => y.projectId === null && !y.elite && !y.lab).sort((a, b) => b.ability - a.ability)[0]; x.ability = Math.max(x.ability, 80);
+    if (!g.command({ type: 'appointExec', role: 'market', staffId: x.id }).ok) { const r = Object.keys(s.execs.seats).find((k) => k !== 'market'); g.command({ type: 'dismissExec', role: r }); g.command({ type: 'appointExec', role: 'market', staffId: x.id }); } c.goCo('exec'); });
+  await mp.waitForTimeout(150);
+  await mp.locator('.exec-card[data-role="market"] [data-act="execDeleg"][data-k="autoMotor"]').click(); await mp.waitForTimeout(120);
+  check('5.6.0 시장 조사 임원 위임 「모터스포츠 예산 자동 조정」 켬', (await MG(() => window.__car.game.state.execs.delegations.market?.includes('autoMotor'))) === true);
+  await MG(() => { const c = window.__car; c.tick(8); c.render(); }); // 1·2월 결산(2월에 확정)
+  check('5.6.0 위임이면 2월 결산에 연 예산 합이 현금의 10% 안, 오늘 탭 계획 할 일 없음', await MG(() => { const s = window.__car.game.state, e = s.motor.season; return !!e && e.year === 2006 && e.entries.reduce((a, x) => a + x.budget, 0) <= s.cash * 0.1 * 1.2 && !window.__car.todos().some((t) => t.kind === 'motor'); }));
+  await mctx.close(); }
 
 check('콘솔 오류 0건', errors.length === 0, errors.slice(0, 3).join(' | '));
 console.log(fails.length ? `FAIL ${fails.length}건 / ${checks}항목: ${fails.join(' / ')}` : `ALL PASS ${checks}항목`); // 실패한 항목 이름을 로그 끝에

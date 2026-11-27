@@ -280,3 +280,35 @@ details.rfield[open]>summary{margin-bottom:10px}
 .tech-in{grid-column:1/-1;background:var(--soft);border-radius:16px;padding:16px}
 .rv-in{margin-top:12px}
 .staff-pick .td-empty h1{font-size:24px}
+/* 5.6.0 시장 › 모터스포츠: 왼쪽 급 목록 / 오른쪽 상세(세로는 한 칸 펼침), 순위표에 회사 로고 */
+.ms-items{display:flex;flex-direction:column;gap:8px}
+.ms-wrap{border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.ms-wrap.on{border-color:var(--ink);box-shadow:inset 4px 0 0 var(--ink)}
+.ms-it{width:100%;min-height:56px;display:flex;align-items:center;gap:10px;padding:10px 14px;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.ms-it .ms-n{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ms-it .ms-n b{font-size:16px}.ms-it .ms-n small{font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
+.ms-it.off .ms-n b{color:var(--ink2)}
+.ms-it .ms-w{flex:none;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink)}
+.ms-it .ms-w i{font-style:normal;color:var(--ink2)}
+.ms-in{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.ms-det{gap:12px}
+.ms-h{margin:0;font-size:26px;font-weight:900;letter-spacing:-.5px;display:flex;align-items:center;gap:6px}
+.ms-plan,.ms-season,.ms-hist{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.ms-steps{margin:0;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr))}
+.ms-cars{display:flex;flex-wrap:wrap;gap:8px}
+.ms-car{min-height:48px;padding:6px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);font:inherit;color:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column;justify-content:center;max-width:100%}
+.ms-car b{font-size:14px;overflow-wrap:anywhere}.ms-car small{font-size:12px;color:var(--ink2)}
+.ms-car[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}.ms-car[aria-pressed="true"] small{color:#d6dde8}
+.ms-car:disabled{opacity:.5;cursor:default}
+.ms-elite{min-height:48px;align-self:flex-start;max-width:100%}
+.ms-pt td{padding:4px 6px}.ms-pt tr.sum td{font-weight:800;border-top:1px solid var(--line)}
+.ms-pw{background:var(--soft);border-radius:14px;padding:10px 12px}
+.ms-fc{margin:8px 0 0;font-size:16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}.ms-fc small{color:var(--ink2);font-size:13px}
+.ms-warn{margin:0}
+.ms-table td,.ms-ht td,.ms-tt td{padding:6px}
+.ms-table tr.me td,.ms-ht tr.win td,.ms-tt tr.win td{background:#fff5d6;font-weight:800}
+.ms-team{display:inline-flex;align-items:center;gap:8px;min-width:0}.ms-team span{overflow-wrap:anywhere}
+.ms-boosts{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.45}
+.ms-tag{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:#FFC94A;color:#0B1F3A;font-size:12px;font-weight:800;vertical-align:middle;white-space:nowrap}
+@media (max-width:560px){.ms-steps{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:899px){.ms-h{font-size:22px}}

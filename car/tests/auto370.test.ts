@@ -28,7 +28,7 @@ function until(g: Game, test: (p: PendingChoice) => boolean, years = 12): Pendin
 describe('결정 자동 승인', () => {
   it('종류 목록은 무작위 사건 8종 + 경쟁 2부 2종(임원 규칙)이고, 기본은 모두 끔(상태에 칸이 없다)', () => {
     expect(AUTO_KINDS.map((k) => k.id)).toEqual(ALL);
-    expect(AUTO_KINDS.filter((k) => k.rule === 'exec').map((k) => k.id)).toEqual(['priceWar', 'poach', 'tradeDeal']); // 5.5.0 무역 협정
+    expect(AUTO_KINDS.filter((k) => k.rule === 'exec').map((k) => k.id)).toEqual(['priceWar', 'poach', 'tradeDeal', 'motorLimited']); // 5.5.0 무역 협정, 5.6.0 우승 기념 한정판
     const g = Game.create({ seed: 1 });
     expect(g.state.autoDecide).toBeUndefined();
     expect(g.command({ type: 'setAutoDecide', kind: 'nope', on: true }).ok).toBe(false);
@@ -129,7 +129,7 @@ describe('결정 자동 승인', () => {
   });
 
   it('저장 왕복: 켠 종류·안전선이 저장되고 이어서 돌린 결과가 같다. 형식은 10 그대로, 예전 저장은 모두 끔', () => {
-    expect(SAVE_VERSION).toBe(13);
+    expect(SAVE_VERSION).toBe(14);
     const old = load(); expect(old.state.autoDecide).toBeUndefined();
     const g = load();
     ok(g.command({ type: 'setAutoDecide', kind: 'all', on: true })); ok(g.command({ type: 'setAutoDecide', kind: 'motorshow', on: false })); ok(g.command({ type: 'setAutoDecideGuard', on: false }));

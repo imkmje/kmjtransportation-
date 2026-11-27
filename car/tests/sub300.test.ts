@@ -163,7 +163,7 @@ describe('저장과 결정론', () => {
     const raw = fixture();
     expect(raw.saveVersion).toBe(8); expect(raw.subs).toBeUndefined();
     const a = Game.fromJSON(raw);
-    expect(SAVE_VERSION).toBe(13); expect(a.state.saveVersion).toBe(13); expect(a.state.subs).toBeUndefined();
+    expect(SAVE_VERSION).toBe(14); expect(a.state.saveVersion).toBe(14); expect(a.state.subs).toBeUndefined();
     expect(Game.fromJSON(raw).toJSON()).toEqual(a.toJSON());
     const b = Game.fromJSON(JSON.parse(JSON.stringify(a.toJSON())));
     ticks(a, 96); ticks(b, 96);
@@ -183,7 +183,7 @@ describe('저장과 결정론', () => {
     };
     const a = run(false);
     expect(run(false)).toBe(a); expect(run(true)).toBe(a);
-    expect(JSON.parse(a).saveVersion).toBe(13);
+    expect(JSON.parse(a).saveVersion).toBe(14);
   });
 });
 

@@ -15,6 +15,7 @@ import { monthOf, monthTime } from './time';
 import { won } from './won';
 import { delegationOn, execSkill } from './execs';
 import { hash01 } from './rng';
+import { motorAw } from './motor';
 import type { CarState, Command, CommandResult, GameEvent, GenWorld, Generation, LedgerWorld, LocalPlant, PendingChoice, TradeMod, WorldRegion } from './types';
 
 const W = config.world;
@@ -229,7 +230,7 @@ export function worldSettle(s: CarState, ev: GameEvent[], gens: Generation[], m:
     r.sold = b.sold; r.rev = b.revenue; r.profit = profit; r.share = size > 0 ? b.sold / size : 0; r.total += b.sold; r.totalProfit += profit; r.tariff = b.tariff; r.ship = b.ship;
     if (pl) { pl.made = b.loc ?? 0; pl.total += pl.made; if (lv) pl.saved += (b.saved ?? 0) - pu; } // 5.5.0 현지 공장 누적 손익 = 현지 생산 차의 이익 − 공장 유지비(건설비는 착공 때 뺐다)
     r.rep += Math.min(W.repYearMax, (b.sold * config.time.monthsPerYear) / W.repSoldDiv) / config.time.monthsPerYear * (1 + P.rep * lv);
-    const target = Math.min(1, Math.max(0, W.awBase + repEffect(r.rep) / W.awRepDiv + W.office.aw[r.office] + P.aw * lv));
+    const target = Math.min(1, Math.max(0, W.awBase + repEffect(r.rep) / W.awRepDiv + W.office.aw[r.office] + P.aw * lv + (s.motor ? motorAw(s, m) : 0))); // 5.6.0 세계 랠리·내구 보상
     r.aw += (target - r.aw) * (W.awRate + W.office.rate[r.office] + P.rate * lv + xr);
     if (pl?.build && m + 1 >= pl.build.doneMonth) { // 5.5.0 현지 공장 공사가 끝나면 다음 달부터 새 등급
       pl.level = pl.build.level; pl.build = null; pl.since ??= m + 1;

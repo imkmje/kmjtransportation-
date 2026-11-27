@@ -165,7 +165,7 @@ function rollRandom(s: CarState, m: number, ev: GameEvent[]): void {
     if (mon !== m % MPY) return;
     const gens = onSaleGens(s), defect = gens.filter((g) => g.editions[g.editions.length - 1].defects > 0);
     const room = staffCount(s) < staffCap(s);
-    const ok = RANDOM_EVENTS.filter((d) => d.needs !== 'rivalry' && d.needs !== 'world').filter((d) => d.needs === 'none' || (d.needs === 'defectCar' ? defect.length > 0 : d.needs === 'staffRoom' ? room : gens.length > 0));
+    const ok = RANDOM_EVENTS.filter((d) => d.needs !== 'rivalry' && d.needs !== 'world' && d.needs !== 'motorsport').filter((d) => d.needs === 'none' || (d.needs === 'defectCar' ? defect.length > 0 : d.needs === 'staffRoom' ? room : gens.length > 0));
     if (!ok.length) return;
     const def = ok[Math.floor(hash01(s.seed, 53, year, k) * ok.length)];
     const pool = def.needs === 'defectCar' ? defect : gens, g = def.needs === 'none' || def.needs === 'staffRoom' ? undefined : pool[Math.floor(hash01(s.seed, 54, year, k) * pool.length)];
@@ -272,14 +272,14 @@ export function choiceMoney(s: CarState, pc: PendingChoice, idx: number): number
   const def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, g = pc.genId === null ? undefined : s.nameplates.flatMap((n) => n.generations).find((x) => x.id === pc.genId && x.status !== 'discontinued');
   const rev = s.ledger.slice(-E.revenueMonths), avgRev = rev.length ? rev.reduce((a, e) => a + e.revenue, 0) / rev.length : 0, salaries = s.staff.reduce((a, x) => a + salaryOf(x.ability), 0);
   return def.choices[idx].effects.reduce((a, e) => a + (e.type === 'cash' ? e.base + (e.revenue ?? 0) * avgRev + (e.salaries ?? 0) * salaries
-    : e.type === 'fixDefects' && g ? -g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare : e.type === 'tradeLobby' ? -(pc.tr?.cost ?? 0) : 0), 0); // 5.5.0 무역 협정 로비 비용
+    : e.type === 'fixDefects' && g ? -g.totalSold * config.recall.costPerCar * diffOf(s).recallMult * e.costShare : e.type === 'tradeLobby' ? -(pc.tr?.cost ?? 0) : e.type === 'motorLimited' ? -(pc.ms?.cost ?? 0) : 0), 0); // 5.5.0 무역 협정 로비 비용, 5.6.0 우승 기념 한정판 비용
 }
 const moneyText = (x: number): string | null => { const v = Math.abs(x); if (v < 1) return null; const t = won(v); return `${x < 0 ? '비용' : '수입'} 약 ${t}`; };
 /** 답을 기다리는 사건. choices[].cost: 지출(만원, 수입이면 음수), costText: "비용 약 3.2억원"(돈 변화가 없으면 null). 0.5.1 */
 export function pendingChoices(s: CarState) {
   return s.events.pending.map((p) => {
     const def = RANDOM_EVENTS.find((d) => d.id === p.eventId)!;
-    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c, i) => { const mny = choiceMoney(s, p, i); return { label: c.label, result: p.rv?.results[i] ?? p.tr?.results[i] ?? c.result, cost: -mny, costText: moneyText(mny) }; }), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
+    return { id: p.id, eventId: p.eventId, name: def.name, text: p.text, choices: def.choices.map((c, i) => { const mny = choiceMoney(s, p, i); return { label: c.label, result: p.rv?.results[i] ?? p.tr?.results[i] ?? p.ms?.results[i] ?? c.result, cost: -mny, costText: moneyText(mny) }; }), defaultChoice: def.defaultChoice, weeksLeft: p.deadline - s.week };
   });
 }
 /** 뉴스 기록(최신이 앞). category가 없는 예전 항목은 'other' */

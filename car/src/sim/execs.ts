@@ -42,7 +42,7 @@ export const DELEGATIONS: Record<ExecRole, { key: string; label: string; note?: 
   product: [], finance: [{ key: 'autoPriceWar', label: '가격 전쟁 자동 대응', note: '경쟁사가 가격을 내리면, 버틸 때 줄어드는 판매가 인하 폭보다 크면 따라 내리고 아니면 가격을 지킵니다(3.5.0).' }],
   production: [{ key: 'autoAlloc', label: '생산 배분 자동 조정' }],
   research: [{ key: 'autoResearch', label: '빈 연구 칸에 추천 연구 시작' }],
-  market: [],
+  market: [{ key: 'autoMotor', label: '모터스포츠 예산 자동 조정', note: `해마다 2월 결산에 참가할 수 있는 모터스포츠 급에 모두 나가되, 연 예산 합이 지금 현금의 ${Math.round(config.motorsport.autoShare * 100)}%를 넘지 않게 가장 비싼 급부터 예산 단계를 낮춥니다(가장 작은 예산도 넘으면 그 급은 쉽니다). 출전 차가 없으면 평론이 가장 높은 차를 고르고, 우승 기념 한정판은 다 팔아 남는 돈이 있고 운영비 6개월 치가 남으면 냅니다(5.6.0).` }],
   world: [{ key: 'autoWorld', label: '해외 운영 자동 조정', note: '권역마다 자동 수출을 켜 두고, 손으로 정한 권역 가격을 자동 가격으로 돌리고, 현지 공장의 생산 차종을 자동(관세·운송비가 큰 차부터)으로 둡니다. 무역 협정 결정에는 앞당겨 아끼는 관세가 로비 비용보다 크고 운영비 6개월 치가 남으면 로비합니다(5.5.0).' }],
 };
 /** 보고 종류별 제목 */
@@ -56,6 +56,7 @@ const KIND_TITLE: Record<string, string> = {
   autoPriceWar: '가격 전쟁 대응', autoPoach: '이직 제안 대응', autoRest: '자동 휴식', autoTrain: '자동 교육', autoHire: '자동 채용', autoHireFail: '자동 채용 보류', autoFire: '자동 해고', autoResearch: '자동 연구', autoAlloc: '자동 생산 배분',
   autoFullChange: '자동 풀체인지', autoFacelift: '자동 페이스리프트', autoDerive: '파생 모델 세대교체', autoGenWait: '세대교체 대기', autoLaunch: '자동 출시', autoLaunchFail: '자동 출시 보류',
   plant: '현지 공장 건설', worldOffice: '판매 법인 투자', worldOpen: '해외 진출', autoWorld: '해외 운영 자동 조정', // 5.5.0
+  autoMotor: '모터스포츠 예산 자동 조정', // 5.6.0
   replaceDone: '교체 고용 완료', replaceFail: '교체 고용 실패', replaceHold: '교체 고용 보류', replaceCancel: '교체 고용 취소', replaceWait: '교체 고용 대기',
 };
 

@@ -406,11 +406,11 @@ describe('시장 규모(7.3, 7.5): 달마다 매끄럽게, 연도 사이는 비�
 
 describe('저장 형식 1 → 4', () => {
   it(`SAVE_VERSION = 4, 형식 1 파일을 올려서 불러오고 이어서 실행할 수 있다`, () => {
-    expect(SAVE_VERSION).toBe(13);
+    expect(SAVE_VERSION).toBe(14);
     const v1 = JSON.parse(readFileSync('car/tests/fixtures/save-v1.json', 'utf8'));
     expect(v1.saveVersion).toBe(1);
     const g = Game.fromJSON(v1), s = g.state;
-    expect(s.saveVersion).toBe(13);
+    expect(s.saveVersion).toBe(14);
     expect(s.hqLevel).toBe(1); expect(s.factory).toEqual({ level: 1, build: null });
     for (const x of s.staff) expect(x.potential).toBe(Math.max(60, x.ability));
     const gen = allGens(s)[0], ed = gen.editions[0];

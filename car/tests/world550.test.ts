@@ -203,10 +203,10 @@ describe('5.5.0 해외 담당 임원', () => {
 });
 
 describe('5.5.0 저장 형식 13·결정론', () => {
-  it('형식 12 fixture(5.2.0으로 만든 2004년 판)가 13으로 올라오고 새 칸은 없으며, 이어서 돌린 결과와 저장 왕복이 같다', () => {
+  it('형식 12 fixture(5.2.0으로 만든 2004년 판)가 13(5.6.0부터 14)으로 올라오고 새 칸은 없으며, 이어서 돌린 결과와 저장 왕복이 같다', () => {
     const r0 = raw(); expect(r0.saveVersion).toBe(12);
     const a = Game.fromJSON(r0), s = a.state;
-    expect(s.saveVersion).toBe(13); expect(SAVE_VERSION).toBe(13);
+    expect(s.saveVersion).toBe(14); expect(SAVE_VERSION).toBe(14);
     expect(s.world!.regions.every((r) => !r.plant)).toBe(true); expect(s.world!.trade).toBeUndefined(); expect(s.subs!.every((x) => !x.regions)).toBe(true);
     for (let i = 0; i < 6; i++) toMonthEnd(a);
     const b = Game.fromJSON(JSON.parse(JSON.stringify(a.toJSON())));

@@ -485,4 +485,42 @@ export const config = {
     // 해외 담당 임원(exec 'world'): 권역 인지도 수렴 + awRate × 능력/100
     exec: { awRate: 0.02 },
   },
+  // 5.6.0 모터스포츠(설계서 9.11, 계산은 sim/motor.ts). 금액 단위 만원. 시즌은 1년: 2월 말에 그해 계획을 확정하고, 3~12월 월 결산마다 경기 한 번(10경기), 12월 결산에 최종 순위와 보상.
+  // 팀 전력 = 예산 단계 점수 × (낸 예산 ÷ 낼 예산) + 관련 연구 점수 × (그해까지 나온 관련 기술 중 완료한 몫) + 출전 차 점수 × 평론 비율((평론 − carRef[0]) ÷ (carRef[1] − carRef[0]), 0~1)
+  //   + 전담팀 점수 × min(1, 전담팀원 ÷ elite.full) + 연속 참가 경험(해마다 + exp.step, 최대 exp.max, 쉬면 − exp.decay).
+  // 경기 성적 = 전력 + noise × (두 시드 해시의 합 − 1)(삼각 분포 ±noise), 순위 점수 points. 경쟁사 전력 = 급별 rivals 값 ± rivalJitter(해마다 시드 해시). 인수한 경쟁사·등장 전 경쟁사는 나오지 않는다.
+  // 보상 배수 f = 우승 1, 그 밖은 0.6 × (팀 수 − 순위) ÷ (팀 수 − 2)(꼴찌 0). 벌칙 없음(쓴 예산만 나간다). 한 달 예산 = 연 예산 ÷ 경기 수(3~12월), 현금이 모자라면 남은 현금까지만 낸다(파산하지 않는다)
+  motorsport: {
+    on: true,
+    races: 10, firstMonth: 2, lockMonth: 1, // 3월부터 10경기, 2월 결산에 그해 계획 확정(연중 변경은 다음 시즌)
+    points: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+    noise: 9, rivalJitter: 3, forecastRuns: 200,
+    stepNames: ['작게', '보통', '크게', '전력'], stepPts: [20, 30, 40, 50],
+    carRef: [5, 10], elite: { pts: 10, full: 4 }, exp: { step: 2, max: 10, decay: 3 },
+    warnShare: 0.25, autoShare: 0.1, // 직접 정한 연 예산 합이 현금의 25%를 넘으면 경고. 위임(시장 조사 임원 '모터스포츠 예산 자동 조정')은 연 예산 합이 현금의 10%를 넘지 않게
+    sports: ['sports', 'coupe'], // 판매 가산을 받는 차급(+ 출전 차의 차급, 고성능판 파생)
+    research: { mult: 0.25, months: 12 }, // 우승: 관련 분야 연구 점수 × (1 + 0.25) 12개월
+    brand: { top: 3, value: 0.05, months: 12 }, // 최상위 포뮬러 3위 안: 전 차종 판매 × (1 + 0.05 × f) 12개월
+    aw: { value: 0.08, months: 24 }, // 세계 급: 진출한 모든 권역 인지도 목표 + 0.08 × f, 24개월
+    // 우승 기념 한정판(결정, events.json motorLimited): 출전 차(포뮬러는 판매 중 평론이 가장 높은 차) 바탕의 고성능판(variants.json gt) 한정 생산.
+    // 값 = 그 차 시장 기준가 × 고성능판 가격 배수 × priceMult, 대당 원가 = 그 차 대당 원가 × 고성능판 원가 배수. 비용(결정 때) = 대수 × 대당 원가 + 바탕 개발비 × 고성능판 개발비 몫 × devShare(최소 devMin). months개월에 나눠 다 팔린다
+    limited: { priceMult: 2, devShare: 0.1, devMin: 100000, months: 6 },
+    series: [
+      { id: 'touring', name: '국내 투어링', short: '투어링', hq: 3, region: false, budget: [500000, 1000000, 1500000, 2000000],
+        bodies: ['sedanS', 'sedanM', 'sedanL', 'hatch'], car: 12, researchPts: 10, fields: ['powertrain', 'body'],
+        techs: ['pw_carb', 'pw_efi', 'pw_dohc', 'pw_vvt', 'pw_gdi', 'pw_turbo', 'pw_next', 'bd_abs', 'pr_cad', 'pr_sim'],
+        rivals: { bmv: 77, hondi: 73, toyoda: 71, hyundae: 68, porty: 62 } as Record<string, number>, locals: false,
+        rep: 3, sales: 0.05, salesMonths: 24, units: 400, limitedRep: 2 },
+      { id: 'rally', name: '세계 랠리·내구', short: '랠리·내구', hq: 5, region: true, budget: [5000000, 10000000, 15000000, 20000000],
+        bodies: ['sports', 'coupe', 'suvS', 'suv', 'suvL', 'pickup'], car: 12, researchPts: 12, fields: ['powertrain', 'body'],
+        techs: ['pw_efi', 'pw_dohc', 'pw_vvt', 'pw_gdi', 'pw_turbo', 'pw_next', 'bd_abs', 'bd_suv', 'pr_sim', 'pr_ai', 'ec_hybrid2'],
+        rivals: { porty: 80, toyoda: 78, bmv: 72, hyundae: 70, hondi: 62 } as Record<string, number>, locals: true, localPower: { volksbagen: 74, chevore: 66, datta: 50 } as Record<string, number>,
+        rep: 6, sales: 0.08, salesMonths: 24, units: 800, limitedRep: 3 },
+      { id: 'formula', name: '최상위 포뮬러', short: '포뮬러', hq: 6, region: false, budget: [30000000, 50000000, 75000000, 100000000],
+        bodies: [] as string[], car: 0, researchPts: 24, fields: ['powertrain', 'body', 'eco'],
+        techs: ['pw_dohc', 'pw_vvt', 'pw_gdi', 'pw_turbo', 'pw_next', 'bd_sports', 'pr_cad', 'pr_sim', 'pr_ai', 'pr_gigaCasting', 'ec_hybrid2', 'ec_battery3'],
+        rivals: { bmv: 84, hondi: 80, toyoda: 78, porty: 74, hyundae: 66 } as Record<string, number>, locals: false,
+        rep: 10, sales: 0.1, salesMonths: 24, units: 1500, limitedRep: 5 },
+    ] as { id: string; name: string; short: string; hq: number; region: boolean; budget: number[]; bodies: string[]; car: number; researchPts: number; fields: string[]; techs: string[]; rivals: Record<string, number>; locals: boolean; localPower?: Record<string, number>; rep: number; sales: number; salesMonths: number; units: number; limitedRep: number }[],
+  },
 };

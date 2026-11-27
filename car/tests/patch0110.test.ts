@@ -39,7 +39,7 @@ describe('평판 상한 없앰(1.0.0)', () => {
     expect(save.reputation).toBe(100);
     const g = Game.fromJSON(save);
     for (let i = 0; i < 12; i++) toMonthEnd(g);
-    expect(g.state.status).toBe('playing'); expect(g.state.saveVersion).toBe(13);
+    expect(g.state.status).toBe('playing'); expect(g.state.saveVersion).toBe(14);
     expect(g.state.reputation).toBeGreaterThan(100);
     const b = Game.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
     for (let i = 0; i < 8; i++) { g.tick(); b.tick(); }

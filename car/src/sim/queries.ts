@@ -478,6 +478,7 @@ export function bestTeam(s: CarState, spec: ProjectSpec, opts: { includeBusy?: b
 import { josa as josaQ } from './josa';
 const STAT_KO: Record<string, string> = { P: '성능', E: '연비', U: '실용', D: '디자인', Q: '품질' };
 export { hallOfFame, type HallOfFame, type HallCar, type HallRow } from './hall';
+export { motorInfo, forecast as motorForecast, seriesError as motorSeriesError, SERIES as MOTOR_SERIES, rewardShare as motorRewardShare, teamName as motorTeamName } from './motor'; // 5.6.0
 
 // ---------- 1.1.0 장비 구성 ----------
 export { equipInfo, recommendedEquip, equipChanges, expectation, takeRate, optPrice, bodyClass, equipOf, type Expectation } from './equip';

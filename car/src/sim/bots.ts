@@ -21,6 +21,7 @@ import { compareToPrev, latestGen, launchAvgGrade } from './lifecycle';
 import { buyableTechs, listError, rivalRelations } from './rivalry';
 import { SUB_KINDS, autoSpec, badgeCost, foundError, isDirect, newModelName, slotError, subFunds, subPlanPreview, areaBodies } from './subs';
 import { monthOf, monthTime, yearOf } from './time';
+import { SERIES, carChoices, seriesError } from './motor';
 import type { Battery, Budget, CarState, Equip, Difficulty, ExecRole, Generation, Role, Staff } from './types';
 
 export interface Bot { name: string; step(g: Game): void }
@@ -51,6 +52,7 @@ export interface SteadyOptions {
   subDirect?: boolean; // 3.1.0: 브랜드 자회사를 직접 운영(빈 차급에 본사 차 배지 또는 직접 기획, subs와 함께)
   autoDecide?: boolean; // 3.7.0: 결정 자동 승인을 모두 켜고 결정 창에 답하지 않는다(안전선에 걸린 것은 4주 뒤 기본 선택)
   rivalry?: boolean; // 3.5.0: 경쟁사 인재 영입·기술 제휴(기술 구매)·자회사 상장·경쟁사 인수를 쓴다(선택, 기존 균형 봇은 쓰지 않는다)
+  motor?: 'touring' | 'all' | 'allWarn'; // 5.6.0: 해마다 1월에 모터스포츠 계획(투어링만 / 나갈 수 있는 모든 급 / 모든 급이되 연 예산 합이 경고선(현금의 warnShare) 안)을 전력 단계로(allWarn은 넘으면 비싼 급부터 낮춤), 출전 차는 평론이 가장 높은 차. 우승 기념 한정판은 자동 승인(규칙대로)
   world2?: boolean; // 5.5.0: world와 함께. 현지 공장(지난달 수출이 다음 등급 생산의 60% 이상이고 아끼는 관세·운송비가 유지비보다 클 때), 해외 담당 임원(steadyExec), 무역 협정 자동 승인(규칙대로)
   world?: boolean; // 4.0.0: 조건이 되면 해외 권역에 진출(싼 곳부터, 자동 수출·자동 가격 그대로)하고, 판매가 상한에 가까우면 판매 법인에 투자(선택, 기존 균형 봇은 쓰지 않는다)
   elite?: boolean; // 4.1.0: 직속 전담팀을 채우고(지난 1년 흑자·현금 여유) 쉬는 전담팀으로 풀체인지·새 차종을 만든다(선택, 기존 균형 봇은 쓰지 않는다)
@@ -86,6 +88,7 @@ export function steady(opts: Partial<SteadyOptions> = {}): Bot {
       if (o.rivalry && g.state.week % config.time.weeksPerMonth === 0) manageRivalry(g);
       if (o.world && g.state.week % config.time.weeksPerMonth === 0) { manageWorld(g); if (o.world2) manageWorld2(g); }
       if (o.elite && g.state.week % config.time.weeksPerMonth === 0) manageElite(g);
+      if (o.motor && g.state.week % config.time.weeksPerMonth === 0) manageMotor(g, o.motor);
       if (g.state.week % config.time.weeksPerMonth === 0) monthly(g, o); // 달 첫 주(전달 결산을 본 뒤, 개발 배치 다음에: 쉬는 직원만 교육)
     },
   };
@@ -183,6 +186,24 @@ function manageWorld2(g: Game): void {
     const lv = plantLevel(r) + 1;
     if (plantError(s, r.id) || s.cash < plantCost(r.id, lv) + reserve || r.sold - (r.plant?.made ?? 0) < plantCapOf(lv) * 0.6) continue;
     if (plantSaveEstimate(s, r.id, lv) > plantUpkeep(r.id, lv)) g.command({ type: 'buildPlant', region: r.id });
+  }
+}
+/** 5.6.0 모터스포츠 봇: 1월마다 나갈 수 있는 급(touring: 투어링만)을 전력 단계로. 출전 차는 평론이 가장 높은 차(motorSeriesError·carChoices 기준) */
+function manageMotor(g: Game, which: 'touring' | 'all' | 'allWarn'): void {
+  const s = g.state, MS = config.motorsport;
+  if (!s.autoDecide?.on.includes('motorLimited') && s.motor) g.command({ type: 'setAutoDecide', kind: 'motorLimited', on: true });
+  if (monthOf(s.week) % config.time.monthsPerYear !== 0) return;
+  const steps: Record<string, number> = {};
+  for (const x of SERIES) if ((which !== 'touring' || x.id === 'touring') && !seriesError(s, x.id)) steps[x.id] = MS.stepPts.length - 1;
+  const total = () => Object.entries(steps).reduce((a, [id, k]) => a + SERIES.find((x) => x.id === id)!.budget[k], 0);
+  while (which === 'allWarn' && Object.keys(steps).length && total() > Math.max(0, s.cash) * MS.warnShare) { // 경고선 안으로: 가장 비싼 급부터 한 단계씩, 0단계로도 넘으면 그 급은 쉰다
+    const id = Object.keys(steps).sort((a, b) => SERIES.find((x) => x.id === b)!.budget[steps[b]] - SERIES.find((x) => x.id === a)!.budget[steps[a]])[0];
+    if (steps[id] > 0) steps[id]--; else delete steps[id];
+  }
+  for (const x of SERIES) {
+    if (steps[x.id] === undefined) { if (s.motor?.plan[x.id]) g.command({ type: 'setMotor', series: x.id, step: null }); continue; }
+    const c = carChoices(s, x.id)[0];
+    g.command({ type: 'setMotor', series: x.id, step: steps[x.id], ...(c ? { car: c.nameplate } : {}) });
   }
 }
 function manageRivalry(g: Game): void {

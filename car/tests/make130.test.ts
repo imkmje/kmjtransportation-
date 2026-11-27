@@ -350,7 +350,7 @@ describe('저장 형식 7(1.3.0)', () => {
     const raw = JSON.parse(readFileSync('car/tests/fixtures/save-v6.json', 'utf8'));
     expect(raw.saveVersion).toBe(6);
     const a = Game.fromJSON(raw);
-    expect(a.state.saveVersion).toBe(13);
+    expect(a.state.saveVersion).toBe(14);
     const gens = allGens(a.state);
     expect(gens.length).toBeGreaterThan(2);
     for (const x of gens) { expect(x.critiques!.map((c) => c.score)).toEqual(x.reviews); for (const c of x.critiques!) expect(c.text.length).toBeGreaterThan(10); }
