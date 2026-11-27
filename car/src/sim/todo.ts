@@ -13,9 +13,11 @@ import { equipOf, expectEffect } from './equip';
 import { autoLaunching, delegationOn } from './execs';
 import { josa } from './josa';
 import { faceliftPreview, advice } from './queries';
+import { motorInfo } from './motor';
+import { won } from './won';
 import type { CarState } from './types';
 
-export type TodoKind = 'choice' | 'ready' | 'cands' | 'cash' | 'regulation' | 'reports' | 'exec' | 'retrofit' | 'capacity' | 'equip' | 'facelift' | 'fullchange' | 'team' | 'research' | 'tired' | 'hire';
+export type TodoKind = 'choice' | 'ready' | 'cands' | 'cash' | 'regulation' | 'reports' | 'exec' | 'retrofit' | 'capacity' | 'equip' | 'facelift' | 'fullchange' | 'team' | 'research' | 'tired' | 'hire' | 'motor' | 'motorResult' | 'motorRace'; // motor·motorResult·motorRace(5.6.0): 올해 모터스포츠 계획·지난 시즌 결과·지난 경기 결과(참고)
 /** goto.tab: garage(id = 세대) · dev(sub 'launch' + id = 프로젝트, sub 'plan' = 신차 기획) · company(sub = 회사 안쪽 탭) · choice(id = 선택 사건) · reports(보고함) */
 export interface TodoGoto { tab: string; sub?: string; id?: number }
 export interface TodoItem { key: string; kind: TodoKind; title: string; detail: string; goto: TodoGoto; urgent: boolean }
@@ -24,7 +26,7 @@ export interface TodoItem { key: string; kind: TodoKind; title: string; detail: 
 export interface TodoExec { vacant: number; unread: number; lastUnread: number }
 const NO_EXEC: TodoExec = { vacant: 0, unread: 0, lastUnread: 0 };
 
-const ORDER: TodoKind[] = ['choice', 'ready', 'cands', 'cash', 'regulation', 'reports', 'exec', 'retrofit', 'capacity', 'equip', 'facelift', 'fullchange', 'team', 'research', 'tired', 'hire'];
+const ORDER: TodoKind[] = ['choice', 'ready', 'cands', 'cash', 'regulation', 'motorResult', 'motor', 'reports', 'exec', 'retrofit', 'capacity', 'equip', 'facelift', 'fullchange', 'team', 'research', 'tired', 'hire', 'motorRace'];
 const nameOfGen = (s: CarState, genId: number) => s.nameplates.find((n) => n.generations.some((g) => g.id === genId))?.name ?? '';
 
 export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
@@ -78,6 +80,23 @@ export function todoItems(s: CarState, exec: TodoExec = NO_EXEC): TodoItem[] {
   const tired = s.staff.filter((x) => x.condition < config.staff.condition.low && !isResting(x, s.week) && !isTraining(x, s.week)).length;
   if (tired) add('tired', 'tired', `지친 직원 ${tired}명`, '컨디션이 낮아 일의 성과가 줄었습니다. 휴식을 줄 수 있습니다.', { tab: 'company', sub: 'staff' });
   if (!s.candidates.length && staffCount(s) < staffCap(s) && !delegationOn(s, 'hr', 'autoHire')) add('hire', 'hire', `정원에 여유가 있습니다(${staffCount(s)}/${staffCap(s)}명)`, '채용 공고를 낼 수 있습니다.', { tab: 'company', sub: 'staff' });
+  if (config.motorsport.on) motorTodos(s, add);
 
   return out.sort((a, b) => Number(b.urgent) - Number(a.urgent) || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
+}
+
+/** 5.6.0 모터스포츠: 1~2월(확정 전) 올해 계획(위임이면 없음), 지난 시즌 결과(본 뒤 사라짐), 시즌 중 지난 경기 결과(참고) */
+function motorTodos(s: CarState, add: (key: string, kind: TodoKind, title: string, detail: string, goto: TodoGoto, urgent?: boolean) => void): void {
+  const I = motorInfo(s, false), M = config.motorsport, goto = { tab: 'motor' };
+  if (!I.open) return;
+  if (!I.locked && !I.delegated && I.planned !== I.year) {
+    const on = I.series.filter((x) => x.plan && x.eligible);
+    add(`motor:${I.year}`, 'motor', `올해 모터스포츠 계획을 정하세요`, on.length ? `지금 계획: ${on.map((x) => `${x.name} ${M.stepNames[x.plan!.step]}`).join(', ')}(연 ${won(I.total)}). 2월 결산에 확정됩니다.` : '참가할 수 있는 대회가 있습니다. 2월 결산에 확정되며, 그 뒤 변경은 다음 시즌부터입니다.', goto);
+  }
+  const last = I.lastYear;
+  if (last !== null && last === I.year - 1 && !I.locked && I.seen !== last) {
+    const rows = I.series.flatMap((x) => x.history.filter((h) => h.year === last).map((h) => `${x.name} ${h.rank}위`));
+    add(`motorResult:${last}`, 'motorResult', `${last} 모터스포츠 시즌 결과`, rows.join(', '), goto);
+  }
+  for (const x of I.series) if (x.season && x.season.races > 0 && x.season.races < M.races) add(`motorRace:${x.id}:${x.season.races}`, 'motorRace', `${x.name} ${x.season.races}전 ${x.season.lastPos}위`, `종합 ${x.season.rank}위, ${x.season.pts}점. 남은 경기 ${M.races - x.season.races}.`, goto);
 }

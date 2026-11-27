@@ -67,10 +67,11 @@ export type ChoiceEffect =
   | { type: 'hire'; abilityMin: number; abilityMax: number } // 인재 영입(정원 안에서)
   | { type: 'warFollow' } // 3.5.0 가격 전쟁: 그 기간 그 차급 내 차 가격을 따라 내린다(PendingChoice.rv)
   | { type: 'retain' } // 3.5.0 이직 제안: 연봉을 올려 붙잡는다(PendingChoice.rv)
-  | { type: 'tradeLobby' }; // 5.5.0 무역 협정 로비: 비용(PendingChoice.tr.cost)을 내고 협정을 앞당긴다
+  | { type: 'tradeLobby' } // 5.5.0 무역 협정 로비: 비용(PendingChoice.tr.cost)을 내고 협정을 앞당긴다
+  | { type: 'motorLimited' }; // 5.6.0 우승 기념 한정판: 비용(PendingChoice.ms.cost)을 내고 한정판을 낸다
 export interface RandomEventDef {
   id: string; name: string; text: string; // text의 {car}는 대상 차 이름
-  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell' | 'rivalry' | 'world'; // world(5.5.0): 무역 사건이 직접 띄우는 결정(추첨에서 빠진다) // rivalry(3.5.0): 경쟁 2부가 직접 띄우는 결정 창(무작위 사건 추첨에서 빠진다)
+  needs: 'none' | 'carOnSale' | 'defectCar' | 'staffRoom' | 'rivalCell' | 'rivalry' | 'world' | 'motorsport'; // motorsport(5.6.0): 우승이 직접 띄우는 결정(추첨에서 빠진다) // world(5.5.0): 무역 사건이 직접 띄우는 결정(추첨에서 빠진다) // rivalry(3.5.0): 경쟁 2부가 직접 띄우는 결정 창(무작위 사건 추첨에서 빠진다)
   choices: { label: string; result: string; effects: ChoiceEffect[] }[];
   defaultChoice: number;
   onFire?: { type: 'rivalHit'; add: number; months: number } | { type: 'fxRoll'; good: number; bad: number; goodShare: number }; // 사건이 뜰 때 바로 생기는 일
@@ -227,6 +228,7 @@ export interface LedgerEntry {
   profit: number; cash: number; sold: number;
   world?: Record<string, LedgerWorld>; tariff?: number; ship?: number; worldUpkeep?: number; worldInv?: number; // 4.0.0 권역별 몫(revenue·cogs에 들어 있음), 관세·운송비·판매 법인 유지비(profit에서 뺌), 진출비·법인 투자(oneOff에 들어 있음). 해외가 없던 달에는 없다
   subDiv?: number; subInv?: number; // 3.0.0 자회사 배당(profit에 더한다)·자회사 설립·투자(oneOff에 들어 있음). 자회사가 없던 달에는 없다
+  motor?: number; motorRev?: number; // 5.6.0 모터스포츠 예산(profit에서 뺌)·우승 기념 한정판 판매(profit에 더함). 모터스포츠를 쓰지 않은 달에는 없다
   cars?: LedgerCar[]; execPay?: number; research?: number; // 0.9.0 월 결산 창용(예전 장부에는 없다): 차종별 한 줄, salaries 중 임원 몫, oneOff 중 연구 시작 비용
 }
 /** 0.9.0 장부의 차종별 한 줄(세대 ID). 이익 = 매출 − 원가 − 광고 − 리콜 */
@@ -240,7 +242,9 @@ export interface ResearchState {
   priority?: string; // 0.5.1 우선 연구(맨 앞, 주간 점수의 50%). 없으면 고르게 나눈다
 }
 /** 무작위 사건의 답을 기다리는 선택(4주 뒤 기본 선택) */
-export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null; rv?: RivalChoice; tr?: TradeChoice } // rv(3.5.0): 경쟁 2부 결정 창의 대상, tr(5.5.0): 무역 협정
+export interface PendingChoice { id: number; eventId: string; text: string; week: number; deadline: number; genId: number | null; fx: number | null; rv?: RivalChoice; tr?: TradeChoice; ms?: MotorChoice } // rv(3.5.0): 경쟁 2부 결정 창의 대상, tr(5.5.0): 무역 협정, ms(5.6.0): 우승 기념 한정판
+/** 5.6.0 우승 기념 한정판 결정: 급, 바탕 세대, 이름, 대수·값·대당 원가, 비용(결정 때), 선택지별 결과 문장 */
+export interface MotorChoice { series: string; gen: number; name: string; units: number; price: number; unit: number; cost: number; rep: number; results: string[] }
 /** 5.5.0 무역 협정 결정: 권역, 로비 비용, 앞당기면 아끼는 관세 어림, 선택지별 결과 문장 */
 export interface TradeChoice { region: string; cost: number; save: number; results: string[] }
 /** 3.7.1 결정 자동 승인의 답: 선택지 번호 또는 'rule'(임원 위임과 같은 규칙, 가격 전쟁·이직 제안만) */
@@ -361,8 +365,21 @@ export interface RivalryState {
   told?: string[]; // 3.6.0 대응 신차 예고를 알림으로 띄운 내 차 이름(같은 차를 겨냥한 다음 예고부터는 뉴스로만. 없으면 빈 목록)
 }
 
+// ---------- 5.6.0 모터스포츠(설계서 9.11) ----------
+/** 다음(또는 올해, 2월 확정 전) 시즌 계획 한 급: 예산 단계(0~3), 출전 차종(차종 ID, 포뮬러는 없음), 직속 전담팀 배치 */
+export interface MotorPlan { step: number; car?: number; elite?: true }
+/** 시즌 중인 한 급: 확정한 예산·출전 세대·전담팀, 전력(나머지 부분 parts, 예산 부분은 낸 비율로 줄어든다), 낼 예산·낸 예산, 출전 팀(내 팀 'me')과 전력, 누적 점수, 치른 경기 수, 지난 경기 순서 */
+export interface MotorEntry { series: string; step: number; budget: number; car: number | null; carName: string; elite: boolean; parts: { budget: number; research: number; car: number; elite: number; exp: number }; due: number; paid: number; field: { id: string; power: number }[]; pts: Record<string, number>; races: number; last: string[] }
+/** 지난 시즌 한 급의 기록 */
+export interface MotorRecord { year: number; series: string; rank: number; of: number; pts: number; budget: number; paid: number; car: string; elite: boolean }
+/** 보상의 기간 효과: 판매(차급 bodies, 고성능판 포함)·전 차종 판매(brand)·권역 인지도 목표(aw)·관련 분야 연구 속도(research, fields). until: 이 달부터 효과 없음 */
+export interface MotorBoost { kind: 'sales' | 'brand' | 'aw' | 'research'; series: string; value: number; until: number; bodies?: string[]; fields?: string[] }
+/** 팔고 있는 우승 기념 한정판: 남은 대수, 대당 값, 한 달 판매 대수 */
+export interface MotorLimited { name: string; series: string; year: number; units: number; left: number; price: number; per: number; rev: number }
+export interface MotorState { plan: Record<string, MotorPlan>; planned?: number; seen?: number; season: { year: number; entries: MotorEntry[] } | null; exp: Record<string, number>; history: MotorRecord[]; boosts: MotorBoost[]; limited: MotorLimited[]; spent: number; earned: number }
+
 export interface CarState {
-  saveVersion: 13;
+  saveVersion: 14;
   difficulty?: Difficulty;
   seed: number; rng: number;
   week: number;
@@ -398,6 +415,7 @@ export interface CarState {
   world?: WorldState; // 4.0.0 세계 시장(형식 11). 없으면 해외 진출 전
   elite?: EliteState; // 4.1.0 직속 전담팀(형식 12). 없으면 아직 쓰지 않음
   former?: FormerStaff[]; // 4.1.0 전 직원(형식 12). 없으면 없음
+  motor?: MotorState; // 5.6.0 모터스포츠(형식 14). 없으면 아직 쓰지 않음(결과가 5.5.1과 같다)
   pendingWorldInv?: number; // 4.0.0 이번 달 진출비·판매 법인 투자(pendingOneOff에 들어 있음)
   pendingSubInv?: number; // 3.0.0 이번 달 자회사 설립·투자(pendingOneOff에 들어 있음, 장부의 subInv 칸용)
   years?: Record<string, YearLog>; // 0.8.0 연 보고서용 해마다의 기록(연도 → 기록). 없으면(예전 저장) 장부·차 기록으로 계산할 수 있는 것만 보인다. 저장 형식은 그대로 4
@@ -499,6 +517,10 @@ export type Command =
   | { type: 'setElite'; staffId: number; on: boolean } // 기존 직원을 전담팀으로 옮기기(on)·빼기
   | { type: 'setEliteTrain'; on: boolean } // 자동 교육 켜기·끄기
   | { type: 'rehire'; staffId: number } // 전 직원 다시 채용
+  // ---------- 5.6.0 모터스포츠 ----------
+  | { type: 'setMotor'; series: string; step: number | null; car?: number | null; elite?: boolean } // 다음 확정 시즌 계획(step null = 불참). car·elite를 빼면 그대로
+  | { type: 'confirmMotor' } // 지금 계획대로 확정(오늘 탭의 정할 일을 닫는다)
+  | { type: 'ackMotor' } // 지난 시즌 결과를 봤다
   | { type: 'devCheat'; kind: DevCheatKind }; // 개발자 메뉴(개발 단계용). 쓰면 상태에 devUsed가 선다
 /** 개발자 메뉴: 현금 추가 / 평판 추가 / 진행 중 연구 완료 / 진행 중 개발을 결함 0·출시 대기로 / 전 직원 컨디션 최대 */
 export type DevCheatKind = 'cash' | 'reputation' | 'finishResearch' | 'finishDev' | 'restStaff';

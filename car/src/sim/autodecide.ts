@@ -7,10 +7,11 @@ import { staffCap, staffCount } from './company';
 import { choiceMoney } from './events';
 import { autoChoice } from './rivalry';
 import { tradeAuto } from './world';
+import { limitedAuto } from './motor';
 import type { AutoAnswer, CarState, PendingChoice } from './types';
 
 /** 자동 승인할 수 있는 결정 종류(무작위 사건 + 경쟁 2부 결정 창), 자료 순서 */
-export const AUTO_KINDS = RANDOM_EVENTS.map((d) => ({ id: d.id, name: d.name, rule: d.needs === 'rivalry' || d.needs === 'world' ? 'exec' as const : 'default' as const, defaultLabel: d.choices[d.defaultChoice].label,
+export const AUTO_KINDS = RANDOM_EVENTS.map((d) => ({ id: d.id, name: d.name, rule: d.needs === 'rivalry' || d.needs === 'world' || d.needs === 'motorsport' ? 'exec' as const : 'default' as const, defaultLabel: d.choices[d.defaultChoice].label,
   defaultChoice: d.defaultChoice, choices: d.choices.map((c) => ({ label: c.label, result: c.result })) }));
 type AutoKind = typeof AUTO_KINDS[number];
 /** 3.7.1 답을 정하지 않은 종류의 답: 규칙 종류는 규칙대로, 나머지는 기본 선택(3.7.0과 같다) */
@@ -27,7 +28,7 @@ export const autoGuardOn = (s: CarState): boolean => s.autoDecide?.guard !== fal
 export function autoPick(s: CarState, pc: PendingChoice): { choice: number; why: string | null } {
   const ans = autoAnswer(s, pc.eventId);
   if (ans !== 'rule') return { choice: ans, why: null };
-  const a = pc.tr ? tradeAuto(s, pc) : autoChoice(s, pc); // 5.5.0 무역 협정: 아끼는 관세가 로비 비용보다 크면 로비
+  const a = pc.tr ? tradeAuto(s, pc) : pc.ms ? limitedAuto(s, pc) : autoChoice(s, pc); // 5.5.0 무역 협정: 아끼는 관세가 로비 비용보다 크면 로비. 5.6.0 한정판: 다 팔아 남으면 낸다
   return a ? { choice: a.choice, why: a.why } : { choice: RANDOM_EVENTS.find((d) => d.id === pc.eventId)!.defaultChoice, why: null };
 }
 /** 3.7.1 그 선택지를 지금 할 수 없으면 이유(효과가 걸 대상이 없음), 아니면 null */

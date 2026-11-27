@@ -3,7 +3,8 @@ import { config } from '../config';
 import { BODIES, OPTIONS, POWERTRAINS, TECHS, bodyById, optionById, powertrainById, techById } from '../data';
 import { isAway } from './company';
 import { josa } from './josa';
-import { yearOf } from './time';
+import { monthOf, yearOf } from './time';
+import { motorResearchMult } from './motor';
 import { REGION, eraTimeline } from './events';
 import type { Battery, BodyDef, CarState, GameEvent, OptionDef, PowertrainDef, Staff, TechDef, TechEffect, TechField } from './types';
 
@@ -188,6 +189,7 @@ export function researchWeek(s: CarState, ev: GameEvent[]): void {
   const req = regulatedTechs(s), cur = s.research.priority;
   if (!(cur && req.has(cur) && s.research.active.some((a) => a.techId === cur))) { const r = s.research.active.find((a) => req.has(a.techId)); if (r) { s.research.priority = r.techId; s.research.active = [r, ...s.research.active.filter((a) => a !== r)]; } }
   const got = researchShares(s, weeklyResearchPoints(s));
+  if (s.motor?.boosts.length) s.research.active.forEach((a, i) => { got[i] *= motorResearchMult(s, a.techId, monthOf(s.week)); }); // 5.6.0 모터스포츠 우승: 관련 분야 연구 속도
   s.research.active.forEach((a, i) => { a.points += got[i]; });
   const done = s.research.active.filter((a) => a.points >= a.need - 1e-9);
   if (!done.length) return;

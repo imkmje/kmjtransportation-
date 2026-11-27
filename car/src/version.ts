@@ -1,1 +1,1 @@
-export const CAR_VERSION = '5.5.1';
+export const CAR_VERSION = '5.6.0';

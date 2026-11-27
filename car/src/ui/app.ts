@@ -29,7 +29,7 @@ import * as I from './insight';
 import * as V from './views';
 import * as EQ from './equip';
 
-type Screen = 'today' | 'garage' | 'start' | 'plan' | 'lift' | 'derive' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records' | 'rivals'; // derive: 1.3.0 파생 모델 고르기, today·rivals: 5.0.0
+type Screen = 'today' | 'garage' | 'start' | 'plan' | 'lift' | 'derive' | 'dev' | 'launch' | 'research' | 'company' | 'fin' | 'records' | 'rivals' | 'motor'; // motor: 5.6.0 시장 › 모터스포츠 // derive: 1.3.0 파생 모델 고르기, today·rivals: 5.0.0
 /** 5.0.0 아래쪽 주 메뉴 7탭. 기존 화면(Screen)을 탭 아래로 묶는다(mainTab) */
 type Main = 'today' | 'car' | 'research' | 'people' | 'group' | 'market' | 'fin';
 type PlanTab = 'sum' | 'prev' | 'body' | 'look' | 'seg' | 'power' | 'opt' | 'dir' | 'budget';
@@ -670,7 +670,7 @@ export function startApp(): void {
     const hqOf = (e: typeof L) => e.upkeepHq ?? Math.min(e.upkeep, Q.hqInfo(s).current.upkeep); // 0.5.1 전 장부는 지금 본사 유지비로 나눈다(재무 화면과 같게)
     // 지출 줄: [이름, 이번 달, 전월]. 임원·연구는 0.9.0부터 장부에 따로 있다(예전 달은 월급·일회성에 들어 있음)
     const costs = (e: typeof L): [string, number][] => [['차 원가', e.cogs], [e.execPay === undefined ? '직원·임원 월급' : '직원 월급', e.salaries - (e.execPay ?? 0)], ['임원 월급', e.execPay ?? 0], ['본사 유지비', hqOf(e)], [s.batteryPlant.level || s.batteryPlant.build ? '공장 유지비(배터리 공장 포함)' : '공장 유지비', e.upkeep - hqOf(e)],
-      ['개발비', e.dev], ['광고비', e.marketing], ['연구 시작 비용', e.research ?? 0], ['대출 이자', e.interest], ['리콜', e.recall], ['자회사 투자(설립·추가 투자)', e.subInv ?? 0], ['관세', e.tariff ?? 0], ['운송비', e.ship ?? 0], ['판매 법인·현지 공장 유지비', e.worldUpkeep ?? 0], ['해외 진출·판매 법인·현지 공장 투자', e.worldInv ?? 0], ['일회성 지출(채용 공고·교육·퇴직금·승급·건설 등)', (e.oneOff || 0) - (e.research ?? 0) - (e.subInv ?? 0) - (e.worldInv ?? 0)]]; // 4.0.0 해외 항목
+      ['개발비', e.dev], ['광고비', e.marketing], ['연구 시작 비용', e.research ?? 0], ['대출 이자', e.interest], ['리콜', e.recall], ['자회사 투자(설립·추가 투자)', e.subInv ?? 0], ['관세', e.tariff ?? 0], ['운송비', e.ship ?? 0], ['판매 법인·현지 공장 유지비', e.worldUpkeep ?? 0], ['해외 진출·판매 법인·현지 공장 투자', e.worldInv ?? 0], ['모터스포츠', e.motor ?? 0], ['일회성 지출(채용 공고·교육·퇴직금·승급·건설 등)', (e.oneOff || 0) - (e.research ?? 0) - (e.subInv ?? 0) - (e.worldInv ?? 0)]]; // 4.0.0 해외 항목
     const cur = costs(L), prev = P ? costs(P) : null;
     const dd = (a: number, b: number | undefined, cost = false) => b === undefined ? '<td class="r d">—</td>' : Math.round(a - b) === 0 ? '<td class="r d">±0</td>' : `<td class="r d ${(a > b) !== cost ? 'pos' : 'neg'}">${money(a - b, true)}</td>`;
     const kp = (label: string, v: string, a: number, b: number | undefined, cls = '') => `<div class="kpi"><small>${label}</small><b class="${longCls(cls, v)}">${v}</b>${b === undefined ? '' : `<small class="${a >= b ? 'pos' : 'neg'}">전월 대비 ${label === '판매' ? `${a - b >= 0 ? '+' : '−'}${num(Math.abs(a - b))}대` : money(a - b, true)}</small>`}</div>`;
@@ -685,7 +685,7 @@ export function startApp(): void {
     sheetBody.innerHTML = `<div class="mon"><div class="eyebrow"><i></i>${esc(s.companyName)} · 월 결산</div><h2>${ml(L)} 결산${P ? ` <small class="hint">전월(${ml(P)})과 비교</small>` : ''}</h2>
       <div class="kpis mon-kpis">${kp('판매', `${num(wSold(L))}<span>대</span>`, wSold(L), P ? wSold(P) : undefined)}${kp('매출', money(L.revenue), L.revenue, P?.revenue)}${kp('이익', money(L.profit, true), L.profit, P?.profit, L.profit >= 0 ? 'pos' : 'neg')}${kp('월말 현금', money(L.cash), L.cash, P?.cash, L.cash < 0 ? 'neg' : '')}</div>
       <div class="mon-cols"><section><p class="lbl">차종별 판매와 이익</p>${cars}<p class="note">차종 이익 = 매출 − 원가 − 광고 − 리콜${L.world ? ' − 관세·운송비' : ''}(직원 월급·유지비·개발비 전).</p>${L.world ? monWorld(L, P) : ''}</section>
-      <section><p class="lbl">지출 내역</p><table class="tbl mon-costs"><tr><th>항목</th><th class="r">금액</th><th class="r">전월 대비</th></tr><tr><td>판매 수입</td><td class="r pos">${money(L.revenue)}</td>${dd(L.revenue, P?.revenue)}</tr>${L.subDiv !== undefined ? `<tr class="mon-subdiv"><td>자회사 배당</td><td class="r pos">${money(L.subDiv ?? 0)}</td>${dd(L.subDiv ?? 0, P ? P.subDiv ?? 0 : undefined)}</tr>` : ''}${rows}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td>${dd(L.profit, P?.profit)}</tr></table></section></div>${nav}</div>`;
+      <section><p class="lbl">지출 내역</p><table class="tbl mon-costs"><tr><th>항목</th><th class="r">금액</th><th class="r">전월 대비</th></tr><tr><td>판매 수입</td><td class="r pos">${money(L.revenue)}</td>${dd(L.revenue, P?.revenue)}</tr>${L.subDiv !== undefined ? `<tr class="mon-subdiv"><td>자회사 배당</td><td class="r pos">${money(L.subDiv ?? 0)}</td>${dd(L.subDiv ?? 0, P ? P.subDiv ?? 0 : undefined)}</tr>` : ''}${L.motorRev ? `<tr class="mon-motorrev"><td>우승 기념 한정판 판매</td><td class="r pos">${money(L.motorRev)}</td>${dd(L.motorRev, P ? P.motorRev ?? 0 : undefined)}</tr>` : ''}${rows}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td>${dd(L.profit, P?.profit)}</tr></table></section></div>${nav}</div>`;
     openSheet(true); renderTop();
   }
   /** 4.0.0 월 결산의 해외 권역 표 */
@@ -828,10 +828,10 @@ export function startApp(): void {
   const TODO_MUTE_KEY = 'car-company-todomute';
   const todoMute = new Set<string>((() => { try { const a = JSON.parse(localStorage.getItem(TODO_MUTE_KEY) ?? '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : []; } catch { return []; } })());
   const todoSnooze = new Map<string, number>(); // 항목 키 → 이 달(포함)까지 숨김. 화면 메모리에만(불러오면 다시 보인다)
-  const REF_KINDS = new Set<string>(['exec', 'team', 'research', 'hire']); // 늘 떠 있는 참고 항목
+  const REF_KINDS = new Set<string>(['exec', 'team', 'research', 'hire', 'motorRace']); // 늘 떠 있는 참고 항목(5.6.0 모터스포츠 경기 결과)
   const NO_MUTE = new Set<string>(['choice', 'cash', 'ready', 'regulation']); // 끌 수 없는 종류
-  const TODO_TAG: Record<Q.TodoKind, string> = { choice: '결정', ready: '출시', cands: '채용', cash: '현금', regulation: '규제', reports: '보고', exec: '임원', retrofit: '장비', capacity: '생산', equip: '장비', facelift: '얼굴', fullchange: '세대', team: '개발', research: '연구', tired: '휴식', hire: '정원' };
-  const TODO_KIND_NAME: Record<Q.TodoKind, string> = { choice: '결정할 사건', ready: '출시 대기', cands: '채용 후보', cash: '현금 마이너스', regulation: '규제', reports: '임원 보고', exec: '빈 임원 자리', retrofit: '의무 장비', capacity: '생산 한도', equip: '장비 기대 미달', facelift: '페이스리프트 적기', fullchange: '풀체인지', team: '빈 개발팀', research: '빈 연구 칸', tired: '지친 직원', hire: '정원 여유' };
+  const TODO_TAG: Record<Q.TodoKind, string> = { choice: '결정', ready: '출시', cands: '채용', cash: '현금', regulation: '규제', reports: '보고', exec: '임원', retrofit: '장비', capacity: '생산', equip: '장비', facelift: '얼굴', fullchange: '세대', team: '개발', research: '연구', tired: '휴식', hire: '정원', motor: '경주', motorResult: '경주', motorRace: '경주' };
+  const TODO_KIND_NAME: Record<Q.TodoKind, string> = { choice: '결정할 사건', ready: '출시 대기', cands: '채용 후보', cash: '현금 마이너스', regulation: '규제', reports: '임원 보고', exec: '빈 임원 자리', retrofit: '의무 장비', capacity: '생산 한도', equip: '장비 기대 미달', facelift: '페이스리프트 적기', fullchange: '풀체인지', team: '빈 개발팀', research: '빈 연구 칸', tired: '지친 직원', hire: '정원 여유', motor: '모터스포츠 계획', motorResult: '모터스포츠 시즌 결과', motorRace: '모터스포츠 경기' };
   /** 서랍·배지에 보이는 할 일(숨긴 것 빼고) */
   const shownTodos = () => { const m = monthOf(game!.state.week); return todos().filter((t) => !todoMute.has(t.kind) && !((todoSnooze.get(t.key) ?? -1) >= m)); };
   /** 배지 숫자: 급한 일 + 지금 할 수 있는 일(참고 제외) */
@@ -911,6 +911,7 @@ export function startApp(): void {
         go(devScreen()); return;
       case 'company': goCo(t.sub, t.id); return;
       case 'records': go('records'); return;
+      case 'motor': mkLast = 'motor'; go('motor'); return; // 5.6.0
       case 'choice': showChoice(); return;
       case 'reports': showTodo('reports'); return;
       default: go(screen);
@@ -1032,7 +1033,7 @@ export function startApp(): void {
     }
     isShow = false;
     const v: View = sx && screen !== 'plan' ? (screen === 'garage' ? subGarageView(sx.id) : screen === 'dev' ? subDevView(sx.id) : screen === 'records' ? subRecordsView(sx.id) : { ov: '', panel: subBar(sx) + subDetailView(sx.id), look: undefined })
-      : screen === 'today' ? todayView() : screen === 'rivals' ? { ov: '', panel: rivalsView(), look: undefined }
+      : screen === 'today' ? todayView() : screen === 'rivals' ? { ov: '', panel: rivalsView(), look: undefined } : screen === 'motor' ? { ov: '', panel: motorView(), look: undefined }
       : screen === 'garage' ? (garageSub && s.subs?.some((x) => x.id === garageSub!.id) ? subGarageView(garageSub.id, true) : garageView()) : screen === 'start' ? startView() : screen === 'plan' ? planView() : screen === 'lift' ? liftView() : screen === 'derive' ? deriveView()
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : screen === 'research' ? researchTab() : screen === 'fin' ? finTab() : recordsView(), look: undefined };
@@ -1080,7 +1081,7 @@ export function startApp(): void {
   }
   // ---------- 5.0.0 주 메뉴 7탭 ----------
   let pSec: 'staff' | 'hire' | 'elite' = 'staff'; // 5.1.0 사람 탭 구역
-  let devFrom: 'car' | 'people' = 'car', mkLast: 'rivals' | 'world' | 'awards' = 'rivals', isShow = false;
+  let devFrom: 'car' | 'people' = 'car', mkLast: 'rivals' | 'world' | 'awards' | 'motor' = 'rivals', isShow = false;
   /** 지금 화면이 속한 주 메뉴 탭 */
   function mainTab(): Main {
     const sx = curSub();
@@ -1090,7 +1091,7 @@ export function startApp(): void {
       case 'dev': return devFrom;
       case 'research': return 'research';
       case 'company': return coTab === 'staff' || coTab === 'exec' ? 'people' : coTab === 'world' ? 'market' : 'group';
-      case 'rivals': return 'market';
+      case 'rivals': case 'motor': return 'market';
       case 'records': return recTab === 'awards' ? 'market' : 'fin';
       case 'fin': return 'fin';
       default: return 'car';
@@ -1108,7 +1109,7 @@ export function startApp(): void {
       case 'research': go('research'); return;
       case 'people': if (coTab !== 'staff' && coTab !== 'exec') coTab = 'staff'; go('company'); return;
       case 'group': if (!['sum', 'hq', 'factory', 'sub'].includes(coTab)) coTab = 'sum'; go('company'); return;
-      case 'market': if (mkLast === 'world') { coTab = 'world'; go('company'); } else if (mkLast === 'awards') { recTab = 'awards'; go('records'); } else go('rivals'); return;
+      case 'market': if (mkLast === 'world') { coTab = 'world'; go('company'); } else if (mkLast === 'awards') { recTab = 'awards'; go('records'); } else go(mkLast === 'motor' ? 'motor' : 'rivals'); return;
       case 'fin': go('fin'); return;
     }
   }
@@ -1116,7 +1117,7 @@ export function startApp(): void {
   const SECS: Partial<Record<Main, [string, string, string][]>> = {
     people: [['psec', 'staff', '직원'], ['psec', 'hire', '채용'], ['psec', 'elite', '직속 전담팀'], ['cotab', 'exec', '임원'], ['sec', 'office', '사무실']],
     group: [['cotab', 'sum', '그룹 종합'], ['cotab', 'hq', '본사'], ['cotab', 'factory', '공장'], ['cotab', 'sub', '자회사']],
-    market: [['sec', 'rivals', '경쟁사'], ['cotab', 'world', '세계'], ['rectab', 'awards', '시상식']],
+    market: [['sec', 'rivals', '경쟁사'], ['cotab', 'world', '세계'], ['sec', 'motor', '모터스포츠'], ['rectab', 'awards', '시상식']], // 5.6.0 모터스포츠
     fin: [['sec', 'fin', '재무'], ['sec', 'records', '기록']],
   };
   /** 5.1.0 탭 머리: 지금 상태 한 줄 + 핵심 숫자 3~4개(사람·그룹·시장·재무) */
@@ -1127,6 +1128,7 @@ export function startApp(): void {
     if (t === 'group') { const H = Q.hqInfo(s), n = H.next, F = Q.factoryInfo(s), bar = (label: string, v: number, need: number, txt: string) => `<div class="th-bar"><span>${label}</span><div class="life" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(1, v / Math.max(1, need)) * 100)}" aria-label="${label}"><u style="width:${(Math.min(1, v / Math.max(1, need)) * 100).toFixed(1)}%"></u></div><b>${txt}</b></div>`;
       return row(`본사 ${s.hqLevel}등급 「${esc(H.current.name)}」${n ? ` · 다음 ${n.level}등급까지 ${H.canUpgrade ? '<b>지금 올릴 수 있습니다</b>' : esc(H.reason ?? '')}` : ' · 가장 높은 등급'}`, `${kpi('본사 등급', `${s.hqLevel}<span>등급</span>`)}${kpi('공장', `${s.factory.level}<span>등급 · 월 ${num(F.current.capacity)}대</span>`)}${kpi('자회사', `${s.subs?.length ?? 0}<span>곳</span>`)}${kpi('평판', String(Math.round(s.reputation)))}`,
         n ? `<div class="th-bars">${bar('현금', Math.max(0, s.cash), n.cost, `${money(s.cash)} / ${money(n.cost)}`)}${bar('평판', s.reputation, n.rep, `${Math.round(s.reputation)} / ${n.rep}`)}</div>` : ''); }
+    if (t === 'market' && screen === 'motor') return motorHead(); // 5.6.0
     if (t === 'market') { const mine = sellingGens(s).reduce((a, g) => a + WD.madeLast(g), 0), open = WD.regionViews(s).filter((v) => v.open).length, aw = s.rivals.length - (s.rivalry?.out?.length ?? 0);
       return row(`경쟁사 ${aw}곳 · 해외 권역 ${open}곳 진출 · 지난달 내 판매 ${num(mine)}대`, `${kpi('지난달 판매', `${num(mine)}<span>대</span>`)}${kpi('경쟁사', `${aw}<span>곳</span>`)}${kpi('진출 권역', `${open}<span>/ ${WD.regionViews(s).length}</span>`)}${kpi('수상', `${allGens(s).reduce((a, g) => a + (g.awards?.length ?? 0), 0)}<span>회</span>`)}`); }
     if (t === 'fin') { const L = s.ledger.at(-1), led = s.ledger.slice(-12), y = yearOf(s.week), ytd = s.ledger.filter((e) => e.year === y).reduce((a, e) => a + e.profit, 0);
@@ -1165,7 +1167,7 @@ export function startApp(): void {
   let todaySel: string | null = null; // 고른 일(키). null = 맨 위, '' = 아무것도 펼치지 않음(세로 화면)
   // 5.1.0 오늘 탭 줄: 같은 종류는 한 줄로 묶고, 기한 있는 결정·멈춰 있는 일만 '정할 일'(나머지는 '참고'), 기한이 가까운 순
   type TdRow = Q.TodoItem & { items: Q.TodoItem[]; ref: boolean; due: number };
-  const DECIDE = new Set<string>(['choice', 'ready', 'cands', 'cash', 'regulation', 'research', 'team', 'fullchange', 'facelift']);
+  const DECIDE = new Set<string>(['choice', 'ready', 'cands', 'cash', 'regulation', 'research', 'team', 'fullchange', 'facelift', 'motor', 'motorResult']); // 5.6.0 모터스포츠 경기 결과(motorRace)는 참고
   const GROUP_TITLE: Partial<Record<Q.TodoKind, (n: number) => string>> = { capacity: (n) => `주문이 생산을 넘는 차 ${n}종`, equip: (n) => `기대 장비가 빠진 차 ${n}종`, retrofit: (n) => `의무 장비를 넣을 차 ${n}종`, facelift: (n) => `페이스리프트 적기인 차 ${n}종`, fullchange: (n) => `풀체인지할 수 있는 차 ${n}종`, regulation: (n) => `규제 대응 ${n}건`, ready: (n) => `출시 준비가 끝난 차 ${n}대` };
   function todayRows(): TdRow[] {
     if (!game) return [];
@@ -1191,6 +1193,7 @@ export function startApp(): void {
     for (const a of Q.researchInfo(s).active) rows.push(row('tab', ' data-v="research"', `연구 · ${esc(a.name)}`, a.weeksLeft === null ? '—' : `${a.weeksLeft}주`));
     for (const x of s.subs ?? []) { const d = Q.subDetail(s, x.id); if (d && d.mode === 'delegate') rows.push(row('cotab', ' data-v="sub"', `자회사 「${esc(d.name)}」 (전반 위임)`, `이익 ${money(d.lastMonth?.profit ?? 0, true)}`)); }
     for (const r of WD.regionViews(s)) if (r.open && r.auto) rows.push(row('cotab', ' data-v="world"', `자동 수출 · ${esc(r.name)}`, `${num(r.sold)}대`));
+    { const I = Q.motorInfo(s, false), on = I.series.filter((x) => x.season); if (I.delegated || on.length) rows.push(row('msGo', '', `모터스포츠${I.delegated ? ' (위임)' : ''}${on.length ? ` · ${on.map((x) => `${esc(x.short)} 종합 ${x.season!.rank}위`).join(' · ')}` : ''}`, on.length ? `${on[0].season!.races}/${on[0].season!.of}전` : `${I.planYear} 시즌 준비`)); } // 5.6.0
     for (const r of WD.regionViews(s)) if (r.plant?.level || r.plant?.build) rows.push(row('cotab', ' data-v="world"', `현지 공장 · ${esc(r.name)}${r.plant.build ? ` ${r.plant.build.level}등급 공사` : ''}`, r.plant.build ? `${r.plant.build.monthsLeft}개월` : `${num(r.plant.made)}대`)); // 5.5.0
     const n = Q.autoLog(s, 99).filter((x) => x.week > s.week - config.time.weeksPerMonth).length;
     return { rows, foot: n ? `<p class="td-foot">자동 승인으로 최근 한 달 동안 ${n}건을 처리했습니다</p>` : '' };
@@ -1236,11 +1239,28 @@ export function startApp(): void {
         break;
       }
       case 'team': body = tdHead('개발', t.title, t.detail) + `<div class="row td-btns"><button class="btn ink" data-act="plan">새 차 기획</button><button class="btn" data-act="devTab">개발 현황</button></div>`; break;
+      case 'motor': case 'motorResult': case 'motorRace': body = motorTodo(t); break; // 5.6.0
       case 'ready': body = tdHead('출시', t.title, t.detail) + `<div class="row td-btns">${go1('출시 준비')}</div>`; break;
       case 'reports': body = tdHead('보고', t.title, t.detail) + `<div class="row td-btns"><button class="btn ink" data-act="tdReports">보고 보기</button></div>`; break;
       default: body = tdHead(TODO_KIND_NAME[t.kind], t.title, t.detail) + `<div class="row td-btns">${go1('해당 화면으로')}</div>`;
     }
     return body + later;
+  }
+  /** 5.6.0 오늘 탭의 모터스포츠: 올해 계획(급마다 예산·예상 순위, [이대로 확정]), 지난 시즌 결과([확인]), 지난 경기(참고) */
+  function motorTodo(t: Q.TodoItem): string {
+    const s = game!.state, I = Q.motorInfo(s, t.kind === 'motor'), go = (l: string) => `<button class="btn${t.kind === 'motorRace' ? ' ink' : ''}" data-act="msGo">${l}</button>`;
+    if (t.kind === 'motor') {
+      const rows = I.series.filter((x) => x.eligible).map((x) => `<tr><td>${esc(x.name)}</td><td>${x.plan ? `${esc(I.stepNames[x.plan.step])} · ${money(x.steps[x.plan.step].budget)}` : '불참'}</td><td>${x.fc ? `${x.fc.best === x.fc.worst ? x.fc.best : `${x.fc.best}~${x.fc.worst}`}위 <small class="hint">/ ${x.fc.of}</small>` : '—'}</td></tr>`).join('');
+      return tdHead('모터스포츠', t.title, `${I.year} 시즌은 2월 결산에 확정되고 3월부터 10경기를 치릅니다. 연 예산 합 ${money(I.total)}, 지금 현금 ${money(s.cash)}.`)
+        + `<div class="td-card"><table class="tbl ms-tt"><tr><th>대회</th><th>예산</th><th>예상 순위</th></tr>${rows}</table>${I.warn ? `<p class="note why">${esc(I.warn)}</p>` : ''}<p class="note">시장 조사 임원에게 '모터스포츠 예산 자동 조정'을 위임하면 해마다 알아서 정합니다${ib('term:모터스포츠 위임')}.</p>
+          <div class="row td-btns"><button class="btn ink" data-act="msGo">모터스포츠에서 정하기</button><button class="btn" data-act="msConfirm">이대로 확정</button></div></div>`;
+    }
+    if (t.kind === 'motorResult') {
+      const y = I.lastYear!, rows = I.series.flatMap((x) => x.history.filter((h) => h.year === y).map((h) => `<tr class="${h.rank === 1 ? 'win' : ''}"><td>${esc(x.name)}</td><td>${h.rank}위 <small class="hint">/ ${h.of}</small></td><td class="r">${h.pts}점</td><td class="r">${money(h.paid)}</td></tr>`)).join('');
+      return tdHead('모터스포츠', t.title, '12월 결산의 최종 순위입니다. 순위에 따른 보상(평판·판매·인지도·연구)은 이미 들어갔습니다. 성적이 나빠도 잃는 것은 쓴 예산뿐입니다.')
+        + `<div class="td-card"><table class="tbl ms-tt"><tr><th>대회</th><th>최종 순위</th><th class="r">점수</th><th class="r">낸 예산</th></tr>${rows}</table><div class="row td-btns"><button class="btn ink" data-act="msAck">확인</button>${go('모터스포츠 보기')}</div></div>`;
+    }
+    return tdHead('모터스포츠 · 참고', t.title, t.detail) + `<div class="row td-btns">${go('순위표 보기')}</div>`;
   }
   function todayView(): View {
     const rows = todayRows(), list = rows.filter((r) => !r.ref), refs = rows.filter((r) => r.ref), wide = todayWide();
@@ -1575,6 +1595,8 @@ export function startApp(): void {
     if (n) toast(`${n}대의 ${k.kind === 'mk' ? '광고' : '자동 가격'}를 바꿨습니다.${no.length ? ` 바꿀 수 없는 ${no.length}대는 그대로 뒀습니다.` : ''}`);
     render();
   }
+  /** 5.6.0 차 탭 무대의 출전 차 표시(올해 시즌에 나간 차) */
+  const msTag = (g: Generation): string => { const ss = game!.state.motor?.season, on = ss && ss.year === yearOf(game!.state.week) ? ss.entries.filter((e) => e.car === g.id) : []; return on.length ? ` <span class="ms-tag">모터스포츠 출전 · ${esc(on.map((e) => Q.MOTOR_SERIES.find((x) => x.id === e.series)!.short).join('·'))}</span>` : ''; };
   function garageView(): View {
     const s = game!.state, gens = sellingGens(s), p = s.projects[0];
     const devCard = s.projects.map((p) => `<div class="card"><p class="lbl">개발 중</p><h2>${esc(p.name)}</h2><p class="hint">${p.phase === 'design' ? `설계 ${p.weeksDone}/${p.designWeeks}주` : `시험 ${p.testWeeks}주째`} · 남은 결함 약 ${p.defectEst}개</p><div class="row" style="margin-top:10px"><button class="btn" data-act="devSel" data-id="${p.id}">개발 화면 보기</button></div></div>`).join('');
@@ -1595,7 +1617,7 @@ export function startApp(): void {
     const stLine = ending ? '이번 달 말에 단종됩니다' : `나온 지 ${ageText(g).replace(/ 지남$/, '')}${fc0.ok && !isDeriv ? ' · 세대교체할 수 있습니다' : g.lostSales >= 1 ? ' · 주문이 생산을 넘습니다' : ''}`;
     const ovh = `<div class="ov tl show-h"><div class="eyebrow"><i></i>${esc(bodyById(g.body).name)} · ${g.number}세대 · ${genYear(g)}년 출시 · ${ending ? '이번 달 말 단종' : '판매 중'}${lines >= 2 ? ` · 생산 라인 <span class="lines">${gens.length}/${lines}</span>` : ''}</div>
       <div class="model">${esc(name)}<small>${editionName(g)}</small><button class="btn rn-btn" data-act="renameOpen" data-id="${np0.id}">이름 변경</button></div>
-      <div class="show-st">${esc(stLine)}</div><div class="spec">${derivLine(g) ? `${esc(derivLine(g))} · ` : ''}${esc(specLine(g.body, g.powertrain, e.tier, g.segment))} · ${esc(paintName(e.color))}</div><div class="spec when">${esc(launchWhen(g))}</div></div>
+      <div class="show-st">${esc(stLine)}${msTag(g)}</div><div class="spec">${derivLine(g) ? `${esc(derivLine(g))} · ` : ''}${esc(specLine(g.body, g.powertrain, e.tier, g.segment))} · ${esc(paintName(e.color))}</div><div class="spec when">${esc(launchWhen(g))}</div></div>
       <aside class="ov show-k" aria-label="이 차의 수치"><div class="sk-rv"><b>${score(g.reviewAvg)}</b><small>평론</small></div><div class="sk-g"><div><small>지난달</small><b>${lastSale === null ? '—' : `${qty(lastSale)}대`}</b></div><div><small>대당 이익</small><b>${esc(money(Q.generationUnitProfit(g, s), true))}</b></div><div><small>차급 점유</small><b>${Math.round(shr * 100)}%</b></div><div><small>가격</small><b>${num(e.price)}만원</b></div></div></aside>
       <div class="ov show-a" role="group" aria-label="이 차로 할 일">${isDeriv ? `<button class="sa-main" data-act="carJump" data-v="next">다음 세대(파생)</button>` : `<button class="sa-main" data-act="showFull" data-id="${np0.id}" ${fc0.ok ? '' : `aria-disabled="true" title="${esc(fc0.reason ?? '')}"`}>세대교체 기획</button>`}<button data-act="carJump" data-v="price">가격·광고</button><button data-act="showCmp" data-id="${g.id}">경쟁 차와 비교</button><button data-act="carJump" data-v="fac">판매 분석</button></div>`;
     const sales = g.sales.slice(-12), mx = Math.max(1, ...sales);
@@ -2459,6 +2481,56 @@ export function startApp(): void {
     return wide ? `<div class="split"><div class="sp-l">${cards}</div><section class="sp-r card" aria-label="경쟁사 자세히">${det}</section></div>` : cards + (rivalSel ? `<div class="card rv-in">${det}</div>` : '');
   }
 
+  // ---------- 5.6.0 시장 › 모터스포츠: 머리(상태 한 줄 + 참가 급·올해 예산·현재 순위·통산 우승), 왼쪽 급 목록 / 오른쪽 상세(세로는 한 칸 펼침) ----------
+  let msSel: string | null = null; // 고른 급. null = 처음(가로는 첫 급), '' = 접음(세로)
+  function motorHead(): string {
+    const s = game!.state, I = Q.motorInfo(s, false), on = I.series.filter((x) => x.season), best = on.length ? Math.min(...on.map((x) => x.season!.rank)) : null;
+    const line = !I.on ? '모터스포츠가 꺼져 있습니다.' : !I.open ? `모터스포츠는 본사 ${I.series[0].hq}등급부터 나갈 수 있습니다.`
+      : on.length ? `${I.year} 시즌 ${on.length}개 급 참가 중 · ${on.map((x) => `${esc(x.short)} ${x.season!.races}/${x.season!.of}전 종합 ${x.season!.rank}위`).join(' · ')}`
+      : I.locked ? `${I.year} 시즌에는 나가지 않습니다 · 지금 정하는 계획은 ${I.planYear} 시즌부터` : `<b>${I.year} 시즌 계획을 2월 결산까지 정하세요</b>`;
+    const dl = I.delegated ? ` · 시장 조사 임원에게 위임(연 예산 합 현금의 ${Math.round(I.autoShare * 100)}% 안)` : '';
+    return `<div class="card tab-head ms-head"><p class="th-line">${line}${dl}</p><div class="kpis">${kpi('참가 급', `${on.length}<span>/ ${I.series.length}</span>`)}${kpi('올해 예산', money(I.seasonBudget))}${kpi('현재 순위', best === null ? '—' : `${best}<span>위</span>`)}${kpi('통산 우승', `${I.wins}<span>회</span>`)}</div></div>`;
+  }
+  type MsSeries = ReturnType<typeof Q.motorInfo>['series'][number];
+  const msLogo = (id: string, z = 20) => id === 'me' ? myLogo(z) : logo(id, z);
+  function motorDetail(I: ReturnType<typeof Q.motorInfo>, x: MsSeries, inline = false): string { // inline: 세로 화면에서 목록 줄 아래 펼침(이름은 줄에 있다)
+    const p = x.plan, py = I.planYear;
+    const head = `<p class="lbl">${esc(x.region ? `본사 ${x.hq}등급 + 해외 권역 진출` : `본사 ${x.hq}등급부터`)}</p>${inline ? '' : `<h2 class="ms-h">${esc(x.name)}${ib('term:모터스포츠')}</h2>`}`;
+    if (!x.eligible) return `${head}<p class="hint">${esc(x.why ?? '')}</p>${x.history.length ? motorHist(x) : ''}`;
+    const steps = `<div class="seg ms-steps" role="group" aria-label="${esc(x.name)} 예산 단계"><button data-act="msStep" data-k="${x.id}" data-v="off" aria-pressed="${!p}">불참<small>0원</small></button>${x.steps.map((st) => `<button data-act="msStep" data-k="${x.id}" data-v="${st.step}" aria-pressed="${p?.step === st.step}">${esc(st.name)}<small>${money(st.budget)}</small></button>`).join('')}</div>`;
+    const cars = !x.needCar ? '<p class="hint">포뮬러는 출전 차를 고르지 않습니다. 관련 연구 점수가 크게 들어갑니다.</p>'
+      : x.cars.length ? `<div class="ms-cars" role="group" aria-label="출전 차">${x.cars.map((c) => `<button class="ms-car" data-act="msCar" data-k="${x.id}" data-id="${c.nameplate}" aria-pressed="${p?.car === c.nameplate}" ${p ? '' : 'disabled'}><b>${esc(c.name)}</b><small>${esc(bodyById(c.body).name)} · 평론 ${score(c.review)}</small></button>`).join('')}</div>${p && p.car === undefined ? '<p class="hint">고르지 않으면 2월 결산 때 평론이 가장 높은 차가 나갑니다.</p>' : ''}`
+      : `<p class="hint">판매 중인 ${esc(x.bodies.join('·'))} 차가 없습니다. 출전 차 없이 나가면 차 점수가 0입니다.</p>`;
+    const eliteOn = !!p?.elite, eliteBtn = I.eliteN ? `<button class="btn${eliteOn ? ' ink' : ''} ms-elite" data-act="msElite" data-k="${x.id}" data-v="${eliteOn ? '0' : '1'}" aria-pressed="${eliteOn}" ${p ? '' : 'disabled'}>${eliteOn ? '전담팀 배치함 · 누르면 뺍니다' : `직속 전담팀 ${I.eliteN}명 배치하기`}</button>` : '<p class="hint">직속 전담팀원이 없습니다(본사 3등급부터 사람 › 직속 전담팀).</p>';
+    const pr = x.parts, fc = x.fc, total = pr ? pr.budget + pr.research + pr.car + pr.elite + pr.exp : 0;
+    const power = pr ? `<div class="ms-pw"><p class="lbl">팀 전력${ib('term:팀 전력')}</p><table class="tbl ms-pt"><tr><td>예산 단계</td><td class="r">${Math.round(pr.budget)}</td></tr><tr><td>관련 연구</td><td class="r">${Math.round(pr.research)}</td></tr>${x.needCar ? `<tr><td>출전 차</td><td class="r">${Math.round(pr.car)}</td></tr>` : ''}<tr><td>직속 전담팀</td><td class="r">${Math.round(pr.elite)}</td></tr><tr><td>연속 참가 경험</td><td class="r">${Math.round(pr.exp)}</td></tr><tr class="sum"><td>합계</td><td class="r">${Math.round(total)}</td></tr></table>
+      ${fc ? `<p class="ms-fc"><b>예상 순위 ${fc.best === fc.worst ? `${fc.best}위` : `${fc.best}~${fc.worst}위`}</b> <small>${fc.of}팀 중 · 우승 확률 약 ${Math.round(fc.win * 100)}%</small>${ib('term:예상 순위')}</p>` : ''}</div>` : '';
+    const planCard = `<section class="ms-plan"><p class="lbl">${py} 시즌 계획${ib('term:모터스포츠 예산')}</p><p class="hint">${I.locked ? `올해 시즌은 2월 결산에 확정되었습니다. 지금 바꾸면 ${py} 시즌부터 적용됩니다.` : '2월 결산에 확정되어 3월부터 10경기를 치릅니다.'}${I.delegated ? ` 시장 조사 임원에게 위임되어 2월 결산 때 예산 단계를 현금의 ${Math.round(I.autoShare * 100)}% 안에서 다시 정합니다.` : ''}</p>${steps}
+      <p class="lbl">출전 차</p>${cars}<p class="lbl">직속 전담팀 배치${ib('term:전담팀 모터스포츠 배치')}</p>${eliteBtn}<p class="note">배치하면 전력이 크게 오르지만 그 시즌(12월 결산까지) 전담팀은 차를 개발할 수 없습니다.</p>${power}${I.warn ? `<p class="note why ms-warn">${esc(I.warn)}</p>` : ''}</section>`;
+    const se = x.season, season = se ? `<section class="ms-season"><p class="lbl">${I.year} 시즌 · ${se.races}/${se.of}전</p><div class="kpis">${kpi('종합 순위', `${se.rank}<span>위 / ${se.table.length}팀</span>`)}${kpi('점수', `${se.pts}<span>점</span>`)}${kpi('낸 예산', `${money(se.paid)}<span> / ${money(se.budget)}</span>`)}${kpi('전력', String(Math.round(se.power)))}</div>
+      <p class="hint">${se.car ? `출전 차 「${esc(se.car)}」` : '출전 차 없음'}${se.elite ? ' · 직속 전담팀 배치' : ''}${se.races ? ` · 지난 경기 ${se.lastPos}위` : ' · 3월 결산에 첫 경기'}</p>
+      <table class="tbl ms-table"><tr><th>순위</th><th>팀</th><th class="r">점수</th></tr>${se.table.map((r) => `<tr class="${r.me ? 'me' : ''}"><td>${r.rank}</td><td><span class="ms-team">${msLogo(r.id)}<span>${esc(r.name)}</span></span></td><td class="r">${r.pts}</td></tr>`).join('')}</table></section>` : '';
+    return head + (se ? season : '') + planCard + motorHist(x);
+  }
+  function motorHist(x: MsSeries): string {
+    return `<section class="ms-hist"><p class="lbl">지난 시즌 기록 · 통산 우승 ${x.wins}회</p>${x.history.length ? `<table class="tbl ms-ht"><tr><th>해</th><th>순위</th><th class="r">점수</th><th class="r">낸 예산</th><th>출전 차</th></tr>${x.history.slice(0, 12).map((h) => `<tr class="${h.rank === 1 ? 'win' : ''}"><td>${h.year}</td><td>${h.rank}위 <small class="hint">/ ${h.of}</small></td><td class="r">${h.pts}</td><td class="r">${money(h.paid)}</td><td>${esc(h.car || '—')}${h.elite ? ' <small class="hint">전담팀</small>' : ''}</td></tr>`).join('')}</table>` : '<p class="hint">아직 기록이 없습니다.</p>'}</section>`;
+  }
+  function motorView(): string {
+    const s = game!.state, I = Q.motorInfo(s), wide = todayWide();
+    if (!I.on) return '<div class="card"><p class="hint">모터스포츠가 꺼져 있습니다.</p></div>';
+    if (msSel && !I.series.some((x) => x.id === msSel)) msSel = null;
+    const sel = msSel === null ? (wide ? (I.series.find((x) => x.eligible) ?? I.series[0]).id : '') : msSel;
+    const sub = (x: MsSeries) => !x.eligible ? (x.why ?? '') : x.season ? `${x.season.races}/${x.season.of}전 · 종합 ${x.season.rank}위 · ${x.season.pts}점` : x.plan ? `${I.planYear} 시즌 ${I.stepNames[x.plan.step]} · ${money(x.steps[x.plan.step].budget)}` : `${I.planYear} 시즌 불참`;
+    const item = (x: MsSeries) => { const on = x.id === sel; return `<div class="ms-wrap${on ? ' on' : ''}"><button class="ms-it${x.eligible ? '' : ' off'}" data-act="msSel" data-v="${x.id}" ${wide ? `aria-pressed="${on}"` : `aria-expanded="${on}"`}><span class="ms-n"><b>${esc(x.name)}</b><small>${esc(sub(x))}</small></span><span class="ms-w">${x.wins ? `우승 ${x.wins}회` : ''}${wide ? '' : `<i aria-hidden="true">${on ? '접기' : '열기'}</i>`}</span></button>${!wide && on ? `<div class="ms-in">${motorDetail(I, x, true)}</div>` : ''}</div>`; };
+    const extra = [...I.boosts.map((b) => `<li>${esc(b.name)} · ${b.kind === 'sales' ? `${esc((b.bodies ?? []).map((k) => bodyById(k).name).join('·'))}·고성능판 판매 +${(b.value * 100).toFixed(1)}%` : b.kind === 'brand' ? `전 차종 판매 +${(b.value * 100).toFixed(1)}%` : b.kind === 'aw' ? `진출 권역 인지도 목표 +${(b.value * 100).toFixed(1)}%p` : `관련 분야 연구 속도 +${Math.round(b.value * 100)}%`} <small class="hint">${b.left}개월 남음</small></li>`),
+      ...I.limited.map((L) => `<li>우승 기념 한정판 「${esc(L.name)}」 ${num(L.units - L.left)}/${num(L.units)}대 판매 · ${money(L.rev)}</li>`)];
+    const list = `<div class="card ms-list"><h3>대회</h3><div class="ms-items" role="list">${I.series.map(item).join('')}</div>
+      ${extra.length ? `<p class="lbl" style="margin-top:12px">받고 있는 보상${ib('term:모터스포츠 보상')}</p><ul class="ms-boosts">${extra.join('')}</ul>` : ''}
+      <p class="note">누적 예산 ${money(I.spent)}${I.earned ? ` · 한정판 판매 ${money(I.earned)}` : ''}. 성적이 나빠도 평판이 깎이지 않고, 잃는 것은 쓴 예산뿐입니다. 경기 장면은 없고 순위표로 봅니다.</p></div>`;
+    const cur = I.series.find((x) => x.id === sel);
+    return wide ? `<div class="split ms-split"><div class="sp-l">${list}</div><section class="sp-r card ms-det" aria-label="대회 자세히">${cur ? motorDetail(I, cur) : ''}</section></div>` : list;
+  }
+
   // ----- 0.8.0 직원 표 정렬·필터 -----
   const STATUS_RANK: Record<Q.StaffRow['status'], number> = { working: 0, idle: 1, training: 2, resting: 3, sales: 4 };
   const staffFits = (x: Q.StaffRow, f: StaffFilter): boolean => f === '' ? true : f === 'exec' ? false : f === 'idle' ? x.status === 'idle' : f === 'working' ? x.status === 'working' : f === 'trainable' ? x.canTrain
@@ -2994,7 +3066,7 @@ export function startApp(): void {
       : k === 'profit' || k === 'loss' ? money(v, true) : k === 'payback' ? `출시 ${v}개월째` : k === 'long' ? `${v}개월` : k === 'month' ? `${num(v)}대 · ${Q.monthLabel(m ?? 0)}` : String(v);
     const card = (x: Q.HallCar) => { const g = Q.generationById(s, x.genId), n = s.nameplates.find((y) => y.id === x.nameplateId);
       return g ? `<button class="hall-it" data-act="hallGo" data-v="${x.nameplateId}"><span class="g-th">${thumb(genLook(g), -0.65, 160, 100)}</span><span class="hall-t"><small>${esc(x.label)}</small><b>${esc(n?.name ?? '')}${x.key === 'soldName' ? '' : ` <em>${g.number}세대</em>`}</b><span>${x.key === 'soldName' ? `${n?.generations.length ?? 0}세대 합계` : `${genYear(g)}년 출시`}</span></span><span class="hall-v ${x.key === 'loss' ? 'neg' : x.key === 'profit' ? 'pos' : ''}">${fmtV(x.key, x.value, x.month)}</span></button>` : ''; };
-    const co = h.company.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${r.key === 'yearRev' || r.key === 'yearProfit' ? money(r.value, r.key === 'yearProfit') : r.key === 'rep' ? Math.round(r.value) : r.key === 'totalSold' ? `${num(r.value)}대` : r.key === 'names' ? `${r.value}개` : r.key === 'staff' ? `${esc(r.text ?? '')} · ${Math.floor(r.value / 12) ? `${Math.floor(r.value / 12)}년 ` : ''}${r.value % 12}개월` : num(r.value)}${r.year ? ` <small class="hint">${r.year}년</small>` : ''}</td></tr>`).join('');
+    const co = h.company.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${r.key === 'yearRev' || r.key === 'yearProfit' ? money(r.value, r.key === 'yearProfit') : r.key === 'rep' ? Math.round(r.value) : r.key === 'totalSold' ? `${num(r.value)}대` : r.key === 'names' ? `${r.value}개` : r.key === 'staff' ? `${esc(r.text ?? '')} · ${Math.floor(r.value / 12) ? `${Math.floor(r.value / 12)}년 ` : ''}${r.value % 12}개월` : r.key === 'motorWins' ? `${r.value}회 <small class="hint">${esc(r.text ?? '')}</small>` : r.key === 'motorBest' ? `${esc(r.text ?? '')} ${r.value}위` : num(r.value)}${r.year ? ` <small class="hint">${r.year}년</small>` : ''}</td></tr>`).join('');
     return `${startCard()}<div class="card hall"><h3>명예의 전당 <small class="hint">누르면 그 차종 계보로 갑니다</small></h3><div class="hall-grid">${h.cars.map(card).join('')}</div>
       ${h.shame.length ? `<details class="hall-shame"><summary><span class="lbl">불명예 ${h.shame.length}</span></summary><div class="hall-grid">${h.shame.map(card).join('')}</div></details>` : ''}</div>
       <div class="card"><h3>회사 기록</h3><table class="tbl hall-co">${co}</table><p class="note">연 매출·이익은 연 기록과 장부로 셉니다. 최고 평판은 해마다의 평판 변화로 거꾸로 셈한 연말 값과 지금 값 중 가장 높은 값입니다.</p></div>`;
@@ -3521,6 +3593,14 @@ export function startApp(): void {
       case 'cmpClear': cmpSel.clear(); render(); return;
       case 'cmpOpen': if (cmpSel.size === 1) showRivalCompare([...cmpSel][0]); else showCompare(); return;
       case 'rivalOpen': showRivalLineup(v); return;
+      // 5.6.0 모터스포츠
+      case 'msSel': msSel = msSel === v && !todayWide() ? '' : v; lastPanel = ''; render(); return;
+      case 'msStep': if (game && run(game.command({ type: 'setMotor', series: el.dataset.k ?? '', step: v === 'off' ? null : Number(v) }))) render(); return;
+      case 'msCar': if (game && run(game.command({ type: 'setMotor', series: el.dataset.k ?? '', step: game.state.motor?.plan[el.dataset.k ?? '']?.step ?? 1, car: Number(el.dataset.id) }))) render(); return;
+      case 'msElite': if (game && run(game.command({ type: 'setMotor', series: el.dataset.k ?? '', step: game.state.motor?.plan[el.dataset.k ?? '']?.step ?? 1, elite: v === '1' }))) render(); return;
+      case 'msConfirm': if (game && run(game.command({ type: 'confirmMotor' }))) { toast('올해 모터스포츠 계획을 이대로 둡니다. 2월 결산에 확정됩니다.'); render(); } return;
+      case 'msAck': if (game && run(game.command({ type: 'ackMotor' }))) render(); return;
+      case 'msGo': mkLast = 'motor'; if (v) msSel = v; go('motor'); return;
       case 'allyRival': if (game && run(game.command({ type: 'allyRival', rivalId: v }))) { toast('기술 제휴를 맺었습니다. 연구 속도가 빨라지고, 이 회사의 앞선 기술을 사 올 수 있습니다.'); showRivalLineup(v); } return;
       case 'endAlly': if (game && await ask('제휴를 끝낼까요? 계약금은 돌아오지 않습니다.', '제휴 끝내기', true) && run(game.command({ type: 'endAlliance', rivalId: v }))) showRivalLineup(v); return;
       case 'buyTech': if (game && run(game.command({ type: 'buyRivalTech', rivalId: v, techId: el.dataset.t ?? '' }))) { toast('기술을 사 와 연구를 마친 것으로 처리했습니다.'); showRivalLineup(v); } return;
@@ -3572,7 +3652,7 @@ export function startApp(): void {
       case 'later': { sheet.hidden = true; if (screen === 'today') { const L = todayList(), i = L.findIndex((x) => x.key === (todaySel ?? L[0]?.key)); todaySel = L[i + 1]?.key ?? ''; lastPanel = ''; } render(); return; } // 오늘 탭: 다음 일로
       // ---- 5.0.0 주 메뉴·오늘 탭·차 탭 ----
       case 'psec': pSec = v as typeof pSec; coTab = 'staff'; screen = 'company'; lastPanel = ''; render(); panel.scrollTop = 0; return;
-      case 'sec': if (v === 'office') { devFrom = 'people'; devSel = null; go('dev'); } else if (v === 'rivals') { mkLast = 'rivals'; go('rivals'); } else if (v === 'records') { if (recTab === 'awards') recTab = 'cars'; go('records'); } else go('fin'); return;
+      case 'sec': if (v === 'office') { devFrom = 'people'; devSel = null; go('dev'); } else if (v === 'rivals') { mkLast = 'rivals'; go('rivals'); } else if (v === 'motor') { mkLast = 'motor'; go('motor'); } else if (v === 'records') { if (recTab === 'awards') recTab = 'cars'; go('records'); } else go('fin'); return;
       case 'tdSel': { const L = todayList(), cur = todaySel === null ? L[0]?.key ?? '' : todaySel, k = el.dataset.k ?? ''; todaySel = !todayWide() && cur === k ? '' : k; lastPanel = ''; render(); return; }
       case 'tdReports': showTodo('reports'); return;
       case 'alertGo': $('#alertbar').hidden = true; showChoice(); return;

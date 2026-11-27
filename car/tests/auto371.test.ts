@@ -90,7 +90,7 @@ describe('결정 자동 승인 3.7.1: 종류별 답', () => {
     o.autoDecide = { on: ALL, guard: false };
     const old = Game.fromJSON(JSON.parse(JSON.stringify(o))), s = old.state, pc = s.events.pending.find((p) => p.eventId === 'poach')!;
     expect(s.autoDecide).toEqual({ on: ALL, guard: false });
-    for (const k of ALL) expect(autoAnswer(s, k)).toBe(defOf(k).needs === 'rivalry' || defOf(k).needs === 'world' ? 'rule' : defOf(k).defaultChoice);
+    for (const k of ALL) expect(autoAnswer(s, k)).toBe(defOf(k).needs === 'rivalry' || defOf(k).needs === 'world' || defOf(k).needs === 'motorsport' ? 'rule' : defOf(k).defaultChoice);
     expect(autoPick(s, pc).choice).toBe(autoChoice(s, pc)!.choice);
     o.autoDecide = { on: ALL, pick: { motorshow: 'rule', strike: 9, poach: 0 } };
     const bad = Game.fromJSON(JSON.parse(JSON.stringify(o))).state;

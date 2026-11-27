@@ -168,7 +168,7 @@ describe('저장과 결정론', () => {
       return JSON.stringify(g.toJSON());
     };
     const a = run(false);
-    expect(SAVE_VERSION).toBe(13); expect(JSON.parse(a).saveVersion).toBe(13);
+    expect(SAVE_VERSION).toBe(14); expect(JSON.parse(a).saveVersion).toBe(14);
     expect(run(true)).toBe(a);
     const s = JSON.parse(a) as CarState;
     expect(s.subs![0].models.map((m) => m.car?.how).sort()).toEqual(expect.arrayContaining(['badge', 'plan']));

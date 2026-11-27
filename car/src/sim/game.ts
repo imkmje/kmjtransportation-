@@ -29,6 +29,7 @@ import { presidents, subCommand, subsMonthStart, subsSettle } from './subs';
 import { applyTradeChoice, noteLoss, settleGen, splitMade, tradeAuto, worldCommand, worldDemand, worldMonthStart, worldPrep, worldSettle, type RegionSum } from './world';
 import { applyRivalChoice, autoChoice, emptyRivalry, rivalryCommand, rivalryMonthEnd, rivalryMonthStart, warPriceMult } from './rivalry';
 import { addReport, delegationOn } from './execs';
+import { applyLimited, limitedAffordable, limitedAuto, motorCommand, motorDelegated, motorEliteBusy, motorMonth, motorSalesMult } from './motor';
 import { AUTO_KINDS, autoAnswerOk, autoHold, autoInitial, autoOn, autoPick } from './autodecide';
 import { EXEC_TITLE, execCommand, execExpire, execMonth, execPay, execWeek, monthlyFixed, type ExecCtx } from './execs';
 import { dateLabel, isMonthEnd, monthLabel, monthOf, monthTime, yearOf } from './time';
@@ -36,7 +37,7 @@ import { STATS, type CarState, type Command, type CommandResult, type Edition, t
 
 /** 저장 형식 번호. 2: 차종의 일생(페이스리프트·풀체인지·3D 시드·경쟁 차 교체). 3: 직원·본사·공장(9장). 4: 연구·시대 사건·조합 노트·차체 10종(10·11장, 5.5).
  *  형식 1·2·3은 fromJSON이 올린다 */
-export const SAVE_VERSION = 13; // 13(5.5.0): 세계 시장 2부(권역의 현지 공장 plant, 무역 사건 trade·협정 deals·lastTrade, 세대 권역의 loc, 자회사 해외 판매 regions·abroad, 임원 해외 담당 자리, 결정의 tr). 12(4.1.0): 직속 전담팀(elite, 직원·개발·세대의 elite, 수작 opus), 전 직원(former), 도전 과제 실패(start.failed), 경쟁 모델 이름 일부 교체. 11(4.0.0): 세계 시장(world, 세대의 권역 수출 world·국내 우선 domFirst, 장부의 권역 몫), 경쟁사 6곳·모델 이름 교체.  10(3.5.0): 경쟁 2부(rivalry), 직원 월급 가산(pay)·영입한 경쟁사(from), 세대·자회사 모델 수상, 자회사 상장 지분·인수 브랜드.  9(3.0.0): 자회사(subs)·장부의 자회사 배당·투자. 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
+export const SAVE_VERSION = 14; // 14(5.6.0): 모터스포츠(motor, 장부의 motor·motorRev, 결정의 ms). 13(5.5.0): 세계 시장 2부(권역의 현지 공장 plant, 무역 사건 trade·협정 deals·lastTrade, 세대 권역의 loc, 자회사 해외 판매 regions·abroad, 임원 해외 담당 자리, 결정의 tr). 12(4.1.0): 직속 전담팀(elite, 직원·개발·세대의 elite, 수작 opus), 전 직원(former), 도전 과제 실패(start.failed), 경쟁 모델 이름 일부 교체. 11(4.0.0): 세계 시장(world, 세대의 권역 수출 world·국내 우선 domFirst, 장부의 권역 몫), 경쟁사 6곳·모델 이름 교체.  10(3.5.0): 경쟁 2부(rivalry), 직원 월급 가산(pay)·영입한 경쟁사(from), 세대·자회사 모델 수상, 자회사 상장 지분·인수 브랜드.  9(3.0.0): 자회사(subs)·장부의 자회사 배당·투자. 8(1.5.0): 새 게임 선택지(start), 연 기록의 연말 평판(repEnd). 1.1.0: 장비 구성(equip). 6(1.2.0): 배터리 공장(batteryPlant), 전기차 배터리 용량·전용 플랫폼. 7(1.3.0): 평론가별 시승기·파생 모델·직원 성과·세대교체 위임
 /** difficulty: 생략하면 'easy'(0.4.1 새 게임 기본) */
 export interface GameOptions { seed: number; companyName?: string; difficulty?: Difficulty; startYear?: number; condition?: StartCondition; challenges?: Challenge[] } // 1.5.0 시작 연도(기본 1970)·조건(기본 보통)·도전 과제(기본 없음)
 
@@ -77,6 +78,7 @@ const UNDO_KIND: Record<string, string> = {
   buildPlant: '현지 공장 건설', setPlantCars: '현지 생산 차종', setSubRegion: '자회사 해외 판매', // 5.5.0
   hireRivalTalent: '경쟁사 인재 영입', allyRival: '기술 제휴', endAlliance: '기술 제휴 해지', buyRivalTech: '기술 구매', listSub: '자회사 상장', acquireRival: '경쟁사 인수', // 3.5.0
   hireElite: '전담팀 영입', setElite: '전담팀 옮기기', setEliteTrain: '전담팀 자동 교육', rehire: '전 직원 채용', // 4.1.0
+  setMotor: '모터스포츠 계획', // 5.6.0
   setPrice: '가격 변경', setPricePolicy: '가격 변경', renameNameplate: '이름 변경', setMarketing: '광고 변경', startResearch: '연구 시작', cancelResearch: '연구 취소', dismissCandidates: '후보 돌려보내기',
 };
 /** 명령 직전 상태(JSON)와 알림 이름. 상태 밖(WeakMap)에 두어 저장 파일에 들어가지 않는다(불러오면 되돌리기 없음) */
@@ -222,6 +224,7 @@ export class Game {
       if (ed.kind === 'facelift' && monthOf(ed.launchWeek) === m) d *= LC.facelift.switchMonthMult; // 페이스리프트 전환 달 생산 −30%
       if (g.status === 'ending') d *= config.discontinue.lastMonthMult; // 단종 달: 재고 처분
       if ((g.awardUntil ?? -1) > m) d *= 1 + config.rivalry.awards.salesBoost; // 3.5.0 수상 판매 보너스
+      if (s.motor) d *= motorSalesMult(s, g, m); // 5.6.0 모터스포츠 보상
       return d;
     });
     // 4.0.0 해외 권역 수요(자동 가격·자동 수출을 먼저). 생산 쪽 배수(출시 달 주 수·페이스리프트 전환·단종 달)는 수출에도 같다
@@ -279,12 +282,15 @@ export class Game {
     const upkeep = upkeepOf(s), upkeepHq = hqUpkeep(s, s.hqLevel), dev = s.pendingDev, interest = s.loan.balance * loanRate(s), oneOff = s.pendingOneOff;
     const sub = s.subs?.length || s.pendingSubInv ? subsSettle(s, ev, m, { revenue, cogs }) : null; // 3.0.0 자회사 판매·이익·배당(배당은 본사 이익에 더한다)
     const ws = s.world ? worldSettle(s, ev, gens, m, byRegion) : null; // 4.0.0 권역 합계·판매 법인 유지비·인지도·평판
-    const profit = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff + (sub?.dividend ?? 0) - (ws ? ws.tariff + ws.ship + ws.upkeep : 0);
+    const profit0 = revenue - cogs - salaries - upkeep - dev - marketing - interest - recall - oneOff + (sub?.dividend ?? 0) - (ws ? ws.tariff + ws.ship + ws.upkeep : 0);
+    const mo = config.motorsport.on && (s.motor || motorDelegated(s)) ? motorMonth(s, ev, m, s.cash + profit0 + oneOff) : null; // 5.6.0 모터스포츠 예산(남은 현금까지만)·경기·한정판 판매
+    const profit = profit0 - (mo ? mo.spend - mo.rev : 0);
     const research = s.pendingResearch ?? 0;
     s.cash += profit + oneOff; s.pendingDev = 0; s.pendingOneOff = 0; s.pendingResearch = 0; // 일회성 지출은 명령 때 이미 현금에서 나갔다
-    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, ...(sub ? { subDiv: sub.dividend, subInv: s.pendingSubInv ?? 0 } : {}), ...(ws ? { world: ws.ledger, tariff: ws.tariff, ship: ws.ship, worldUpkeep: ws.upkeep, worldInv: s.pendingWorldInv ?? 0 } : {}), cars: carRows, execPay: xPay, research };
+    const e: LedgerEntry = { month: m, year, monthOfYear: (m % config.time.monthsPerYear) + 1, revenue, cogs, salaries, upkeep, upkeepHq, dev, marketing, interest, recall, oneOff, profit, cash: s.cash, sold, ...(sub ? { subDiv: sub.dividend, subInv: s.pendingSubInv ?? 0 } : {}), ...(ws ? { world: ws.ledger, tariff: ws.tariff, ship: ws.ship, worldUpkeep: ws.upkeep, worldInv: s.pendingWorldInv ?? 0 } : {}), ...(mo ? { motor: mo.spend, motorRev: mo.rev } : {}), cars: carRows, execPay: xPay, research };
     if (ws) { s.pendingWorldInv = 0; const yw = (ylog.world ??= {}); for (const [rid, v] of Object.entries(ws.ledger)) { const y = (yw[rid] ??= { sold: 0, revenue: 0, profit: 0 }); y.sold += v.sold; y.revenue += v.revenue; y.profit += v.profit; } }
     if (sub) { s.pendingSubInv = 0; for (const r of sub.rep) this.addRep(r.value, r.reason ?? `자회사 「${r.name}」의 명성`); }
+    for (const r of mo?.rep ?? []) this.addRep(r.value, `모터스포츠 ${r.reason}`); // 5.6.0
     s.ledger.push(e);
     ylog.revenue += revenue; ylog.profit += profit; ylog.sold += sold; ylog.months++; ylog.cash = s.cash;
     const everyone = [...s.staff, ...Object.values(s.execs?.seats ?? {}).map((x) => x!.staff), ...presidents(s)];
@@ -722,6 +728,7 @@ export class Game {
       case 'appointExec': case 'dismissExec': case 'postExecJob': case 'hireExec': case 'setDelegation': case 'dismissReport': case 'markReportsRead':
       case 'approveReplacement': case 'rejectReplacement': case 'cancelReplacement': case 'setGenAuto': return execCommand(this.execCtx(), cmd)!; // 0.7.0 임원, 1.3.0 세대교체 위임
       case 'hireElite': case 'setElite': case 'setEliteTrain': return eliteCommand({ s, spend: (c) => this.spend(c) }, cmd)!; // 4.1.0 직속 전담팀
+      case 'setMotor': case 'confirmMotor': case 'ackMotor': return config.motorsport.on ? motorCommand(s, cmd)! : fail('모터스포츠가 꺼져 있습니다.'); // 5.6.0
       case 'openRegion': case 'setExport': case 'setRegionPrice': case 'investOffice': case 'setRegionAuto': case 'setDomFirst': case 'buildPlant': case 'setPlantCars': return worldCommand({ s, spend: (c) => this.spend(c) }, cmd, [])!; // 4.0.0 세계 시장
       case 'foundSubsidiary': case 'setSubStrategy': case 'setSubArea': case 'setSubDividend': case 'investSub': case 'setSubPresident': case 'setSubShare':
       case 'subAddModel': case 'subDropModel': case 'renameSubModel': case 'sellSubsidiary':
@@ -769,24 +776,26 @@ export class Game {
       } break;
       case 'warFollow': case 'retain': applyRivalChoice(s, pc, e.type); break; // 3.5.0
       case 'tradeLobby': break; // 5.5.0 비용은 choiceMoney, 협정은 아래
+      case 'motorLimited': { const r = applyLimited(s, pc); if (r) this.addRep(r, `우승 기념 한정판 「${pc.ms!.name}」`); break; } // 5.6.0 비용은 choiceMoney
     }
     if (pc.rv && !choice.effects.length) applyRivalChoice(s, pc, 'none');
     if (pc.tr) applyTradeChoice(s, pc, choice.effects.some((e) => e.type === 'tradeLobby'));
-    const result = pc.rv?.results[idx] ?? pc.tr?.results[idx] ?? choice.result;
+    const result = pc.rv?.results[idx] ?? pc.tr?.results[idx] ?? pc.ms?.results[idx] ?? choice.result;
     if (approved) addNews(s, ev, `자동 승인: ${def.name} → ${choice.label} 선택 — ${result}`, 'result', 'news', undefined, 'auto'); // 3.7.0
-    else addNews(s, ev, `[${def.name}] ${choice.label}${auto ? '(답하지 않아 기본 선택)' : ''} — ${result}`, 'result', 'news', undefined, pc.rv ? 'rival' : pc.tr ? 'world' : undefined);
+    else addNews(s, ev, `[${def.name}] ${choice.label}${auto ? '(답하지 않아 기본 선택)' : ''} — ${result}`, 'result', 'news', undefined, pc.rv ? 'rival' : pc.tr ? 'world' : pc.ms ? 'market' : undefined);
   }
   /** 3.5.0 위임: 재무 임원 '가격 전쟁 대응'·인사 임원 '이직 제안 대응'이 켜져 있으면 결정 창을 바로 처리하고 보고함에 남긴다 */
   private autoRivalry(ev: GameEvent[]): void {
     const s = this.state;
-    for (const pc of s.events.pending.filter((p) => p.rv || p.tr).sort((a, b) => a.id - b.id)) {
-      const role = pc.tr ? 'world' : pc.eventId === 'priceWar' ? 'finance' : 'hr', key = pc.tr ? 'autoWorld' : pc.eventId === 'priceWar' ? 'autoPriceWar' : 'autoPoach'; // 5.5.0 무역 협정은 해외 담당 위임
+    for (const pc of s.events.pending.filter((p) => p.rv || p.tr || p.ms).sort((a, b) => a.id - b.id)) {
+      const role = pc.ms ? 'market' : pc.tr ? 'world' : pc.eventId === 'priceWar' ? 'finance' : 'hr', key = pc.ms ? 'autoMotor' : pc.tr ? 'autoWorld' : pc.eventId === 'priceWar' ? 'autoPriceWar' : 'autoPoach'; // 5.5.0 무역 협정은 해외 담당 위임, 5.6.0 한정판은 시장 조사 임원
       if (!delegationOn(s, role, key)) continue;
-      const a = pc.tr ? tradeAuto(s, pc) : autoChoice(s, pc); if (!a) continue;
+      const a = pc.ms ? limitedAuto(s, pc) : pc.tr ? tradeAuto(s, pc) : autoChoice(s, pc); if (!a) continue;
       if (pc.tr && a.choice === 0 && s.cash - pc.tr.cost < monthlyFixed(s) * config.exec.research.cashMonths) continue; // 로비 비용을 내고도 운영비 6개월 치가 남을 때만(아니면 묻는다)
+      if (pc.ms && a.choice === 0 && !limitedAffordable(s, pc)) continue; // 5.6.0 같은 기준
       const def = RANDOM_EVENTS.find((d) => d.id === pc.eventId)!, label = def.choices[a.choice].label;
       this.applyChoice(pc, a.choice, ev, false);
-      addReport(s, role, key, `[${def.name}] ${label}. ${a.why}`, [pc.text], pc.tr ? { tab: 'company', sub: 'world' } : pc.eventId === 'priceWar' ? { tab: 'garage' } : { tab: 'company', sub: 'staff' }, true);
+      addReport(s, role, key, `[${def.name}] ${label}. ${a.why}`, [pc.text], pc.ms ? { tab: 'motor' } : pc.tr ? { tab: 'company', sub: 'world' } : pc.eventId === 'priceWar' ? { tab: 'garage' } : { tab: 'company', sub: 'staff' }, true);
     }
   }
 
@@ -812,7 +821,8 @@ export class Game {
   /** 4.1.0 전담팀원이 들어간 팀은 전담팀 자리(한 팀), 아니면 일반 개발팀 수 */
   private teamError(team: Staff[] | string): string | null {
     const s = this.state;
-    if (typeof team !== 'string' && team.some((x) => x.elite)) return eliteBusy(s) ? '직속 전담팀이 이미 다른 차를 개발 중입니다. 전담팀원을 빼고 고르거나 그 개발을 끝내세요.' : null;
+    if (typeof team !== 'string' && team.some((x) => x.elite)) return eliteBusy(s) ? '직속 전담팀이 이미 다른 차를 개발 중입니다. 전담팀원을 빼고 고르거나 그 개발을 끝내세요.'
+      : motorEliteBusy(s) ? '직속 전담팀이 올해 모터스포츠에 배치되어 있어 시즌이 끝날 때(12월)까지 차를 개발할 수 없습니다. 전담팀원을 빼고 고르세요.' : null; // 5.6.0
     return teamsUsed(s) >= devTeams(s) ? '개발팀이 모두 바쁩니다. 진행 중인 개발을 끝내거나 취소하세요.' : null;
   }
   /** 배치할 팀: 생략하면 쉬고 있는 개발 직무 전원. 문제가 있으면 이유(문자열) */
@@ -992,6 +1002,7 @@ export class Game {
     if ((st.saveVersion as number) === 10) migrateV10(st);
     if ((st.saveVersion as number) === 11) migrateV11(st);
     if ((st.saveVersion as number) === 12) (st as { saveVersion: number }).saveVersion = 13; // 형식 12 → 13(5.5.0): 새 칸은 모두 빠질 수 있다(현지 공장·무역 사건·자회사 해외 판매·해외 담당 없음)
+    if ((st.saveVersion as number) === 13) (st as { saveVersion: number }).saveVersion = 14; // 형식 13 → 14(5.6.0): 모터스포츠 없음(motor 없음과 같다)
     fillRivalCells(st); // 0.6.0 소형·대형 SUV처럼 나중에 더한 칸(저장 형식은 그대로 4)
     return new Game(st);
   }

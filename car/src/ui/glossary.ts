@@ -5,6 +5,15 @@ import { config } from '../config';
 
 /** 게임 용어 */
 export const TERMS: Record<string, string> = {
+  // 5.6.0 모터스포츠
+  '모터스포츠': `해마다 큰돈을 들여 자동차 경주에 나가는 일. 국내 투어링(본사 ${config.motorsport.series[0].hq}등급), 세계 랠리·내구(본사 ${config.motorsport.series[1].hq}등급 + 해외 권역 1곳 이상 진출), 최상위 포뮬러(본사 ${config.motorsport.series[2].hq}등급) 세 급이 있고 여러 급에 함께 나갈 수 있다. 시즌은 1년이며 2월 결산에 그해 계획이 확정되고, 3~12월 월 결산마다 경기를 한 번(모두 ${config.motorsport.races}경기) 치러 12월에 최종 순위가 나온다. 성적이 나빠도 평판이 깎이지 않고, 잃는 것은 쓴 예산뿐이다.`,
+  '모터스포츠 예산': `급마다 고르는 연 예산 단계(${config.motorsport.stepNames.join('·')}). 연 예산을 경기 수로 나눠 3~12월 월 결산마다 내며, 월 결산의 '모터스포츠' 지출로 보인다. 현금이 모자라면 남은 현금까지만 내고 낸 비율만큼 전력이 줄어든다(예산 때문에 파산하지는 않는다). 2월 결산 뒤에 바꾼 계획은 다음 시즌부터 적용된다.`,
+  '팀 전력': `경기 성적의 바탕이 되는 점수. 예산 단계(${config.motorsport.stepPts.join('·')}점), 관련 연구(그해까지 나온 엔진·차체·생산 관련 기술 중 완료한 몫), 출전 차(평론이 ${config.motorsport.carRef[0]}에서 ${config.motorsport.carRef[1]}으로 갈수록 높음, 포뮬러는 차 선택 없음), 직속 전담팀 배치(최대 ${config.motorsport.elite.pts}점), 연속 참가 경험(해마다 +${config.motorsport.exp.step}, 최대 ${config.motorsport.exp.max}, 쉬면 해마다 −${config.motorsport.exp.decay})을 더한다. 경기마다 운이 조금 섞이지만 시즌 합계에서는 대체로 전력 순서가 유지된다.`,
+  '예상 순위': `지금 계획으로 시즌을 ${config.motorsport.forecastRuns}번 미리 굴려 본 순위 범위(열 번 중 여덟 번이 들어가는 범위)와 우승 확률. 경쟁사 전력은 해마다 조금씩 다르다.`,
+  '모터스포츠 보상': `12월 최종 순위에 따른 보상. 우승이 가장 크고 순위가 낮을수록 작아지며 꼴찌는 없다. 평판, 스포츠카·쿠페·고성능판과 출전 차 차급의 판매 가산(${config.motorsport.series[0].salesMonths}개월), 세계 급은 진출한 권역 인지도 가산(${config.motorsport.aw.months}개월), 우승하면 관련 분야 연구 속도 +${Math.round(config.motorsport.research.mult * 100)}%(${config.motorsport.research.months}개월), 포뮬러 ${config.motorsport.brand.top}위 안이면 전 차종 판매 가산(${config.motorsport.brand.months}개월).`,
+  '전담팀 모터스포츠 배치': `직속 전담팀을 한 급에 배치하면 팀 전력이 크게 오른다(전담팀원 ${config.motorsport.elite.full}명 이상이면 +${config.motorsport.elite.pts}). 대신 그 시즌(12월 결산까지) 전담팀은 차를 개발할 수 없다. 시즌이 시작할 때 전담팀이 차를 개발 중이면 배치되지 않는다.`,
+  '우승 기념 한정판': `우승하면 뜨는 결정. 출전 차(포뮬러는 판매 중 평론이 가장 높은 차)를 바탕으로 한 고성능판을 소량 생산한다. 비용(생산·개발)을 결정 때 내고, ${config.motorsport.limited.months}개월에 나눠 높은 값에 모두 팔리며 평판이 오른다. 결정 자동 승인의 '규칙대로'와 시장 조사 임원 위임은 다 팔아 남는 돈이 있으면 낸다.`,
+  '모터스포츠 위임': `시장 조사 임원의 위임 '모터스포츠 예산 자동 조정'. 해마다 2월 결산에 참가할 수 있는 급에 모두 나가되 연 예산 합이 지금 현금의 ${Math.round(config.motorsport.autoShare * 100)}%를 넘지 않게 가장 비싼 급부터 예산을 낮춘다. 위임하지 않으면 직접 정하며, 연 예산 합이 현금의 ${Math.round(config.motorsport.warnShare * 100)}%를 넘으면 경고가 뜬다.`,
   '해외 진출': `국내 밖 권역(북미·유럽·신흥 시장)에 차를 팔기 시작하는 일. 본사 ${config.world.hqLevel}등급과 권역마다 정한 평판이 있어야 하고, 진출비를 한 번 낸다('수출 호황' 동안은 진출비가 줄어든다). 진출하면 그 권역의 브랜드 인지도와 권역 평판이 낮게 시작해 팔리면서 오른다.`,
   '수출': '국내 공장에서 만든 차를 해외 권역에 파는 일. 생산 한도를 국내 판매와 나눠 쓰고, 대당 원가에 관세와 운송비가 붙는다. 수출 목록에 넣은 차만 그 권역에서 팔린다.',
   '자동 수출': `권역마다 켜는 위임. 켜 두면 판매 중인 차 가운데 그 권역에서 한 달 ${config.world.autoMinSales}대 이상 팔릴 것으로 보이고 대당 이익이 남는 차를 수출 목록에 넣고, 단종한 차와 ${config.world.autoLossMonths}개월 연속 적자인 차를 뺀다. 손으로 뺀 차는 다시 넣지 않는다. 진출하면 켜져 있다.`,

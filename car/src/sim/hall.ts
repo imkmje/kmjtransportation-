@@ -70,5 +70,11 @@ export function hallOfFame(s: CarState): HallOfFame {
     for (const x of [...s.staff].sort((a, c) => a.id - c.id)) { const w = x.hist?.join ?? x.hist?.since; if (w !== null && w !== undefined && (!b || w < b.w)) b = { name: x.name, w }; }
     if (b) company.push({ key: 'staff', label: '가장 오래 근무한 직원', value: Math.floor((s.week - b.w) / config.time.weeksPerMonth), text: b.name });
   }
+  if (s.motor?.history.length) { // 5.6.0 모터스포츠 통산 우승·최고 순위
+    const H = s.motor.history, wins = H.filter((h) => h.rank === 1), first = wins[0] ?? [...H].sort((a, b) => a.rank - b.rank || a.year - b.year)[0];
+    const name = (id: string) => config.motorsport.series.find((x) => x.id === id)?.name ?? id;
+    company.push({ key: 'motorWins', label: '모터스포츠 통산 우승', value: wins.length, text: config.motorsport.series.map((x) => `${x.name} ${H.filter((h) => h.series === x.id && h.rank === 1).length}회`).join(' · ') });
+    company.push({ key: 'motorBest', label: wins.length ? '모터스포츠 첫 우승' : '모터스포츠 최고 순위', value: first.rank, year: first.year, text: name(first.series) });
+  }
   return { cars, shame, company, empty: !gens.length };
 }
