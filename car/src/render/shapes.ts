@@ -28,7 +28,7 @@ export const BODY: Record<BodyId, BodyShape> = {
   suv: { L: 4.6, W: 1.86, clr: .3, belt: 1.08, roof: 1.72, cR: -1.75, cF: .6, rr: .25, rf: .6, wr: .365, wb: 1.4, deck: false, sill: .2, doors: [.9, -.575, -1.28], archTrim: .07, suv: true },
   suvL: { L: 5.05, W: 1.96, clr: .32, belt: 1.14, roof: 1.86, cR: -2.05, cF: .66, rr: .18, rf: .62, wr: .39, wb: 1.62, deck: false, sill: .22, doors: [.98, -.29, -1.24], archTrim: .075, pil: [.3, .65], nose: .14, edge: .7, suv: true },
   sedanL: { L: 5.1, W: 1.88, clr: .18, belt: .88, roof: 1.47, cR: -1.22, cF: .58, rr: .58, rf: .78, wr: .31, wb: 1.5, deck: true, sill: .1, doors: [1.06, -.12, -1.12], archTrim: .03, nose: .17 },
-  minivan: { L: 4.8, W: 1.9, clr: .19, belt: .98, roof: 1.72, cR: -2.0, cF: .5, rr: .22, rf: 1.08, wr: .32, wb: 1.5, deck: false, sill: .12, doors: [1.02, 0, -1.0], archTrim: .04, pil: [.4, .8], nose: .15, edge: .8 },
+  minivan: { L: 4.8, W: 1.9, clr: .19, belt: .98, roof: 1.72, cR: -2.0, cF: .5, rr: .22, rf: .95, wr: .32, wb: 1.5, deck: false, sill: .12, doors: [1.02, 0, -1.0], archTrim: .04, pil: [.4, .8], nose: .07, edge: .8 },
   kei: { L: 3.4, W: 1.48, clr: .15, belt: .86, roof: 1.52, cR: -1.36, cF: .44, rr: .16, rf: .56, wr: .26, wb: 1.14, deck: false, sill: .09, doors: [.76, -.32, -.78], archTrim: .03, pil: [.58], nose: .14, edge: .6 },
   pickup: { L: 5.2, W: 1.9, clr: .3, belt: 1.1, roof: 1.84, cR: -.6, cF: .7, rr: .2, rf: .55, wr: .38, wb: 1.6, deck: false, sill: .18, doors: [1.08, .05, -.66], archTrim: .07, bed: .72, nose: .1, edge: .55 },
   sports: { L: 4.4, W: 1.94, clr: .1, belt: .68, roof: 1.06, cR: -.95, cF: .06, rr: .78, rf: 1.0, wr: .285, wb: 1.32, deck: true, sill: .08, doors: [.86, -.72], archTrim: .03, nose: .26, spoiler: true, fenders: true },
@@ -39,6 +39,7 @@ export const BODY: Record<BodyId, BodyShape> = {
 // 5.2.0 타이어가 차 높이에 비해 너무 컸다: 증가 폭을 줄이고 림 비율을 키웠다(얇은 타이어)
 export const WHEEL_GROW = [0, .01, .02] as const;
 export const RIM_RATIO = [.66, .71, .76] as const;
+export const COWL_BEHIND_AXLE = .12; // 5.5.1 앞유리 아래 끝(카울)은 앞바퀴 축보다 최소 이만큼 뒤
 export const BELT_OVER_ARCH = .07; // 허리선이 휠 아치 꼭대기보다 최소 이만큼 위(fenders 차체 제외)
 
 export type Era = 1970 | 1980 | 1990 | 2000 | 2010 | 2020 | 2030;
@@ -61,11 +62,11 @@ export const ERA: Record<Era, EraStyle> = {
   // 2000년대: 둥근 면에 선이 돌아오고 지붕이 높아진다(키 큰 실내), 큰 전조등
   2000: { len: 1, roofD: .03, beltD: .03, wbK: 1.02, wrD: .005, wedge: .07, rake: 1.05, p: 3, endT: .26, endB: .15, corner: .24, bow: .1, taper: .07, tuck: .06, side: .04, crown: .04, tumble: .26, sh: 1, rs: .035, rc: .09, nose: .48, classic: false },
   // 높은 허리선·짧은 오버행·큰 바퀴, 쐐기, 날 선 캐릭터 라인
-  2010: { len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .01, wedge: .1, rake: 1.08, p: 3.6, endT: .22, endB: .14, corner: .2, bow: .12, taper: .08, tuck: .07, side: .04, crown: .03, tumble: .3, sh: 1, rs: .022, rc: .075, nose: .5, classic: false },
+  2010: { len: 1, roofD: .02, beltD: .05, wbK: 1.04, wrD: .01, wedge: .1, rake: 1.08, p: 3.6, endT: .22, endB: .14, corner: .13, bow: .1, taper: .08, tuck: .07, side: .04, crown: .03, tumble: .3, sh: 1, rs: .022, rc: .075, nose: .5, classic: false },
   // 매끈한 면, 짧은 앞 오버행(전기차는 휠베이스 더 길고 보닛 짧게: variant.chassisOf)
-  2020: { len: 1, roofD: 0, beltD: .04, wbK: 1.06, wrD: .015, wedge: .06, rake: 1.1, p: 4, endT: .18, endB: .12, corner: .14, bow: .13, taper: .08, tuck: .1, side: .07, crown: .03, tumble: .3, sh: 1, rs: .018, rc: .07, nose: .52, classic: false },
+  2020: { len: 1, roofD: 0, beltD: .04, wbK: 1.06, wrD: .015, wedge: .06, rake: 1.1, p: 4, endT: .18, endB: .12, corner: .09, bow: .11, taper: .08, tuck: .1, side: .07, crown: .03, tumble: .3, sh: 1, rs: .018, rc: .07, nose: .52, classic: false },
   // 2030년대: 더 둥근 앞뒤(포드형), 높은 허리선·큰 휠, 긴 휠베이스
-  2030: { len: 1.01, roofD: .02, beltD: .09, wbK: 1.08, wrD: .02, wedge: .04, rake: 1.14, p: 3.2, endT: .26, endB: .15, corner: .24, bow: .15, taper: .08, tuck: .06, side: .04, crown: .035, tumble: .32, sh: 1, rs: .03, rc: .09, nose: .52, classic: false },
+  2030: { len: 1.01, roofD: .02, beltD: .09, wbK: 1.08, wrD: .02, wedge: .04, rake: 1.14, p: 3.2, endT: .26, endB: .15, corner: .18, bow: .14, taper: .08, tuck: .06, side: .04, crown: .035, tumble: .32, sh: 1, rs: .03, rc: .09, nose: .52, classic: false },
 };
 export const eraOf = (look: CarLook): Era => { const e = look.era ?? 2020; return e < 1980 ? 1970 : e < 1990 ? 1980 : e < 2000 ? 1990 : e < 2010 ? 2000 : e < 2020 ? 2010 : e < 2030 ? 2020 : 2030; };
 export const eraStyle = (look: CarLook): EraStyle => ERA[eraOf(look)];

@@ -317,16 +317,18 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     case 'three': intake(-fw * .3, fw * .3, iy0, iy1); for (const g of [1, -1]) intake(g > 0 ? fw * .5 : -fw * .82, g > 0 ? fw * .82 : -fw * .5, iy0 + .01, iy1 + .03); break;
     case 'fog': intake(-fw * .32, fw * .32, iy0, iy1); for (const g of [1, -1]) { const zc = g * fw * .7, yc = (iy0 + iy1) / 2 + .01, r = Math.min(.045, (iy1 - iy0) * .45); frame(1, ellipse(zc, yc, r + .014, r + .014, 16), .016, .008, M.gloss); fill(1, ellipse(zc, yc, r, r, 16), .006, M.lamp, null); } break;
   }
+  // 5.5.1 2010년대부터 범퍼 모서리에 세로 흡입구(에어 커튼): 둥근 앞 모서리가 꺾여 보이게
+  if (era >= 2010 && !E.classic && fc.intake !== 'fog' && fc.intake !== 'three') for (const g of [1, -1]) { const z0 = g * fw * .9, z1 = g * fw * 1.06, y0 = iy0 + .02, y1 = Math.min(lampY - lampH * .7, iy1 + .08); if (y1 - y0 > .05) { fill(1, roundRect(z0, z1, y0, y1, .012), .003, M.trim, null); frame(1, roundRect(z0 - .008 * g, z1 + .008 * g, y0 - .008, y1 + .008, .016), .01, .008, M.gloss); } }
   // ── 범퍼: 1970 크롬 막대, 검은 수지 범퍼(옆까지 감쌈), 차체색 범퍼는 분할선만 ──
   const bumperBand = (s: 1 | -1, y0: number, y1: number, e: number, mat: THREE.Material, zx = 1.22) => fill(s, roundRect(-fw * zx, fw * zx, y0, y1, Math.min(.03, (y1 - y0) / 2)), e, mat, mat);
   if (E.classic) for (const s of [1, -1] as const) bumperBand(s, (s > 0 ? yNF : yNR) - .1, (s > 0 ? yNF : yNR) - .02, .045, M.chrome, 1.12);
-  else if (fc.bumper === 'black') for (const s of [1, -1] as const) bumperBand(s, p.clr + .05, s > 0 ? yNF + .03 : yNR - .04, .02, M.trim);
+  else if (fc.bumper === 'black') for (const s of [1, -1] as const) { const y1 = s > 0 ? yNF + .03 : yNR - .04; bumperBand(s, Math.max(p.clr + .05, y1 - (tall ? .26 : .2)), y1, .02, M.trim); } // 5.5.1 높이를 줄여 번호판·흡기구가 묻히지 않게
   else for (const s of [1, -1] as const) { const y = (s > 0 ? yNF : yNR) + .045; fill(s, roundRect(-fw * 1.18, fw * 1.18, y - .0025, y + .0025, .002), .0015, M.dark, null); }
   if (!E.classic && era >= 2000) fill(1, roundRect(-fw * .75, fw * .75, p.clr + .015, p.clr + .045, .01), .012, M.gloss, M.gloss); // 앞 아래 립
   if (p.suv || p.bed != null) for (const s of [1, -1] as const) fill(s, roundRect(-fw * .45, fw * .45, p.clr + .03, p.clr + .1, .015), .014, M.rim, M.gloss); // 스키드 플레이트
   // 번호판·엠블럼
   const pz = fc.plateF === 'offset' ? fw * .4 : 0;
-  fill(1, roundRect(pz - .26, pz + .26, plateY0, plateY1, .008), .008, M.plate, M.gloss);
+  fill(1, roundRect(pz - .26, pz + .26, plateY0, plateY1, .008), fc.bumper === 'black' && !E.classic ? .026 : .008, M.plate, M.gloss);
   const emblem = (s: 1 | -1, y: number) => { frame(s, ellipse(0, y, .034, .026, 18), .008, .012, evV ? M.accent : M.chrome); fill(s, ellipse(0, y, .026, .018, 18), .008, M.chrome, null); };
   if (!E.classic) emblem(1, ev || fc.grille === 'none' ? lampY : Math.max(plateY1 + .05, Math.min(lampY, lampTop - .03)));
 
@@ -415,20 +417,23 @@ export function buildCar(look: CarLook, M: CarMaterials): THREE.Group {
     for (let j = 0; j < 2; j++) for (let i = 0; i < n; i++) { const out = [0, 0, g]; triOut(b, rows[j][i], rows[j + 1][i], rows[j + 1][i + 1], out); triOut(b, rows[j][i], rows[j + 1][i + 1], rows[j][i + 1], out); }
   });
 
-  // ── 사이드 미러: 위에서 본 날개 모양을 위아래로 뽑아 모서리를 둥글린 하우징 + 뒤 거울 + 짧은 다리 ──
+  // ── 사이드 미러(5.5.1): 문 위 받침(삼각 판) + 팔 + 앞이 둥근 날개 모양 하우징(반타원체) + 뒤 거울 ──
   {
-    const mx = B.xc - .16, my = B.beltLine(mx) + .06, mz = B.zIn0(mx) - .01, L = id === 'kei' ? .09 : .11, D = .07, Hh = id === 'kei' || sporty ? .055 : tall ? .085 : .068;
-    const sh = new THREE.Shape(); // 위에서 본 모양(x 앞뒤, y 바깥쪽)
-    sh.moveTo(-D * .35, 0); sh.bezierCurveTo(D * .45, 0, D * .55, L * .55, D * .25, L); sh.lineTo(-D * .45, L * .96); sh.lineTo(-D * .45, 0); sh.closePath();
-    const mg = new THREE.ExtrudeGeometry(sh, { depth: Hh, bevelEnabled: true, bevelThickness: .012, bevelSize: .01, bevelSegments: 2, curveSegments: 8 });
-    mg.translate(0, 0, -Hh / 2); mg.rotateX(Math.PI / 2); // 뽑은 방향을 위아래로
-    const gl = new THREE.BoxGeometry(.006, Hh * .85, L * .82), stem = new THREE.BoxGeometry(.05, .03, .07);
+    const mx = B.xc - .14, yb0 = B.beltLine(mx), mz = B.zIn0(mx) + .005, L = id === 'kei' ? .15 : .19, Hh = id === 'kei' || sporty ? .085 : tall ? .12 : .1, D = .09, arm = .05;
+    const my = yb0 + .055 + Hh / 2, zc = mz + arm + L / 2;
+    const shell = new THREE.SphereGeometry(1, 16, 8, Math.PI / 2, Math.PI); shell.scale(D, Hh / 2, L / 2); // 앞(+x)으로 둥근 반쪽
+    const backG = new THREE.CircleGeometry(1, 16); backG.rotateY(-Math.PI / 2); backG.scale(1, Hh / 2, L / 2);
+    const glassG = new THREE.CircleGeometry(1, 16); glassG.rotateY(-Math.PI / 2); glassG.scale(1, Hh / 2 - .012, L / 2 - .014);
+    const armG = new THREE.BoxGeometry(.05, .028, arm + .04), sail = new THREE.BoxGeometry(.13, .05, .02);
+    const hm = E.classic ? M.chrome : sporty || era >= 2010 ? M.paint : M.gloss;
     pair(g => {
-      const m = add(mg, sporty || era >= 2010 ? M.paint : M.gloss, mx, my, g * (mz + .05)); m.scale.z = g; m.rotation.y = g * .08;
-      add(gl, M.glass, mx - D * .47, my, g * (mz + .05 + L * .48));
-      add(stem, M.gloss, mx + .005, my - Hh * .42, g * (mz + .03));
+      const sh = add(shell, hm, mx, my, g * zc); sh.rotation.y = g * .1; sh.scale.y = 1;
+      add(backG, M.gloss, mx - .001, my, g * zc).rotation.y = g * .1;
+      add(glassG, M.glass, mx - .004, my, g * zc).rotation.y = g * .1;
+      add(armG, M.gloss, mx + .01, my - Hh * .3, g * (mz + arm / 2));
+      add(sail, M.gloss, mx + .02, yb0 + .03, g * (mz - .002));
     });
-      }
+  }
 
   // ── 휠하우스: 아래 몸통 단면 홈이 벽·천장. 여기서는 바퀴 뒤쪽 어두운 막(안쪽이 비어 보이지 않게) ──
   // ── 지붕: 루프랙 ──

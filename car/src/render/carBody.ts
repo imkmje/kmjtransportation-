@@ -7,9 +7,11 @@ import type { EraStyle } from './shapes';
    2) 온실: 어깨선 안쪽에서 시작하는 별도 볼륨(유리·A/B/C 기둥·지붕). 옆 유리는 위로 갈수록 안으로 눕는다(텀블홈).
    3) 얼굴 부품은 carBuilder가 이 곡면 위에 광선으로 붙인다(hit). 순수 함수: 같은 차대 = 같은 정점. */
 
-export const HALF = 19; // 아래 몸통 단면 반쪽 점 수(바닥 가운데 0 → 지붕 가운데 18)
+export const HALF = 19;
+const CL_SAG = .022; // 5.5.1 부른 곳에서 캐릭터 라인까지 옆판이 안으로 드는 양(m) // 아래 몸통 단면 반쪽 점 수(바닥 가운데 0 → 지붕 가운데 18)
 // 단면 점 번호: 0 바닥 가운데, 1·2 휠하우스 안벽 아래·위, 3~5 로커(아치 테두리), 6 문턱 띠 위, 7 아래 옆판, 8 옆판 꺾임(가장 넓은 곳), 9·10 위 옆판, 11~13 어깨, 13~18 보닛·트렁크 윗면
-export const KS = { lip: 5, sill: 6, feat: 8, sh0: 11, top: 13 } as const;
+// 5.5.1 점 8은 옆판이 가장 부른 곳, 점 9는 어깨선 아래 캐릭터 라인(위는 안으로 눕고 아래는 서서 빛이 걸리는 꺾임)
+export const KS = { lip: 5, sill: 6, feat: 9, sh0: 11, top: 13 } as const;
 const GH = 12; // 온실 단면 반쪽 점 수: 0 바닥, 1 창 아래(창틀 위), 2·3 유리, 4 유리 위, 5 창틀 위, 6·7 지붕 모서리, 8~11 지붕
 export const MAT = { paint: 0, glass: 1, dark: 2, gloss: 3, trim: 4, chrome: 5 } as const;
 
@@ -48,7 +50,7 @@ export function carBody(p: Chassis, E: EraStyle, o: BodyOpts) {
   };
   const wPlan = (x: number) => {
     const s = x >= 0 ? 1 : -1, d = Math.max(0, h - Math.abs(x)), rp = Math.min(E.corner * ek, zA(s) + .1);
-    let w = hw * (1 - (x > 0 ? 1 : .8) * E.taper * (x / h) ** 4) + (.012 + (fenders ? .025 : 0) + (o.gt ? .03 : 0)) * Math.exp(-(((Math.abs(x) - p.wb) / .5) ** 2));
+    let w = hw * (1 - (x > 0 ? 1 : .8) * E.taper * (x / h) ** 4) + ((fenders ? .025 : 0) + (o.gt ? .03 : 0)) * Math.exp(-(((Math.abs(x) - p.wb) / .5) ** 2));
     if (d < rp) w -= rp - Math.sqrt(rp * rp - (rp - d) ** 2);
     return Math.max(.05, w);
   };
@@ -70,8 +72,16 @@ export function carBody(p: Chassis, E: EraStyle, o: BodyOpts) {
     const yb = n - (n - p.clr) * tB;
     const yA = archAt(x), arch = yA > 0, w = wPlan(x);
     const bed = inBed(x);
-    const yf = yb + (ys - yb) * .5;
-    const zOf = (y: number) => y <= yf ? w - tuck * ((yf - y) / Math.max(.05, yf - yb)) ** 2 : w - side * ((y - yf) / Math.max(.05, ys - yf)) ** 1.6;
+    const yf = yb + (ys - yb) * .46, ycl = yb + (ys - yb) * .76;
+    // 5.5.1 옆판: 아래는 로커 쪽으로 말려 들어가고(tuck + 끝에서 더), 가운데는 위아래로 완만히 부르며, 캐릭터 라인(ycl) 위는 어깨까지 안으로 눕는다.
+    // 휠 아치 둘레는 캐릭터 라인 아래만 펜더가 부푼다(어깨선은 곧게)
+    const fl = (.016 + (fenders ? .006 : 0)) * Math.exp(-(((Math.abs(x) - p.wb) / (ar * 1.25)) ** 2));
+    const zOf = (y: number) => {
+      const fy = fl * (1 - smooth((y - (ycl - .1)) / .1));
+      if (y <= yf) { const q = (yf - y) / Math.max(.05, yf - yb); return w + fy - tuck * q * q - E.tuck * .45 * q ** 6; }
+      if (y <= ycl) { const q = (y - yf) / Math.max(.03, ycl - yf); return w + fy - CL_SAG * q * q; }
+      return w - CL_SAG - side * ((y - ycl) / Math.max(.05, ys - ycl)) ** 1.25;
+    };
     const P: number[] = [];
     let last = -1;
     const put = (y: number, z: number) => { y = Math.max(y, last); last = y; P.push(y, z); };
@@ -80,8 +90,8 @@ export function carBody(p: Chassis, E: EraStyle, o: BodyOpts) {
     put(yb, 0); put(yb, zIn); put(yLow, zIn);
     put(yLow, w0 - rk); put(yLow + rk * .29, w0 - rk * .29); put(yLow + rk, w0);
     const ySill = yb + rk + sillH, yTop = ys - rs;
-    for (const y of [ySill, (ySill + yf) / 2, yf, yf + (yTop - yf) * .45, yf + (yTop - yf) * .8]) { const yy = Math.min(Math.max(y, yLow + rk), yTop); put(yy, zOf(yy)); }
-    const zS = w - side;
+    for (const y of [ySill, (ySill + yf) / 2, yf, ycl, (ycl + yTop) / 2]) { const yy = Math.min(Math.max(y, yLow + rk), yTop); put(yy, zOf(yy)); }
+    const zS = w - side - CL_SAG;
     put(yTop, zOf(yTop)); put(ys - rs * .29, zS - rs * .29); put(ys, zS - rs);
     const z1 = zS - rs;
     if (bed) { // 짐칸: 벽 윗면 → 안쪽 벽 → 바닥
@@ -169,7 +179,9 @@ export function carBody(p: Chassis, E: EraStyle, o: BodyOpts) {
   };
   const gRing = (x: number) => {
     const r = ring(x), yB = r.ys + .004, G = roofAt(x), H = Math.max(0, G - yB), z0 = zIn0(x);
-    const fr = Math.min(.022, H * .08), frT = Math.min(.018, H * .07), rc = Math.min(E.rc, H * .28);
+    // 5.5.1 앞유리 옆(A 기둥)은 지붕 모서리 반경을 줄여 기둥이 가늘게(긴 앞유리 차에서 넓은 차체색 면이 남던 것)
+    const aT = Math.max(0, Math.min(1, (x - p.cF) / .25));
+    const fr = Math.min(.022, H * .08), frT = Math.min(.018, H * .07), rc = Math.min(E.rc * (1 - .65 * aT), H * .28);
     const zt = (y: number) => z0 - E.tumble * (y - yB);
     const yW1 = Math.max(yB + fr, G - rc - frT), yW0 = Math.min(yB + fr, yW1), zA = zt(G - rc);
     const Q: number[] = [yB, z0, yW0, zt(yW0)];
@@ -207,7 +219,7 @@ export function carBody(p: Chassis, E: EraStyle, o: BodyOpts) {
   const bBlack = o.era >= 1990, cBlack = sd.blackPillar;
   for (let i = 0; i < gx.length - 1; i++) {
     const xm = (gx[i] + gx[i + 1]) / 2, Hm = Math.min(gRings[i].H, gRings[i + 1].H);
-    const inWin = xm > winX0 && Hm > .09 && xm < xc - .02, onPil = pilX.some(x => Math.abs(xm - x) < pw / 2);
+    const inWin = xm > winX0 && Hm > .07 && xm < xc - .02, onPil = pilX.some(x => Math.abs(xm - x) < pw / 2);
     const ws = xm > p.cF + .005, rear = xm < cR - .005;
     for (let r = 0; r < GN - 1; r++) {
       const k = r < GH - 1 ? r : GN - 2 - r; // 띠 번호
@@ -216,6 +228,7 @@ export function carBody(p: Chassis, E: EraStyle, o: BodyOpts) {
       if (k <= 4) {
         if (inWin && !onPil) m = k === 0 ? (sd.beltChrome ? MAT.chrome : MAT.gloss) : k === 4 ? MAT.gloss : MAT.glass;
         else if (inWin && onPil) m = bBlack ? MAT.gloss : MAT.paint;
+        else if (ws && xm < xc - .01 && Hm > .015 && k >= 1 && k <= 3 && o.era >= 1990) m = MAT.gloss; // 5.5.1 앞유리 옆 끝 삼각 창틀(검정)
         else if (rear && cBlack && xm > xd + .05) m = MAT.gloss;
       }
       if (k >= 7 && ws && Hm > .02) { m = MAT.glass; g = 7; }

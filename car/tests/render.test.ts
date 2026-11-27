@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.setConfig({ testTimeout: 60000 }); // 차를 수백 대 만든다: 느린 CI에서 기본 5초를 넘지 않게 파일 전체에 넉넉한 한도
 import * as THREE from 'three';
 import { buildCar, createCarMaterials, disposeCar } from '../src/render/carBuilder';
 import { chassisOf, chassisWords, describeLook, distinctFaces, faceOf } from '../src/render/variant';
@@ -169,6 +170,12 @@ describe('사무실·시대 분위기(1.0.0)', () => {
       for (const sp of rm.spots) expect(findPath(rm.grid, [sp.x, sp.y], [coffee.x, coffee.y]), `등급 ${lv} ${sp.kind} 길 없음`).not.toBeNull();
       // 임원실은 사무 책상과 겹치지 않는다
       for (const e of rm.execs) for (const d of rm.furn.filter((f) => f.kind === 'desk')) expect(e.x > d.x && e.x < d.x + d.w && e.y > d.y && e.y < d.y + d.d).toBe(false);
+      // 5.5.1 해외 담당 책상 하나 더(해외 진출한 판): 자리 수 +1, 사무 자리 수 그대로, 길이 막히지 않는다
+      const rx = roomFor(lv, 1), cx = rx.spots.find((q) => q.kind === 'coffee')!;
+      expect(rx.execs.length).toBe(EXEC_SEATS[lv] + 1);
+      expect(rx.seats.filter((x) => !x.elite).length).toBe(CAPACITY[lv]);
+      for (const st of rx.seats) expect(findPath(rx.grid, st.access, [cx.x, cx.y]), `등급 ${lv}+1 자리 길 없음`).not.toBeNull();
+      for (const e of rx.execs) for (const d of rx.furn.filter((f) => f.kind === 'desk')) expect(e.x > d.x && e.x < d.x + d.w && e.y > d.y && e.y < d.y + d.d).toBe(false);
     }
   });
 
@@ -233,5 +240,5 @@ describe('외관 후보·직접 고르기(1.0.0)', () => {
       expect(summary(vs[0][1])).toEqual(summary(vs[0][1])); // 결정론
     }
     expect(n).toBe(4 * 4 * 2 * 2 + 2 * 4 * 2 * 2);
-  }, 30000); // 차 100여 대를 만든다: 느린 CI에서 기본 5초를 넘는다
+  });
 });

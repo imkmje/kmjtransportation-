@@ -19,6 +19,7 @@ export interface OfficeView {
   logo?: string;        // 내 회사 로고 SVG(art.ts logoSvg가 만든 것). 표지판·로비 벽에 끼워 넣는다
   year?: number;        // 지금 연도: 책상 집기(제도판·타자기 → CRT → 모니터·태블릿)
   execs?: { id: string; name: string; title: string }[]; // 임명된 임원(창가 임원실, 직함 문패)
+  execExtra?: number;   // 5.5.1 등급 자리 밖의 임원 책상(해외 담당 1)
 }
 export type Stat = '성능' | '연비' | '실용' | '디자인' | '품질';
 export type OfficeEvent =
@@ -355,11 +356,11 @@ export function createOffice(host: HTMLElement): Office {
 
   // ---------- 장면 짓기 ----------
   function build(v: OfficeView) {
-    const rm = roomFor(v.level);
+    const rm = roomFor(v.level, v.execExtra ?? 0);
     room = rm;
     const sorted0 = [...v.staff].sort((a, b) => ROLE[a.role].order - ROLE[b.role].order || (a.id < b.id ? -1 : 1));
     const staff = [...sorted0.filter((x) => !x.elite).slice(0, CAPACITY[rm.level]), ...sorted0.filter((x) => x.elite).slice(0, ELITE_SEATS[rm.level])]; // 4.1.0 전담팀원은 금색 자리
-    const seatOf = assignSeats(rm.level, staff);
+    const seatOf = assignSeats(rm.level, staff, v.execExtra ?? 0);
     const occupant = new Map<number, OfficeStaff>();
     for (const s of staff) { const i = seatOf.get(s.id); if (i !== undefined) occupant.set(i, s); }
     const c0 = v.carSvg?.match(/fill="(#[0-9a-fA-F]{6})"/)?.[1];
@@ -881,7 +882,7 @@ export function createOffice(host: HTMLElement): Office {
   return {
     update(v) {
       if (disposed) return;
-      const key = JSON.stringify([v.level, v.staff.map((s) => [s.id, s.role, s.name, !!s.elite]).sort(), v.carSvg ?? '', kitOf(v.year), v.execs ?? []]);
+      const key = JSON.stringify([v.level, v.execExtra ?? 0, v.staff.map((s) => [s.id, s.role, s.name, !!s.elite]).sort(), v.carSvg ?? '', kitOf(v.year), v.execs ?? []]);
       const lvChanged = !view || view.level !== v.level, phaseChanged = !!view && view.phase !== v.phase;
       view = v;
       const rebuilt = key !== structKey;

@@ -169,6 +169,13 @@ export function startApp(): void {
   let lastPanel = '', lastOv = '', dragging = false;
 
   const panel = $('#panel'), ov = $('#ov'), sheet = $('#sheet'), sheetBody = $('#sheet-body'), title = $('#title');
+  // 5.5.1 page=true: 창 대신 지금 탭의 내용 자리를 덮는 전체 구역(위쪽 줄·탭 줄은 그대로 쓰고, 닫거나 탭을 누르면 원래 화면). 되돌릴 수 없는 행동의 확인·결정은 창 그대로
+  const mainEl = $('#main');
+  const openSheet = (page = false): void => {
+    sheet.classList.toggle('page', page); sheetBody.setAttribute('role', page ? 'region' : 'dialog'); sheetBody.setAttribute('aria-modal', String(!page));
+    if (page) { if (sheet.parentElement !== mainEl) mainEl.append(sheet); } else if (sheet.parentElement !== document.body) document.body.insertBefore(sheet, $('#pick'));
+    sheet.hidden = false; if (page) sheet.scrollTop = 0;
+  };
   const myLogo = (z = 26) => logoSvg(ui.logo, z);
 
   // ---------- 소리 ----------
@@ -438,7 +445,7 @@ export function startApp(): void {
       projectName: p ? `${p.name}${p.kind === 'facelift' ? ' 페이스리프트' : ''}` : undefined,
       carSvg: p ? silhouetteSvg(projLook(p, ui.colors[p.id] ?? PAINT[0][1]), { color: ui.colors[p.id] ?? PAINT[0][1] }) : undefined,
       progress: p ? (p.phase === 'design' ? p.weeksDone / p.designWeeks : 1) : undefined, defects: p?.defectEst, logo: myLogo(32),
-      year: yearOf(s.week), execs: Q.execInfo(s).roles.flatMap((r) => r.holder ? [{ id: `x${r.holder.staffId}`, name: r.holder.name, title: r.title }] : []), // M3 시대별 집기, 임원실
+      year: yearOf(s.week), execs: Q.execInfo(s).roles.flatMap((r) => r.holder ? [{ id: `x${r.holder.staffId}`, name: r.holder.name, title: r.title }] : []), execExtra: s.world?.regions.length ? 1 : 0, // 5.5.1 해외 담당 임원 책상 // M3 시대별 집기, 임원실
     };
   }
   /** 주간 개발 기록 → 사무실 연출: 직원마다 가장 큰 능력치 1개(정수, 0이면 생략), 결함 증감 */
@@ -531,7 +538,7 @@ export function startApp(): void {
   function launchScene(g: Generation, ed?: Generation['editions'][number], rep?: number, news?: string): void {
     const after = () => { if (ed) showNews(ed.headline ?? news ?? '', `${nameOf(g)}${josa(nameOf(g), '이/가')} 새 얼굴로 돌아왔다. 판매가 되살아나고 인지도도 오를 것으로 보인다.`, undefined, undefined, true); else showReview(g, rep); };
     const vn = Q.variantById(g.variant)?.name;
-    if (stage && revealWanted(stage)) playReveal({ stage, sheet, body: sheetBody, kind: ed ? 'facelift' : 'new', name: nameOf(g), sub: `${g.number}세대${ed ? ' 페이스리프트' : ''}${vn ? ` · ${vn}` : ''} · ${bodyById(g.body).name} · ${segName(g.segment)}용`, sound: () => sfx('launch'), done: after });
+    if (stage && revealWanted(stage)) { openSheet(); playReveal({ stage, sheet, body: sheetBody, kind: ed ? 'facelift' : 'new', name: nameOf(g), sub: `${g.number}세대${ed ? ' 페이스리프트' : ''}${vn ? ` · ${vn}` : ''} · ${bodyById(g.body).name} · ${segName(g.segment)}용`, sound: () => sfx('launch'), done: after }); }
     else after();
   }
   // ----- 0.8.0 자동 저장: 연속 요청은 묶어 한 번(프레임을 끊지 않게), 실패는 한 번만 알림 -----
@@ -630,7 +637,7 @@ export function startApp(): void {
     if (!game) return;
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
     sheetBody.innerHTML = `<div class="yr">${I.decadePaper(game.state, d, myLogo(22))}</div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
   /** 4.0.0 연 보고서의 해외 비중(연 기록) */
   function yearWorld(y: number): string {
@@ -652,7 +659,7 @@ export function startApp(): void {
         <p class="lbl">올해 출시</p>${li(r.launches, '없음')}<p class="lbl">올해 단종</p>${li(r.discontinued, '없음')}<p class="lbl">올해 끝낸 연구</p>${li(r.research, '없음')}</section>
       <section>${yearWorld(y)}<p class="lbl">평판 변화와 이유</p>${rep}<p class="lbl">주요 사건</p>${li(r.events.map(newsLine), '없음')}${r.next.length ? `<p class="lbl">내년에 볼 것</p>${li(r.next, '')}` : ''}</section></div>
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
   // ----- 0.9.0 월 결산 창: 장부 한 달 그대로(차종별 판매·매출·원가·이익, 지출 내역, 전월 대비). i = 장부 위치(최근 24개월) -----
   function showMonth(i: number): void {
@@ -679,7 +686,7 @@ export function startApp(): void {
       <div class="kpis mon-kpis">${kp('판매', `${num(wSold(L))}<span>대</span>`, wSold(L), P ? wSold(P) : undefined)}${kp('매출', money(L.revenue), L.revenue, P?.revenue)}${kp('이익', money(L.profit, true), L.profit, P?.profit, L.profit >= 0 ? 'pos' : 'neg')}${kp('월말 현금', money(L.cash), L.cash, P?.cash, L.cash < 0 ? 'neg' : '')}</div>
       <div class="mon-cols"><section><p class="lbl">차종별 판매와 이익</p>${cars}<p class="note">차종 이익 = 매출 − 원가 − 광고 − 리콜${L.world ? ' − 관세·운송비' : ''}(직원 월급·유지비·개발비 전).</p>${L.world ? monWorld(L, P) : ''}</section>
       <section><p class="lbl">지출 내역</p><table class="tbl mon-costs"><tr><th>항목</th><th class="r">금액</th><th class="r">전월 대비</th></tr><tr><td>판매 수입</td><td class="r pos">${money(L.revenue)}</td>${dd(L.revenue, P?.revenue)}</tr>${L.subDiv !== undefined ? `<tr class="mon-subdiv"><td>자회사 배당</td><td class="r pos">${money(L.subDiv ?? 0)}</td>${dd(L.subDiv ?? 0, P ? P.subDiv ?? 0 : undefined)}</tr>` : ''}${rows}<tr class="sum"><td>이익</td><td class="r ${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</td>${dd(L.profit, P?.profit)}</tr></table></section></div>${nav}</div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
   /** 4.0.0 월 결산의 해외 권역 표 */
   function monWorld(L: Game['state']['ledger'][number], P?: Game['state']['ledger'][number]): string {
@@ -1030,9 +1037,9 @@ export function startApp(): void {
       : screen === 'dev' ? devView() : screen === 'launch' ? launchView()
       : { ov: '', panel: screen === 'company' ? companyView() : screen === 'research' ? researchTab() : screen === 'fin' ? finTab() : recordsView(), look: undefined };
     if (!sx) { const sb = secBar(); if (sb) v.panel = sb + v.panel; } // 5.0.0 탭 안 구역 전환 줄
-    else if (isBrandK(sx.kind) && (screen === 'garage' || screen === 'dev')) v.panel = `<div class="seg cotabs secbar" role="tablist" aria-label="자회사 차"><button role="tab" data-act="tab" data-v="garage" aria-selected="${screen === 'garage'}">차고</button><button role="tab" data-act="tab" data-v="dev" aria-selected="${screen === 'dev'}">개발</button></div>` + v.panel; // 운영 전환: 자회사 차고·개발
-    { const mt = mainTab(), flow = mt === 'car' && !sx && deciding(), carMode = mt === 'car' && !sx && !flow, side = $('#side'), m = $('#main'); side.hidden = !carMode; m.classList.toggle('flow', flow); // 기획·출시 흐름은 왼쪽 목록 없이 무대 + 넓은 패널(기존 배치)
-      if (carMode) { const h = sideList(); if (side.dataset.v !== h) { side.dataset.v = h; side.innerHTML = h; } }
+    // 5.5.1 운영 전환의 차고·개발 전환은 왼쪽 목록이 맡는다(구역 줄 없음)
+    { const mt = mainTab(), flow = mt === 'car' && !sx && deciding(), carMode = mt === 'car' && !flow && (!sx || screen !== 'plan'), side = $('#side'), m = $('#main'); side.hidden = !carMode; m.classList.toggle('flow', flow); // 기획·출시 흐름은 왼쪽 목록 없이 무대 + 넓은 패널(기존 배치)
+      if (carMode) { const h = sx ? subSideList(sx) : sideList(); if (side.dataset.v !== h) { side.dataset.v = h; side.innerHTML = h; } }
       m.classList.toggle('car', carMode); m.classList.toggle('show', carMode && isShow); m.classList.toggle('today', screen === 'today' && !sx);
       for (const t of ['today', 'car', 'research', 'people', 'group', 'market', 'fin']) m.classList.toggle(`t-${t}`, mt === t);
       setVar(m, '--mainh', `${m.clientHeight}px`); setVar(document.body, '--toph', `${Math.round($('#top').getBoundingClientRect().bottom)}px`); }
@@ -1092,6 +1099,7 @@ export function startApp(): void {
   /** 주 메뉴 탭 누르기(키보드 Enter·Space도 button이라 같다) */
   function goTab(t: string): void {
     if (!game) return;
+    if (!sheet.hidden && sheet.classList.contains('page')) sheet.hidden = true; // 5.5.1 탭 안 전체 구역은 탭을 누르면 닫힌다
     const sx = curSub();
     if (sx) { go(t === 'car' ? 'garage' : t === 'fin' ? 'records' : 'company'); return; }
     switch (t) {
@@ -1136,6 +1144,14 @@ export function startApp(): void {
     return (t === 'people' || t === 'group' || t === 'market' ? tabHead(t) : '') + bar + rec; // 재무는 본문 맨 위가 현금 추이·지난달 손익(재무 화면 그대로)
   }
   /** 차 탭 왼쪽 목록: 내 차(이름·차급·평론), 개발 중, 새 차 기획 */
+  /** 5.5.1 운영 전환 중 차 탭 왼쪽 목록: 자회사 모델, 개발 중, 개발 화면 */
+  function subSideList(x: Subsidiary): string {
+    const d = Q.subDetail(game!.state, x.id)!, cur = screen === 'garage' ? (d.models.find((m) => m.body === subCar) ?? d.models[0])?.body : '';
+    const car = (m: Q.SubModelView) => `<button class="cl-it${cur === m.body ? ' on' : ''}" data-act="subCarSel" data-id="${x.id}" data-k="${m.body}" aria-current="${cur === m.body}"><b>${esc(m.name)}</b><small>${m.bodyName} · ${score(m.critic)}</small></button>`;
+    const ord = (o: Q.SubDetail['orders'][number]) => `<button class="cl-it dev" data-act="devTab"><b>${esc(o.name || `${o.bodyName} 신차`)}</b><small>${o.monthsLeft ? `${o.monthsLeft}개월 남음` : '이번 달 말 출시'}</small></button>`;
+    return `<div class="cl" role="list">${d.models.map(car).join('')}${d.models.length ? '' : '<p class="cl-none">판매 중인 모델이 없습니다</p>'}
+      <p class="cl-h">개발 중</p><button class="cl-it dev${screen === 'dev' ? ' on' : ''}" data-act="devTab"><b>개발 현황</b><small>${d.orders.length ? `${d.orders.length}대 개발 중` : '신차 기획·제작 지시'}</small></button>${d.orders.map(ord).join('')}</div>`;
+  }
   function sideList(): string {
     const s = game!.state, GL = garageList(), cur = screen === 'garage' && !garageSum ? garageId : -1;
     const car = (g: Generation) => `<button class="cl-it${cur === g.id ? ' on' : ''}" data-act="carOpen" data-id="${g.id}" aria-current="${cur === g.id}"><b>${esc(nameOf(g))}</b><small>${esc(bodyById(g.body).name)} · ${score(g.reviewAvg)}${g.status === 'ending' ? ' · 단종 예정' : ''}</small></button>`;
@@ -1427,7 +1443,7 @@ export function startApp(): void {
       <tr class="rival"><th>가장 많이 팔리는 경쟁 차</th>${G.map((g) => `<td class="r">${rival(g.body)}</td>`).join('')}</tr>${G.some((g) => Q.subModelsIn(s, g.body).length) ? `<tr class="rival"><th>같은 차급의 내 자회사 모델</th>${G.map((g) => `<td class="r">${Q.subModelsIn(s, g.body).map((v) => `<i class="sub-own">내 자회사</i> ${esc(v.company)} ${esc(v.name)} ${v.number}세대<br><small>추정 평론 ${score(v.critic)} · 점유 약 ${Math.round(v.share * 100)}%</small>`).join('<br>') || '—'}</td>`).join('')}</tr>` : ''}</table></div>
       <p class="note">능력치는 그해 다른 차와 비교한 등급(0~10, 5가 보통)입니다. 굵은 칸이 그 줄에서 가장 좋은 값입니다(가격은 낮은 쪽). 한 대만 고르면 같은 차급의 경쟁 차와 나란히 봅니다.</p>
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
   /** 2.0.0 경쟁 모델의 썸네일: 차체·출시 연도·모델 시드로 그리고, 색은 회사 경향에서 */
   const rivalLook = (v: Q.RivalModelView): CarLook => { const c = RIVAL_PAINT[v.rivalId] ?? [PAINT[4][1]]; return lookOf({ body: v.body, powertrain: 'gasoline', tier: 2, color: c[v.seed % c.length], wheels: 1, year: v.year, chassisSeed: v.seed, faceSeed: v.seed >>> 3 }); };
@@ -1455,7 +1471,7 @@ export function startApp(): void {
       <p class="hint rv-sum">가장 센 경쟁 차와 견주면 앞서는 능력치: <b class="pos">${nm(ahead)}</b> · 뒤지는 능력치: <b class="neg">${nm(behind)}</b></p>
       <p class="note">경쟁 차${M.length ? '와 내 자회사 모델' : ''}의 평론·능력치·가격·점유는 시장에서 보이는 세기로 어림한 추정값입니다. 능력치는 그해 기준 등급(0~10, 5가 보통)이고, 굵은 칸이 그 줄에서 가장 좋은 값입니다(가격은 낮은 쪽). 내 차의 평론은 출시 때 받은 평균입니다.</p>
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
   /** 2.0.0 경쟁사 라인업: 모델마다 차체·세대·출시 연도·추정 평론·히트작, 누르면 지난 세대 */
   /** 5.1.0 경쟁사 상세는 창 대신 시장 › 경쟁사 오른쪽 칸(세로는 카드 아래) */
@@ -1471,7 +1487,7 @@ export function startApp(): void {
       <p class="lbl" style="margin-top:12px">라인업</p><div class="rv-list">${L.models.map(row).join('')}</div>
       <p class="note">모델을 누르면 지난 세대가 펼쳐집니다. 추정 평론${ib('term:추정 평론')}은 시장에서 보이는 세기로 어림한 값입니다. 첫 세대의 추정 평론은 회사의 차급별 강약만으로 어림합니다.</p>
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="rivalClose">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 3.5.0 경쟁사와의 관계 표시(제휴 중·가격 전쟁 중·대응 신차 준비 중) */
   function relTags(x: Q.RivalRelation): string {
@@ -1510,7 +1526,7 @@ export function startApp(): void {
       <p class="note">지금 이 회사는 한 달 약 ${num(a.rivalMonthly)}대를 팝니다. 인수하면 손님 일부가 남은 경쟁사로 옮겨 가 브랜드 판매는 그보다 적게 잡았습니다. 자본 ${money(a.capital)}으로 시작하고(인수 값의 ${Math.round(config.rivalry.acquire.capital * 100)}%), 브랜드 평판 ${Math.round(a.rep)}, 전략은 성장 중심, 배당 비율 ${config.subs.defaultSub.dividend}%입니다. 자회사 수에 들어갑니다.</p>
       ${a.reason ? `<div class="badbox" style="margin-top:10px">${esc(a.reason)}</div>` : ''}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="rivalOpen" data-v="${id}">← ${esc(a.name)}</button><button class="btn ink" data-act="acqDo" data-v="${id}" ${a.reason ? 'disabled' : ''}>인수하기 · ${money(a.price)}</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 1.0.0 고른 차 여러 대에 자동 가격 또는 광고를 한 번에(한 번에 한 종류: 되돌리기가 한 번에 되도록) */
   let bulk: { kind: 'policy' | 'mk'; v: string } | null = null;
@@ -1541,7 +1557,7 @@ export function startApp(): void {
       <div class="tblwrap"><table class="tbl bulk-t"><tr><th>차종</th><th>지금 가격</th><th>지금 광고</th><th>바뀌는 것</th></tr>${rows}</table></div>
       ${bulk?.kind === 'policy' && bulk.v === 'manual' ? '<p class="note">수동으로 바꾸면 지금 가격을 그대로 두고, 앞으로는 직접 바꿀 때만 바뀝니다.</p>' : ''}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button><button class="btn ink" data-act="bulkApply" ${ok.length ? '' : 'disabled'}>${ok.length ? `${ok.length}대에 적용` : '바꿀 차가 없습니다'}</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   async function applyBulk(): Promise<void> {
     if (!game || !bulk) return;
@@ -1750,7 +1766,7 @@ export function startApp(): void {
     sheetBody.innerHTML = `<div class="proj-eq"><div class="eyebrow"><i></i>개발 중 · ${esc(p.name)}</div><h2>장비 다시 고르기</h2><p class="hint">설계 단계에서만 바꿀 수 있고 비용은 들지 않습니다.</p>
       ${EQ.equipPicker(s, { body: p.body, segment: p.segment, powertrain: p.powertrain, tier: p.tier, equip: eqOf(projEq) }, 'proj', ib)}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button><button class="btn ink" data-act="projEquipApply">이 구성으로 바꾸기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 장비 고르기 칸(기획·페이스리프트 공통) */
   function equipView(t: 'plan' | 'lift'): string {
@@ -1967,7 +1983,7 @@ export function startApp(): void {
       <label class="lbl" for="rn-name">새 이름</label><div class="name-row"><input class="namein" id="rn-name" type="text" maxlength="${config.nameMax}" value="${esc(n.name)}" autocomplete="off">${pastBtn('rn-name')}</div>
       ${kids.length ? `<label class="chk"><input type="checkbox" id="rn-kids" checked> 파생 모델 이름도 함께 바꾸기(${kids.map((k) => `「${esc(k.name)}」`).join(', ')})</label>` : ''}
       <div class="row" style="margin-top:12px"><button class="btn ink" data-act="renameDo" data-id="${n.id}">이름 바꾸기</button><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
     const inp = $<HTMLInputElement>('#rn-name'); inp?.focus(); inp?.select();
   }
   function showPresets(): void {
@@ -1977,7 +1993,7 @@ export function startApp(): void {
       <div class="preset-new"><input class="namein" id="preset-name" type="text" maxlength="16" placeholder="프리셋 ${list.length + 1}" aria-label="프리셋 이름"><label class="chk"><input type="checkbox" id="preset-body" checked> 차체도 저장(${esc(bn)})</label><button class="btn ink" data-act="presetSave">지금 조합 저장</button></div>
       ${list.length ? `<div class="menu-slots presets">${list.map((p, i) => `<div class="slot preset"><div><b>${esc(p.name)}</b><small>${esc(presetLine(p))}</small></div><div class="row"><button class="btn ink" data-act="presetLoad" data-v="${i}">불러오기</button><button class="btn" data-act="presetDel" data-v="${i}">지우기</button></div></div>`).join('')}</div>` : '<p class="note">저장한 프리셋이 없습니다.</p>'}
       <p class="note">불러올 때 지금 쓸 수 없는 차체·동력·옵션(연구 전 등)은 빼고 알려 줍니다.</p><button class="btn" data-act="closeSheet" style="width:100%;margin-top:10px">닫기</button>`;
-    sheet.hidden = false;
+    openSheet();
   }
   /** 프리셋을 초안에 넣는다. 지금 쓸 수 없는 것은 빼고 그 이름 목록을 돌려준다 */
   function applyPreset(d: Draft, p: S.PlanPreset): string[] {
@@ -2228,7 +2244,7 @@ export function startApp(): void {
       <div class="avgline later" id="rv-avg"><div><small class="hint">평균</small><b>${score(avg)}</b></div>${g.opus ? `<span class="badge opus">직속 전담팀의 수작</span>` : ''}${g.masterpiece ? `<span class="badge">명차 등록 · ${repWord(repChange)}</span>` : avg <= c.flop ? `<span class="badge flop">혹평 · ${repWord(repChange)}</span>` : avg >= 6 ? `<span class="chip on">호평 · ${repWord(repChange)}</span>` : `<span class="chip">무난한 평가 · ${repWord(repChange)}</span>`}</div></div>
       <div class="later" id="rv-news"><div class="news"><div class="mast"><span>모터 데일리</span><span>${esc(Q.monthLabel(g.launchMonth))}</span></div><h3>${esc(head)}</h3><p>${esc(bodyTxt)}</p>${rival ? `<div class="rv">${logo(rival.id, 22)}<span>${esc(rival.name)} 관계자: "${quote}"</span></div>` : ''}</div>
       ${winsList(g.wins)}<button class="go dark" data-act="closeReview">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches, gap = still ? 0 : 650;
     list.forEach((_, i) => reviewTimers.push(window.setTimeout(() => { const el = sheetBody.querySelector(`.critic[data-i="${i}"]`); el?.classList.remove('wait'); el?.classList.add('pop'); }, gap * (i + 1))));
     reviewTimers.push(window.setTimeout(() => { $('#rv-avg').classList.add('show'); sfx(avg >= 7 ? 'reviewGood' : avg >= 4.5 ? 'reviewMid' : 'reviewBad'); }, gap * (list.length + 1)));
@@ -2240,7 +2256,7 @@ export function startApp(): void {
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
     sheetBody.innerHTML = `<div class="eyebrow"><i></i>${esc(label)} · ${esc(Q.monthLabel(month))}</div><div class="news paper"><div class="mast"><span>모터 데일리</span><span>${esc(Q.monthLabel(month))}</span></div><h3>${esc(head)}</h3>${body ? `<p>${esc(body)}</p>` : ''}${byMe ? `<div class="rv me-by">${myLogo(22)}<span>${esc(game!.state.companyName)}</span></div>` : ''}</div>
       <button class="go dark" data-act="closeReview">닫기</button>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
     sheetBody.querySelector<HTMLElement>('[data-act="closeReview"]')?.focus();
   }
 
@@ -2276,7 +2292,7 @@ export function startApp(): void {
       <p class="hint" style="margin-top:10px">${c.weeksLeft}주 안에 고르지 않으면 「${esc(def)}」${josa(def, '으로/로')} 정해집니다. 이 창이 떠 있는 동안 시간이 멈춥니다.</p>
       ${Q.autoOn(game!.state, c.eventId) ? `<p class="hint auto-held">${esc(heldWhy(c.id))}</p>` : `<label class="chk auto-chk"><input type="checkbox" data-ad="${esc(c.eventId)}"> 이 종류(${esc(c.name)})는 앞으로 지금 고르는 답으로 자동 승인 ${ib('term:결정 자동 승인')}</label>`}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="later">나중에</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 진행 중인 사건 창: 효과, 충전 인프라 보급률, 필수 옵션, 다가오는 사건 */
   function showEvents(): void {
@@ -2288,7 +2304,7 @@ export function startApp(): void {
       ${up.length ? `<p class="lbl" style="margin-top:14px">다가오는 사건(예고)</p><ul class="uplist">${up.map((x) => `<li>${esc(x.warn)} <small class="hint">· 약 ${x.monthsLeft}개월 뒤</small></li>`).join('')}</ul>` : ''}
       <p class="note">이 게임의 역사 사건과 시장 수치는 게임에 맞게 어림한 것이라 실제와 다를 수 있습니다.</p>
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
 
   // ----- 회사(9장): 안쪽 탭 재무 / 직원 / 본사 / 공장 -----
@@ -2354,7 +2370,7 @@ export function startApp(): void {
   function regionRank(v: WD.RegionView): string {
     const rk = WD.regionRanking(game!.state, v.id), top = Math.max(...rk.map((x) => x.share), 1e-9);
     const nm = (x: WD.RankRow) => x.mine || x.local ? esc(x.name) : x.sub ? `${subMark(x.name, x.color ?? '#777', 16)}${esc(x.name)} <small class="hint">자회사</small>` : `${logo(x.id, 16)}${esc(x.name)}${x.maker ? ' <small class="hint">현지</small>' : ''}`;
-    return `<p class="lbl">${esc(v.name)} 경쟁사 순위 <small class="hint">대략 점유</small></p><div class="w-bars w-rank">${rk.map((x, i) => `<div class="w-bar ${x.mine ? 'me' : ''}${x.maker ? ' mk' : ''}"><span>${i + 1}. ${nm(x)}${x.local ? ib('term:기타 현지 업체') : x.maker ? ib('term:현지 경쟁사') : ''}</span><i><u style="width:${((x.share / top) * 100).toFixed(0)}%"></u></i><small>${(x.share * 100).toFixed(1)}%</small></div>`).join('')}</div>`;
+    return `<p class="lbl">${esc(v.name)} 경쟁사 순위 <small class="hint">대략 점유</small></p><div class="w-bars w-rank">${rk.map((x, i) => `<div class="w-bar ${x.mine ? 'me' : ''}${x.maker ? ' mk' : ''}"><span><em class="w-n">${i + 1}. ${nm(x)}</em>${x.local ? ib('term:기타 현지 업체') : x.maker ? ib('term:현지 경쟁사') : ''}</span><i><u style="width:${((x.share / top) * 100).toFixed(0)}%"></u></i><small>${(x.share * 100).toFixed(1)}%</small></div>`).join('')}</div>`;
   }
   /** 5.5.0 현지 경쟁사 소개 */
   function makersBlock(rid: string): string {
@@ -2378,7 +2394,7 @@ export function startApp(): void {
       <div class="kpis" style="margin-top:10px">${kpi('건설비', money(n.cost))}${kpi('공사', `${n.months}<span>개월</span>`)}${kpi('늘어나는 월 이익(어림)', money(n.save), 'pos')}</div>
       <p class="note">현지 공장이 만든 차는 관세·운송비가 없고 국내 공장 한도를 쓰지 않습니다. 대신 대당 원가가 ${Math.round((config.world.plant.costMult - 1) * 100)}% 더 들고, 그 권역 판매 상한 안에서만 팔립니다. 생산 차종은 자동(관세·운송비가 큰 차부터)이며 직접 고를 수도 있습니다.</p>
       ${n.error ? `<div class="badbox">${esc(n.error)}</div>` : ''}<div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">취소</button><button class="btn ink" data-act="wPlantDo" data-v="${id}" ${n.error ? 'disabled' : ''}>건설 · ${money(n.cost)}</button></div>`;
-    sheet.hidden = false;
+    openSheet();
   }
   const monthLabelOf = (m: number) => `${yearOfMonth(m)}년 ${(m % 12) + 1}월`;
   function showWorldOpen(id: string): void {
@@ -2387,7 +2403,7 @@ export function startApp(): void {
       <table class="tbl"><tr><td>진출비</td><td class="r">${money(v.entry)}</td></tr><tr><td>한 달 시장 규모</td><td class="r">약 ${num(v.market)}대</td></tr><tr><td>판매 상한(판매 법인 없음)</td><td class="r">${num(v.cap)}대(시장의 ${Math.round(v.capShare * 100)}%)</td></tr><tr><td>관세·운송비</td><td class="r">원가의 ${Math.round(v.tariffRate * 100)}% + ${money(v.shipCost)}/대</td></tr><tr><td>시작 권역 평판·인지도</td><td class="r">${Math.round(v.rep)} · ${Math.round(config.world.awStart * 100)}%</td></tr></table>
       <p class="note">국내 공장에서 만들어 보내므로 생산 한도를 국내와 나눠 씁니다. 생산이 모자라면 대당 이익이 큰 곳부터 채웁니다. 자동 수출과 자동 권역 가격이 켜진 채로 시작하며, 다음 월 결산부터 팔립니다.</p>
       ${v.error ? `<div class="badbox">${esc(v.error)}</div>` : ''}<div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">취소</button><button class="btn ink" data-act="wOpenDo" data-v="${id}" ${v.error ? 'disabled' : ''}>진출 · ${money(v.entry)}</button></div>`;
-    sheet.hidden = false;
+    openSheet();
   }
   function showOfficeInvest(id: string): void {
     const s = game!.state, v = WD.regionViews(s).find((x) => x.id === id)!, n = v.officeNext; if (!n) return;
@@ -2395,7 +2411,7 @@ export function startApp(): void {
       <table class="tbl"><tr><th>무엇이 바뀌나</th><th class="r">지금</th><th class="r">투자 뒤</th></tr>${cmpRow('판매 상한', `${num(v.cap)}대`, `${num(v.market * n.capShare)}대`)}${cmpRow('인지도 목표 가산', `+${Math.round(config.world.office.aw[v.office] * 100)}%`, `+${Math.round(config.world.office.aw[n.level] * 100)}%`)}${cmpRow('월 유지비', money(v.upkeep), money(n.upkeep), true)}</table>
       <div class="kpis" style="margin-top:10px">${kpi('투자비', money(n.cost))}${kpi('지난달 판매', `${num(v.sold)}<span>대</span>`)}${kpi('지난달 권역 이익', money(v.profit, true), v.profit >= 0 ? 'pos' : 'neg')}</div>
       ${n.error ? `<div class="badbox">${esc(n.error)}</div>` : ''}<div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">취소</button><button class="btn ink" data-act="wOfficeDo" data-v="${id}" ${n.error ? 'disabled' : ''}>투자 · ${money(n.cost)}</button></div>`;
-    sheet.hidden = false;
+    openSheet();
   }
   let wPriceSet: { gen: number; rid: string } | null = null;
   function showRegionPrice(gen: number, rid: string): void {
@@ -2406,7 +2422,7 @@ export function startApp(): void {
       <label class="lbl" for="w-price">권역 가격(만원)</label><input class="namein" id="w-price" type="number" inputmode="numeric" step="10" value="${c.price}">
       <label class="chk w-auto"><input type="checkbox" data-act="wDomFirst" data-id="${gen}" ${Q.generationById(s, gen)?.domFirst ? 'checked' : ''}> 생산이 모자라면 국내 우선${ib('term:국내 우선')}</label>
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="wPriceAuto">자동으로</button><button class="btn" data-act="closeSheet">취소</button><button class="btn ink" data-act="wPriceDo">이 값으로</button></div>`;
-    sheet.hidden = false;
+    openSheet();
   }
 
 
@@ -2438,7 +2454,7 @@ export function startApp(): void {
   function rivalsView(): string {
     const s = game!.state, mine = sellingGens(s).reduce((a, g) => a + WD.madeLast(g), 0), rel = Q.rivalRelations(s), wide = todayWide();
     if (rivalSel && !Q.rivalLineup(s, rivalSel)) rivalSel = null;
-    const cards = `<div class="card rivals-card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r, i) => rel[i].out ? `<div class="rv-co rv-out">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>인수함 · 내 자회사</small></span><small class="rv-strong">${esc(s.subs?.find((x) => x.from === r.id)?.name ?? '')}</small></div>` : `<button class="rv-co" data-act="rivalOpen" data-v="${r.id}" aria-label="${esc(r.name)} 라인업 보기">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small>${relTags(rel[i])}</span><small class="rv-strong">${rivalStrong(r.cells)}<br>라인업 ${Object.keys(r.models).length}종 ›</small></button>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small>평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">회사를 누르면 모델 라인업과 지난 세대, 기술 제휴·인재 영입·인수를 봅니다. 경쟁사 이름·모델 이름·로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
+    const cards = `<div class="card rivals-card"><h3>경쟁사</h3><div class="rivals">${s.rivals.map((r, i) => rel[i].out ? `<div class="rv-co rv-out">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>인수함 · 내 자회사</small></span><small class="rv-strong">${esc(s.subs?.find((x) => x.from === r.id)?.name ?? '')}</small></div>` : `<button class="rv-co" data-act="rivalOpen" data-v="${r.id}" aria-label="${esc(r.name)} 라인업 보기">${logo(r.id, 26)}<span>${esc(r.name)}<br><small>${esc(RIVALS.find((x) => x.id === r.id)?.trait ?? '')}</small>${relTags(rel[i])}</span><small class="rv-strong">${rivalStrong(r.cells)}<br><b class="rv-sold">국내 월 판매 약 ${num(Math.round(Q.rivalValue(s, r.id).monthly / 100) * 100)}대</b><br>라인업 ${Object.keys(r.models).length}종 ›</small></button>`).join('')}<div class="me">${myLogo(26)}<span>${esc(s.companyName)}<br><small>평판 ${Math.round(s.reputation)}</small></span><span>지난달 ${num(mine)}대</span></div></div><p class="note">회사를 누르면 모델 라인업과 지난 세대, 기술 제휴·인재 영입·인수를 봅니다. 경쟁사 이름·모델 이름·로고는 실제 브랜드를 본뜬 가상의 것이며, 도형은 새로 그렸습니다.</p></div>`;
     const det = rivalSel ? rivalHtml(rivalSel) : '<div class="td-empty"><h1>경쟁사를 고르세요</h1><p>회사를 누르면 모델 라인업·지난 세대와 기술 제휴·인재 영입·인수가 여기 열립니다.</p></div>';
     return wide ? `<div class="split"><div class="sp-l">${cards}</div><section class="sp-r card" aria-label="경쟁사 자세히">${det}</section></div>` : cards + (rivalSel ? `<div class="card rv-in">${det}</div>` : '');
   }
@@ -2604,9 +2620,12 @@ export function startApp(): void {
     const s = game!.state, d = Q.subDetail(s, id)!, B = d.brand;
     const head = `<div class="card sub-head">${subView === id ? '' : `<div class="row sub-top"><button class="btn" data-act="subBack">← 자회사 목록</button><button class="btn ink" data-act="subOpen" data-id="${id}">운영 전환</button></div>`}<div class="rv-head">${subMark(d.name, d.color, 48)}<div><h2>${esc(d.name)} <small class="hint">${esc(d.kindName)} · ${d.foundedYear}년 설립</small></h2><p class="hint">${esc(d.kindDesc)}</p></div></div>
       <div class="kpis">${kpi('자본', money(d.capital))}${B ? kpi('월 생산 한도', `${num(d.capacity)}<span>대</span>`) + kpi('모델', `${d.models.length}/${d.modelCap}<span>개</span>`) + kpi('브랜드 평판', String(Math.round(d.rep))) : ''}${d.hqEffect ? kpi('본사에 주는 효과', esc(d.hqEffect.text), 'pos', 'kpi-word') : ''}</div></div>`;
+    const sell = `<div class="card sub-sell"><h3>매각</h3><p class="hint">지금 매각하면 자본의 ${Math.round(SUBS.sellShare * 100)}%${d.listed ? `에서 상장한 지분(${Math.round(d.listed * 100)}%)을 뺀` : ''} <b>${money(d.sellPrice)}</b>을 받습니다. 매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없고, 모델과 실적 기록이 사라집니다. 사장은 본사 직원으로 돌아옵니다.${d.from ? ' 인수한 회사는 다시 독립 경쟁사가 됩니다.' : ''}</p><button class="btn danger" data-act="subSell" data-id="${d.id}" style="width:100%;margin-top:8px">「${esc(d.name)}」 매각 · ${money(d.sellPrice)}</button></div>`;
+    // 5.5.1 운영 전환의 그룹 탭: 머리 + 왼쪽(전략·라인업·해외) / 오른쪽 상세(운영 방식·목표·설정·사장·매각). 실적은 재무 탭
+    if (subView === id) return `<div class="sub-detail sub-ops">${head}${pcols(subStrategyCard(d) + (B ? subLineupCard(d) + subWorldCard(d) + subListCard(d) : ''), subModeCard(d) + subTargetCard(d) + subSettingsCard(d) + subPresidentCard(d) + sell)}</div>`;
     return `<div class="sub-detail">${head}<div class="cols">${subModeCard(d)}${subTargetCard(d)}</div>${subView === id ? '' : subWorkCard(d)}${subStrategyCard(d)}<div class="cols">${subSettingsCard(d)}${subPresidentCard(d)}</div>${B ? subLineupCard(d) : ''}${B ? subWorldCard(d) : ''}${subResultCard(d)}
       ${B ? subListCard(d) : ''}
-      <div class="card sub-sell"><h3>매각</h3><p class="hint">지금 매각하면 자본의 ${Math.round(SUBS.sellShare * 100)}%${d.listed ? `에서 상장한 지분(${Math.round(d.listed * 100)}%)을 뺀` : ''} <b>${money(d.sellPrice)}</b>을 받습니다. 매각은 같은 주 안의 되돌리기 말고는 되돌릴 수 없고, 모델과 실적 기록이 사라집니다. 사장은 본사 직원으로 돌아옵니다.${d.from ? ' 인수한 회사는 다시 독립 경쟁사가 됩니다.' : ''}</p><button class="btn danger" data-act="subSell" data-id="${d.id}" style="width:100%;margin-top:8px">「${esc(d.name)}」 매각 · ${money(d.sellPrice)}</button></div></div>`;
+      ${sell}</div>`;
   }
   /** 5.5.0 자회사 해외 판매: 본사가 진출한 권역마다 켜기·끄기(전반 위임은 자동도), 권역 인지도, 지난달 실적 */
   function subWorldCard(d: Q.SubDetail): string {
@@ -2678,14 +2697,14 @@ export function startApp(): void {
       ${f.ok ? '' : `<div class="badbox" style="margin-top:10px">${esc(f.reason ?? '')}</div>`}
       <div class="row" style="margin-top:12px"><button class="btn ink" data-act="subFoundDo" ${f.ok ? '' : 'disabled'}>${esc(f.name)} 설립 · ${money(f.cost)}</button><button class="btn" data-act="closeSheet">닫기</button></div>
       <p class="note">설립비는 현금에서 바로 나가고 장부에 '자회사 투자'로 적습니다. 처음 전략은 ${brand ? '성장 중심' : '안정 유지'}, 배당 비율 ${SUBS.defaultSub.dividend}%이며 설립 뒤 바꿀 수 있습니다.</p></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   function showSubRename(id: number, body: string): void {
     const d = Q.subDetail(game!.state, id), m = d?.models.find((x) => x.body === body); if (!d || !m) return;
     sheetBody.innerHTML = `<div class="rename-sheet"><div class="eyebrow"><i></i>${esc(d.name)} · 이름 변경</div><h2>「${esc(m.name)}」 이름 바꾸기</h2><p class="hint">${m.bodyName} · ${m.number}세대. 지난 뉴스와 보고의 문장은 바뀌지 않습니다.</p>
       <label class="lbl" for="sub-rn">새 이름</label><input class="namein" id="sub-rn" type="text" maxlength="${config.nameMax}" value="${esc(m.name)}" autocomplete="off">
       <div class="row" style="margin-top:12px"><button class="btn ink" data-act="subRenameDo" data-id="${id}" data-k="${body}">이름 바꾸기</button><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
     const inp = $<HTMLInputElement>('#sub-rn'); inp?.focus(); inp?.select();
   }
 
@@ -2717,15 +2736,23 @@ export function startApp(): void {
     const list = d.models.map((m) => `<button class="gsr sub-car" data-act="${fromHq ? 'gsubOpen' : 'subCarSel'}" data-id="${id}" data-k="${m.body}" aria-pressed="${m.body === v.body}"><span class="g-th">${thumb(subLook(m), -0.65, 160, 100)}</span><span class="g-name"><b>${esc(m.name)}</b><small>${m.bodyName} · ${m.number}세대 · ${esc(m.how ? HOW_NAME[m.how] : '자체 개발')}</small></span><span>평론 ${score(m.critic)}${m.awards.length ? '<small class="aw-s">수상</small>' : ''}</span><span>지난달 ${num(m.sold)}대</span></button>`).join('');
     const crit = v.reviews ? `<p class="lbl" style="margin-top:12px">평론가 4명</p><div class="kpis">${config.critics.list.map((c, i) => kpi(esc(c.name), score(v.reviews![i] ?? 0))).join('')}</div>` : `<p class="note">이 모델은 자회사가 전략에 따라 스스로 개발했습니다. 평론은 추정 평론${ib('term:추정 평론')}입니다.</p>`;
     const pct = v.pricePct ?? null, step = (dv: number) => Math.min(SUBS.modelPrice.max, Math.max(SUBS.modelPrice.min, (pct ?? Math.round(v.price / Math.max(1, v.stdPrice) * 100)) + dv));
-    const price = direct && !fromHq ? `<hr><p class="lbl">가격 · 브랜드 기준 가격 ${num(v.stdPrice)}만원</p><div class="row sub-px"><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(-5)}">−5%</button><b class="sub-divv">${pct === null ? '전략대로' : `${pct}%`}</b><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(5)}">+5%</button><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="" ${pct === null ? 'disabled' : ''}>전략대로</button></div>
-      <p class="note">가격은 브랜드 기준 가격의 ${SUBS.modelPrice.min}~${SUBS.modelPrice.max}%로 정합니다. 비싸게 받으면 대당 이익이 늘고 판매가 줄어듭니다. 정하지 않으면 전략이 정합니다.</p>` : '';
+    const price = direct && !fromHq ? `<hr><div class="price-card"><p class="lbl">가격 · 브랜드 기준 가격 ${num(v.stdPrice)}만원</p><div class="row sub-px"><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(-5)}">−5%</button><b class="sub-divv">${pct === null ? '전략대로' : `${pct}%`}</b><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="${step(5)}">+5%</button><button class="btn" data-act="subPrice" data-id="${id}" data-k="${v.body}" data-v="" ${pct === null ? 'disabled' : ''}>전략대로</button></div>
+      <p class="note">가격은 브랜드 기준 가격의 ${SUBS.modelPrice.min}~${SUBS.modelPrice.max}%로 정합니다. 비싸게 받으면 대당 이익이 늘고 판매가 줄어듭니다. 정하지 않으면 전략이 정합니다.</p></div>` : '';
     const acts = fromHq ? `<button class="btn ink" data-act="subOpen" data-id="${id}" data-v="garage" style="width:100%;margin-top:10px">${esc(d.name)} 운영 전환</button>` : `<div class="row sub-mact" style="margin-top:10px"><button class="btn" data-act="subRenameOpen" data-id="${id}" data-k="${v.body}">이름 변경</button><button class="btn danger" data-act="subDrop" data-id="${id}" data-k="${v.body}">단종</button></div>`;
     const card = `<div class="card sub-car-card"><p class="lbl"><i class="sub-own">${fromHq ? '내 자회사' : esc(v.how ? HOW_NAME[v.how] : '자체 개발')}</i> ${esc(d.name)}</p><h2>${esc(v.name)} <small class="hint">${v.bodyName} · ${v.number}세대 · ${v.year}년</small></h2>${v.fromName ? `<p class="hint">본사 「${esc(v.fromName)}」의 배지 모델${ib('term:배지 모델')}</p>` : ''}
       ${statBars(v.grades)}<div class="kpis" style="margin-top:10px">${kpi('평론', score(v.critic))}${kpi('가격', `${num(v.price)}<span>만원</span>`)}${kpi('대당 원가', `${num(v.unitCost)}<span>만원</span>`)}${kpi('지난달 판매', `${num(v.sold)}<span>대</span>`)}${kpi('차급 점유', `${Math.round(v.share * 100)}<span>%</span>`)}${kpi('다음 세대교체', v.cycleLeft ? `${v.cycleLeft}<span>개월 뒤</span>` : '이번 달')}</div>
       ${v.awards.length ? `<p class="hint aw-line" style="margin-top:8px"><b>수상${ib('term:시상식')}</b> ${v.awards.map(esc).join(' · ')}${v.awardLeft ? ` <small>(판매 +${Math.round(config.rivalry.awards.salesBoost * 100)}%, ${v.awardLeft}개월 남음)</small>` : ''}</p>` : ''}
       ${crit}${price}${acts}</div>`;
     const ovh = ovTop(`${esc(d.name)} 차고 · ${fromHq ? '내 자회사' : esc(SUBS.kinds[x.kind].name)}`, `${esc(v.name)}<small>${v.number}세대</small>`, specLine(v.body, v.powertrain, v.tier, v.segment)) + ovScore('평론', v.critic) + ovHint;
-    return { ov: ovh, panel: (fromHq ? back : subBar(x)) + `<div class="card gsec"><h3>${esc(d.name)} 모델 ${d.models.length}대</h3>${list}</div>` + card, look: subLook(v) };
+    if (!fromHq) { // 5.5.1 운영 전환: 본사 차 탭과 같은 짜임(왼쪽 목록 + 무대 + 수치 띠 + 오른쪽 상세·행동 단추)
+      isShow = true;
+      const sh = `<div class="ov tl show-h"><div class="eyebrow"><i></i>${esc(d.name)} · ${esc(SUBS.kinds[x.kind].name)} · ${v.number}세대 · ${v.year}년 출시</div><div class="model">${esc(v.name)}</div><div class="spec">${esc(specLine(v.body, v.powertrain, v.tier, v.segment))}</div></div>
+        <aside class="ov show-k" aria-label="이 차의 수치"><div class="sk-rv"><b>${score(v.critic)}</b><small>평론</small></div><div class="sk-g"><div><small>지난달</small><b>${num(v.sold)}대</b></div><div><small>대당 원가</small><b>${num(v.unitCost)}만원</b></div><div><small>차급 점유</small><b>${Math.round(v.share * 100)}%</b></div><div><small>가격</small><b>${num(v.price)}만원</b></div></div></aside>
+        <div class="ov show-a" role="group" aria-label="이 차로 할 일"><button class="sa-main" data-act="devTab">개발 현황</button>${direct ? '<button data-act="carJump" data-v="price">가격</button>' : `<button data-act="subOpen" data-id="${id}" data-v="company">전략 지시</button>`}<button data-act="subRenameOpen" data-id="${id}" data-k="${v.body}">이름 변경</button><button data-act="subDrop" data-id="${id}" data-k="${v.body}">단종</button></div>`;
+      const keys = `<div class="key"><small>지난달 판매</small><b>${num(v.sold)}<span>대</span></b></div><div class="key"><small>가격</small><b>${num(v.price)}<span>만원</span></b></div><div class="key"><small>대당 원가</small><b>${num(v.unitCost)}<span>만원</span></b></div><div class="key"><small>차급 점유</small><b>${Math.round(v.share * 100)}<span>%</span></b></div>`;
+      return { ov: sh, panel: subBar(x) + card, look: subLook(v), keys };
+    }
+    return { ov: ovh, panel: back + `<div class="card gsec"><h3>${esc(d.name)} 모델 ${d.models.length}대</h3>${list}</div>` + card, look: subLook(v) };
   }
   /** 개발 중인 차와 새 차 내기(본사 자회사 상세·운영 전환의 개발 탭 공통) */
   function subWorkCard(d: Q.SubDetail): string {
@@ -2765,8 +2792,9 @@ export function startApp(): void {
   function subRecordsView(id: number): View {
     const s = game!.state, x = s.subs!.find((y) => y.id === id)!, d = Q.subDetail(s, id)!;
     const news = s.events.news.filter((n) => n.category === 'sub' && n.text.includes(`「${x.name}」`) && !n.text.startsWith('[')).slice(-30).reverse();
-    return { ov: '', panel: subBar(x) + `<div class="card"><h3>출시·전략 뉴스 <small class="hint">최근 ${news.length}건</small></h3>${news.length ? `<ul class="sub-reports">${news.map((n) => `<li><small>${yearOf(n.week)}년 ${(monthOf(n.week) % 12) + 1}월</small>${esc(n.text)}</li>`).join('')}</ul>` : '<p class="hint">아직 뉴스가 없습니다.</p>'}</div>`
-      + `<div class="card sub-rep"><h3>분기 보고 <small class="hint">최근 ${d.reports.length}건</small></h3>${d.reports.length ? `<ul class="sub-reports">${d.reports.map((r) => `<li><small>${yearOf(r.week)}년 ${(monthOf(r.week) % 12) + 1}월</small>${esc(r.text)}</li>`).join('')}</ul>` : '<p class="hint">아직 보고가 없습니다.</p>'}</div>`, look: undefined };
+    const L = d.lastMonth, Y = d.last12, fhead = `<div class="card tab-head sub-fhead"><p class="th-line">${esc(x.name)} 재무${L ? ` · 지난달 이익 <b class="${L.profit >= 0 ? 'pos' : 'neg'}">${money(L.profit, true)}</b>` : ''}</p><div class="kpis">${kpi('자본', money(d.capital))}${d.brand ? kpi(`최근 ${Y.months}개월 판매`, `${num(Y.sold)}<span>대</span>`) : ''}${kpi(`최근 ${Y.months}개월 이익`, money(Y.profit, true), Y.profit >= 0 ? 'pos' : 'neg')}${kpi(`최근 ${Y.months}개월 배당`, money(Y.dividend))}</div></div>`;
+    // 5.5.1 운영 전환의 재무 탭: 머리 + 실적·분기 보고(그룹 탭에서 옮김) + 뉴스
+    return { ov: '', panel: subBar(x) + fhead + subResultCard(d) + `<div class="card"><h3>출시·전략 뉴스 <small class="hint">최근 ${news.length}건</small></h3>${news.length ? `<ul class="sub-reports">${news.map((n) => `<li><small>${yearOf(n.week)}년 ${(monthOf(n.week) % 12) + 1}월</small>${esc(n.text)}</li>`).join('')}</ul>` : '<p class="hint">아직 뉴스가 없습니다.</p>'}</div>`, look: undefined };
   }
   /** 제작 지시 창 */
   function showSubOrder(): void {
@@ -2785,7 +2813,7 @@ export function startApp(): void {
       ${why ? `<div class="badbox" style="margin-top:10px">${esc(why)}</div>` : ''}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button><button class="btn ink" data-act="subOrderDo" ${why ? 'disabled' : ''}>제작 지시</button></div>
       <p class="note">자회사가 공유 범위 안의 본사 기술로 사양을 짜 개발합니다. 예상 평론은 평론가의 흔들림을 뺀 값입니다.</p></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 본사 차 배지 창 */
   function showSubBadge(id: number): void {
@@ -2795,7 +2823,7 @@ export function startApp(): void {
       <p class="hint">본사가 판매 중인 차 가운데 ${esc(x.name)}${josa(x.name, '이/가')} 맡은 차급의 차만 낼 수 있습니다. 개발비 ${Math.round(SUBS.badge.costShare * 100)}%·기간 약 ${Math.round(1 / SUBS.badge.timeShare)}분의 1, 평론 −${Math.abs(SUBS.badge.critic)}점, 본사 원본의 판매가 일반 자회사 모델보다 많이 줄어듭니다.</p>
       ${list.length ? `<div class="sub-badges">${list.map((b) => { const g = Q.generationById(s, b.generationId); return `<div class="sub-bd${b.ok ? '' : ' locked'}"><span class="g-th">${g ? thumb({ ...genLook(g), color: x.color }, -0.65, 140, 88) : ''}</span><span class="g-name"><b>${esc(b.name)}</b><small>${b.bodyName} · 본사 평론 ${score(b.hqCritic)} → ${score(b.critic)}${b.replaces ? ` · 「${esc(b.replaces)}」 다음 세대` : ''}</small><small>개발비 ${money(b.cost)} · ${b.months}개월</small>${b.reason ? `<small class="need">${esc(b.reason)}</small>` : ''}</span><button class="btn ink" data-act="subBadgeDo" data-id="${id}" data-v="${b.generationId}" ${b.ok ? '' : 'disabled'}>배지 모델로 내기</button></div>`; }).join('')}</div>` : '<div class="warnbox">맡은 차급에서 본사가 판매 중인 차가 없습니다.</div>'}
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 자회사 신차 기획 초안: 본사 기획 화면을 그대로 쓰고 차급·고객층은 그 자회사 영역 안, 개발팀은 가상 팀 */
   function newSubDraft(id: number): Draft | null {
@@ -3096,7 +3124,7 @@ export function startApp(): void {
   function showLogoSheet(): void {
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
     sheetBody.innerHTML = `<div class="eyebrow"><i></i>메뉴</div><h2>회사 로고 바꾸기</h2>${logoMaker(ui.logo)}<div class="row end" style="margin-top:12px"><button class="btn" data-act="settings">← 설정</button><button class="btn ink" data-act="closeSheet">완료</button></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
 
   // ---------- 1.5.0 새 게임 선택지(시작 연도·조건·도전 과제) ----------
@@ -3189,7 +3217,7 @@ export function startApp(): void {
       <button class="btn menu-set" data-act="settings" style="width:100%;margin-top:10px">설정 <small>시간·알림·소리·저장·화면</small></button>
       <p class="note help-line">이 게임의 역사 사건과 시장 수치는 게임에 맞게 어림한 것이라 실제와 다를 수 있습니다.</p>
       <div class="row" style="margin-top:12px"><button class="btn" data-act="home">처음 화면으로</button><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   // ---------- 1.0.0 설정 화면: 시간(자동 멈춤)·알림(종류별)·소리·저장(자동 저장)·화면(로고·디버그). 값은 예전과 같은 기기 저장소 키 ----------
   const SET_TABS = [['time', '시간'], ['note', '알림'], ['decide', '결정'], ['sound', '소리'], ['save', '저장'], ['view', '화면']] as const;
@@ -3217,7 +3245,7 @@ export function startApp(): void {
     sheetBody.innerHTML = `<div class="settings"><div class="eyebrow"><i></i>메뉴 · 설정</div><h2>설정</h2><div class="seg set-tabs" role="tablist" aria-label="설정 묶음">${SET_TABS.map(([k, n]) => `<button role="tab" data-act="setTab" data-v="${k}" aria-selected="${t === k}">${n}</button>`).join('')}</div>
       <div class="set-body" data-tab="${t}">${body}</div><p class="note">${t === 'decide' ? '결정 설정은 지금 판에 저장됩니다(판마다 따로). 나머지 설정은 이 기기에 저장되며 모든 게임에 함께 쓰입니다.' : '설정은 이 기기에 저장되며 모든 게임에 함께 쓰입니다.'}</p>
       <div class="row end" style="margin-top:12px"><button class="btn" data-act="menuBack">← 메뉴</button><button class="btn ink" data-act="closeSheet">닫기</button></div></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(true); renderTop();
   }
   /** 3.7.0 최근 자동 승인 기록(뉴스에서). 없으면 빈 문자열 */
   const autoLogHtml = () => { const l = Q.autoLog(game!.state); return l.length ? `<ul class="auto-log">${l.map((x) => `<li><small class="nd">${esc(Q.dateLabel(x.week))}</small> ${esc(x.text.replace(/^자동 승인: /, ''))}</li>`).join('')}</ul>` : ''; };
@@ -3257,7 +3285,7 @@ export function startApp(): void {
     reviewTimers.forEach(clearTimeout); reviewTimers = [];
     sheetBody.innerHTML = `<div class="eyebrow"><i></i>개발자 메뉴 (시험용)</div><h2>개발자 메뉴</h2><div class="menu-slots dev-menu">${DEV_CHEATS.map(([k, n]) => `<button class="btn" data-act="devCheat" data-v="${k}">${n}</button>`).join('')}<button class="btn" data-act="devYear">1년 건너뛰기(48주)</button></div>
       <div class="row end" style="margin-top:12px"><button class="btn ink" data-act="closeSheet">닫기</button></div>`;
-    sheet.hidden = false; renderTop();
+    openSheet(); renderTop();
   }
   /** 내보내기 파일 이름: "카컴퍼니-한빛자동차-1973년04월.json"(파일 이름에 못 쓰는 글자는 뺀다) */
   const saveFileName = () => { const s = game!.state, y = yearOf(s.week), m = (monthOf(s.week) % 12) + 1; return `카컴퍼니-${s.companyName.replace(/[\\/:*?"<>|\s]+/g, '') || '회사'}-${y}년${String(m).padStart(2, '0')}월.json`; };
@@ -3479,7 +3507,7 @@ export function startApp(): void {
         if (g) launchScene(g, lifted ? ed : undefined, game.state.reputation - rep0, news?.text);
         return;
       }
-      case 'closeReview': reviewTimers.forEach(clearTimeout); sheet.hidden = true; go('garage'); return;
+      case 'closeReview': reviewTimers.forEach(clearTimeout); sheet.hidden = true; if (screen === 'launch' || screen === 'dev' || screen === 'plan' || screen === 'lift') go('garage'); else { lastPanel = ''; render(); } return; // 5.5.1 출시 화면에서 본 평론은 차고로, 알림·기록에서 연 평론은 원래 자리로
       case 'goWeak': { const w = weakest(); if (w) garageAt(w.id); return; }
       case 'gprev': case 'gnext': { const L = garageList(), i = L.findIndex((g) => g.id === garageId); if (L.length) garageId = L[((i < 0 ? 0 : i) + (a === 'gnext' ? 1 : -1) + L.length) % L.length].id; lastPanel = ''; render(); return; }
       case 'gopen': garageAt(Number(el.dataset.id)); return;
@@ -3611,7 +3639,7 @@ export function startApp(): void {
       case 'subBack': subSel = null; subPick = ''; lastPanel = ''; render(); panel.scrollTop = 0; return;
       // ---- 3.1.0 운영 전환·직접 운영 ----
       case 'subOpen': sheet.hidden = true; openSub(Number(el.dataset.id), (v || 'company') as Screen); return;
-      case 'subCarSel': subCar = el.dataset.k ?? ''; lastPanel = ''; render(); return;
+      case 'subCarSel': subCar = el.dataset.k ?? ''; go('garage'); return;
       case 'gsubOpen': garageSub = { id: Number(el.dataset.id), body: el.dataset.k ?? '' }; if (screen !== 'garage') { go('garage'); return; } lastPanel = ''; render(); panel.scrollTop = 0; return;
       case 'gsubBack': garageSub = null; garageSum = true; lastPanel = ''; render(); return;
       case 'subMode': { if (!game) return; const id = Number(el.dataset.id), d = Q.subDetail(game.state, id); if (!d || d.mode === v) return;
@@ -4018,7 +4046,7 @@ export function startApp(): void {
     setSpeed, render, held: isHeld, toast, get sound() { return sound.settings(); },
     get office() { return { on: officeOn, view: officeLast, scores: officeScores }; },
     get skip() { return !!skip; }, todos: () => (game ? todos() : []), Q,
-    get garageId() { return garageId; }, get coTab() { return coTab; }, get recTab() { return recTab; }, get mainTab() { return mainTab(); }, get todaySel() { return todaySel; }, get garageSum() { return garageSum; }, goTarget, showMonth, goCo, // goCo(4.0.0 점검용)
+    get garageId() { return garageId; }, get coTab() { return coTab; }, get recTab() { return recTab; }, get mainTab() { return mainTab(); }, get todaySel() { return todaySel; }, get garageSum() { return garageSum; }, goTarget, showMonth, goCo, showYearReport, showSettings, showReview: (id: number) => { const g = game && Q.generationById(game.state, id); if (g) showReview(g); }, // goCo(4.0.0 점검용), 5.5.1 탭 안 전체 구역 점검용
     get noteSet() { return noteSet; }, // 1.3.0 점검용: 알림 유형 켜고 끄기(기기 저장소에는 쓰지 않음)
   };
 

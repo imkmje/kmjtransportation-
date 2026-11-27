@@ -42,11 +42,12 @@ const POD_W = 2.8, POD_D = 2.75;
 export const DESK_H = 0.75;
 
 const clampLevel = (l: number): Level => Math.max(1, Math.min(7, Math.round(l) || 1)) as Level;
-const cache = new Map<Level, Room>();
+const cache = new Map<string, Room>();
 
-export function roomFor(level: number): Room {
-  const lv = clampLevel(level);
-  const hit = cache.get(lv);
+/** extraExec: 등급 자리 밖의 임원 자리(5.5.1 해외 권역에 진출하면 해외 담당 1) */
+export function roomFor(level: number, extraExec = 0): Room {
+  const lv = clampLevel(level), nx = EXEC_SEATS[lv] + Math.max(0, Math.min(1, Math.round(extraExec)));
+  const hit = cache.get(`${lv}|${nx}`);
   if (hit) return hit;
   const regPods = CAPACITY[lv] / 4, nPods = regPods + Math.ceil(ELITE_SEATS[lv] / 4);
   const pc = lv <= 2 ? nPods : lv >= 5 ? 3 : 2, pr = Math.ceil(nPods / pc);
@@ -55,7 +56,7 @@ export function roomFor(level: number): Room {
   const ox = lv === 1 ? 2.6 : 6.2;                     // 사무 구역 시작 x(왼쪽에 디자인 스튜디오)
   const oy = BACK + 1.6;                               // 사무 구역 시작 y(첫 줄 의자 뒤 통로 포함)
   // 뒤쪽 띠: 탕비(0~4.8) → 회의실(3등급~) → 임원실(창가 유리방) → 간판·수납장. 임원실이 길면 건물이 넓어지고 넓어진 만큼 책상 묶음 사이 통로를 넓힌다
-  const cab0 = lv === 1 ? 6.0 : lv === 2 ? 8.0 : 11.0, exEnd = cab0 + EXEC_SEATS[lv] * EXW;
+  const cab0 = lv === 1 ? 6.0 : lv === 2 ? 8.0 : 11.0, exEnd = cab0 + nx * EXW;
   const rxMin = lv === 1 ? exEnd + 0.6 : exEnd + 0.4 + 3.2 + 0.4;
   const AY = 1.4, AX0 = lv >= 4 ? 2.0 : 1.6;
   const AX = pc > 1 ? Math.min(3.0, Math.max(AX0, (rxMin - 1.8 - ox - pc * POD_W) / (pc - 1))) : AX0; // 묶음 사이 통로(책상 깊이보다 넓게)
@@ -108,7 +109,7 @@ export function roomFor(level: number): Room {
     Wl('whiteboard', 'R', mx + 1.0, 2.8, 1.0, 1.2);
   } else if (lv === 2) { F('table', 6.0, 1.0, 1.2, 1.2, 0.74); F('stool', 6.3, 2.4, 0.4, 0.4, 0.5); }
   // 임원실: 창을 등진 큰 책상, 책장, 앞은 유리(오른쪽 0.8m가 문). 1등급은 벽 없는 책상 하나
-  for (let i = 0; i < EXEC_SEATS[lv]; i++) {
+  for (let i = 0; i < nx; i++) {
     const x0 = cab0 + i * EXW;
     zones.push({ kind: 'exec', x: x0, y: 0, w: EXW, d: BACKE });
     if (lv >= 2) { F('glass', x0 + EXW - 0.05, 0, 0.05, BACKE, 2.4); F('glass', x0 + 0.05, BACKE - 0.05, EXW - 0.9, 0.05, 2.4); if (i === 0) F('glass', x0, 0, 0.05, BACKE, 2.4); }
@@ -199,19 +200,19 @@ export function roomFor(level: number): Room {
     sales: zc('lobby') ?? [0, D],
   };
   const room: Room = { level: lv, name: NAME[lv], W, D, H, zones, furn, walls, seats, spots, execs, lights, anchors, grid };
-  cache.set(lv, room);
+  cache.set(`${lv}|${nx}`, room);
   return room;
 }
 
 /** 등급의 책상 자리(정원만큼). used는 앞에서부터 staffCount개. 실제 배정은 assignSeats가 직무별로 한다 */
-export function seatsFor(level: number, staffCount: number): Seat[] {
-  return roomFor(level).seats.map((s, i) => ({ ...s, used: i < staffCount }));
+export function seatsFor(level: number, staffCount: number, extraExec = 0): Seat[] {
+  return roomFor(level, extraExec).seats.map((s, i) => ({ ...s, used: i < staffCount }));
 }
 
 /** 직무 구역 쪽 자리부터 채운다(디자이너는 스튜디오 가까이, 엔지니어·테스터는 시험실·연구실 가까이, 영업은 앞쪽).
  *  넘친 사람은 자리가 없다(결과에 없음). */
-export function assignSeats(level: number, staff: { id: string; role: Role; elite?: boolean }[]): Map<string, number> {
-  const rm = roomFor(level), out = new Map<string, number>(), taken = new Set<number>();
+export function assignSeats(level: number, staff: { id: string; role: Role; elite?: boolean }[], extraExec = 0): Map<string, number> {
+  const rm = roomFor(level, extraExec), out = new Map<string, number>(), taken = new Set<number>();
   const order: Role[] = ['designer', 'tester', 'engineer', 'sales'];
   const list = [...staff].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const s of list) {

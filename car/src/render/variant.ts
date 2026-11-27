@@ -1,6 +1,6 @@
 import type { CarLook } from './look';
 import type { BodyId } from './look';
-import { ARCH_GAP, BELT_OVER_ARCH, BODY, ERA, ERA_FACE, MIN_CABIN, MIN_OVERHANG, MIN_ROOF_GAP, MIN_TRUNK, VARY, WHEEL_GROW, eraOf, type BodyShape, type FaceSpec, type GrilleKind, type LampKind, type TailKind, type WheelKind } from './shapes';
+import { ARCH_GAP, BELT_OVER_ARCH, BODY, COWL_BEHIND_AXLE, ERA, ERA_FACE, MIN_CABIN, MIN_OVERHANG, MIN_ROOF_GAP, MIN_TRUNK, VARY, WHEEL_GROW, eraOf, type BodyShape, type FaceSpec, type GrilleKind, type LampKind, type TailKind, type WheelKind } from './shapes';
 
 // 시드 → 값. 같은 시드면 항상 같은 수열(mulberry32). Math.random은 쓰지 않는다.
 export function rng(seed: number): () => number {
@@ -98,18 +98,19 @@ export function chassisOf(look: CarLook): Chassis {
   // 전기차는 보닛이 짧다(객실을 앞으로)
   const cab = VARY.cab * dev.cab + (ev && eraOf(look) >= 2010 ? .22 : 0);
   const minCab = roofType === 'notch' ? MIN_CABIN : .8; // 패스트백은 지붕이 짧으면 혹처럼 솟는다
-  // 앞유리 아래 끝(보닛 길이)은 객실 이동만 따르고, 기울기는 지붕 앞 끝을 옮긴다. 보닛 .65m·트렁크 최소는 남긴다
-  const base = Math.min((b.cF + b.rf) * s + cab, h - .65);
-  const room = base - (-h + tmin) - minCab; // 앞뒤 유리가 쓸 수 있는 길이(극단 시드에서 객실이 찌그러지지 않게 유리를 줄인다)
-  if (rr + rf > room) { const k = room / (rr + rf); rr *= k; rf *= k; }
-  const cR = Math.max(b.cR * s + cab + VARY.deck * dev.deck, -h + rr + tmin);
-  const cF = Math.max(base - rf, cR + minCab);
-  const side = sideOf(look, b);
   // 휠 아치: 가장 큰 휠 기준 원(중심 높이 archY). 허리선은 아치 꼭대기보다 BELT_OVER_ARCH 위(부푼 펜더 차체 제외)
   const wr0 = b.wr + E.wrD, archGap = ARCH_GAP + VARY.arch * dev.arch, archY = wr0 + WHEEL_GROW[2], archR = archY + archGap;
   // 휠베이스: 시대·시드 배율, 아치 바깥 오버행은 MIN_OVERHANG(차체 기본이 더 짧으면 그 값) 이상
   const oh = Math.min(MIN_OVERHANG, b.L / 2 - b.wb - (b.wr + WHEEL_GROW[2] + ARCH_GAP));
   const wb = Math.min(b.wb * s * E.wbK * (1 + VARY.wbr * dev.wbr) * (ev ? 1.03 : 1), h - archR - oh);
+  // 앞유리 아래 끝(보닛 길이)은 객실 이동만 따르고, 기울기는 지붕 앞 끝을 옮긴다. 보닛 .65m·트렁크 최소는 남긴다
+  // 5.5.1 카울은 앞바퀴 축보다 뒤(미니밴 앞유리가 보닛 끝까지 누워 쐐기처럼 보이던 것)
+  const base = Math.min((b.cF + b.rf) * s + cab, h - .65, wb - COWL_BEHIND_AXLE);
+  const room = base - (-h + tmin) - minCab; // 앞뒤 유리가 쓸 수 있는 길이(극단 시드에서 객실이 찌그러지지 않게 유리를 줄인다)
+  if (rr + rf > room) { const k = room / (rr + rf); rr *= k; rf *= k; }
+  const cR = Math.max(b.cR * s + cab + VARY.deck * dev.deck, -h + rr + tmin);
+  const cF = Math.max(base - rf, cR + minCab);
+  const side = sideOf(look, b);
   // 쐐기가 크면 앞바퀴 위 옆선이 내려가므로 허리선을 그만큼 올린다(아치가 보닛 위로 솟지 않게)
   const wedge = Math.max(0, E.wedge + VARY.wedge * dev.wedge), wedgeAtFront = wedge * (h + wb) / (2 * h);
   const belt = Math.max(b.belt + E.beltD + VARY.belt * dev.belt, b.fenders ? 0 : archY + archR + Math.max(BELT_OVER_ARCH, .05 + wedgeAtFront));
@@ -158,11 +159,26 @@ export function chassisWords(look: CarLook): string[] {
     .map(([k, z]) => WORDS[k][z > 0 ? 0 : 1]);
 }
 
+/** 5.5.1 얼굴 시드가 없을 때 차급별 기본 얼굴(시대 기본 위에 덮어쓴다): 픽업·SUV는 높고 큰 그릴과 두꺼운 검은 범퍼, 스포츠카는 가는 램프와 낮고 넓은 흡입구,
+    경차는 큰 램프와 작은 그릴, 고급 세단은 세로로 큰 그릴, 미니밴은 넓은 램프와 낮은 그릴 */
+function classFace(f: FaceSpec, id: string, era: number): FaceSpec {
+  const old = era <= 1980;
+  switch (id) {
+    case 'pickup': case 'suvL': return { ...f, grille: 'bars', grilleW: f.grilleW * 1.15, grilleH: f.grilleH * 1.35, bumper: 'black', intake: 'slim', lampW: f.lampW * 1.1 };
+    case 'suv': case 'suvS': return { ...f, grille: era >= 2010 ? 'hex' : f.grille, grilleW: f.grilleW * 1.05, grilleH: f.grilleH * 1.2, bumper: 'black', intake: 'wide' };
+    case 'sports': case 'coupe': return { ...f, lamp: era === 1980 ? 'popup' : era >= 2010 ? 'slim' : f.lamp, lampW: f.lampW * .85, grilleW: f.grilleW * .7, grilleH: f.grilleH * .55, intake: 'wide' };
+    case 'kei': return { ...f, lamp: old ? 'round' : 'oval', lampW: f.lampW * 1.3, grilleW: f.grilleW * .55, grilleH: f.grilleH * .6, intake: 'slim' };
+    case 'sedanL': return { ...f, grille: 'vertical', grilleW: f.grilleW * .9, grilleH: f.grilleH * 1.4, intake: era >= 2000 ? 'fog' : f.intake };
+    case 'minivan': return { ...f, lampW: f.lampW * 1.2, grille: old ? f.grille : 'wide', grilleH: f.grilleH * .8, intake: 'wide' };
+    default: return f;
+  }
+}
+
 /** 시대 + faceSeed로 얼굴 값. 시드가 없으면 시대 기본 얼굴(2020은 지금까지의 모습) */
 export function faceOf(look: CarLook): FaceSpec {
   const era = eraOf(look), T = ERA_FACE[era], ev = look.powertrain === 'ev';
   let f: FaceSpec, w0: WheelKind = T.def.wheel; // w0: 전기차 공력 휠로 바꾸기 전 휠(전기차판이 바탕 차와 다른 휠을 고르게)
-  if (look.faceSeed == null) f = { ...T.def };
+  if (look.faceSeed == null) f = classFace({ ...T.def }, look.bodyId, era);
   else {
     const r = rng(Math.imul(look.faceSeed, 0x9e3779b1) ^ 0x5bd1e995);
     const pick = <K>(a: K[]) => a[Math.floor(r() * a.length)];
